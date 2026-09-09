@@ -17,3 +17,27 @@ fact you own, guardrails block invented metrics, and quality beats volume.
 - Demo profile: `profile.example/` (your real data lives in gitignored `profile/`)
 
 License: AGPL-3.0-only
+
+## Quick start (CLI, phase 0.1)
+
+```bash
+cp .env.example .env            # add your ANTHROPIC_API_KEY
+cp -r profile.example profile   # then replace the fictional data with yours (profile/ is gitignored)
+cd apps/api && uv sync
+uv run rhapto profile validate ../../profile
+uv run rhapto tailor --jd path/to/jd.txt --profile ../../profile --out ../../out
+```
+
+`tailor` writes `out/<company>-<role>/resume.docx`, `resume.pdf` (when LibreOffice is installed, otherwise skipped),
+`cover-note.md`, and `package.json` with the guardrail report and change log. Exit code 2 means the guardrails
+blocked the draft; the files are still written so you can see why.
+
+Without LibreOffice locally, use the container:
+
+```bash
+docker build -f apps/api/Dockerfile --target cli -t rhapto-cli .
+docker run --rm --env-file .env -v "$PWD:/work" rhapto-cli tailor --jd jd.txt --profile profile --out out
+```
+
+Development: `uv run pytest`, `uv run ruff check .`, `uv run mypy`, `uv run lint-imports` from `apps/api`;
+`bash scripts/codegen.sh` after editing `packages/schemas`.

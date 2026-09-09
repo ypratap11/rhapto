@@ -1,0 +1,11 @@
+[importlinter]
+root_package = rhapto
+
+[importlinter:contract:engine-is-pure]
+name = engine must not import application layers
+type = forbidden
+source_modules =
+    rhapto.engine
+forbidden_modules =
+    rhapto.profile
+    rhapto.cli
