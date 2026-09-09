@@ -16,7 +16,7 @@ class ResumeHeader(BaseModel):
     email: str | None = None
     phone: str | None = None
     location: str | None = None
-    links: list[str] | None = []
+    links: list[str] = []
 
 
 class ResumeBullet(BaseModel):
@@ -36,7 +36,7 @@ class ResumeEntry(BaseModel):
     role: str | None = None
     period: str | None = None
     title: str | None = None
-    bullets: Annotated[list[ResumeBullet] | None, Field(validate_default=True)] = []
+    bullets: Annotated[list[ResumeBullet], Field(validate_default=True)] = []
 
 
 class ResumeSection(BaseModel):
@@ -57,5 +57,5 @@ class ResumeDocument(BaseModel):
         extra='forbid',
     )
     header: ResumeHeader
-    summary: Annotated[list[ResumeBullet] | None, Field(validate_default=True)] = []
+    summary: Annotated[list[ResumeBullet], Field(validate_default=True)] = []
     sections: list[ResumeSection]

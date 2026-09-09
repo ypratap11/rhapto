@@ -12,7 +12,7 @@ class Visibility(BaseModel):
     model_config = ConfigDict(
         extra='forbid',
     )
-    exclude_when: list[str] | None = []
+    exclude_when: list[str] = []
     """
     Context tags that hard-exclude this block from a tailoring run.
     """
@@ -30,18 +30,18 @@ class Block(BaseModel):
     """
     YYYY, YYYY-YYYY, or YYYY-Present
     """
-    verified: bool | None = False
+    verified: bool = False
     """
     Only verified blocks may carry metrics.
     """
     metric: str | None = None
     content: str
-    tags: list[str] | None = []
+    tags: list[str] = []
     attribution: str | None = None
     """
     Required attribution phrase for named projects.
     """
-    concurrent: bool | None = False
+    concurrent: bool = False
     """
     May overlap in time with other roles.
     """

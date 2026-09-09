@@ -39,6 +39,13 @@ def test_block_rejects_bad_type() -> None:
         Block.model_validate({"id": "x", "type": "hobby", "content": "c"})
 
 
+def test_defaulted_fields_reject_none() -> None:
+    with pytest.raises(ValidationError):
+        Block.model_validate({"id": "x", "type": "role", "content": "c", "verified": None})
+    with pytest.raises(ValidationError):
+        JDExtract.model_validate({"company": "c", "title": "t", "must_have": None})
+
+
 def test_blocks_file_round_trip() -> None:
     data = {
         "blocks": [

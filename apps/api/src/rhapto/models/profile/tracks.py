@@ -15,9 +15,9 @@ class Track(BaseModel):
     id: Annotated[str, Field(pattern='^[a-z0-9][a-z0-9-]*$')]
     name: str
     description: str | None = None
-    keywords: list[str] | None = []
+    keywords: list[str] = []
     resume_base: str
-    min_fit: Annotated[int | None, Field(ge=0, le=100)] = 50
+    min_fit: Annotated[int, Field(ge=0, le=100)] = 50
 
 
 class TracksFile(BaseModel):

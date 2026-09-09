@@ -15,14 +15,14 @@ class ResumeBase(BaseModel):
     id: Annotated[str, Field(pattern='^[a-z0-9][a-z0-9-]*$')]
     name: str
     block_ids: list[str]
-    section_order: list[str] | None = [
+    section_order: list[str] = [
         'summary',
         'experience',
         'projects',
         'skills',
         'credentials',
     ]
-    style: dict[str, Any] | None = {}
+    style: dict[str, Any] = {}
 
 
 class BasesFile(BaseModel):

@@ -10,6 +10,7 @@ rm -rf "$OUT"
   --output "$OUT" \
   --output-model-type pydantic_v2.BaseModel \
   --use-title-as-name \
+  --strict-nullable \
   --use-annotated \
   --field-constraints \
   --enum-field-as-literal all \

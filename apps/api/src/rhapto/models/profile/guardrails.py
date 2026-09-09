@@ -13,8 +13,8 @@ class GuardrailRule(BaseModel):
         extra='forbid',
     )
     rule: str
-    active: bool | None = True
-    config: dict[str, Any] | None = {}
+    active: bool = True
+    config: dict[str, Any] = {}
 
 
 class GuardrailsFile(BaseModel):

@@ -16,16 +16,16 @@ class JDExtract(BaseModel):
     )
     company: str
     title: str
-    location_policy: str | None = 'unspecified'
+    location_policy: str = 'unspecified'
     """
     remote, hybrid, onsite, or unspecified
     """
-    seniority: str | None = 'unspecified'
-    must_have: list[str] | None = []
-    nice_to_have: list[str] | None = []
-    keywords: list[str] | None = []
-    likely_knockouts: list[str] | None = []
-    context_tags: list[str] | None = []
+    seniority: str = 'unspecified'
+    must_have: list[str] = []
+    nice_to_have: list[str] = []
+    keywords: list[str] = []
+    likely_knockouts: list[str] = []
+    context_tags: list[str] = []
     """
     Tags matched against block visibility.exclude_when
     """
