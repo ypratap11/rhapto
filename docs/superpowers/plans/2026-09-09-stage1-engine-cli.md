@@ -4676,7 +4676,7 @@ Run from the repo root:
 docker build -f apps/api/Dockerfile --target cli -t rhapto-cli .
 docker run --rm -v "$PWD:/work" rhapto-cli profile validate profile.example
 ```
-Expected: the build succeeds and the second command prints `ok: 4 blocks, 2 tracks, 2 bases, 3 guardrail rules, 9 answers`.
+Expected: the build succeeds and the second command prints `ok: 4 blocks, 2 tracks, 2 bases, 5 guardrail rules, 9 answers`.
 
 - [ ] **Step 4: Append the quick start to README.md**
 

@@ -7,5 +7,6 @@ type = forbidden
 source_modules =
     rhapto.engine
 forbidden_modules =
+    rhapto.config
     rhapto.profile
     rhapto.cli

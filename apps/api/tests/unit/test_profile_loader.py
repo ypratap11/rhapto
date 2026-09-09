@@ -22,6 +22,8 @@ def test_loads_demo_profile(demo_profile_dir: Path) -> None:
         "no-unverified-metrics",
         "no-invented-entities",
         "date-consistency",
+        "attribution",
+        "visibility-context",
     }
 
 

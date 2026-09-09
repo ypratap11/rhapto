@@ -13,6 +13,7 @@ from rhapto.engine.select import (
 )
 from rhapto.engine.types import Profile
 from rhapto.models.jd_extract import JDExtract
+from rhapto.models.profile.bases import ResumeBase
 from rhapto.models.profile.blocks import Block, Visibility
 from rhapto.models.profile.tracks import Track
 from rhapto.profile.loader import load_profile
@@ -103,7 +104,7 @@ async def test_visibility_hard_excludes_before_ranking(extract: JDExtract) -> No
     profile = Profile(
         blocks=[hidden, visible],
         tracks=[track],
-        bases=[{"id": "all", "name": "All", "block_ids": ["agency-secret", "open"]}],  # type: ignore[list-item]
+        bases=[ResumeBase(id="all", name="All", block_ids=["agency-secret", "open"])],
         guardrails=[],
     )
     tagged = extract.model_copy(update={"context_tags": ["agency"]})
@@ -116,10 +117,12 @@ async def test_visibility_hard_excludes_before_ranking(extract: JDExtract) -> No
 async def test_restricts_to_track_base(profile: Profile, extract: JDExtract) -> None:
     narrow = profile.model_copy(
         update={
-            "bases": [{"id": "data-pm", "name": "N", "block_ids": ["cred-pmp"]}, profile.bases[1]]
+            "bases": [
+                ResumeBase(id="data-pm", name="N", block_ids=["cred-pmp"]),
+                profile.bases[1],
+            ]
         }
     )
-    narrow = Profile.model_validate(narrow.model_dump())
     selection = await select_blocks(
         extract, narrow, narrow.get_track("data-pm"), FakeEmbeddingProvider()
     )
@@ -131,8 +134,8 @@ async def test_empty_candidates(extract: JDExtract) -> None:
     profile = Profile(
         blocks=[],
         tracks=[track],
-        bases=[{"id": "empty", "name": "E", "block_ids": []}],
+        bases=[ResumeBase(id="empty", name="E", block_ids=[])],
         guardrails=[],
-    )  # type: ignore[list-item]
+    )
     selection = await select_blocks(extract, profile, track, FakeEmbeddingProvider())
     assert selection.block_ids == [] and selection.scores == {}
