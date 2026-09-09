@@ -77,5 +77,5 @@ packages = ["rhapto"]
 exclude = ["alembic"]
 
 [[tool.mypy.overrides]]
-module = ["fastembed.*", "docx.*", "rapidfuzz.*", "pgvector.*", "trafilatura.*", "arq.*", "sse_starlette.*"]
+module = ["fastembed.*", "docx.*", "rapidfuzz.*", "pgvector.*", "trafilatura.*", "arq.*", "sse_starlette.*", "redis.*"]
 ignore_missing_imports = true
