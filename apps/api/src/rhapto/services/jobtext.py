@@ -1,0 +1,113 @@
+from __future__ import annotations
+
+import asyncio
+import ipaddress
+import re
+import socket
+from collections.abc import Awaitable, Callable
+from urllib.parse import urljoin, urlparse
+
+import httpx
+import trafilatura
+
+from rhapto.db.hashing import dedupe_hash
+
+__all__ = [
+    "FetchText",
+    "JobTextError",
+    "assert_public_host",
+    "dedupe_hash",
+    "fetch_job_text",
+    "resolve_host",
+]
+
+FetchText = Callable[[str], Awaitable[str]]
+MIN_TEXT_CHARS = 200
+TIMEOUT_SECONDS = 20.0
+MAX_REDIRECTS = 5
+_REDIRECT_STATUS_CODES = (301, 302, 303, 307, 308)
+
+
+class JobTextError(Exception):
+    """The job posting could not be fetched or contained too little text."""
+
+
+def resolve_host(hostname: str) -> list[str]:
+    """Resolve a hostname to its IP address strings. Overridable in tests."""
+    infos = socket.getaddrinfo(hostname, None)
+    return [str(info[4][0]) for info in infos]
+
+
+async def assert_public_host(hostname: str) -> None:
+    """Reject hostnames that resolve to private, loopback, link-local, reserved,
+    multicast, or unspecified addresses, to prevent SSRF via job posting URLs."""
+    try:
+        addresses = await asyncio.to_thread(resolve_host, hostname)
+    except OSError as exc:
+        raise JobTextError("URL host could not be resolved") from exc
+    if not addresses:
+        raise JobTextError("URL host could not be resolved")
+    for address in addresses:
+        ip = ipaddress.ip_address(address)
+        if (
+            ip.is_private
+            or ip.is_loopback
+            or ip.is_link_local
+            or ip.is_reserved
+            or ip.is_multicast
+            or ip.is_unspecified
+        ):
+            raise JobTextError("URL host is not allowed")
+
+
+async def _check_url(url: str) -> None:
+    parsed = urlparse(url)
+    if parsed.scheme not in ("http", "https") or not parsed.hostname:
+        raise JobTextError("only http(s) URLs are supported")
+    await assert_public_host(parsed.hostname)
+
+
+def _strip_tags(html: str) -> str:
+    text = re.sub(r"<(script|style)[^>]*>.*?</\1>", " ", html, flags=re.S | re.I)
+    text = re.sub(r"<[^>]+>", " ", text)
+    return re.sub(r"\s+", " ", text).strip()
+
+
+async def fetch_job_text(url: str, *, client: httpx.AsyncClient | None = None) -> str:
+    await _check_url(url)
+    own_client = client is None
+    client = client or httpx.AsyncClient(follow_redirects=False, timeout=TIMEOUT_SECONDS)
+    try:
+        current_url = url
+        redirects = 0
+        while True:
+            try:
+                response = await client.get(
+                    current_url, headers={"User-Agent": "rhapto/0.1 (+https://github.com)"}
+                )
+            except httpx.HTTPError as exc:
+                raise JobTextError(f"fetch failed: {exc}") from exc
+            if response.status_code in _REDIRECT_STATUS_CODES:
+                if redirects >= MAX_REDIRECTS:
+                    raise JobTextError("too many redirects")
+                location = response.headers.get("location")
+                if not location:
+                    raise JobTextError(f"fetch failed with HTTP {response.status_code}")
+                redirects += 1
+                current_url = urljoin(current_url, location)
+                await _check_url(current_url)
+                continue
+            if response.status_code >= 400:
+                raise JobTextError(f"fetch failed with HTTP {response.status_code}")
+            html = response.text
+            break
+    finally:
+        if own_client:
+            await client.aclose()
+    extracted = trafilatura.extract(
+        html, include_comments=False, include_tables=True
+    ) or _strip_tags(html)
+    text = extracted.strip()
+    if len(text) < MIN_TEXT_CHARS:
+        raise JobTextError("too little text extracted from the page; paste the description instead")
+    return text
