@@ -1,0 +1,6 @@
+ExampleCo is hiring a Data Platform Program Manager (Remote, US).
+
+You will lead our Snowflake migration and coordinate ETL modernisation across product, data engineering,
+and analytics teams. Must have: 5+ years of program management on data platforms, hands-on experience
+running a warehouse migration, strong cross-functional leadership. Nice to have: cost optimisation
+experience, PMP. We will ask about US work authorization.

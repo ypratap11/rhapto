@@ -1,0 +1,11 @@
+{
+  "company": "ExampleCo",
+  "title": "Data Platform Program Manager",
+  "location_policy": "remote",
+  "seniority": "senior",
+  "must_have": ["5+ years program management on data platforms", "warehouse migration experience", "cross-functional leadership"],
+  "nice_to_have": ["cost optimisation", "PMP"],
+  "keywords": ["Snowflake", "migration", "ETL", "data platform", "program management", "cross-functional", "warehouse", "PMP"],
+  "likely_knockouts": ["US work authorization"],
+  "context_tags": []
+}

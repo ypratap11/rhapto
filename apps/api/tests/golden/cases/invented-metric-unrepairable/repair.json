@@ -1,0 +1,46 @@
+{
+  "summary": [
+    {"text": "Senior data program manager who doubled platform throughput.", "source_block_id": "acme-data-pm"}
+  ],
+  "sections": [
+    {
+      "title": "Experience",
+      "kind": "experience",
+      "entries": [
+        {
+          "source_block_id": "acme-data-pm",
+          "org": "Acme Analytics",
+          "role": "Senior Data Program Manager",
+          "period": "2019-2025",
+          "bullets": [
+            {"text": "Led cross-functional delivery of the customer data platform across 4 teams spanning product, data engineering, and analytics.", "source_block_id": "acme-data-pm"},
+            {"text": "Owned the Snowflake migration program end to end, cutting warehouse cost 25% and migrating 12 pipelines.", "source_block_id": "acme-migration"}
+          ]
+        }
+      ]
+    },
+    {
+      "title": "Projects",
+      "kind": "projects",
+      "entries": [
+        {"source_block_id": "side-llm-tool", "org": "Independent", "title": "Open-source LLM eval harness", "bullets": [{"text": "Built and maintain an open-source LLM eval harness.", "source_block_id": "side-llm-tool"}]}
+      ]
+    },
+    {
+      "title": "Credentials",
+      "kind": "credentials",
+      "entries": [
+        {"source_block_id": "cred-pmp", "bullets": [{"text": "PMP certification.", "source_block_id": "cred-pmp"}]}
+      ]
+    }
+  ],
+  "cover_note": "I am applying for the Data Platform Program Manager role at ExampleCo because the Snowflake migration you describe is exactly the program I have run. At Acme Analytics I owned a warehouse migration end to end, coordinating product, data engineering, and analytics teams while keeping the platform live for customers. I bring the cross-functional leadership your posting asks for, a habit of measuring outcomes rather than activity, and a PMP-backed approach to planning that still leaves room for engineering judgement. I would welcome the chance to talk about how I could help ExampleCo modernise its ETL estate without disrupting the teams that depend on it. Thank you for your consideration.",
+  "change_log": "Led with the Snowflake migration because it is the posting's core must-have.\nKept the verified cost and downtime metrics from the migration block.\nSurfaced PMP as a nice-to-have match.\nDropped GitHub star counts from the side project because that block is unverified.",
+  "answers": {
+    "work_authorization": "US citizen; no sponsorship required.",
+    "onsite_preference": "Remote preferred; open to hybrid.",
+    "salary_range": "$160k-$190k base",
+    "notice_period": "2 weeks",
+    "why_this_company": "ExampleCo is modernising its data platform, which is the work I do best."
+  }
+}

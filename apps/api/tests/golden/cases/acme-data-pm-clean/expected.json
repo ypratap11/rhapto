@@ -1,0 +1,7 @@
+{
+  "status": "draft",
+  "passed": true,
+  "llm_calls": 2,
+  "violation_rules": [],
+  "selected_block_ids_include": ["acme-data-pm", "acme-migration", "cred-pmp"]
+}
