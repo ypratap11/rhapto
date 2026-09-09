@@ -1,0 +1,4 @@
+guardrails:
+  - { rule: no-unverified-metrics, active: true }
+  - { rule: no-invented-entities, active: true }
+  - { rule: date-consistency, active: true }

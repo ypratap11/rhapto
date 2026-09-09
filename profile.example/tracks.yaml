@@ -1,0 +1,13 @@
+tracks:
+  - id: data-pm
+    name: Data Program Management
+    resume_base: data-pm
+    min_fit: 60
+    keywords: ["Data Program Manager", "analytics", "data platform", "ETL"]
+    description: Data platform and analytics program leadership.
+  - id: ai-pm
+    name: AI Product/Program
+    resume_base: ai-pm
+    min_fit: 55
+    keywords: ["AI Product Manager", "LLM", "GenAI", "ML platform"]
+    description: AI product and program roles leveraging hands-on LLM work.

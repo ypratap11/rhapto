@@ -1,0 +1,26 @@
+# Fictional demo profile — "Maya Chen", enterprise data PM turned AI builder.
+blocks:
+  - id: acme-data-pm
+    type: role
+    org: Acme Analytics
+    role: Senior Data Program Manager
+    period: "2019-2025"
+    content: Led cross-functional delivery of the customer data platform across 4 teams.
+    tags: [program-management, data]
+  - id: acme-migration
+    type: achievement
+    org: Acme Analytics
+    period: "2023"
+    verified: true
+    metric: "Migrated 12 pipelines with zero downtime, cutting warehouse cost 18%"
+    content: Owned the Snowflake migration program end to end.
+    tags: [migration, cost]
+  - id: side-llm-tool
+    type: project
+    org: Independent
+    content: Built an open-source LLM eval harness (1.2k GitHub stars).
+    tags: [ai, oss]
+  - id: cred-pmp
+    type: credential
+    content: PMP certification (2021).
+    tags: [credential]
