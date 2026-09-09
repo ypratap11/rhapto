@@ -57,3 +57,21 @@ def test_convert_raises_when_binary_missing(
     monkeypatch.setattr(pdf.subprocess, "run", missing)
     with pytest.raises(pdf.PdfRenderError, match="not found"):
         pdf.convert_docx_to_pdf(tmp_path / "x.docx", tmp_path, binary="nope")
+
+
+def test_convert_raises_on_nonzero_exit(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def failing(cmd: list[str], **kw: Any) -> None:
+        raise subprocess.CalledProcessError(returncode=1, cmd=cmd, stderr=b"boom")
+
+    monkeypatch.setattr(pdf.subprocess, "run", failing)
+    with pytest.raises(pdf.PdfRenderError, match="LibreOffice failed"):
+        pdf.convert_docx_to_pdf(tmp_path / "x.docx", tmp_path)
+
+
+def test_convert_raises_on_timeout(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def slow(cmd: list[str], **kw: Any) -> None:
+        raise subprocess.TimeoutExpired(cmd=cmd, timeout=kw.get("timeout", 180))
+
+    monkeypatch.setattr(pdf.subprocess, "run", slow)
+    with pytest.raises(pdf.PdfRenderError, match="LibreOffice failed"):
+        pdf.convert_docx_to_pdf(tmp_path / "x.docx", tmp_path, timeout=1)
