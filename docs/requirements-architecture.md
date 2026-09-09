@@ -135,17 +135,17 @@ guardrails(id, user_id, rule_type, config_json, active)
 
 ### Resume block schema (the heart of it)
 ```yaml
-- id: hooli-jba-automation
+- id: acme-migration
   type: achievement            # achievement | role | project | skill | credential
-  org: Acme Analytics / LinkedIn account
-  role: Delivery Lead
-  period: 2023–2026
+  org: Acme Analytics
+  role: Senior Data Program Manager
+  period: "2019-2025"
   verified: true               # only verified:true blocks may carry metrics
-  metric: "Cut 20–40 hrs/month of manual effort for the revenue team (measured post go-live)"
-  content: "Led JBA contract automation delivery ..."
-  tags: [automation, finance-systems, delivery, O2C]
+  metric: "Migrated 12 pipelines with zero downtime, cutting warehouse cost 18%"
+  content: "Owned the Snowflake migration program end to end."
+  tags: [migration, cost]
   visibility:                  # guardrail hook
-    exclude_when: [hooli-internal]   # e.g., Northwind Labs blocks excluded on Acme Analytics-internal profiles
+    exclude_when: [agency]   # e.g. hide client work when applying to that client's competitor
 ```
 
 ### Guardrail rule types (shipped defaults, user-configurable)

@@ -20,3 +20,6 @@ __pycache__/
 # node
 node_modules/
 .next/
+
+# superpowers scratch (ledgers, briefs, review packages)
+.superpowers/
