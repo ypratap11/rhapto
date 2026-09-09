@@ -3,5 +3,5 @@
   "passed": true,
   "llm_calls": 3,
   "violation_rules": [],
-  "selected_block_ids_include": ["acme-migration"]
+  "selected_block_ids_include": ["acme-migration", "side-llm-tool"]
 }
