@@ -89,3 +89,21 @@ async def test_profile_rows_are_user_scoped(session: AsyncSession, user: User) -
     await repo.upsert_block(session, other.id, Block(id="a", type="role", content="theirs"))
     await session.commit()
     assert [b.content for b in await repo.list_blocks(session, user.id)] == ["mine"]
+
+
+async def test_order_is_explicit_not_timestamp_based(session: AsyncSession, user: User) -> None:
+    await repo.upsert_block(
+        session, user.id, Block(id="zeta", type="role", content="z"), position=0
+    )
+    await repo.upsert_block(
+        session, user.id, Block(id="alpha", type="role", content="a"), position=1
+    )
+    await session.commit()
+    assert [b.block_id for b in await repo.list_blocks(session, user.id)] == ["zeta", "alpha"]
+    await repo.upsert_block(session, user.id, Block(id="mid", type="role", content="m"))  # appended
+    await session.commit()
+    assert [b.block_id for b in await repo.list_blocks(session, user.id)] == [
+        "zeta",
+        "alpha",
+        "mid",
+    ]

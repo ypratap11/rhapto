@@ -28,6 +28,7 @@ class ResumeBlock(UserScopedMixin, TimestampMixin, Base):
     __tablename__ = "resume_blocks"
     __table_args__ = (UniqueConstraint("user_id", "block_id"),)
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=new_uuid)
+    position: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     block_id: Mapped[str] = mapped_column(String(100), nullable=False)
     type: Mapped[str] = mapped_column(String(20), nullable=False)
     org: Mapped[str | None] = mapped_column(String(200))
@@ -47,6 +48,7 @@ class ResumeBase(UserScopedMixin, TimestampMixin, Base):
     __tablename__ = "resume_bases"
     __table_args__ = (UniqueConstraint("user_id", "base_id"),)
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=new_uuid)
+    position: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     base_id: Mapped[str] = mapped_column(String(100), nullable=False)
     name: Mapped[str] = mapped_column(String(200), nullable=False)
     block_ids: Mapped[list[str]] = mapped_column(ARRAY(String), default=list, nullable=False)
@@ -58,6 +60,7 @@ class Track(UserScopedMixin, TimestampMixin, Base):
     __tablename__ = "tracks"
     __table_args__ = (UniqueConstraint("user_id", "track_id"),)
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=new_uuid)
+    position: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     track_id: Mapped[str] = mapped_column(String(100), nullable=False)
     name: Mapped[str] = mapped_column(String(200), nullable=False)
     description: Mapped[str | None] = mapped_column(Text)
@@ -70,6 +73,7 @@ class Guardrail(UserScopedMixin, TimestampMixin, Base):
     __tablename__ = "guardrails"
     __table_args__ = (UniqueConstraint("user_id", "rule"),)
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=new_uuid)
+    position: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     rule: Mapped[str] = mapped_column(String(100), nullable=False)
     active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     config_json: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict, nullable=False)

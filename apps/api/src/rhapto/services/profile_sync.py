@@ -98,14 +98,14 @@ async def replace_profile_in_db(
     session: AsyncSession, user_id: uuid.UUID, profile: Profile
 ) -> None:
     await repo.delete_all_profile_rows(session, user_id)
-    for block in profile.blocks:
-        await repo.upsert_block(session, user_id, block)
-    for base in profile.bases:
-        await repo.upsert_base(session, user_id, base)
-    for track in profile.tracks:
-        await repo.upsert_track(session, user_id, track)
-    for rule in profile.guardrails:
-        await repo.upsert_guardrail(session, user_id, rule)
+    for index, block in enumerate(profile.blocks):
+        await repo.upsert_block(session, user_id, block, position=index)
+    for index, base in enumerate(profile.bases):
+        await repo.upsert_base(session, user_id, base, position=index)
+    for index, track in enumerate(profile.tracks):
+        await repo.upsert_track(session, user_id, track, position=index)
+    for index, rule in enumerate(profile.guardrails):
+        await repo.upsert_guardrail(session, user_id, rule, position=index)
     await repo.set_answers(session, user_id, profile.answers)
     await repo.replace_watchlist(session, user_id, profile.watchlist)
 

@@ -3,7 +3,7 @@ from __future__ import annotations
 import uuid
 from typing import Any, cast
 
-from sqlalchemy import CursorResult, delete, select
+from sqlalchemy import CursorResult, delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from rhapto.db.models import Answers, Guardrail, ResumeBase, ResumeBlock, Track, WatchlistEntry
@@ -14,9 +14,19 @@ from rhapto.models.profile.tracks import Track as TrackModel
 from rhapto.models.profile.watchlist import WatchlistEntry as WatchlistEntryModel
 
 
+async def _next_position(session: AsyncSession, model: type[Any], user_id: uuid.UUID) -> int:
+    """One past the current max `position` for this user/table; -1 when there are no rows yet."""
+    current_max = await session.scalar(
+        select(func.coalesce(func.max(model.position), -1)).where(model.user_id == user_id)
+    )
+    return int(current_max) + 1
+
+
 async def list_blocks(session: AsyncSession, user_id: uuid.UUID) -> list[ResumeBlock]:
     rows = await session.scalars(
-        select(ResumeBlock).where(ResumeBlock.user_id == user_id).order_by(ResumeBlock.created_at)
+        select(ResumeBlock)
+        .where(ResumeBlock.user_id == user_id)
+        .order_by(ResumeBlock.position, ResumeBlock.created_at, ResumeBlock.block_id)
     )
     return list(rows)
 
@@ -28,11 +38,26 @@ async def get_block(session: AsyncSession, user_id: uuid.UUID, block_id: str) ->
     return result
 
 
-async def upsert_block(session: AsyncSession, user_id: uuid.UUID, data: Block) -> ResumeBlock:
+async def upsert_block(
+    session: AsyncSession, user_id: uuid.UUID, data: Block, position: int | None = None
+) -> ResumeBlock:
     row = await get_block(session, user_id, data.id)
     if row is None:
-        row = ResumeBlock(user_id=user_id, block_id=data.id, type=data.type, content=data.content)
+        resolved_position = (
+            position
+            if position is not None
+            else await _next_position(session, ResumeBlock, user_id)
+        )
+        row = ResumeBlock(
+            user_id=user_id,
+            block_id=data.id,
+            type=data.type,
+            content=data.content,
+            position=resolved_position,
+        )
         session.add(row)
+    elif position is not None:
+        row.position = position
     row.type = data.type
     row.org = data.org
     row.role = data.role
@@ -63,7 +88,9 @@ async def delete_block(session: AsyncSession, user_id: uuid.UUID, block_id: str)
 async def list_bases(session: AsyncSession, user_id: uuid.UUID) -> list[ResumeBase]:
     return list(
         await session.scalars(
-            select(ResumeBase).where(ResumeBase.user_id == user_id).order_by(ResumeBase.created_at)
+            select(ResumeBase)
+            .where(ResumeBase.user_id == user_id)
+            .order_by(ResumeBase.position, ResumeBase.created_at, ResumeBase.base_id)
         )
     )
 
@@ -76,12 +103,19 @@ async def get_base(session: AsyncSession, user_id: uuid.UUID, base_id: str) -> R
 
 
 async def upsert_base(
-    session: AsyncSession, user_id: uuid.UUID, data: ResumeBaseModel
+    session: AsyncSession, user_id: uuid.UUID, data: ResumeBaseModel, position: int | None = None
 ) -> ResumeBase:
     row = await get_base(session, user_id, data.id)
     if row is None:
-        row = ResumeBase(user_id=user_id, base_id=data.id, name=data.name)
+        resolved_position = (
+            position if position is not None else await _next_position(session, ResumeBase, user_id)
+        )
+        row = ResumeBase(
+            user_id=user_id, base_id=data.id, name=data.name, position=resolved_position
+        )
         session.add(row)
+    elif position is not None:
+        row.position = position
     row.name = data.name
     row.block_ids = list(data.block_ids)
     row.section_order = list(data.section_order)
@@ -103,7 +137,9 @@ async def delete_base(session: AsyncSession, user_id: uuid.UUID, base_id: str) -
 async def list_tracks(session: AsyncSession, user_id: uuid.UUID) -> list[Track]:
     return list(
         await session.scalars(
-            select(Track).where(Track.user_id == user_id).order_by(Track.created_at)
+            select(Track)
+            .where(Track.user_id == user_id)
+            .order_by(Track.position, Track.created_at, Track.track_id)
         )
     )
 
@@ -115,11 +151,24 @@ async def get_track(session: AsyncSession, user_id: uuid.UUID, track_id: str) ->
     return result
 
 
-async def upsert_track(session: AsyncSession, user_id: uuid.UUID, data: TrackModel) -> Track:
+async def upsert_track(
+    session: AsyncSession, user_id: uuid.UUID, data: TrackModel, position: int | None = None
+) -> Track:
     row = await get_track(session, user_id, data.id)
     if row is None:
-        row = Track(user_id=user_id, track_id=data.id, name=data.name, resume_base=data.resume_base)
+        resolved_position = (
+            position if position is not None else await _next_position(session, Track, user_id)
+        )
+        row = Track(
+            user_id=user_id,
+            track_id=data.id,
+            name=data.name,
+            resume_base=data.resume_base,
+            position=resolved_position,
+        )
         session.add(row)
+    elif position is not None:
+        row.position = position
     row.name = data.name
     row.description = data.description
     row.keywords = list(data.keywords)
@@ -142,7 +191,9 @@ async def delete_track(session: AsyncSession, user_id: uuid.UUID, track_id: str)
 async def list_guardrails(session: AsyncSession, user_id: uuid.UUID) -> list[Guardrail]:
     return list(
         await session.scalars(
-            select(Guardrail).where(Guardrail.user_id == user_id).order_by(Guardrail.created_at)
+            select(Guardrail)
+            .where(Guardrail.user_id == user_id)
+            .order_by(Guardrail.position, Guardrail.created_at, Guardrail.rule)
         )
     )
 
@@ -155,12 +206,17 @@ async def get_guardrail(session: AsyncSession, user_id: uuid.UUID, rule: str) ->
 
 
 async def upsert_guardrail(
-    session: AsyncSession, user_id: uuid.UUID, data: GuardrailRule
+    session: AsyncSession, user_id: uuid.UUID, data: GuardrailRule, position: int | None = None
 ) -> Guardrail:
     row = await get_guardrail(session, user_id, data.rule)
     if row is None:
-        row = Guardrail(user_id=user_id, rule=data.rule)
+        resolved_position = (
+            position if position is not None else await _next_position(session, Guardrail, user_id)
+        )
+        row = Guardrail(user_id=user_id, rule=data.rule, position=resolved_position)
         session.add(row)
+    elif position is not None:
+        row.position = position
     row.active = data.active
     row.config_json = dict(data.config)
     await session.flush()
