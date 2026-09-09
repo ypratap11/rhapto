@@ -25,11 +25,11 @@ def check_attribution(ctx: GuardrailContext) -> list[Violation]:
             )
             if _missing(entry_block.attribution, text):
                 out.append(_violation(entry_block.attribution, path, entry_block.id))
-        for i, bullet in enumerate(entry.bullets):
-            if bullet.source_block_id == entry.source_block_id:
+        for i, entry_bullet in enumerate(entry.bullets):
+            if entry_bullet.source_block_id == entry.source_block_id:
                 continue  # covered by the entry-level check
-            block = ctx.blocks.get(bullet.source_block_id)
-            if block and block.attribution and _missing(block.attribution, bullet.text):
+            block = ctx.blocks.get(entry_bullet.source_block_id)
+            if block and block.attribution and _missing(block.attribution, entry_bullet.text):
                 out.append(_violation(block.attribution, f"{path}.bullets[{i}]", block.id))
     return out
 

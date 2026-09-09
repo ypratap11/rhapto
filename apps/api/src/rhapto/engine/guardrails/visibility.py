@@ -8,7 +8,7 @@ RULE_NAME = "visibility-context"
 
 def check_visibility(ctx: GuardrailContext) -> list[Violation]:
     """No entry or bullet may derive from a block excluded by the JD's context tags."""
-    context = set(ctx.extract.context_tags)
+    context = {tag.casefold() for tag in ctx.extract.context_tags}
     if not context:
         return []
     out: list[Violation] = []
@@ -18,7 +18,7 @@ def check_visibility(ctx: GuardrailContext) -> list[Violation]:
         block = ctx.blocks.get(block_id)
         if block is None or block.visibility is None:
             continue
-        hits = sorted(context & set(block.visibility.exclude_when))
+        hits = sorted(tag for tag in block.visibility.exclude_when if tag.casefold() in context)
         if hits:
             out.append(
                 violation(

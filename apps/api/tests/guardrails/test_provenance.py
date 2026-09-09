@@ -2,7 +2,12 @@ from pathlib import Path
 
 from helpers import bullet, demo_extract, demo_resume
 
-from rhapto.engine.guardrails.base import GuardrailContext, iter_bullets, iter_entries
+from rhapto.engine.guardrails.base import (
+    GuardrailContext,
+    iter_bullets,
+    iter_entries,
+    iter_entries_with_section,
+)
 from rhapto.engine.guardrails.provenance import check_provenance
 from rhapto.profile.loader import load_profile
 
@@ -25,6 +30,12 @@ def test_iterators_yield_paths() -> None:
     ]
     paths = [p for p, _ in iter_bullets(resume)]
     assert paths[0] == "summary[0]" and "sections[0].entries[0].bullets[1]" in paths
+
+
+def test_iter_entries_with_section_yields_section_objects() -> None:
+    resume = demo_resume()
+    kinds = [section.kind for _, section, _ in iter_entries_with_section(resume)]
+    assert kinds == ["experience", "projects", "credentials"]
 
 
 def test_passes_for_valid_resume(demo_profile_dir: Path) -> None:

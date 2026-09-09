@@ -28,6 +28,16 @@ def test_normalize_handles_dashes_case_and_spaces() -> None:
     assert normalize_entity("2019–2025") == "2019-2025"
 
 
+def test_normalize_collapses_spaces_around_dashes() -> None:
+    assert normalize_entity("2019 - Present") == normalize_entity("2019-present")
+
+
+def test_spaced_dash_period_matches(demo_profile_dir: Path) -> None:
+    resume = demo_resume()
+    resume.sections[0].entries[0].period = "2019 - 2025"
+    assert check_entities(make_ctx(demo_profile_dir, resume)) == []
+
+
 def test_passes_for_matching_entities(demo_profile_dir: Path) -> None:
     assert check_entities(make_ctx(demo_profile_dir)) == []
 
@@ -72,4 +82,23 @@ def test_flags_entity_the_block_does_not_have(demo_profile_dir: Path) -> None:
 def test_unknown_block_is_skipped_here(demo_profile_dir: Path) -> None:
     resume = demo_resume()
     resume.sections[0].entries[0].source_block_id = "ghost"
+    assert check_entities(make_ctx(demo_profile_dir, resume)) == []
+
+
+def test_role_entry_may_not_omit_fields_the_block_has(demo_profile_dir: Path) -> None:
+    resume = demo_resume()
+    resume.sections[0].entries[0].role = None
+    violations = check_entities(make_ctx(demo_profile_dir, resume))
+    assert (
+        len(violations) == 1
+        and "missing" in violations[0].message
+        and "role" in violations[0].message
+    )
+
+
+def test_non_role_entry_may_omit_fields(demo_profile_dir: Path) -> None:
+    resume = demo_resume()
+    resume.sections[1].entries[
+        0
+    ].org = None  # side-llm-tool is a project block with org Independent
     assert check_entities(make_ctx(demo_profile_dir, resume)) == []

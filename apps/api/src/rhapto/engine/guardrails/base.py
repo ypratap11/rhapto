@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from collections.abc import Callable, Iterator, Mapping
 from dataclasses import dataclass, field, replace
 from typing import Any, Literal
@@ -7,7 +8,18 @@ from typing import Any, Literal
 from rhapto.models.guardrail_report import Violation
 from rhapto.models.jd_extract import JDExtract
 from rhapto.models.profile.blocks import Block
-from rhapto.models.resume_document import ResumeBullet, ResumeDocument, ResumeEntry
+from rhapto.models.resume_document import (
+    ResumeBullet,
+    ResumeDocument,
+    ResumeEntry,
+    ResumeSection,
+)
+
+DASHES = re.compile(r"[‒–—−]")
+
+
+def normalize_dashes(text: str) -> str:
+    return DASHES.sub("-", text)
 
 
 @dataclass(frozen=True)
@@ -25,10 +37,17 @@ class GuardrailContext:
 Rule = Callable[[GuardrailContext], list[Violation]]
 
 
-def iter_entries(resume: ResumeDocument) -> Iterator[tuple[str, ResumeEntry]]:
+def iter_entries_with_section(
+    resume: ResumeDocument,
+) -> Iterator[tuple[str, ResumeSection, ResumeEntry]]:
     for s, section in enumerate(resume.sections):
         for e, entry in enumerate(section.entries):
-            yield f"sections[{s}].entries[{e}]", entry
+            yield f"sections[{s}].entries[{e}]", section, entry
+
+
+def iter_entries(resume: ResumeDocument) -> Iterator[tuple[str, ResumeEntry]]:
+    for path, _section, entry in iter_entries_with_section(resume):
+        yield path, entry
 
 
 def iter_bullets(resume: ResumeDocument) -> Iterator[tuple[str, ResumeBullet]]:

@@ -4,16 +4,22 @@ import re
 
 from rapidfuzz import fuzz
 
-from rhapto.engine.guardrails.base import GuardrailContext, iter_entries, violation
+from rhapto.engine.guardrails.base import (
+    GuardrailContext,
+    iter_entries,
+    normalize_dashes,
+    violation,
+)
 from rhapto.models.guardrail_report import Violation
 
 RULE_NAME = "no-invented-entities"
 DEFAULT_THRESHOLD = 90
-DASHES = re.compile(r"[‒–—−]")
 
 
 def normalize_entity(text: str) -> str:
-    return re.sub(r"\s+", " ", DASHES.sub("-", text)).strip().casefold()
+    dashed = normalize_dashes(text)
+    collapsed_dashes = re.sub(r"\s*-\s*", "-", dashed)
+    return re.sub(r"\s+", " ", collapsed_dashes).strip().casefold()
 
 
 def _fuzzy_match(candidate: str, source: str, threshold: int) -> bool:
@@ -31,9 +37,18 @@ def check_entities(ctx: GuardrailContext) -> list[Violation]:
             continue
         for field_name in ("org", "role"):
             value = getattr(entry, field_name)
-            if value is None:
-                continue
             source = getattr(block, field_name)
+            if value is None:
+                if block.type == "role" and source is not None:
+                    out.append(
+                        violation(
+                            RULE_NAME,
+                            f"{field_name} is missing on entry but block {block.id!r} has {source!r}",
+                            path,
+                            block.id,
+                        )
+                    )
+                continue
             if source is None or not _fuzzy_match(value, source, threshold):
                 out.append(
                     violation(
@@ -43,6 +58,15 @@ def check_entities(ctx: GuardrailContext) -> list[Violation]:
                         block.id,
                     )
                 )
+        if entry.period is None and block.type == "role" and block.period is not None:
+            out.append(
+                violation(
+                    RULE_NAME,
+                    f"period is missing on entry but block {block.id!r} has {block.period!r}",
+                    path,
+                    block.id,
+                )
+            )
         if entry.period is not None and (
             block.period is None or normalize_entity(entry.period) != normalize_entity(block.period)
         ):

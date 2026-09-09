@@ -2,18 +2,23 @@ from __future__ import annotations
 
 import re
 
-from rhapto.engine.guardrails.base import GuardrailContext, iter_entries, violation
+from rhapto.engine.guardrails.base import (
+    GuardrailContext,
+    iter_entries_with_section,
+    normalize_dashes,
+    violation,
+)
 from rhapto.models.guardrail_report import Violation
 
 RULE_NAME = "date-consistency"
 PRESENT = 9999
 PERIOD_RE = re.compile(
-    r"^\s*(\d{4})\s*(?:(?:[-‒–—−]|to)\s*(\d{4}|present|current|now))?\s*$", re.IGNORECASE
+    r"^\s*(\d{4})\s*(?:(?:-|to)\s*(\d{4}|present|current|now))?\s*$", re.IGNORECASE
 )
 
 
 def parse_period(text: str) -> tuple[int, int] | None:
-    match = PERIOD_RE.match(text or "")
+    match = PERIOD_RE.match(normalize_dashes(text or ""))
     if not match:
         return None
     start = int(match.group(1))
@@ -28,7 +33,7 @@ def check_dates(ctx: GuardrailContext) -> list[Violation]:
     """Periods parse and are ordered; experience entries do not overlap unless a block is concurrent."""
     out: list[Violation] = []
     experience: list[tuple[str, str, int, int, bool]] = []  # path, block_id, start, end, concurrent
-    for path, entry in iter_entries(ctx.resume):
+    for path, section, entry in iter_entries_with_section(ctx.resume):
         if entry.period is None:
             continue
         parsed = parse_period(entry.period)
@@ -50,8 +55,7 @@ def check_dates(ctx: GuardrailContext) -> list[Violation]:
                 )
             )
             continue
-        section_index = int(path.split("[")[1].split("]")[0])
-        if ctx.resume.sections[section_index].kind == "experience":
+        if section.kind == "experience":
             block = ctx.blocks.get(entry.source_block_id)
             concurrent = bool(block and block.concurrent)
             experience.append((path, entry.source_block_id, start, end, concurrent))

@@ -63,3 +63,10 @@ def test_flags_entry_when_context_matches(demo_profile_dir: Path) -> None:
 
 def test_passes_for_demo_without_visibility(demo_profile_dir: Path) -> None:
     assert check_visibility(make_ctx(demo_profile_dir, demo_resume(), ["agency"])) == []
+
+
+def test_context_match_is_case_insensitive(demo_profile_dir: Path) -> None:
+    resume = demo_resume()
+    resume.summary.append(bullet("Delivered a client migration.", "agency-secret"))
+    violations = check_visibility(make_ctx(demo_profile_dir, resume, ["Agency"]))
+    assert len(violations) == 1
