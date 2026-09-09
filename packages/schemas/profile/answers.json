@@ -1,0 +1,12 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rhapto.dev/schemas/profile/answers.json",
+  "title": "AnswersFile",
+  "description": "answers.yaml: standard application answers plus header fields name, email, phone, location, links.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["answers"],
+  "properties": {
+    "answers": { "type": "object", "additionalProperties": { "type": "string" } }
+  }
+}

@@ -1,0 +1,64 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rhapto.dev/schemas/resume_document.json",
+  "title": "ResumeDocument",
+  "description": "A tailored resume. Every bullet and entry cites the block it came from.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["header", "sections"],
+  "properties": {
+    "header": { "$ref": "#/$defs/ResumeHeader" },
+    "summary": { "type": "array", "items": { "$ref": "#/$defs/ResumeBullet" }, "default": [] },
+    "sections": { "type": "array", "items": { "$ref": "#/$defs/ResumeSection" } }
+  },
+  "$defs": {
+    "ResumeHeader": {
+      "title": "ResumeHeader",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name"],
+      "properties": {
+        "name": { "type": "string" },
+        "email": { "type": "string" },
+        "phone": { "type": "string" },
+        "location": { "type": "string" },
+        "links": { "type": "array", "items": { "type": "string" }, "default": [] }
+      }
+    },
+    "ResumeBullet": {
+      "title": "ResumeBullet",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["text", "source_block_id"],
+      "properties": {
+        "text": { "type": "string" },
+        "source_block_id": { "type": "string" }
+      }
+    },
+    "ResumeEntry": {
+      "title": "ResumeEntry",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source_block_id"],
+      "properties": {
+        "source_block_id": { "type": "string" },
+        "org": { "type": "string" },
+        "role": { "type": "string" },
+        "period": { "type": "string" },
+        "title": { "type": "string" },
+        "bullets": { "type": "array", "items": { "$ref": "#/$defs/ResumeBullet" }, "default": [] }
+      }
+    },
+    "ResumeSection": {
+      "title": "ResumeSection",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["title", "kind", "entries"],
+      "properties": {
+        "title": { "type": "string" },
+        "kind": { "type": "string", "enum": ["experience", "projects", "skills", "credentials"] },
+        "entries": { "type": "array", "items": { "$ref": "#/$defs/ResumeEntry" } }
+      }
+    }
+  }
+}

@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rhapto.dev/schemas/profile/guardrails.json",
+  "title": "GuardrailsFile",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["guardrails"],
+  "properties": {
+    "guardrails": { "type": "array", "items": { "$ref": "#/$defs/GuardrailRule" } }
+  },
+  "$defs": {
+    "GuardrailRule": {
+      "title": "GuardrailRule",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["rule"],
+      "properties": {
+        "rule": { "type": "string" },
+        "active": { "type": "boolean", "default": true },
+        "config": { "type": "object", "additionalProperties": true, "default": {} }
+      }
+    }
+  }
+}

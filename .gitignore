@@ -1,5 +1,5 @@
 # personal data (never commit)
-profile/
+/profile/
 .env
 .env.*
 !.env.example

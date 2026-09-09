@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rhapto.dev/schemas/profile/watchlist.json",
+  "title": "WatchlistFile",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["watchlist"],
+  "properties": {
+    "watchlist": { "type": "array", "items": { "$ref": "#/$defs/WatchlistEntry" } }
+  },
+  "$defs": {
+    "WatchlistEntry": {
+      "title": "WatchlistEntry",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["company", "source", "board"],
+      "properties": {
+        "company": { "type": "string" },
+        "source": { "type": "string", "enum": ["greenhouse", "lever", "ashby", "smartrecruiters", "workable"] },
+        "board": { "type": "string" }
+      }
+    }
+  }
+}

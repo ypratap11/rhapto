@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rhapto.dev/schemas/profile/tracks.json",
+  "title": "TracksFile",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["tracks"],
+  "properties": {
+    "tracks": { "type": "array", "items": { "$ref": "#/$defs/Track" } }
+  },
+  "$defs": {
+    "Track": {
+      "title": "Track",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "resume_base"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$" },
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "keywords": { "type": "array", "items": { "type": "string" }, "default": [] },
+        "resume_base": { "type": "string" },
+        "min_fit": { "type": "integer", "minimum": 0, "maximum": 100, "default": 50 }
+      }
+    }
+  }
+}

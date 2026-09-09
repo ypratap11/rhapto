@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rhapto.dev/schemas/profile/blocks.json",
+  "title": "BlocksFile",
+  "description": "blocks.yaml: the user's provenance-checked resume block library.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["blocks"],
+  "properties": {
+    "blocks": { "type": "array", "items": { "$ref": "#/$defs/Block" } }
+  },
+  "$defs": {
+    "Visibility": {
+      "title": "Visibility",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "exclude_when": {
+          "description": "Context tags that hard-exclude this block from a tailoring run.",
+          "type": "array", "items": { "type": "string" }, "default": []
+        }
+      }
+    },
+    "Block": {
+      "title": "Block",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "type", "content"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$" },
+        "type": { "type": "string", "enum": ["achievement", "role", "project", "skill", "credential"] },
+        "org": { "type": "string" },
+        "role": { "type": "string" },
+        "period": { "type": "string", "description": "YYYY, YYYY-YYYY, or YYYY-Present" },
+        "verified": { "type": "boolean", "default": false, "description": "Only verified blocks may carry metrics." },
+        "metric": { "type": "string" },
+        "content": { "type": "string" },
+        "tags": { "type": "array", "items": { "type": "string" }, "default": [] },
+        "attribution": { "type": "string", "description": "Required attribution phrase for named projects." },
+        "concurrent": { "type": "boolean", "default": false, "description": "May overlap in time with other roles." },
+        "visibility": { "$ref": "#/$defs/Visibility" }
+      }
+    }
+  }
+}

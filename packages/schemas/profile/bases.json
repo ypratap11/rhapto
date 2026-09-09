@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rhapto.dev/schemas/profile/bases.json",
+  "title": "BasesFile",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["bases"],
+  "properties": {
+    "bases": { "type": "array", "items": { "$ref": "#/$defs/ResumeBase" } }
+  },
+  "$defs": {
+    "ResumeBase": {
+      "title": "ResumeBase",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "block_ids"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$" },
+        "name": { "type": "string" },
+        "block_ids": { "type": "array", "items": { "type": "string" } },
+        "section_order": {
+          "type": "array", "items": { "type": "string" },
+          "default": ["summary", "experience", "projects", "skills", "credentials"]
+        },
+        "style": { "type": "object", "additionalProperties": true, "default": {} }
+      }
+    }
+  }
+}

@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rhapto.dev/schemas/guardrail_report.json",
+  "title": "GuardrailReport",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["passed", "rules_run", "violations"],
+  "properties": {
+    "passed": { "type": "boolean" },
+    "rules_run": { "type": "array", "items": { "type": "string" } },
+    "violations": { "type": "array", "items": { "$ref": "#/$defs/Violation" } }
+  },
+  "$defs": {
+    "Violation": {
+      "title": "Violation",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["rule", "severity", "message", "path"],
+      "properties": {
+        "rule": { "type": "string" },
+        "severity": { "type": "string", "enum": ["error", "warning"] },
+        "message": { "type": "string" },
+        "path": { "type": "string", "description": "e.g. sections[0].entries[1].bullets[2]" },
+        "block_id": { "type": "string" }
+      }
+    }
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rhapto.dev/schemas/jd_extract.json",
+  "title": "JDExtract",
+  "description": "Structured requirements extracted from a job description.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["company", "title"],
+  "properties": {
+    "company": { "type": "string" },
+    "title": { "type": "string" },
+    "location_policy": { "type": "string", "default": "unspecified", "description": "remote, hybrid, onsite, or unspecified" },
+    "seniority": { "type": "string", "default": "unspecified" },
+    "must_have": { "type": "array", "items": { "type": "string" }, "default": [] },
+    "nice_to_have": { "type": "array", "items": { "type": "string" }, "default": [] },
+    "keywords": { "type": "array", "items": { "type": "string" }, "default": [] },
+    "likely_knockouts": { "type": "array", "items": { "type": "string" }, "default": [] },
+    "context_tags": { "type": "array", "items": { "type": "string" }, "default": [], "description": "Tags matched against block visibility.exclude_when" }
+  }
+}

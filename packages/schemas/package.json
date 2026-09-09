@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rhapto.dev/schemas/package.json",
+  "title": "ApplicationPackage",
+  "description": "Everything produced for one application, versioned.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["job", "track_id", "jd_extract", "resume", "cover_note", "change_log", "answers", "guardrail_report", "version", "status", "llm_calls", "created_at"],
+  "properties": {
+    "job": { "$ref": "#/$defs/JobSnapshot" },
+    "track_id": { "type": "string" },
+    "jd_extract": { "$ref": "jd_extract.json" },
+    "resume": { "$ref": "resume_document.json" },
+    "cover_note": { "type": "string" },
+    "change_log": { "type": "string" },
+    "answers": { "type": "object", "additionalProperties": { "type": "string" } },
+    "guardrail_report": { "$ref": "guardrail_report.json" },
+    "version": { "type": "integer", "minimum": 1 },
+    "status": { "type": "string", "enum": ["draft", "blocked"] },
+    "llm_calls": { "type": "integer", "minimum": 0 },
+    "created_at": { "type": "string", "format": "date-time" }
+  },
+  "$defs": {
+    "JobSnapshot": {
+      "title": "JobSnapshot",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["company", "title", "jd_text"],
+      "properties": {
+        "company": { "type": "string" },
+        "title": { "type": "string" },
+        "location": { "type": "string" },
+        "url": { "type": "string" },
+        "jd_text": { "type": "string" }
+      }
+    }
+  }
+}
