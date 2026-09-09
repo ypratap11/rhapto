@@ -55,9 +55,7 @@ def write_package(result: TailorResult, target: Path) -> None:
 
 @app.command(name="tailor")
 def tailor_cmd(
-    jd: Path = typer.Option(
-        ..., "--jd", exists=True, dir_okay=False, readable=True, help="Job description text file"
-    ),
+    jd: Path = typer.Option(..., "--jd", help="Job description text file"),
     profile: Path = typer.Option(Path("./profile"), "--profile", help="Profile directory"),
     track: str | None = typer.Option(None, "--track", help="Track id (default: first track)"),
     out: Path = typer.Option(
@@ -67,13 +65,20 @@ def tailor_cmd(
     feedback: str | None = typer.Option(None, "--feedback", help="Regeneration feedback"),
 ) -> None:
     """Tailor a resume package for one job description."""
+    if not jd.is_file():
+        typer.echo(f"error: job description file not found: {jd}", err=True)
+        raise typer.Exit(1)
     settings = get_settings()
     try:
         loaded = load_profile(profile)
     except ProfileError as exc:
         typer.echo(f"profile error: {exc}", err=True)
         raise typer.Exit(1) from exc
-    providers = build_providers(settings)
+    try:
+        providers = build_providers(settings)
+    except typer.BadParameter as exc:
+        typer.echo(f"error: {exc.message}", err=True)
+        raise typer.Exit(1) from exc
     jd_text = jd.read_text(encoding="utf-8")
 
     async def on_step(step: str) -> None:
@@ -97,7 +102,9 @@ def tailor_cmd(
     target = out / f"{slugify(package.job.company)}-{slugify(package.job.title)}"
     write_package(result, target)
 
-    if no_pdf or not result.docx:
+    if not result.docx:
+        typer.echo("PDF skipped: no DOCX was rendered (provenance violation; see guardrail report)")
+    elif no_pdf:
         typer.echo("PDF skipped")
     elif not soffice_available(settings.rhapto_soffice_binary):
         typer.echo(f"PDF skipped: LibreOffice ({settings.rhapto_soffice_binary}) not found")

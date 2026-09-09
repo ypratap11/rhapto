@@ -199,6 +199,40 @@ def test_tailor_renders_pdf_when_available(
     assert (workspace / "out" / "exampleco-data-platform-program-manager" / "resume.pdf").exists()
 
 
+def test_tailor_missing_jd_exits_1(workspace: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _patch_providers(monkeypatch, [])
+    result = runner.invoke(
+        cli.app,
+        [
+            "tailor",
+            "--jd",
+            str(workspace / "missing.txt"),
+            "--profile",
+            str(workspace / "profile"),
+            "--no-pdf",
+        ],
+    )
+    assert result.exit_code == 1 and "not found" in result.output
+
+
+def test_tailor_missing_api_key_exits_1(workspace: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from rhapto.config import Settings
+
+    monkeypatch.setattr(cli, "get_settings", lambda: Settings(_env_file=None, anthropic_api_key=""))
+    result = runner.invoke(
+        cli.app,
+        [
+            "tailor",
+            "--jd",
+            str(workspace / "jd.txt"),
+            "--profile",
+            str(workspace / "profile"),
+            "--no-pdf",
+        ],
+    )
+    assert result.exit_code == 1 and "ANTHROPIC_API_KEY" in result.output
+
+
 def test_build_providers_requires_api_key() -> None:
     from rhapto.config import Settings
 
