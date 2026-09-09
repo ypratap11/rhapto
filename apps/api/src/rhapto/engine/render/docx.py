@@ -15,6 +15,15 @@ from rhapto.models.resume_document import ResumeDocument
 FONT_NAME = "Calibri"
 FONT_SIZE = Pt(11)
 
+# ATS-safe standard headings. The section title the LLM wrote is ignored; kind is a validated
+# Literal, so the heading can never be a fabricated or non-standard label.
+SECTION_HEADINGS = {
+    "experience": "Experience",
+    "projects": "Projects",
+    "skills": "Skills",
+    "credentials": "Credentials",
+}
+
 
 class OrphanBulletError(EngineError):
     """A bullet or entry cites a block that is not in the library. The renderer refuses to continue."""
@@ -44,7 +53,12 @@ def _heading(doc: Any, text: str) -> None:
 
 
 def render_docx(resume: ResumeDocument, blocks: Mapping[str, Block]) -> bytes:
-    """Single column, standard headings, bullets via the built-in List Bullet style. No tables or images."""
+    """Single column, standard headings, bullets via the built-in List Bullet style. No tables or images.
+
+    Headings come from section.kind via SECTION_HEADINGS; ResumeSection.title is not rendered.
+    ResumeBase.section_order is not yet honoured - sections render in the order the composer
+    returned them (stage 2).
+    """
     _check_provenance(resume, blocks)
     doc = Document()
     normal = doc.styles["Normal"]
@@ -68,7 +82,7 @@ def render_docx(resume: ResumeDocument, blocks: Mapping[str, Block]) -> bytes:
         doc.add_paragraph(" ".join(b.text for b in resume.summary))
 
     for resume_section in resume.sections:
-        _heading(doc, resume_section.title)
+        _heading(doc, SECTION_HEADINGS.get(resume_section.kind, resume_section.kind))
         for entry in resume_section.entries:
             head = " | ".join(filter(None, [entry.role or entry.title, entry.org, entry.period]))
             if head:

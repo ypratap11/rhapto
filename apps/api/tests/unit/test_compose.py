@@ -86,6 +86,23 @@ async def test_compose_calls_llm_with_schema_and_returns_output(demo_profile_dir
     assert call.messages[0].role == "user"
 
 
+async def test_user_message_never_carries_contact_details(demo_profile_dir: Path) -> None:
+    profile = load_profile(demo_profile_dir)
+    assert profile.answers["email"] == "maya.chen@example.com"  # the demo profile has them
+    secrets = ("maya.chen@example.com", "+1 555 0100", "Denver, CO")
+    llm = FakeLLMProvider([_output(), _output()])
+    track = profile.get_track("data-pm")
+    await compose(demo_extract(), profile, track, _selection(), llm, "tighten it", demo_resume())
+    regenerated = llm.calls[0].messages[0].content
+    assert "<previous_resume>" in regenerated and "Maya Chen" in regenerated
+    for secret in secrets:
+        assert secret not in regenerated, secret
+    await compose(demo_extract(), profile, track, _selection(), llm)
+    fresh = llm.calls[1].messages[0].content
+    for secret in secrets:
+        assert secret not in fresh, secret
+
+
 def test_assemble_resume_adds_header(demo_profile_dir: Path) -> None:
     profile = load_profile(demo_profile_dir)
     resume = assemble_resume(_output(), profile)

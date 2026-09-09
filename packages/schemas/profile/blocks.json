@@ -31,7 +31,11 @@
         "type": { "type": "string", "enum": ["achievement", "role", "project", "skill", "credential"] },
         "org": { "type": "string" },
         "role": { "type": "string" },
-        "period": { "type": "string", "description": "YYYY, YYYY-YYYY, or YYYY-Present" },
+        "period": {
+          "type": "string",
+          "description": "YYYY, YYYY-YYYY, or YYYY-Present, each year optionally prefixed by a month (Mar 2019 - Present)",
+          "pattern": "^(?:(?:[Jj]an|[Ff]eb|[Mm]ar|[Aa]pr|[Mm]ay|[Jj]un|[Jj]ul|[Aa]ug|[Ss]ep|[Oo]ct|[Nn]ov|[Dd]ec)[a-z]*\\.?\\s+)?\\d{4}(?:\\s*(?:[-‒–—−]|to)\\s*(?:(?:(?:[Jj]an|[Ff]eb|[Mm]ar|[Aa]pr|[Mm]ay|[Jj]un|[Jj]ul|[Aa]ug|[Ss]ep|[Oo]ct|[Nn]ov|[Dd]ec)[a-z]*\\.?\\s+)?\\d{4}|[Pp]resent|[Cc]urrent|[Nn]ow))?$"
+        },
         "verified": { "type": "boolean", "default": false, "description": "Only verified blocks may carry metrics." },
         "metric": { "type": "string" },
         "content": { "type": "string" },

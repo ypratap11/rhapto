@@ -34,6 +34,16 @@ def test_block_rejects_unknown_field() -> None:
         Block.model_validate({"id": "x", "type": "role", "content": "c", "bogus": 1})
 
 
+def test_block_accepts_month_granularity_period() -> None:
+    assert Block(id="x", type="role", content="c", period="Mar 2019 - Present").period is not None
+    assert Block(id="x", type="role", content="c", period="2019-2025").period == "2019-2025"
+
+
+def test_block_rejects_unparseable_period() -> None:
+    with pytest.raises(ValidationError):
+        Block(id="x", type="role", content="c", period="Spring 2020")
+
+
 def test_block_rejects_bad_type() -> None:
     with pytest.raises(ValidationError):
         Block.model_validate({"id": "x", "type": "hobby", "content": "c"})

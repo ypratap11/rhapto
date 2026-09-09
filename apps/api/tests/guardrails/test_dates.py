@@ -55,6 +55,31 @@ def test_parse_period_formats() -> None:
     assert parse_period("") is None
 
 
+def test_parse_period_accepts_month_granularity() -> None:
+    assert parse_period("Mar 2019 - Present") == (2019, PRESENT)
+    assert parse_period("Jan 2019 - Mar 2022") == (2019, 2022)
+    assert parse_period("Sept. 2020") == (2020, 2020)
+    assert parse_period("January 2019 to December 2022") == (2019, 2022)
+    assert parse_period("Spring 2020") is None  # only real month names count
+
+
+def test_same_single_year_roles_overlap(demo_profile_dir: Path) -> None:
+    block, entry = _second_role(period="2020")
+    resume = demo_resume()
+    resume.sections[0].entries[0].period = "2020"
+    resume.sections[0].entries.append(entry)
+    violations = check_dates(make_ctx(demo_profile_dir, resume, [block]))
+    assert len(violations) == 1 and "overlaps" in violations[0].message
+
+
+def test_adjacent_single_year_roles_do_not_overlap(demo_profile_dir: Path) -> None:
+    block, entry = _second_role(period="2021")
+    resume = demo_resume()
+    resume.sections[0].entries[0].period = "2020"
+    resume.sections[0].entries.append(entry)
+    assert check_dates(make_ctx(demo_profile_dir, resume, [block])) == []
+
+
 def test_passes_for_demo(demo_profile_dir: Path) -> None:
     assert check_dates(make_ctx(demo_profile_dir)) == []
 

@@ -79,6 +79,18 @@ def test_base_referencing_unknown_block(tmp_path: Path) -> None:
         load_profile(tmp_path)
 
 
+def test_unparseable_period_names_file(tmp_path: Path) -> None:
+    (tmp_path / "blocks.yaml").write_text(
+        yaml.safe_dump(
+            {"blocks": [{"id": "a", "type": "role", "content": "x", "period": "Spring 2020"}]}
+        ),
+        encoding="utf-8",
+    )
+    (tmp_path / "tracks.yaml").write_text("tracks: []\n", encoding="utf-8")
+    with pytest.raises(ProfileError, match="blocks.yaml"):
+        load_profile(tmp_path)
+
+
 def test_invalid_yaml_shape_names_file(tmp_path: Path) -> None:
     (tmp_path / "blocks.yaml").write_text(
         "blocks: [{id: a, type: hobby, content: x}]\n", encoding="utf-8"

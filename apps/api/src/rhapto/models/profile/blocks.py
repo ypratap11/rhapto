@@ -26,9 +26,14 @@ class Block(BaseModel):
     type: Literal['achievement', 'role', 'project', 'skill', 'credential']
     org: str | None = None
     role: str | None = None
-    period: str | None = None
+    period: Annotated[
+        str | None,
+        Field(
+            pattern='^(?:(?:[Jj]an|[Ff]eb|[Mm]ar|[Aa]pr|[Mm]ay|[Jj]un|[Jj]ul|[Aa]ug|[Ss]ep|[Oo]ct|[Nn]ov|[Dd]ec)[a-z]*\\.?\\s+)?\\d{4}(?:\\s*(?:[-‒–—−]|to)\\s*(?:(?:(?:[Jj]an|[Ff]eb|[Mm]ar|[Aa]pr|[Mm]ay|[Jj]un|[Jj]ul|[Aa]ug|[Ss]ep|[Oo]ct|[Nn]ov|[Dd]ec)[a-z]*\\.?\\s+)?\\d{4}|[Pp]resent|[Cc]urrent|[Nn]ow))?$'
+        ),
+    ] = None
     """
-    YYYY, YYYY-YYYY, or YYYY-Present
+    YYYY, YYYY-YYYY, or YYYY-Present, each year optionally prefixed by a month (Mar 2019 - Present)
     """
     verified: bool = False
     """

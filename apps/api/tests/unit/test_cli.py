@@ -81,7 +81,7 @@ def test_tailor_writes_package(workspace: Path, monkeypatch: pytest.MonkeyPatch)
     assert "guardrails: passed" in result.output and "extract" in result.output
 
 
-def test_tailor_blocked_exits_2(workspace: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_tailor_blocked_exits_3(workspace: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     _patch_providers(monkeypatch, [demo_extract(), _bad(), _bad()])
     result = runner.invoke(
         cli.app,
@@ -96,7 +96,7 @@ def test_tailor_blocked_exits_2(workspace: Path, monkeypatch: pytest.MonkeyPatch
             "--no-pdf",
         ],
     )
-    assert result.exit_code == 2, result.output
+    assert result.exit_code == 3, result.output
     assert "no-unverified-metrics" in result.output and "25%" in result.output
     assert (workspace / "out" / "exampleco-data-platform-program-manager" / "package.json").exists()
 

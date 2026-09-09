@@ -4068,7 +4068,7 @@ git commit -m "feat(engine): tailor() orchestrator with 3-call budget, repair, a
 
 **Interfaces:**
 - Consumes: `Settings`, `get_settings` (Task 1); `load_profile`, `ProfileError` (Task 3); `AnthropicProvider`, `FastEmbedProvider`, `LLMProvider`, `EmbeddingProvider` (Task 4); `tailor`, `TailorRequest`, `LLMBudgetExceeded` (Task 14); `soffice_available`, `convert_docx_to_pdf`, `PdfRenderError` (Task 13).
-- Produces: `rhapto.cli.main.app` (Typer), `Providers(llm, embedder)` dataclass, `build_providers(settings: Settings) -> Providers` (tests monkeypatch this), `slugify(text: str) -> str`, `write_package(result: TailorResult, target: Path) -> None`. Exit codes: 0 draft, 1 error, 2 blocked.
+- Produces: `rhapto.cli.main.app` (Typer), `Providers(llm, embedder)` dataclass, `build_providers(settings: Settings) -> Providers` (tests monkeypatch this), `slugify(text: str) -> str`, `write_package(result: TailorResult, target: Path) -> None`. Exit codes: 0 draft, 1 error, 2 usage error, 3 blocked.
 
 - [ ] **Step 1: Write the failing tests**
 

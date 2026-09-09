@@ -22,7 +22,7 @@ app = typer.Typer(
 profile_app = typer.Typer(no_args_is_help=True, help="Inspect and validate a profile directory.")
 app.add_typer(profile_app, name="profile")
 
-EXIT_BLOCKED = 2
+EXIT_BLOCKED = 3  # 1 is an error, 2 is a click/typer usage error
 
 
 @dataclass

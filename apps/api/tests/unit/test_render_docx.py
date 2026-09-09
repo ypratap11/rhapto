@@ -32,6 +32,16 @@ def test_renders_single_column_ats_safe_docx(demo_profile_dir: Path) -> None:
     assert doc.styles["Normal"].font.name == "Calibri"
 
 
+def test_section_heading_comes_from_kind_not_llm_title(demo_profile_dir: Path) -> None:
+    blocks = load_profile(demo_profile_dir).block_map()
+    resume = demo_resume()
+    resume.sections[0].title = "Relevant Professional Experience"
+    doc = Document(BytesIO(render_docx(resume, blocks)))
+    texts = [p.text for p in doc.paragraphs]
+    assert "EXPERIENCE" in texts
+    assert "RELEVANT PROFESSIONAL EXPERIENCE" not in texts
+
+
 def test_orphan_bullet_raises(demo_profile_dir: Path) -> None:
     blocks = load_profile(demo_profile_dir).block_map()
     resume = demo_resume()

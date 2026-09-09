@@ -29,8 +29,9 @@ uv run rhapto tailor --jd path/to/jd.txt --profile ../../profile --out ../../out
 ```
 
 `tailor` writes `out/<company>-<role>/resume.docx`, `resume.pdf` (when LibreOffice is installed, otherwise skipped),
-`cover-note.md`, and `package.json` with the guardrail report and change log. Exit code 2 means the guardrails
-blocked the draft; the files are still written so you can see why.
+`cover-note.md`, and `package.json` with the guardrail report and change log. Exit code 3 means the guardrails
+blocked the draft; the files are still written so you can see why. Exit code 1 is an error; 2 is a usage error from
+the command-line parser.
 
 Without LibreOffice locally, use the container:
 

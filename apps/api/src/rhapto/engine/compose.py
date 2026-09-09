@@ -70,8 +70,11 @@ def build_user_message(
         f"<answers>\n{json.dumps(application_answers(answers), indent=1)}\n</answers>",
     ]
     if previous is not None:
+        # Name only: email, phone, location and links never reach the LLM, on the fresh path
+        # (application_answers strips them) or on regeneration.
+        redacted = previous.model_copy(update={"header": ResumeHeader(name=previous.header.name)})
         parts.append(
-            f"<previous_resume>\n{previous.model_dump_json(indent=1, exclude_none=True)}\n</previous_resume>"
+            f"<previous_resume>\n{redacted.model_dump_json(indent=1, exclude_none=True)}\n</previous_resume>"
         )
     if feedback:
         parts.append(f"<feedback>\n{feedback.strip()}\n</feedback>")

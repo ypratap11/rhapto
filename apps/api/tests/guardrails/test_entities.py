@@ -1,11 +1,38 @@
 from pathlib import Path
 
+import pytest
 from helpers import demo_extract, demo_resume
 
 from rhapto.engine.guardrails.base import GuardrailContext
 from rhapto.engine.guardrails.entities import check_entities, normalize_entity
 from rhapto.engine.guardrails.registry import RULES
+from rhapto.models.profile.blocks import Block
 from rhapto.profile.loader import load_profile
+
+PM_BLOCK = Block(
+    id="pm-role",
+    type="role",
+    org="Acme Analytics",
+    role="Product Manager",
+    period="2019-2025",
+    content="Managed the product.",
+)
+
+
+def ctx_with_role(demo_profile_dir: Path, role: str) -> GuardrailContext:
+    """The demo experience entry, re-pointed at a block whose role is exactly "Product Manager"."""
+    profile = load_profile(demo_profile_dir)
+    blocks = profile.block_map() | {PM_BLOCK.id: PM_BLOCK}
+    resume = demo_resume()
+    entry = resume.sections[0].entries[0]
+    entry.source_block_id = PM_BLOCK.id
+    entry.role = role
+    return GuardrailContext(
+        resume=resume,
+        blocks=blocks,
+        selection_ids=frozenset(blocks),
+        extract=demo_extract(),
+    )
 
 
 def make_ctx(demo_profile_dir: Path, resume=None, config=None):  # type: ignore[no-untyped-def]
@@ -56,13 +83,31 @@ def test_flags_inflated_title(demo_profile_dir: Path) -> None:
     assert violations[0].path == "sections[0].entries[0]" and "role" in violations[0].message
 
 
-def test_flags_org_suffix_below_threshold_but_allows_with_lower_threshold(
-    demo_profile_dir: Path,
-) -> None:
+@pytest.mark.parametrize(
+    "role", ["Sr Product Manager", "Product Manager II", "Lead Product Manager"]
+)
+def test_flags_titles_that_add_a_token(demo_profile_dir: Path, role: str) -> None:
+    violations = check_entities(ctx_with_role(demo_profile_dir, role))
+    assert len(violations) == 1 and "role" in violations[0].message
+
+
+def test_allows_case_and_dash_variants_of_the_same_title(demo_profile_dir: Path) -> None:
+    assert check_entities(ctx_with_role(demo_profile_dir, "product-manager")) == []
+
+
+def test_flags_near_miss_org(demo_profile_dir: Path) -> None:
+    resume = demo_resume()
+    resume.sections[0].entries[0].org = "Acme Analytica"  # ratio 92.9: above the floor
+    violations = check_entities(make_ctx(demo_profile_dir, resume))
+    assert len(violations) == 1 and "org" in violations[0].message
+
+
+def test_flags_org_with_an_added_token_at_both_thresholds(demo_profile_dir: Path) -> None:
+    """The token rule is stricter than the ratio: an added word is an added entity either way."""
     resume = demo_resume()
     resume.sections[0].entries[0].org = "Acme Analytics Inc"
     assert len(check_entities(make_ctx(demo_profile_dir, resume))) == 1
-    assert check_entities(make_ctx(demo_profile_dir, resume, {"fuzzy_threshold": 80})) == []
+    assert len(check_entities(make_ctx(demo_profile_dir, resume, {"fuzzy_threshold": 80}))) == 1
 
 
 def test_flags_changed_period(demo_profile_dir: Path) -> None:
