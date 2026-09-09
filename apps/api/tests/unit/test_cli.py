@@ -245,3 +245,10 @@ def test_profile_validate(workspace: Path, demo_profile_dir: Path) -> None:
     assert ok.exit_code == 0 and "4 blocks" in ok.output and "2 tracks" in ok.output
     bad = runner.invoke(cli.app, ["profile", "validate", str(workspace / "nothing")])
     assert bad.exit_code == 1
+
+
+def test_db_upgrade_and_profile_import_export_commands_exist() -> None:
+    result = runner.invoke(cli.app, ["db", "--help"])
+    assert result.exit_code == 0 and "upgrade" in result.output
+    result = runner.invoke(cli.app, ["profile", "--help"])
+    assert "import" in result.output and "export" in result.output

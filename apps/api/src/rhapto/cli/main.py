@@ -1,20 +1,29 @@
 from __future__ import annotations
 
 import asyncio
+import os
 import re
+import uuid
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from pathlib import Path
 
 import typer
+from alembic.config import Config
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from alembic import command
 from rhapto.config import Settings, get_settings
+from rhapto.db.repositories.users import get_or_create_user
+from rhapto.db.session import make_engine, make_session_factory
 from rhapto.engine.pipeline import LLMBudgetExceeded, TailorResult, tailor
 from rhapto.engine.providers.anthropic import AnthropicProvider
 from rhapto.engine.providers.embeddings import EmbeddingProvider, FastEmbedProvider
 from rhapto.engine.providers.llm import LLMProvider
 from rhapto.engine.render.pdf import PdfRenderError, convert_docx_to_pdf, soffice_available
-from rhapto.engine.types import ProfileError, TailorRequest
+from rhapto.engine.types import Profile, ProfileError, TailorRequest
 from rhapto.profile.loader import load_profile
+from rhapto.services.profile_sync import export_profile_dir, import_profile_dir
 
 app = typer.Typer(
     no_args_is_help=True, help="Rhapto: human-in-the-loop AI job application copilot."
@@ -141,3 +150,85 @@ def profile_validate(
         f"ok: {len(loaded.blocks)} blocks, {len(loaded.tracks)} tracks, {len(loaded.bases)} bases, "
         f"{len(loaded.guardrails)} guardrail rules, {len(loaded.answers)} answers"
     )
+
+
+db_app = typer.Typer(no_args_is_help=True, help="Database maintenance.")
+app.add_typer(db_app, name="db")
+
+
+def alembic_config() -> Config:
+    """alembic.ini lives two directories above the package (apps/api) in a checkout and at /app in the image."""
+    root = Path(__file__).resolve().parents[3]
+    return Config(str(root / "alembic.ini"))
+
+
+def run_migrations(database_url: str) -> None:
+    os.environ["DATABASE_URL"] = database_url
+    command.upgrade(alembic_config(), "head")
+
+
+@db_app.command("upgrade")
+def db_upgrade() -> None:
+    """Apply database migrations."""
+    run_migrations(get_settings().database_url)
+    typer.echo("database is up to date")
+
+
+async def _with_user(
+    database_url: str,
+    email: str,
+    fn: Callable[[AsyncSession, uuid.UUID], Awaitable[Profile]],
+) -> Profile:
+    engine = make_engine(database_url)
+    try:
+        async with make_session_factory(engine)() as session:
+            user = await get_or_create_user(session, email)
+            result = await fn(session, user.id)
+            await session.commit()
+            return result
+    finally:
+        await engine.dispose()
+
+
+@profile_app.command("import")
+def profile_import(
+    path: Path = typer.Argument(
+        Path("./profile"), help="Profile directory to import (replaces the stored profile)"
+    ),
+) -> None:
+    """Import a YAML profile directory into the database, replacing what is stored."""
+    settings = get_settings()
+    try:
+        profile = asyncio.run(
+            _with_user(
+                settings.database_url,
+                settings.rhapto_user_email,
+                lambda s, uid: import_profile_dir(s, uid, path),
+            )
+        )
+    except ProfileError as exc:
+        typer.echo(f"invalid: {exc}", err=True)
+        raise typer.Exit(1) from exc
+    typer.echo(
+        f"imported {len(profile.blocks)} blocks, {len(profile.tracks)} tracks for {settings.rhapto_user_email}"
+    )
+
+
+@profile_app.command("export")
+def profile_export(
+    path: Path = typer.Argument(Path("./profile"), help="Directory to write YAML files into"),
+) -> None:
+    """Export the stored profile to a YAML directory."""
+    settings = get_settings()
+    try:
+        profile = asyncio.run(
+            _with_user(
+                settings.database_url,
+                settings.rhapto_user_email,
+                lambda s, uid: export_profile_dir(s, uid, path),
+            )
+        )
+    except ProfileError as exc:
+        typer.echo(f"error: {exc}", err=True)
+        raise typer.Exit(1) from exc
+    typer.echo(f"exported {len(profile.blocks)} blocks to {path}")
