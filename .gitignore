@@ -1,10 +1,22 @@
+# personal data (never commit)
 profile/
 .env
+.env.*
+!.env.example
+
+# outputs
 out/
+dist/
+
+# python
 __pycache__/
-node_modules/
 *.pyc
 .venv/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+*.egg-info/
 
-# superpowers scratch (ledgers, briefs, review packages)
-.superpowers/
+# node
+node_modules/
+.next/

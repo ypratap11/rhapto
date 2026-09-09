@@ -1,6 +1,10 @@
 answers:
-  work_authorization: "US citizen"
+  name: "Maya Chen"
+  email: "maya.chen@example.com"
+  phone: "+1 555 0100"
   location: "Denver, CO"
+  links: "github.com/mayachen-example"
+  work_authorization: "US citizen"
   onsite_preference: "Remote or hybrid"
   salary_range: "$160k-$190k base"
   notice_period: "2 weeks"

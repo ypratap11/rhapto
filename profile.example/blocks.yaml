@@ -5,6 +5,7 @@ blocks:
     org: Acme Analytics
     role: Senior Data Program Manager
     period: "2019-2025"
+    verified: true
     content: Led cross-functional delivery of the customer data platform across 4 teams.
     tags: [program-management, data]
   - id: acme-migration
