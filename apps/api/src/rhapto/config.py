@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from functools import lru_cache
+from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -14,6 +15,13 @@ class Settings(BaseSettings):
     rhapto_llm_model: str = "claude-sonnet-5"
     rhapto_embedding_model: str = "BAAI/bge-small-en-v1.5"
     rhapto_soffice_binary: str = "soffice"
+    database_url: str = "postgresql+asyncpg://rhapto:rhapto@localhost:5432/rhapto"
+    rhapto_test_database_url: str = "postgresql+asyncpg://rhapto:rhapto@localhost:5432/rhapto_test"
+    redis_url: str = "redis://localhost:6379/0"
+    rhapto_api_token: str = ""
+    rhapto_user_email: str = "user@example.com"
+    rhapto_packages_dir: Path = Path("data/packages")
+    rhapto_web_origin: str = "http://localhost:3000"
 
 
 @lru_cache(maxsize=1)

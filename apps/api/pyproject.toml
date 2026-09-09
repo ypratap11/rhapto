@@ -14,6 +14,18 @@ dependencies = [
     "pyyaml>=6.0",
     "typer>=0.12",
     "rapidfuzz>=3.9",
+    "sqlalchemy[asyncio]>=2.0.30",
+    "asyncpg>=0.29",
+    "alembic>=1.13",
+    "pgvector>=0.3",
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.30",
+    "arq>=0.26",
+    "redis>=5.0",
+    "sse-starlette>=2.1",
+    "httpx>=0.27",
+    "trafilatura>=1.12",
+    "python-multipart>=0.0.9",
 ]
 
 [project.scripts]
@@ -28,6 +40,7 @@ dev = [
     "datamodel-code-generator>=0.26",
     "import-linter>=2.0",
     "types-PyYAML",
+    "pytest-timeout>=2.3",
 ]
 
 [build-system]
@@ -41,11 +54,12 @@ packages = ["src/rhapto"]
 asyncio_mode = "auto"
 testpaths = ["tests"]
 pythonpath = ["tests"]
+timeout = 60
 
 [tool.ruff]
 line-length = 100
 target-version = "py312"
-extend-exclude = ["src/rhapto/models"]
+extend-exclude = ["src/rhapto/models", "alembic"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]
@@ -60,7 +74,8 @@ strict = true
 plugins = ["pydantic.mypy"]
 mypy_path = "src"
 packages = ["rhapto"]
+exclude = ["alembic"]
 
 [[tool.mypy.overrides]]
-module = ["fastembed.*", "docx.*", "rapidfuzz.*"]
+module = ["fastembed.*", "docx.*", "rapidfuzz.*", "pgvector.*", "trafilatura.*", "arq.*", "sse_starlette.*"]
 ignore_missing_imports = true
