@@ -38,6 +38,12 @@ def bad_output() -> dict[str, Any]:
     return output
 
 
+def cover_note_metric_output() -> dict[str, Any]:
+    output = good_output()
+    output["cover_note"] = "I cut costs 37% for the platform team. " + "word " * 120
+    return output
+
+
 def test_call_budget() -> None:
     budget = CallBudget(max_calls=2)
     budget.before_call()
@@ -140,3 +146,14 @@ async def test_unknown_track_raises(profile: Profile) -> None:
             FakeLLMProvider([]),
             FakeEmbeddingProvider(),
         )
+
+
+async def test_cover_note_metric_blocks_even_when_the_resume_is_clean(profile: Profile) -> None:
+    output = cover_note_metric_output()
+    llm = FakeLLMProvider([demo_extract(), output, output])
+    result = await tailor(TailorRequest(jd_text=JD), profile, llm, FakeEmbeddingProvider())
+    assert result.package.status == "blocked" and result.package.llm_calls == 3
+    violations = result.package.guardrail_report.violations
+    assert [v.path for v in violations] == ["cover_note"]
+    assert violations[0].rule == "no-unverified-metrics" and violations[0].block_id is None
+    assert "37%" in violations[0].message

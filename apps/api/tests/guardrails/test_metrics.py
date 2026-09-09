@@ -1,5 +1,6 @@
 from pathlib import Path
 
+import pytest
 from helpers import bullet, demo_extract, demo_resume
 
 from rhapto.engine.guardrails.base import GuardrailContext
@@ -132,4 +133,56 @@ def test_adversarial_spelled_out_cardinal(demo_profile_dir: Path) -> None:
 def test_prose_one_is_not_a_metric(demo_profile_dir: Path) -> None:
     resume = demo_resume()
     resume.summary = [bullet("Led one platform program end to end.", "acme-data-pm")]
+    assert check_metrics(make_ctx(demo_profile_dir, resume)) == []
+
+
+NUMERIC_ROWS = [
+    ("Cut p95 latency by 40ms.", ["40ms"]),
+    ("Led a 40-person team.", ["40"]),
+    ("Grew revenue 3-fold.", ["3"]),
+    ("Scaled to 10TB of data.", ["10TB"]),
+    ("Cut build time from 30min to 5min.", ["30min", "5min"]),
+    ("raised $2.5M", ["$2.5M"]),
+    ("improved NPS by 12 points", ["12"]),
+    ("Shipped v2 API", []),
+    ("Follows iso-8601", []),
+    ("Wrote it in Python3", []),
+]
+
+
+@pytest.mark.parametrize(("text", "expected"), NUMERIC_ROWS, ids=[row[0] for row in NUMERIC_ROWS])
+def test_numeric_tokenizer_realistic_metrics(text: str, expected: list[str]) -> None:
+    tokens = find_numeric_tokens(text)
+    if not expected:
+        assert tokens == []
+        return
+    assert tokens, f"no numeric token found in {text!r}"
+    for token in expected:
+        assert token in tokens, f"{token!r} not in {tokens!r}"
+
+
+def test_adversarial_unit_suffixed_and_hyphenated_metrics(demo_profile_dir: Path) -> None:
+    resume = demo_resume()
+    resume.sections[1].entries[0].bullets[0] = bullet(
+        "Cut eval latency by 40ms for a 12-person team.", "side-llm-tool"
+    )
+    violations = check_metrics(make_ctx(demo_profile_dir, resume))
+    assert len(violations) == 1
+    assert "40ms" in violations[0].message and "12" in violations[0].message
+
+
+def test_adversarial_metric_hidden_in_entry_title(demo_profile_dir: Path) -> None:
+    resume = demo_resume()
+    resume.sections[1].entries[
+        0
+    ].title = "Open-source LLM eval harness (12k GitHub stars, 40% faster)"
+    violations = check_metrics(make_ctx(demo_profile_dir, resume))
+    assert len(violations) == 1
+    assert violations[0].path == "sections[1].entries[0].title"
+    assert violations[0].block_id == "side-llm-tool" and "12k" in violations[0].message
+
+
+def test_entry_period_copied_from_a_verified_block_is_not_a_metric(demo_profile_dir: Path) -> None:
+    resume = demo_resume()
+    assert resume.sections[0].entries[0].period == "2019-2025"  # verified block acme-data-pm
     assert check_metrics(make_ctx(demo_profile_dir, resume)) == []

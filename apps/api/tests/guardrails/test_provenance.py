@@ -7,6 +7,7 @@ from rhapto.engine.guardrails.base import (
     iter_bullets,
     iter_entries,
     iter_entries_with_section,
+    iter_texts,
 )
 from rhapto.engine.guardrails.provenance import check_provenance
 from rhapto.profile.loader import load_profile
@@ -30,6 +31,19 @@ def test_iterators_yield_paths() -> None:
     ]
     paths = [p for p, _ in iter_bullets(resume)]
     assert paths[0] == "summary[0]" and "sections[0].entries[0].bullets[1]" in paths
+
+
+def test_iter_texts_covers_bullets_and_entry_header_fields() -> None:
+    resume = demo_resume()
+    items = list(iter_texts(resume))
+    # 1 summary bullet + (org, role, period + 2 bullets) + (org, title + 1 bullet) + 1 bullet
+    assert len(items) == 10
+    paths = [p for p, _, _ in items]
+    assert paths[0] == "summary[0]"
+    assert "sections[0].entries[0].period" in paths
+    assert "sections[1].entries[0].title" in paths
+    assert ("sections[0].entries[0].role", "Senior Data Program Manager", "acme-data-pm") in items
+    assert all(text and block_id for _, text, block_id in items)
 
 
 def test_iter_entries_with_section_yields_section_objects() -> None:

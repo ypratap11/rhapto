@@ -82,7 +82,9 @@ async def tailor(
 
     await _notify(on_step, "validate")
     resume = assemble_resume(output, profile)
-    report = run_guardrails(resume, profile, selection.block_ids, jd_extract)
+    report = run_guardrails(
+        resume, profile, selection.block_ids, jd_extract, cover_note=output.cover_note
+    )
 
     if not report.passed:
         await _notify(on_step, "repair")
@@ -90,7 +92,9 @@ async def tailor(
         output, usage = await repair(output, report, build_system_blocks(profile, track), llm)
         budget.after_call(usage)
         resume = assemble_resume(output, profile)
-        report = run_guardrails(resume, profile, selection.block_ids, jd_extract)
+        report = run_guardrails(
+            resume, profile, selection.block_ids, jd_extract, cover_note=output.cover_note
+        )
 
     await _notify(on_step, "render")
     try:

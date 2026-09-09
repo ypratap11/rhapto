@@ -19,7 +19,7 @@ Structure:
   Projects (kind "projects"): one entry per project block with title and org.
   Skills (kind "skills"): one entry per skill block with a single bullet.
   Credentials (kind "credentials"): one entry per credential block with a single bullet.
-- cover_note: 120-180 words, first person, specific to this job, obeying rule 2.
+- cover_note: 120-180 words, first person, specific to this job; the validator checks it for unsourced numbers.
 - change_log: 3-6 short lines on what you emphasised and why.
 - answers: a short drafted answer for every key given in <answers>, plus "why_this_company".
 When <feedback> is present, apply it to <previous_resume> rather than starting over."""

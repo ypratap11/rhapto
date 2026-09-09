@@ -22,6 +22,13 @@ def normalize_dashes(text: str) -> str:
     return DASHES.sub("-", text)
 
 
+def normalize_entity(text: str) -> str:
+    """Case-folded, dash- and whitespace-normalized form used to compare entity strings."""
+    dashed = normalize_dashes(text)
+    collapsed_dashes = re.sub(r"\s*-\s*", "-", dashed)
+    return re.sub(r"\s+", " ", collapsed_dashes).strip().casefold()
+
+
 @dataclass(frozen=True)
 class GuardrailContext:
     resume: ResumeDocument
@@ -56,6 +63,22 @@ def iter_bullets(resume: ResumeDocument) -> Iterator[tuple[str, ResumeBullet]]:
     for entry_path, entry in iter_entries(resume):
         for i, b in enumerate(entry.bullets):
             yield f"{entry_path}.bullets[{i}]", b
+
+
+ENTRY_TEXT_FIELDS = ("title", "org", "role", "period")
+
+
+def iter_texts(resume: ResumeDocument) -> Iterator[tuple[str, str, str]]:
+    """Every rendered text with its path and source block id: summary bullets, entry header fields, entry bullets."""
+    for i, b in enumerate(resume.summary):
+        yield f"summary[{i}]", b.text, b.source_block_id
+    for entry_path, entry in iter_entries(resume):
+        for field_name in ENTRY_TEXT_FIELDS:
+            value: str | None = getattr(entry, field_name)
+            if value is not None:
+                yield f"{entry_path}.{field_name}", value, entry.source_block_id
+        for i, b in enumerate(entry.bullets):
+            yield f"{entry_path}.bullets[{i}]", b.text, b.source_block_id
 
 
 def violation(

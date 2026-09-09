@@ -1,16 +1,25 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Iterable
 
-from rhapto.engine.guardrails.base import GuardrailContext, iter_bullets, violation
+from rhapto.engine.guardrails.base import (
+    GuardrailContext,
+    iter_texts,
+    normalize_entity,
+    violation,
+)
 from rhapto.models.guardrail_report import Violation
 from rhapto.models.profile.blocks import Block
 
 RULE_NAME = "no-unverified-metrics"
 
-# A number optionally prefixed by currency and suffixed by %, percent, k/m/b, or x. Not part of a word.
+# A number, optionally prefixed by currency and followed by a short unit (%, percent, k, m, bn, x,
+# ms, min, TB, pp, ...). A trailing hyphen or unknown word no longer suppresses the token, so
+# "40ms", "10TB" and "40-person" are all seen. The lookbehind still keeps "v2", "iso-8601" and
+# "Python3" quiet: a digit glued to a word character, a dot or a dash on the left is not a metric.
 NUMERIC_RE = re.compile(
-    r"(?<![\w.\-])[$€£]?\d[\d,]*(?:\.\d+)?(?:\s?(?:%|percent|k|m|bn|b|x))?(?![\w\-])",
+    r"(?<![\w.\-])[$€£]?\d[\d,]*(?:\.\d+)?(?:\s?(?:%|percent\b|[A-Za-z]{1,4}\b))?",
     re.IGNORECASE,
 )
 SPELLED_RE = re.compile(
@@ -82,31 +91,56 @@ def _is_exempt_year(normalized: str, block: Block) -> bool:
     )
 
 
+def _is_copied_period(path: str, text: str, block: Block) -> bool:
+    """An entry period copied verbatim from its block is the block's own data, not a new metric."""
+    return (
+        path.endswith(".period")
+        and block.period is not None
+        and normalize_entity(text) == normalize_entity(block.period)
+    )
+
+
+def check_text_against_blocks(text: str, blocks: Iterable[Block]) -> list[str]:
+    """Offending tokens in free text: any numeric or spelled quantity not present in some verified block's source text."""
+    sources = [_source_text(block) for block in blocks if block.verified]
+    source_numbers = {normalize_number(t) for s in sources for t in find_numeric_tokens(s)}
+    source_lower = " ".join(sources).casefold()
+    offending = [t for t in find_numeric_tokens(text) if normalize_number(t) not in source_numbers]
+    offending += [p for p in find_spelled_quantities(text) if p.casefold() not in source_lower]
+    return offending
+
+
 def check_metrics(ctx: GuardrailContext) -> list[Violation]:
-    """Every number or spelled-out quantity must appear in a verified source block."""
+    """Every number or spelled-out quantity in a rendered text must appear in a verified source block.
+
+    Covers summary bullets, entry header fields (title, org, role, period) and entry bullets:
+    anything the renderer prints.
+    """
     out: list[Violation] = []
-    for path, bullet in iter_bullets(ctx.resume):
-        block = ctx.blocks.get(bullet.source_block_id)
+    for path, text, block_id in iter_texts(ctx.resume):
+        block = ctx.blocks.get(block_id)
         if block is None:
             continue
+        if _is_copied_period(path, text, block):
+            continue  # no-invented-entities owns the period field
         source = _source_text(block)
         source_numbers = {normalize_number(t) for t in find_numeric_tokens(source)}
         source_lower = source.casefold()
         offending: list[str] = []
-        for token in find_numeric_tokens(bullet.text):
+        for token in find_numeric_tokens(text):
             normalized = normalize_number(token)
             if _is_exempt_year(normalized, block):
                 continue
             if not block.verified or normalized not in source_numbers:
                 offending.append(token)
-        for phrase in find_spelled_quantities(bullet.text):
+        for phrase in find_spelled_quantities(text):
             if not block.verified or phrase.casefold() not in source_lower:
                 offending.append(phrase)
         if not offending:
             continue
         if not block.verified:
             message = (
-                f"block {block.id!r} is not verified but the bullet contains "
+                f"block {block.id!r} is not verified but the text contains "
                 f"metric(s): {', '.join(offending)}"
             )
         else:
