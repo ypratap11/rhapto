@@ -1,0 +1,101 @@
+from __future__ import annotations
+
+import uuid
+from datetime import UTC, datetime
+from typing import Any, cast
+
+from sqlalchemy import CursorResult, delete, or_, select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from rhapto.db.hashing import dedupe_hash
+from rhapto.db.models import Application, Job, Package
+
+compute_dedupe_hash = dedupe_hash
+
+
+async def create_job(
+    session: AsyncSession,
+    user_id: uuid.UUID,
+    *,
+    jd_text: str,
+    source: str = "manual",
+    company: str | None = None,
+    title: str | None = None,
+    location: str | None = None,
+    url: str | None = None,
+) -> Job:
+    job = Job(
+        user_id=user_id,
+        source=source,
+        company=company,
+        title=title,
+        location=location,
+        url=url,
+        jd_text=jd_text,
+        dedupe_hash=compute_dedupe_hash(jd_text),
+        discovered_at=datetime.now(UTC),
+    )
+    session.add(job)
+    await session.flush()
+    return job
+
+
+async def find_duplicate(
+    session: AsyncSession, user_id: uuid.UUID, dedupe_hash_value: str
+) -> Job | None:
+    result: Job | None = await session.scalar(
+        select(Job).where(Job.user_id == user_id, Job.dedupe_hash == dedupe_hash_value)
+    )
+    return result
+
+
+async def list_jobs(
+    session: AsyncSession, user_id: uuid.UUID, *, search: str | None = None
+) -> list[Job]:
+    query = select(Job).where(Job.user_id == user_id)
+    if search:
+        pattern = f"%{search.lower()}%"
+        query = query.where(
+            or_(Job.company.ilike(pattern), Job.title.ilike(pattern), Job.jd_text.ilike(pattern))
+        )
+    return list(
+        await session.scalars(
+            query.order_by(Job.discovered_at.desc(), Job.created_at.desc(), Job.id)
+        )
+    )
+
+
+async def get_job(session: AsyncSession, user_id: uuid.UUID, job_id: uuid.UUID) -> Job | None:
+    result: Job | None = await session.scalar(
+        select(Job).where(Job.user_id == user_id, Job.id == job_id)
+    )
+    return result
+
+
+async def delete_job(session: AsyncSession, user_id: uuid.UUID, job_id: uuid.UUID) -> bool:
+    result = cast(
+        "CursorResult[Any]",
+        await session.execute(delete(Job).where(Job.user_id == user_id, Job.id == job_id)),
+    )
+    return bool(result.rowcount)
+
+
+async def package_ids_for_job(session: AsyncSession, job_id: uuid.UUID) -> list[uuid.UUID]:
+    return list(await session.scalars(select(Package.id).where(Package.job_id == job_id)))
+
+
+async def latest_package(session: AsyncSession, job_id: uuid.UUID) -> Package | None:
+    result: Package | None = await session.scalar(
+        select(Package).where(Package.job_id == job_id).order_by(Package.version.desc()).limit(1)
+    )
+    return result
+
+
+async def application_for_job(session: AsyncSession, job_id: uuid.UUID) -> Application | None:
+    result: Application | None = await session.scalar(
+        select(Application)
+        .where(Application.job_id == job_id)
+        .order_by(Application.created_at.desc())
+        .limit(1)
+    )
+    return result

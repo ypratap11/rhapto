@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Sequence
 from http import HTTPStatus
 from typing import Any
 
@@ -26,6 +27,19 @@ def not_found(what: str, ident: object) -> HTTPException:
     return HTTPException(status_code=404, detail=f"{what} {ident} not found")
 
 
+def _json_safe_errors(errors: Sequence[Any]) -> list[dict[str, Any]]:
+    """Strip raw exception objects pydantic embeds in ``ctx.error`` so the
+    error list can be JSON-encoded (e.g. a model_validator raising ValueError)."""
+    sanitized: list[dict[str, Any]] = []
+    for error in errors:
+        error = dict(error)
+        ctx = error.get("ctx")
+        if isinstance(ctx, dict) and isinstance(ctx.get("error"), BaseException):
+            error["ctx"] = {**ctx, "error": str(ctx["error"])}
+        sanitized.append(error)
+    return sanitized
+
+
 def install_error_handlers(app: FastAPI) -> None:
     @app.exception_handler(StarletteHTTPException)
     async def _http(request: Request, exc: StarletteHTTPException) -> JSONResponse:
@@ -39,7 +53,10 @@ def install_error_handlers(app: FastAPI) -> None:
     @app.exception_handler(RequestValidationError)
     async def _validation(request: Request, exc: RequestValidationError) -> JSONResponse:
         return problem(
-            422, "Unprocessable Entity", "request validation failed", errors=exc.errors()
+            422,
+            "Unprocessable Entity",
+            "request validation failed",
+            errors=_json_safe_errors(exc.errors()),
         )
 
     @app.exception_handler(ProfileError)
