@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from rhapto import __version__
 from rhapto.api.deps import AppState
 from rhapto.api.errors import install_error_handlers
-from rhapto.api.routers import meta
+from rhapto.api.routers import meta, profile
 from rhapto.config import Settings, get_settings
 from rhapto.db.repositories.users import get_or_create_user
 from rhapto.db.session import make_engine, make_session_factory
@@ -74,6 +74,7 @@ def create_app(
     )
     install_error_handlers(app)
     app.include_router(meta.router, prefix=API_PREFIX, tags=["meta"])
+    app.include_router(profile.router, prefix=API_PREFIX, tags=["profile"])
     return app
 
 

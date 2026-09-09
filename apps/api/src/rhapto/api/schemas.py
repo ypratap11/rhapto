@@ -12,3 +12,10 @@ class HealthOut(BaseModel):
 class MeOut(BaseModel):
     email: str
     user_id: uuid.UUID
+
+
+class ImportOut(BaseModel):
+    blocks: int
+    tracks: int
+    bases: int
+    guardrails: int

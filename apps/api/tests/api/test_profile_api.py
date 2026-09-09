@@ -1,0 +1,123 @@
+import io
+import zipfile
+from pathlib import Path
+
+import httpx
+import pytest
+
+
+async def test_blocks_crud_and_embedding_enqueued(client: httpx.AsyncClient, enqueuer) -> None:  # type: ignore[no-untyped-def]
+    assert (await client.get("/api/v1/profile/blocks")).json() == []
+    body = {
+        "id": "acme-x",
+        "type": "achievement",
+        "content": "Did X.",
+        "verified": True,
+        "metric": "12 things",
+        "tags": ["x"],
+    }
+    created = await client.put("/api/v1/profile/blocks/acme-x", json=body)
+    assert created.status_code == 201 and created.json()["metric"] == "12 things"
+    updated = await client.put(
+        "/api/v1/profile/blocks/acme-x", json={**body, "content": "Did X better."}
+    )
+    assert updated.status_code == 200 and updated.json()["content"] == "Did X better."
+    assert [b["id"] for b in (await client.get("/api/v1/profile/blocks")).json()] == ["acme-x"]
+    assert (
+        "embed_blocks",
+        {"user_id": enqueuer.calls[0][1]["user_id"], "block_ids": ["acme-x"]},
+    ) == enqueuer.calls[0]
+    assert (await client.delete("/api/v1/profile/blocks/acme-x")).status_code == 204
+    assert (await client.delete("/api/v1/profile/blocks/acme-x")).status_code == 404
+
+
+async def test_block_id_mismatch_is_422(client: httpx.AsyncClient) -> None:
+    response = await client.put(
+        "/api/v1/profile/blocks/one", json={"id": "two", "type": "role", "content": "c"}
+    )
+    assert response.status_code == 422 and "id" in response.json()["detail"]
+
+
+async def test_block_rejects_unknown_field(client: httpx.AsyncClient) -> None:
+    response = await client.put(
+        "/api/v1/profile/blocks/a", json={"id": "a", "type": "role", "content": "c", "bogus": 1}
+    )
+    assert response.status_code == 422 and response.json()["title"] == "Unprocessable Entity"
+
+
+@pytest.mark.parametrize(
+    ("path", "key", "body"),
+    [
+        ("bases", "b1", {"id": "b1", "name": "Base", "block_ids": []}),
+        ("tracks", "t1", {"id": "t1", "name": "Track", "resume_base": "b1"}),
+        ("guardrails", "attribution", {"rule": "attribution", "active": False}),
+    ],
+)
+async def test_generic_crud(
+    client: httpx.AsyncClient, path: str, key: str, body: dict[str, object]
+) -> None:
+    assert (await client.put(f"/api/v1/profile/{path}/{key}", json=body)).status_code == 201
+    assert len((await client.get(f"/api/v1/profile/{path}")).json()) == 1
+    assert (await client.delete(f"/api/v1/profile/{path}/{key}")).status_code == 204
+
+
+async def test_answers_and_watchlist(client: httpx.AsyncClient) -> None:
+    assert (await client.get("/api/v1/profile/answers")).json() == {}
+    put = await client.put(
+        "/api/v1/profile/answers", json={"name": "Maya Chen", "notice_period": "2 weeks"}
+    )
+    assert put.status_code == 200 and put.json()["name"] == "Maya Chen"
+    entries = [{"company": "ExampleCo", "source": "greenhouse", "board": "exampleco"}]
+    assert (await client.put("/api/v1/profile/watchlist", json=entries)).json() == entries
+    assert (await client.get("/api/v1/profile/watchlist")).json() == entries
+
+
+async def test_import_and_export_round_trip(
+    client: httpx.AsyncClient, demo_profile_dir: Path, enqueuer
+) -> None:  # type: ignore[no-untyped-def]
+    files = [
+        ("files", (p.name, p.read_bytes(), "application/yaml"))
+        for p in sorted(demo_profile_dir.glob("*.yaml"))
+    ]
+    response = await client.post("/api/v1/profile/import", files=files)
+    assert response.status_code == 200, response.text
+    assert response.json() == {"blocks": 4, "tracks": 2, "bases": 2, "guardrails": 5}
+    assert enqueuer.calls[-1][0] == "embed_blocks" and sorted(
+        enqueuer.calls[-1][1]["block_ids"]
+    ) == ["acme-data-pm", "acme-migration", "cred-pmp", "side-llm-tool"]
+    blocks = (await client.get("/api/v1/profile/blocks")).json()
+    assert {b["id"] for b in blocks} == {
+        "acme-data-pm",
+        "acme-migration",
+        "cred-pmp",
+        "side-llm-tool",
+    }
+
+    export = await client.get("/api/v1/profile/export")
+    assert export.status_code == 200 and export.headers["content-type"] == "application/zip"
+    with zipfile.ZipFile(io.BytesIO(export.content)) as zf:
+        assert set(zf.namelist()) == {
+            "blocks.yaml",
+            "tracks.yaml",
+            "bases.yaml",
+            "guardrails.yaml",
+            "answers.yaml",
+            "watchlist.yaml",
+        }
+        assert b"Maya Chen" in zf.read("answers.yaml")
+
+
+async def test_import_invalid_yaml_is_422(client: httpx.AsyncClient) -> None:
+    files = [
+        (
+            "files",
+            ("blocks.yaml", b"blocks: [{id: a, type: hobby, content: x}]\n", "application/yaml"),
+        ),
+        ("files", ("tracks.yaml", b"tracks: []\n", "application/yaml")),
+    ]
+    response = await client.post("/api/v1/profile/import", files=files)
+    assert response.status_code == 422 and "blocks.yaml" in response.json()["detail"]
+
+
+async def test_export_without_profile_is_422(client: httpx.AsyncClient) -> None:
+    assert (await client.get("/api/v1/profile/export")).status_code == 422
