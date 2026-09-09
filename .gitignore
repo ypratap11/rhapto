@@ -5,3 +5,6 @@ __pycache__/
 node_modules/
 *.pyc
 .venv/
+
+# superpowers scratch (ledgers, briefs, review packages)
+.superpowers/
