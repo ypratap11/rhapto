@@ -101,3 +101,12 @@ async def test_too_many_redirects() -> None:
     async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
         with pytest.raises(JobTextError, match="too many redirects"):
             await fetch_job_text("https://example.com/loop", client=client)
+
+
+async def test_rejects_ipv4_mapped_and_nat64_loopback(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(jobtext, "resolve_host", lambda host: ["::ffff:127.0.0.1"])
+    with pytest.raises(JobTextError, match="not allowed"):
+        await fetch_job_text("http://example.com/jobs")
+    monkeypatch.setattr(jobtext, "resolve_host", lambda host: ["64:ff9b::7f00:1"])
+    with pytest.raises(JobTextError, match="not allowed"):
+        await fetch_job_text("http://example.com/jobs")

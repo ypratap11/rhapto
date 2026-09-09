@@ -32,15 +32,35 @@ class JobTextError(Exception):
     """The job posting could not be fetched or contained too little text."""
 
 
+NAT64_PREFIX = ipaddress.ip_network("64:ff9b::/96")
+
+
 def resolve_host(hostname: str) -> list[str]:
     """Resolve a hostname to its IP address strings. Overridable in tests."""
     infos = socket.getaddrinfo(hostname, None)
     return [str(info[4][0]) for info in infos]
 
 
+def _is_blocked(ip: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
+    return (
+        ip.is_private
+        or ip.is_loopback
+        or ip.is_link_local
+        or ip.is_reserved
+        or ip.is_multicast
+        or ip.is_unspecified
+    )
+
+
 async def assert_public_host(hostname: str) -> None:
     """Reject hostnames that resolve to private, loopback, link-local, reserved,
-    multicast, or unspecified addresses, to prevent SSRF via job posting URLs."""
+    multicast, or unspecified addresses, to prevent SSRF via job posting URLs.
+
+    Also unwraps IPv4-mapped IPv6 addresses (::ffff:a.b.c.d) and NAT64-embedded
+    IPv4 addresses (64:ff9b::/96) and applies the same checks to the embedded
+    IPv4 address, since either could otherwise be used to smuggle a blocked
+    address past the IPv6 checks.
+    """
     try:
         addresses = await asyncio.to_thread(resolve_host, hostname)
     except OSError as exc:
@@ -49,15 +69,15 @@ async def assert_public_host(hostname: str) -> None:
         raise JobTextError("URL host could not be resolved")
     for address in addresses:
         ip = ipaddress.ip_address(address)
-        if (
-            ip.is_private
-            or ip.is_loopback
-            or ip.is_link_local
-            or ip.is_reserved
-            or ip.is_multicast
-            or ip.is_unspecified
-        ):
+        if _is_blocked(ip):
             raise JobTextError("URL host is not allowed")
+        if isinstance(ip, ipaddress.IPv6Address):
+            if ip.ipv4_mapped is not None and _is_blocked(ip.ipv4_mapped):
+                raise JobTextError("URL host is not allowed")
+            if ip in NAT64_PREFIX:
+                embedded = ipaddress.ip_address(int(ip) & 0xFFFFFFFF)
+                if _is_blocked(embedded):
+                    raise JobTextError("URL host is not allowed")
 
 
 async def _check_url(url: str) -> None:

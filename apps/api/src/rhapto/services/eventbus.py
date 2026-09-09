@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
-from collections.abc import AsyncIterator
+from collections.abc import AsyncGenerator, AsyncIterator
 from contextlib import AbstractAsyncContextManager, asynccontextmanager
 from typing import Any, Protocol
 
@@ -41,13 +41,15 @@ class InMemoryEventBus:
         queue: asyncio.Queue[Event] = asyncio.Queue()
         self._queues.setdefault(channel, []).append(queue)
 
-        async def events() -> AsyncIterator[Event]:
+        async def events() -> AsyncGenerator[Event, None]:
             while True:
                 yield await queue.get()
 
+        gen = events()
         try:
-            yield events()
+            yield gen
         finally:
+            await gen.aclose()
             self._queues[channel].remove(queue)
             if not self._queues[channel]:
                 del self._queues[channel]
@@ -67,7 +69,7 @@ class RedisEventBus:
         pubsub = self._redis.pubsub()
         await pubsub.subscribe(channel)
 
-        async def events() -> AsyncIterator[Event]:
+        async def events() -> AsyncGenerator[Event, None]:
             while True:
                 message = await pubsub.get_message(ignore_subscribe_messages=True, timeout=1.0)
                 if message is None:
@@ -75,9 +77,11 @@ class RedisEventBus:
                 data = message["data"]
                 yield json.loads(data) if isinstance(data, str) else data
 
+        gen = events()
         try:
-            yield events()
+            yield gen
         finally:
+            await gen.aclose()
             await pubsub.unsubscribe(channel)
             await pubsub.aclose()
 

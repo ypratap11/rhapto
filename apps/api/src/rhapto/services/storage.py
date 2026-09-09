@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import io
+import re
 import shutil
 import zipfile
 from pathlib import Path
@@ -10,6 +11,8 @@ from rhapto.engine.render.pdf import PdfRenderError, convert_docx_to_pdf, soffic
 
 FileName = Literal["resume.docx", "resume.pdf"]
 
+SAFE_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,99}$")
+
 
 class PackageStorage:
     """Rendered package files under <root>/<package_id>/."""
@@ -18,6 +21,8 @@ class PackageStorage:
         self.root = Path(root)
 
     def dir_for(self, package_id: str) -> Path:
+        if not SAFE_ID.match(package_id):
+            raise ValueError(f"invalid package id {package_id!r}")
         return self.root / package_id
 
     def write_docx(self, package_id: str, data: bytes) -> Path:

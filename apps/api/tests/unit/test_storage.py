@@ -71,3 +71,18 @@ def test_delete(tmp_path: Path) -> None:
     store.delete("p1")
     assert not (tmp_path / "p1").exists()
     store.delete("p1")  # idempotent
+
+
+@pytest.mark.parametrize("bad", ["../x", "a/b", "", ".", "..", "x\\y", "a b"])
+def test_rejects_unsafe_package_ids(tmp_path: Path, bad: str) -> None:
+    store = PackageStorage(tmp_path)
+    with pytest.raises(ValueError, match="invalid package id"):
+        store.dir_for(bad)
+
+
+def test_accepts_uuid_package_ids(tmp_path: Path) -> None:
+    import uuid
+
+    store = PackageStorage(tmp_path)
+    pid = str(uuid.uuid4())
+    assert store.dir_for(pid) == tmp_path / pid
