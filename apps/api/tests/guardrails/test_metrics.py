@@ -109,3 +109,27 @@ def test_unknown_block_is_skipped_here(demo_profile_dir: Path) -> None:
     resume = demo_resume()
     resume.summary = [bullet("Saved 99%.", "ghost")]
     assert check_metrics(make_ctx(demo_profile_dir, resume)) == []  # provenance rule reports it
+
+
+def test_cardinal_tokenizer() -> None:
+    assert find_spelled_quantities("cut costs by eighteen percent") == ["eighteen"]
+    assert find_spelled_quantities("a twenty-five percent reduction") == ["twenty-five"]
+    assert find_spelled_quantities("saved forty thousand dollars") == ["forty thousand"]
+    assert find_spelled_quantities("one platform for one team") == []
+    assert find_spelled_quantities("grew one million users") == ["one million"]
+    assert find_spelled_quantities("hundreds of migrations") == ["hundreds"]
+
+
+def test_adversarial_spelled_out_cardinal(demo_profile_dir: Path) -> None:
+    resume = demo_resume()
+    resume.sections[0].entries[0].bullets[1] = bullet(
+        "Cut warehouse cost by eighteen percent through the Snowflake migration.", "acme-migration"
+    )
+    violations = check_metrics(make_ctx(demo_profile_dir, resume))
+    assert len(violations) == 1 and "eighteen" in violations[0].message
+
+
+def test_prose_one_is_not_a_metric(demo_profile_dir: Path) -> None:
+    resume = demo_resume()
+    resume.summary = [bullet("Led one platform program end to end.", "acme-data-pm")]
+    assert check_metrics(make_ctx(demo_profile_dir, resume)) == []

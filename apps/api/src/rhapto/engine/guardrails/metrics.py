@@ -21,13 +21,51 @@ SPELLED_RE = re.compile(
 )
 YEAR_RE = re.compile(r"^(?:19|20)\d{2}$")
 
+# Spelled-out cardinal numbers, e.g. "eighteen", "twenty-five", "forty thousand", "one million".
+# "one" only counts as a number when it is immediately followed by a scale word (-> "one million")
+# or an unambiguous quantity unit (-> "one percent"); bare "one" ("one platform") is ordinary prose.
+_UNITS = (
+    r"(?:two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen"
+    r"|fifteen|sixteen|seventeen|eighteen|nineteen)"
+)
+_JOIN_UNITS = r"(?:two|three|four|five|six|seven|eight|nine)"
+_TENS = r"(?:twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety)"
+_SCALES = r"(?:hundred|thousand|million|billion|trillion)s?"
+_ONE_UNIT = r"(?:percent|%|pct|x|times|fold|dollars?|usd|hours?|hrs?|days?|weeks?|months?|years?)"
+CARDINAL_RE = re.compile(
+    r"\b(?:"
+    r"(?:" + _TENS + r"(?:[-\s]" + _JOIN_UNITS + r")?|" + _UNITS + r")(?:\s+" + _SCALES + r")*"
+    r"|" + _SCALES + r"|one(?:\s+" + _SCALES + r")+|one(?=\s+" + _ONE_UNIT + r")"
+    r")\b",
+    re.IGNORECASE,
+)
+
 
 def find_numeric_tokens(text: str) -> list[str]:
     return [m.group(0).strip() for m in NUMERIC_RE.finditer(text)]
 
 
 def find_spelled_quantities(text: str) -> list[str]:
-    return [m.group(0) for m in SPELLED_RE.finditer(text)]
+    """SPELLED_RE idioms plus CARDINAL_RE spelled-out numbers, in text order.
+
+    Overlapping matches (e.g. SPELLED_RE's bare "thousand" inside CARDINAL_RE's
+    "forty thousand") are resolved by keeping the longer, earlier-starting span so a
+    phrase is never double-reported.
+    """
+    candidates: list[tuple[int, int, str]] = []
+    for m in SPELLED_RE.finditer(text):
+        candidates.append((m.start(), m.end(), m.group(0)))
+    for m in CARDINAL_RE.finditer(text):
+        candidates.append((m.start(), m.end(), m.group(0)))
+    candidates.sort(key=lambda c: (c[0], -(c[1] - c[0])))
+    phrases: list[str] = []
+    occupied_end = -1
+    for start, end, phrase in candidates:
+        if start < occupied_end:
+            continue
+        phrases.append(phrase)
+        occupied_end = end
+    return phrases
 
 
 def normalize_number(token: str) -> str:
