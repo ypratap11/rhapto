@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import math
+import re
 
 from pydantic import BaseModel, Field
 
@@ -41,6 +42,15 @@ def cosine(a: list[float], b: list[float]) -> float:
     return dot / norm if norm else 0.0
 
 
+def keyword_matches(keyword: str, text: str) -> bool:
+    """Whole-word, case-insensitive match; spaces and hyphens in the keyword match either."""
+    parts = [re.escape(p) for p in re.split(r"[\s\-]+", keyword.strip()) if p]
+    if not parts:
+        return False
+    pattern = r"(?<![a-z0-9])" + r"[\s\-]+".join(parts) + r"(?![a-z0-9])"
+    return re.search(pattern, text, re.IGNORECASE) is not None
+
+
 async def select_blocks(
     extract: JDExtract,
     profile: Profile,
@@ -78,7 +88,11 @@ async def select_blocks(
     scores: dict[str, float] = {}
     for block, vec in zip(candidates, block_vecs, strict=True):
         text = block_text(block).lower()
-        keyword_ratio = sum(1 for k in keywords if k in text) / len(keywords) if keywords else 0.0
+        keyword_ratio = (
+            sum(1 for k in keywords if keyword_matches(k, text)) / len(keywords)
+            if keywords
+            else 0.0
+        )
         tags = {t.lower() for t in block.tags}
         tag_overlap = len(tags & keywords) / len(tags) if tags else 0.0
         scores[block.id] = (

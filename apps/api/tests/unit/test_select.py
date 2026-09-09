@@ -3,7 +3,14 @@ from pathlib import Path
 import pytest
 
 from rhapto.engine.providers.fake import FakeEmbeddingProvider
-from rhapto.engine.select import Selection, SelectionConfig, block_text, cosine, select_blocks
+from rhapto.engine.select import (
+    Selection,
+    SelectionConfig,
+    block_text,
+    cosine,
+    keyword_matches,
+    select_blocks,
+)
 from rhapto.engine.types import Profile
 from rhapto.models.jd_extract import JDExtract
 from rhapto.models.profile.blocks import Block, Visibility
@@ -31,6 +38,15 @@ def test_cosine_basics() -> None:
     assert cosine([1.0, 0.0], [1.0, 0.0]) == pytest.approx(1.0)
     assert cosine([1.0, 0.0], [0.0, 1.0]) == pytest.approx(0.0)
     assert cosine([0.0, 0.0], [1.0, 0.0]) == 0.0
+
+
+def test_keyword_matches_whole_words_only() -> None:
+    assert keyword_matches("ai", "hands-on AI product work")
+    assert not keyword_matches("ai", "send an email to the team")
+    assert not keyword_matches("program", "worked as a programmer")
+    assert keyword_matches("data platform", "led the data-platform team")
+    assert keyword_matches("data-platform", "led the data platform team")
+    assert not keyword_matches("", "anything")
 
 
 def test_block_text_joins_fields() -> None:
