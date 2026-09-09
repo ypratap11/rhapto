@@ -3,6 +3,8 @@ from __future__ import annotations
 from collections.abc import Iterable
 
 from rhapto.engine.guardrails.base import GuardrailContext, Rule
+from rhapto.engine.guardrails.entities import RULE_NAME as ENTITIES
+from rhapto.engine.guardrails.entities import check_entities
 from rhapto.engine.guardrails.metrics import RULE_NAME as METRICS
 from rhapto.engine.guardrails.metrics import check_metrics
 from rhapto.engine.guardrails.provenance import RULE_NAME as PROVENANCE
@@ -13,7 +15,7 @@ from rhapto.models.jd_extract import JDExtract
 from rhapto.models.resume_document import ResumeDocument
 
 # Configurable rules, keyed by the name used in guardrails.yaml. Later tasks add entries.
-RULES: dict[str, Rule] = {METRICS: check_metrics}
+RULES: dict[str, Rule] = {METRICS: check_metrics, ENTITIES: check_entities}
 
 
 class UnknownGuardrailError(EngineError):
