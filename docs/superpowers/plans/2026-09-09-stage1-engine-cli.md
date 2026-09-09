@@ -4584,7 +4584,7 @@ git commit -m "test: golden cases for clean, repaired, and unrepairable tailorin
 ### Task 17: Import-linter contract, Dockerfile, and README quick start
 
 **Files:**
-- Create: `apps/api/.importlinter`, `apps/api/Dockerfile`, `apps/api/.dockerignore`
+- Create: `apps/api/.importlinter`, `apps/api/Dockerfile`, `.dockerignore` (repo root)
 - Modify: `README.md` (append a Quick start section)
 
 **Interfaces:**
@@ -4613,16 +4613,33 @@ Expected: `Contracts: 1 kept, 0 broken.` If it reports a broken contract, the of
 
 - [ ] **Step 2: Write the Dockerfile**
 
-`apps/api/.dockerignore`:
+`.dockerignore` (repo root):
 
 ```
-.venv
-__pycache__
-*.pyc
-.pytest_cache
-.mypy_cache
-.ruff_cache
-tests
+# never ship personal data or secrets into an image build context
+profile/
+.env
+.env.*
+!.env.example
+
+# scratch and outputs
+out/
+.superpowers/
+docs/
+.git/
+
+# python
+**/.venv/
+**/__pycache__/
+**/*.pyc
+**/.pytest_cache/
+**/.mypy_cache/
+**/.ruff_cache/
+apps/api/tests/
+
+# node (future web app)
+**/node_modules/
+**/.next/
 ```
 
 `apps/api/Dockerfile` (build context is the repo root):
@@ -4703,7 +4720,7 @@ Expected: all tests pass, no lint, format, type, or contract errors, generated m
 - [ ] **Step 6: Commit**
 
 ```bash
-git add apps/api/.importlinter apps/api/Dockerfile apps/api/.dockerignore README.md
+git add apps/api/.importlinter apps/api/Dockerfile .dockerignore README.md
 git commit -m "build: import-linter contract, CLI Docker image, README quick start"
 ```
 
