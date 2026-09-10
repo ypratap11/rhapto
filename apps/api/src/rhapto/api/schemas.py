@@ -6,7 +6,9 @@ from typing import Any
 
 from pydantic import BaseModel, model_validator
 
+from rhapto.models.guardrail_report import GuardrailReport
 from rhapto.models.jd_extract import JDExtract
+from rhapto.models.resume_document import ResumeDocument
 
 
 class HealthOut(BaseModel):
@@ -66,6 +68,29 @@ class TailorBody(BaseModel):
     track_id: str | None = None
     feedback: str | None = None
     parent_package_id: uuid.UUID | None = None
+
+
+class PackageOut(BaseModel):
+    id: uuid.UUID
+    job_id: uuid.UUID
+    track_id: str
+    version: int
+    status: str
+    resume: ResumeDocument
+    cover_note: str
+    change_log: str
+    answers: dict[str, str]
+    guardrail_report: GuardrailReport
+    jd_extract: JDExtract
+    llm_calls: int
+    parent_package_id: uuid.UUID | None
+    has_docx: bool
+    has_pdf: bool
+    created_at: datetime
+
+
+class PackagePatch(BaseModel):
+    resume: ResumeDocument
 
 
 class TaskOut(BaseModel):
