@@ -8,11 +8,34 @@ export type ConnectionSettings = { token: string; apiUrl: string };
 
 export type Problem = { type?: string; title: string; status: number; detail?: string; [key: string]: unknown };
 
+type ProblemFieldError = { loc: unknown; msg: unknown };
+
+function isFieldError(value: unknown): value is ProblemFieldError {
+  return typeof value === "object" && value !== null && "loc" in value && "msg" in value;
+}
+
+/**
+ * The API's validation handler sets `detail` to a constant ("request validation
+ * failed") and puts the useful per-field detail in `errors`. Fold the first few
+ * field errors into the message so callers (ApiError, ApiErrorBanner) show
+ * something actionable instead of the generic detail.
+ */
+export function problemMessage(problem: Problem): string {
+  const base = problem.detail ?? problem.title;
+  const errors = problem.errors;
+  if (!Array.isArray(errors) || errors.length === 0) return base;
+  const parts = errors
+    .slice(0, 3)
+    .filter(isFieldError)
+    .map((e) => `${Array.isArray(e.loc) ? e.loc.join(".") : String(e.loc)}: ${String(e.msg)}`);
+  return parts.length > 0 ? `${base} (${parts.join("; ")})` : base;
+}
+
 export class ApiError extends Error {
   status: number;
   problem: Problem | null;
   constructor(status: number, problem: Problem | null, fallback: string) {
-    super(problem?.detail ?? problem?.title ?? fallback);
+    super(problem ? problemMessage(problem) : fallback);
     this.name = "ApiError";
     this.status = status;
     this.problem = problem;
@@ -33,12 +56,17 @@ export function getSettings(): ConnectionSettings {
   return { token: s?.getItem(STORAGE_KEYS.token) ?? "", apiUrl };
 }
 
-export function setSettings(settings: ConnectionSettings): void {
+export function setSettings(settings: ConnectionSettings): boolean {
   const s = storage();
-  if (!s) return;
-  s.setItem(STORAGE_KEYS.token, settings.token.trim());
-  s.setItem(STORAGE_KEYS.apiUrl, settings.apiUrl.trim().replace(/\/+$/, "") || DEFAULT_API_URL);
+  if (!s) return false;
+  try {
+    s.setItem(STORAGE_KEYS.token, settings.token.trim());
+    s.setItem(STORAGE_KEYS.apiUrl, settings.apiUrl.trim().replace(/\/+$/, "") || DEFAULT_API_URL);
+  } catch {
+    return false;
+  }
   window.dispatchEvent(new Event("rhapto-settings"));
+  return true;
 }
 
 export function hasToken(): boolean {

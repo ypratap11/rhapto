@@ -52,4 +52,39 @@ describe("AddJobDialog", () => {
     await user.click(await screen.findByRole("button", { name: /show it/i }));
     expect(onOpenChange).toHaveBeenCalledWith(false);
   });
+
+  it("resets every field (not just text/url) when the dialog is reopened", async () => {
+    mutateAsync.mockResolvedValueOnce({ id: "j1" });
+    const client = new QueryClient();
+    const onOpenChange = vi.fn();
+    const { rerender } = render(
+      <QueryClientProvider client={client}>
+        <AddJobDialog open onOpenChange={onOpenChange} />
+      </QueryClientProvider>,
+    );
+    const user = userEvent.setup();
+    await user.type(screen.getByLabelText(/job description/i), "x".repeat(60));
+    await user.type(screen.getByLabelText(/company/i), "ExampleCo");
+    await user.type(screen.getByLabelText(/title/i), "PM");
+    await user.type(screen.getByLabelText(/location/i), "Remote");
+    await user.click(screen.getByRole("button", { name: /add job/i }));
+    expect(onOpenChange).toHaveBeenCalledWith(false);
+
+    // The parent closes the dialog, then reopens it later.
+    rerender(
+      <QueryClientProvider client={client}>
+        <AddJobDialog open={false} onOpenChange={onOpenChange} />
+      </QueryClientProvider>,
+    );
+    rerender(
+      <QueryClientProvider client={client}>
+        <AddJobDialog open onOpenChange={onOpenChange} />
+      </QueryClientProvider>,
+    );
+
+    expect(screen.getByLabelText(/job description/i)).toHaveValue("");
+    expect(screen.getByLabelText(/company/i)).toHaveValue("");
+    expect(screen.getByLabelText(/title/i)).toHaveValue("");
+    expect(screen.getByLabelText(/location/i)).toHaveValue("");
+  });
 });

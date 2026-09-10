@@ -85,7 +85,7 @@ On first visit the app asks for the API URL (`http://localhost:8000`) and the be
 
 1. **Profile**: import your five YAML files (or the demo `profile.example` to try it) and edit blocks, tracks, and rules.
 2. **Queue**: paste a job description or a posting URL, pick a track, and press Tailor. Progress streams live;
-   the package opens when the engine finishes.
+   a toast with a Review link appears when the engine finishes.
 3. **Review**: job description on the left with requirements highlighted, resume on the right. Click a bullet to
    see the exact block it came from. The guardrail panel lists anything blocked. Edit a bullet and save as a new
    version (guardrails run again), or regenerate with feedback. Download the zip and open the posting yourself.

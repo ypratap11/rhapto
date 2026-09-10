@@ -13,6 +13,22 @@ import { ApiError } from "@/lib/api/client";
 import { useCreateJob } from "@/lib/api/queries";
 
 export function AddJobDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-xl">
+        <DialogHeader>
+          <DialogTitle>Add a job</DialogTitle>
+        </DialogHeader>
+        {/* Keying on `open` remounts the form (and resets every field) each time the
+            dialog transitions from closed to open, instead of only clearing the
+            two fields the previous version remembered to reset on submit. */}
+        <AddJobForm key={open ? "open" : "closed"} onOpenChange={onOpenChange} />
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function AddJobForm({ onOpenChange }: { onOpenChange: (open: boolean) => void }) {
   const router = useRouter();
   const create = useCreateJob();
   const [mode, setMode] = useState<"paste" | "url">("paste");
@@ -39,8 +55,6 @@ export function AddJobDialog({ open, onOpenChange }: { open: boolean; onOpenChan
       });
       toast.success("Job added");
       onOpenChange(false);
-      setText("");
-      setUrl("");
     } catch (e) {
       if (e instanceof ApiError && e.status === 409) {
         const id = e.problem?.existing_job_id;
@@ -63,55 +77,50 @@ export function AddJobDialog({ open, onOpenChange }: { open: boolean; onOpenChan
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-xl">
-        <DialogHeader>
-          <DialogTitle>Add a job</DialogTitle>
-        </DialogHeader>
-        <Tabs value={mode} onValueChange={(v) => setMode(v as "paste" | "url")}>
-          <TabsList>
-            <TabsTrigger value="paste">Paste</TabsTrigger>
-            <TabsTrigger value="url">URL</TabsTrigger>
-          </TabsList>
-          <TabsContent value="paste" className="space-y-1">
-            <Label htmlFor="jd">Job description</Label>
-            <Textarea id="jd" rows={10} value={text} onChange={(e) => setText(e.target.value)} placeholder="Paste the full posting" />
-          </TabsContent>
-          <TabsContent value="url" className="space-y-1">
-            <Label htmlFor="url">Posting URL</Label>
-            <Input id="url" value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://…" />
-          </TabsContent>
-        </Tabs>
-        <div className="grid grid-cols-3 gap-2">
-          <div className="space-y-1">
-            <Label htmlFor="company">Company</Label>
-            <Input id="company" value={company} onChange={(e) => setCompany(e.target.value)} />
-          </div>
-          <div className="space-y-1">
-            <Label htmlFor="title">Title</Label>
-            <Input id="title" value={title} onChange={(e) => setTitle(e.target.value)} />
-          </div>
-          <div className="space-y-1">
-            <Label htmlFor="location">Location</Label>
-            <Input id="location" value={location} onChange={(e) => setLocation(e.target.value)} />
-          </div>
+    <>
+      <Tabs value={mode} onValueChange={(v) => setMode(v as "paste" | "url")}>
+        <TabsList>
+          <TabsTrigger value="paste">Paste</TabsTrigger>
+          <TabsTrigger value="url">URL</TabsTrigger>
+        </TabsList>
+        <TabsContent value="paste" className="space-y-1">
+          <Label htmlFor="jd">Job description</Label>
+          <Textarea id="jd" rows={10} value={text} onChange={(e) => setText(e.target.value)} placeholder="Paste the full posting" />
+        </TabsContent>
+        <TabsContent value="url" className="space-y-1">
+          <Label htmlFor="url">Posting URL</Label>
+          <Input id="url" value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://…" />
+        </TabsContent>
+      </Tabs>
+      <div className="grid grid-cols-3 gap-2">
+        <div className="space-y-1">
+          <Label htmlFor="company">Company</Label>
+          <Input id="company" value={company} onChange={(e) => setCompany(e.target.value)} />
         </div>
-        {error ? (
-          <p role="alert" className="text-sm text-red-700">
-            {error}{" "}
-            {existing ? (
-              <button type="button" className="underline" onClick={showExisting}>
-                Show it
-              </button>
-            ) : null}
-          </p>
-        ) : null}
-        <div className="flex justify-end">
-          <Button onClick={submit} disabled={create.isPending}>
-            Add job
-          </Button>
+        <div className="space-y-1">
+          <Label htmlFor="title">Title</Label>
+          <Input id="title" value={title} onChange={(e) => setTitle(e.target.value)} />
         </div>
-      </DialogContent>
-    </Dialog>
+        <div className="space-y-1">
+          <Label htmlFor="location">Location</Label>
+          <Input id="location" value={location} onChange={(e) => setLocation(e.target.value)} />
+        </div>
+      </div>
+      {error ? (
+        <p role="alert" className="text-sm text-red-700">
+          {error}{" "}
+          {existing ? (
+            <button type="button" className="underline" onClick={showExisting}>
+              Show it
+            </button>
+          ) : null}
+        </p>
+      ) : null}
+      <div className="flex justify-end">
+        <Button onClick={submit} disabled={create.isPending}>
+          Add job
+        </Button>
+      </div>
+    </>
   );
 }

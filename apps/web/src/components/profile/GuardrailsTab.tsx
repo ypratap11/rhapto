@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { toast } from "sonner";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { ApiErrorBanner } from "@/components/shell/ApiErrorBanner";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -24,6 +25,12 @@ function guardrailToForm(rule: GuardrailRule): GuardrailForm {
 
 const emptyGuardrailForm: GuardrailForm = { rule: KNOWN_RULES[0], active: true, config: "" };
 
+/** Rules where turning the switch off has a real, easy-to-miss consequence for output quality. */
+const DEACTIVATION_WARNINGS: Record<string, string> = {
+  "no-unverified-metrics": "Turning this off allows numbers that no verified block supports.",
+  "no-invented-entities": "Turning this off allows employers, products, and tools that are not in your blocks.",
+};
+
 export function GuardrailsTab() {
   const guardrails = useGuardrails();
   const put = usePutGuardrail();
@@ -31,11 +38,21 @@ export function GuardrailsTab() {
   const [form, setForm] = useState<GuardrailForm | null>(null);
   const [isNew, setIsNew] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [confirmDeactivate, setConfirmDeactivate] = useState(false);
 
   function open(rule: GuardrailRule | null) {
     setErrors({});
     setIsNew(rule === null);
     setForm(rule ? guardrailToForm(rule) : emptyGuardrailForm);
+    setConfirmDeactivate(false);
+  }
+
+  function requestActiveChange(next: boolean) {
+    if (!next && form && DEACTIVATION_WARNINGS[form.rule]) {
+      setConfirmDeactivate(true);
+      return;
+    }
+    set({ active: next });
   }
 
   async function save() {
@@ -110,7 +127,10 @@ export function GuardrailsTab() {
                   <p className="font-mono text-sm">{form.rule}</p>
                 )}
               </div>
-              <SwitchField name="guardrail-active" label="Active" checked={form.active} onCheckedChange={(v) => set({ active: v })} />
+              <div className="space-y-1">
+                <SwitchField name="guardrail-active" label="Active" checked={form.active} onCheckedChange={requestActiveChange} />
+                {DEACTIVATION_WARNINGS[form.rule] ? <p className="text-xs text-amber-700">{DEACTIVATION_WARNINGS[form.rule]}</p> : null}
+              </div>
               <div className="space-y-1">
                 <Label htmlFor="guardrail-config">Config (JSON object)</Label>
                 <Textarea id="guardrail-config" rows={6} value={form.config} onChange={(e) => set({ config: e.target.value })} placeholder="{}" />
@@ -128,6 +148,25 @@ export function GuardrailsTab() {
           ) : null}
         </SheetContent>
       </Sheet>
+      <AlertDialog open={confirmDeactivate} onOpenChange={(o) => !o && setConfirmDeactivate(false)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Turn off {form?.rule}?</AlertDialogTitle>
+            <AlertDialogDescription>{form ? DEACTIVATION_WARNINGS[form.rule] : ""}</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                set({ active: false });
+                setConfirmDeactivate(false);
+              }}
+            >
+              Turn off
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

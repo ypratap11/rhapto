@@ -55,7 +55,10 @@ export function useDeleteJob() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => unwrap(apiClient().DELETE("/api/v1/jobs/{job_id}", { params: { path: { job_id: id } } })),
-    onSuccess: () => invalidateJobs(queryClient),
+    onSuccess: () => {
+      invalidateJobs(queryClient);
+      void queryClient.invalidateQueries({ queryKey: ["applications"] });
+    },
   });
 }
 

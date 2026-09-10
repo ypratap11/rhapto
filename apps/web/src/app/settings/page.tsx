@@ -7,7 +7,11 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ApiError, apiClient, getSettings, setSettings, unwrap } from "@/lib/api/client";
+import { ApiError, apiClient, getSettings, setSettings, unwrap, type ConnectionSettings } from "@/lib/api/client";
+
+function validateApiUrl(apiUrl: string): string | null {
+  return /^https?:\/\//i.test(apiUrl.trim()) ? null : "Enter an API URL starting with http:// or https://.";
+}
 
 export default function SettingsPage() {
   const queryClient = useQueryClient();
@@ -15,6 +19,7 @@ export default function SettingsPage() {
   const tokenRef = useRef<HTMLInputElement>(null);
   const [show, setShow] = useState(false);
   const [testing, setTesting] = useState(false);
+  const [apiUrlError, setApiUrlError] = useState<string | null>(null);
 
   // Read the stored settings straight into the (uncontrolled) inputs. This
   // touches the DOM directly rather than React state, so it stays a plain
@@ -26,18 +31,31 @@ export default function SettingsPage() {
     if (tokenRef.current) tokenRef.current.value = s.token;
   }, []);
 
-  function readForm() {
+  function readForm(): ConnectionSettings {
     return { apiUrl: apiUrlRef.current?.value ?? "", token: tokenRef.current?.value ?? "" };
   }
 
+  /** Validates and persists the form, surfacing a failure inline (bad URL) or as a toast (storage write failed). */
+  function commit(): ConnectionSettings | null {
+    const form = readForm();
+    const error = validateApiUrl(form.apiUrl);
+    setApiUrlError(error);
+    if (error) return null;
+    if (!setSettings(form)) {
+      toast.error("Could not save settings in this browser");
+      return null;
+    }
+    return form;
+  }
+
   function save() {
-    setSettings(readForm());
+    if (!commit()) return;
     void queryClient.invalidateQueries();
     toast.success("Settings saved");
   }
 
   async function test() {
-    setSettings(readForm());
+    if (!commit()) return;
     setTesting(true);
     try {
       const me = await unwrap(apiClient().GET("/api/v1/me"));
@@ -47,6 +65,14 @@ export default function SettingsPage() {
     } finally {
       setTesting(false);
     }
+  }
+
+  function disconnect() {
+    const apiUrl = apiUrlRef.current?.value ?? getSettings().apiUrl;
+    setSettings({ token: "", apiUrl });
+    if (tokenRef.current) tokenRef.current.value = "";
+    queryClient.clear();
+    toast.success("Disconnected");
   }
 
   return (
@@ -60,6 +86,11 @@ export default function SettingsPage() {
           <div className="space-y-1">
             <Label htmlFor="apiUrl">API URL</Label>
             <Input id="apiUrl" ref={apiUrlRef} defaultValue="" placeholder="http://localhost:8000" />
+            {apiUrlError ? (
+              <p role="alert" className="text-xs text-red-700">
+                {apiUrlError}
+              </p>
+            ) : null}
           </div>
           <div className="space-y-1">
             <Label htmlFor="token">Bearer token</Label>
@@ -75,6 +106,9 @@ export default function SettingsPage() {
             <Button onClick={save}>Save</Button>
             <Button variant="outline" onClick={test} disabled={testing}>
               {testing ? "Testing…" : "Test connection"}
+            </Button>
+            <Button variant="outline" onClick={disconnect}>
+              Disconnect
             </Button>
           </div>
         </CardContent>

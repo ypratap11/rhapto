@@ -1,3 +1,4 @@
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { TaskProgress } from "./TaskProgress";
@@ -7,14 +8,29 @@ import { toast } from "sonner";
 vi.mock("@/lib/api/sse", () => ({ readTaskEvents: vi.fn() }));
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 
+const resolvePackageStatus = vi.fn();
+vi.mock("@/lib/task-progress", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/task-progress")>()),
+  resolvePackageStatus: (packageId: string) => resolvePackageStatus(packageId) as Promise<string | null>,
+}));
+
 const mockReadTaskEvents = vi.mocked(readTaskEvents);
 const toastSuccess = vi.mocked(toast.success);
 const toastError = vi.mocked(toast.error);
+
+function renderTaskProgress(props: { taskId: string; jobId: string; onFinished: (state: unknown) => void }) {
+  return render(
+    <QueryClientProvider client={new QueryClient()}>
+      <TaskProgress {...props} />
+    </QueryClientProvider>,
+  );
+}
 
 afterEach(() => {
   mockReadTaskEvents.mockReset();
   toastSuccess.mockClear();
   toastError.mockClear();
+  resolvePackageStatus.mockReset();
 });
 
 describe("TaskProgress", () => {
@@ -26,7 +42,7 @@ describe("TaskProgress", () => {
         }),
     );
     const onFinished = vi.fn();
-    const { unmount } = render(<TaskProgress taskId="t1" jobId="j1" onFinished={onFinished} />);
+    const { unmount } = renderTaskProgress({ taskId: "t1", jobId: "j1", onFinished });
     unmount();
     await Promise.resolve();
     await Promise.resolve();
@@ -42,11 +58,50 @@ describe("TaskProgress", () => {
       onEvent({ event: "state", data: { status: "running", progress: { step: "render" } } });
       return new Promise<void>(() => undefined);
     });
-    render(<TaskProgress taskId="t2" jobId="j1" onFinished={vi.fn()} />);
+    renderTaskProgress({ taskId: "t2", jobId: "j1", onFinished: vi.fn() });
 
     for (const step of ["extract", "select", "compose", "validate", "repair"]) {
       expect(screen.getByText(step).className).toContain("border-green-300");
     }
     expect(screen.getByText("render").className).toContain("border-accent");
+  });
+
+  it("resolves the real package status on a state-replay and never announces a blocked package as ready", async () => {
+    resolvePackageStatus.mockResolvedValueOnce("blocked");
+    mockReadTaskEvents.mockImplementation(async (_taskId, onEvent) => {
+      onEvent({ event: "state", data: { status: "succeeded", result_ref: "pkg1", progress: {} } });
+    });
+    const onFinished = vi.fn();
+    renderTaskProgress({ taskId: "t3", jobId: "j1", onFinished });
+
+    await vi.waitFor(() => expect(onFinished).toHaveBeenCalled());
+    expect(resolvePackageStatus).toHaveBeenCalledWith("pkg1");
+    expect(toastSuccess).toHaveBeenCalledTimes(1);
+    expect(toastSuccess.mock.calls[0]?.[0]).not.toBe("Package ready");
+    expect(toastSuccess).toHaveBeenCalledWith("Package blocked by guardrails", expect.anything());
+    expect(await screen.findByText(/open package \(blocked\)/i)).toBeInTheDocument();
+  });
+
+  it("uses neutral copy when the fallback status lookup also fails", async () => {
+    resolvePackageStatus.mockResolvedValueOnce(null);
+    mockReadTaskEvents.mockImplementation(async (_taskId, onEvent) => {
+      onEvent({ event: "state", data: { status: "succeeded", result_ref: "pkg1", progress: {} } });
+    });
+    renderTaskProgress({ taskId: "t4", jobId: "j1", onFinished: vi.fn() });
+
+    await vi.waitFor(() => expect(toastSuccess).toHaveBeenCalled());
+    expect(toastSuccess).toHaveBeenCalledWith("Package created — open the review", expect.anything());
+  });
+
+  it("toasts an interruption when the stream ends without a terminal event", async () => {
+    mockReadTaskEvents.mockImplementation(async (_taskId, onEvent) => {
+      onEvent({ event: "progress", data: { step: "compose" } });
+    });
+    const onFinished = vi.fn();
+    renderTaskProgress({ taskId: "t5", jobId: "j1", onFinished });
+
+    await vi.waitFor(() => expect(onFinished).toHaveBeenCalled());
+    expect(toastError).toHaveBeenCalledWith("Tailoring was interrupted; refresh to check the job");
+    expect(toastSuccess).not.toHaveBeenCalled();
   });
 });

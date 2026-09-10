@@ -72,6 +72,13 @@ export default function PackageReviewPage() {
         </div>
       </div>
       <RegenerateDialog job={job.data} pkg={pkg.data} open={regenOpen} onOpenChange={setRegenOpen} />
+      {blocks.error || packages.error || applications.error ? (
+        <div className="space-y-2">
+          {blocks.error ? <ApiErrorBanner error={blocks.error} /> : null}
+          {packages.error ? <ApiErrorBanner error={packages.error} /> : null}
+          {applications.error ? <ApiErrorBanner error={applications.error} /> : null}
+        </div>
+      ) : null}
       <div className="grid gap-6 lg:grid-cols-[1fr_1.2fr]">
         <JdPane job={job.data} />
         <div className="space-y-4">

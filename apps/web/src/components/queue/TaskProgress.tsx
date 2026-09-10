@@ -3,12 +3,15 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
+import { useQueryClient } from "@tanstack/react-query";
 import { readTaskEvents } from "@/lib/api/sse";
-import { PIPELINE_STEPS, initialProgress, reduceTaskEvent, type ProgressState } from "@/lib/task-progress";
+import { invalidateJobs } from "@/lib/api/queries";
+import { PIPELINE_STEPS, initialProgress, reduceTaskEvent, resolvePackageStatus, type ProgressState } from "@/lib/task-progress";
 
 export function TaskProgress({ taskId, jobId, onFinished }: { taskId: string; jobId: string; onFinished: (state: ProgressState) => void }) {
   const [state, setState] = useState<ProgressState>(initialProgress);
   const finished = useRef(false);
+  const queryClient = useQueryClient();
 
   useEffect(() => {
     const controller = new AbortController();
@@ -27,16 +30,38 @@ export function TaskProgress({ taskId, jobId, onFinished }: { taskId: string; jo
         current = { ...current, status: "failed", error: error instanceof Error ? error.message : String(error) };
         setState(current);
       })
-      .finally(() => {
+      .finally(async () => {
         if (aborted) return;
         if (finished.current) return;
         finished.current = true;
         if (current.status === "succeeded" && current.packageId) {
-          toast.success(current.packageStatus === "blocked" ? "Package created, but guardrails blocked it" : "Package ready", {
-            action: { label: "Review", onClick: () => window.location.assign(`/jobs/${jobId}/packages/${current.packageId}`) },
-          });
+          let packageStatus = current.packageStatus;
+          if (packageStatus === null) {
+            // The task was already finished when the SSE request landed: the API
+            // replayed a bare "state" event (a TaskOut, with no package status)
+            // and closed the stream. Resolve the real status before toasting so a
+            // blocked package is never announced as ready.
+            invalidateJobs(queryClient);
+            packageStatus = await resolvePackageStatus(current.packageId);
+            if (aborted) return;
+            current = { ...current, packageStatus };
+            setState(current);
+          }
+          const action = { label: "Review", onClick: () => window.location.assign(`/jobs/${jobId}/packages/${current.packageId}`) };
+          if (packageStatus === "blocked") {
+            toast.success("Package blocked by guardrails", { action });
+          } else if (packageStatus) {
+            toast.success("Package ready", { action });
+          } else {
+            // Neither the SSE event nor the fallback fetch could confirm the
+            // package's guardrail status — don't claim it's clean.
+            toast.success("Package created — open the review", { action });
+          }
         } else if (current.status === "failed") {
           toast.error(current.error ?? "Tailoring failed");
+        } else if (current.status === "running") {
+          // The stream ended without a terminal ("done"/"error") event.
+          toast.error("Tailoring was interrupted; refresh to check the job");
         }
         onFinished(current);
       });
@@ -44,7 +69,7 @@ export function TaskProgress({ taskId, jobId, onFinished }: { taskId: string; jo
       aborted = true;
       controller.abort();
     };
-  }, [taskId, jobId, onFinished]);
+  }, [taskId, jobId, onFinished, queryClient]);
 
   const activeIndex = state.step ? PIPELINE_STEPS.indexOf(state.step as (typeof PIPELINE_STEPS)[number]) : -1;
   return (

@@ -23,10 +23,7 @@ export default function ProfilePage() {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl">Profile</h1>
-        <p className="text-sm text-muted-foreground">
-          Your blocks, bases, tracks, guardrails, answers, and watchlist live in the database now. Import YAML to replace them, or export to take them back to files — <code className="font-mono text-xs">rhapto profile export</code> writes the
-          same files locally.
-        </p>
+        <p className="text-sm text-muted-foreground">Blocks, bases, tracks, guardrails, answers, and watchlist.</p>
       </div>
       <ImportExport />
       <Tabs defaultValue="blocks">

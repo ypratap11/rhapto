@@ -19,5 +19,7 @@ export async function downloadAuthenticated(path: string, filename: string): Pro
   document.body.appendChild(a);
   a.click();
   a.remove();
-  URL.revokeObjectURL(url);
+  // Revoking synchronously can invalidate the URL before the browser's download
+  // handler has consumed it in some browsers; defer to the next tick instead.
+  setTimeout(() => URL.revokeObjectURL(url), 0);
 }
