@@ -1,3 +1,4 @@
+import logging
 import uuid
 from pathlib import Path
 from typing import Any
@@ -79,6 +80,8 @@ def _ctx(
         "event_bus": bus,
         "storage": storage,
         "soffice_binary": "soffice-missing",
+        # FakeEmbeddingProvider is 64-dim; opt into reshaping rather than dropping the vector.
+        "allow_dimension_mismatch": True,
     }
 
 
@@ -270,3 +273,38 @@ async def test_render_package_pdf_ignores_unknown_id(session_factory, tmp_path: 
     await render_package_pdf(
         _ctx(session_factory, FakeLLMProvider([]), bus, storage), package_id=str(uuid.uuid4())
     )
+
+
+async def test_embed_blocks_drops_mismatched_vectors_by_default(
+    session_factory,  # type: ignore[no-untyped-def]
+    user: User,
+    demo_profile_dir: Path,
+    tmp_path: Path,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """A provider whose width is not EMBEDDING_DIMENSIONS means a misconfigured deployment:
+    store nothing and say so loudly rather than silently reshaping the vector."""
+    async with session_factory() as session:
+        await import_profile_dir(session, user.id, demo_profile_dir)
+        await session.commit()
+    ctx = _ctx(session_factory, FakeLLMProvider([]), InMemoryEventBus(), PackageStorage(tmp_path))
+    del ctx["allow_dimension_mismatch"]  # production default
+    with caplog.at_level(logging.ERROR, logger="rhapto.worker"):
+        await embed_blocks(ctx, user_id=str(user.id), block_ids=["acme-migration"])
+    async with session_factory() as session:
+        from rhapto.db.repositories.profile import get_block
+
+        row = await get_block(session, user.id, "acme-migration")
+        assert row is not None and row.embedding is None
+    assert "expected 384" in caplog.text and "acme-migration" in caplog.text
+
+
+async def test_embed_blocks_logs_and_returns_on_a_bad_user_id(
+    session_factory,  # type: ignore[no-untyped-def]
+    tmp_path: Path,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    ctx = _ctx(session_factory, FakeLLMProvider([]), InMemoryEventBus(), PackageStorage(tmp_path))
+    with caplog.at_level(logging.ERROR, logger="rhapto.worker"):
+        await embed_blocks(ctx, user_id="not-a-uuid", block_ids=["acme-migration"])
+    assert "embed_blocks failed" in caplog.text

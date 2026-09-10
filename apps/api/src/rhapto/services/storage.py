@@ -51,7 +51,15 @@ class PackageStorage:
             raise FileNotFoundError(f"{name} not found for package {package_id}")
         return path.read_bytes()
 
-    def build_zip(self, package_id: str, cover_note: str, package_json: str) -> bytes:
+    def build_zip(
+        self,
+        package_id: str,
+        cover_note: str,
+        package_json: str,
+        extra_files: dict[str, str] | None = None,
+    ) -> bytes:
+        """Zip the package files. `extra_files` maps archive name to text content (e.g. a
+        guardrail-blocked notice) and is written last."""
         buffer = io.BytesIO()
         with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as zf:
             for name in ("resume.docx", "resume.pdf"):
@@ -60,6 +68,8 @@ class PackageStorage:
                     zf.write(path, name)
             zf.writestr("cover-note.md", cover_note.rstrip("\n") + "\n")
             zf.writestr("package.json", package_json)
+            for name, content in (extra_files or {}).items():
+                zf.writestr(name, content)
         return buffer.getvalue()
 
     def delete(self, package_id: str) -> None:

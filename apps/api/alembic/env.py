@@ -13,7 +13,9 @@ from rhapto.db.base import Base
 
 config = context.config
 if config.config_file_name is not None:
-    fileConfig(config.config_file_name)
+    # disable_existing_loggers defaults to True, which would switch off every logger the
+    # application already created (rhapto.api, rhapto.worker) when migrations run in-process.
+    fileConfig(config.config_file_name, disable_existing_loggers=False)
 
 url = os.environ.get("DATABASE_URL")
 if url:

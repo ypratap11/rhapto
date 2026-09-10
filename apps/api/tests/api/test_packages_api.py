@@ -71,6 +71,7 @@ async def test_patch_creates_new_validated_version(
         2,
     ]
     assert ("render_package_pdf", {"package_id": new["id"]}) in enqueuer.calls
+    assert patched.headers["location"].endswith(f"/api/v1/packages/{new['id']}")
 
 
 @pytest.mark.usefixtures("imported_profile")
@@ -102,11 +103,13 @@ async def test_download_zip_and_files(client: httpx.AsyncClient, fake_llm) -> No
     _, package_id = await _tailored(client, fake_llm)
     download = await client.get(f"/api/v1/packages/{package_id}/download")
     assert download.status_code == 200 and download.headers["content-type"] == "application/zip"
+    assert download.headers["x-rhapto-guardrails"] == "passed"
     with zipfile.ZipFile(io.BytesIO(download.content)) as zf:
         assert set(zf.namelist()) == {"resume.docx", "cover-note.md", "package.json"}
         assert b'"version": 1' in zf.read("package.json")
     docx = await client.get(f"/api/v1/packages/{package_id}/files/resume.docx")
     assert docx.status_code == 200 and docx.content[:2] == b"PK"
+    assert docx.headers["x-rhapto-guardrails"] == "passed"
     assert (await client.get(f"/api/v1/packages/{package_id}/files/resume.pdf")).status_code == 404
     assert (await client.get(f"/api/v1/packages/{package_id}/files/evil.txt")).status_code == 422
 
@@ -115,3 +118,27 @@ async def test_unknown_package_404(client: httpx.AsyncClient) -> None:
     missing = "00000000-0000-0000-0000-000000000000"
     assert (await client.get(f"/api/v1/packages/{missing}")).status_code == 404
     assert (await client.get(f"/api/v1/jobs/{missing}/packages")).status_code == 404
+
+
+@pytest.mark.usefixtures("imported_profile")
+async def test_blocked_package_download_is_unmistakable(
+    client: httpx.AsyncClient, fake_llm
+) -> None:  # type: ignore[no-untyped-def]
+    """A blocked package stays downloadable, but the transport and the zip both say so."""
+    _, package_id = await _tailored(client, fake_llm)
+    resume = (await client.get(f"/api/v1/packages/{package_id}")).json()["resume"]
+    resume["sections"][0]["entries"][0]["bullets"][1] = bullet(
+        "Cut warehouse cost 25%.", "acme-migration"
+    ).model_dump()
+    new = (await client.patch(f"/api/v1/packages/{package_id}", json={"resume": resume})).json()
+    assert new["status"] == "blocked"
+
+    download = await client.get(f"/api/v1/packages/{new['id']}/download")
+    assert download.status_code == 200
+    assert download.headers["x-rhapto-guardrails"] == "blocked"
+    with zipfile.ZipFile(io.BytesIO(download.content)) as zf:
+        assert "GUARDRAILS-BLOCKED.md" in zf.namelist()
+        note = zf.read("GUARDRAILS-BLOCKED.md").decode()
+    assert "no-unverified-metrics" in note and "25%" in note
+    docx = await client.get(f"/api/v1/packages/{new['id']}/files/resume.docx")
+    assert docx.status_code == 200 and docx.headers["x-rhapto-guardrails"] == "blocked"

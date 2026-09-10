@@ -94,6 +94,8 @@ def worker_ctx(
         "event_bus": event_bus,
         "storage": storage,
         "soffice_binary": api_settings.rhapto_soffice_binary,
+        # FakeEmbeddingProvider is 64-dim; opt into reshaping rather than dropping the vector.
+        "allow_dimension_mismatch": True,
     }
 
 
