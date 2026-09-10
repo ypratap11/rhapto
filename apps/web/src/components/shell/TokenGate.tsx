@@ -8,17 +8,26 @@ import { hasToken } from "@/lib/api/client";
 
 function subscribe(onStoreChange: () => void): () => void {
   window.addEventListener("storage", onStoreChange);
-  return () => window.removeEventListener("storage", onStoreChange);
+  window.addEventListener("rhapto-settings", onStoreChange);
+  return () => {
+    window.removeEventListener("storage", onStoreChange);
+    window.removeEventListener("rhapto-settings", onStoreChange);
+  };
 }
 
-function getServerSnapshot(): boolean {
-  return false;
+function getSnapshot(): boolean | null {
+  return hasToken();
+}
+
+function getServerSnapshot(): boolean | null {
+  return null;
 }
 
 export function TokenGate({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const connected = useSyncExternalStore(subscribe, hasToken, getServerSnapshot);
+  const connected = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
   if (pathname === "/settings") return <>{children}</>;
+  if (connected === null) return null;
   if (connected) return <>{children}</>;
   return (
     <Card className="mx-auto max-w-md">

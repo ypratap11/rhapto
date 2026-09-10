@@ -38,6 +38,7 @@ export function setSettings(settings: ConnectionSettings): void {
   if (!s) return;
   s.setItem(STORAGE_KEYS.token, settings.token.trim());
   s.setItem(STORAGE_KEYS.apiUrl, settings.apiUrl.trim().replace(/\/+$/, "") || DEFAULT_API_URL);
+  window.dispatchEvent(new Event("rhapto-settings"));
 }
 
 export function hasToken(): boolean {
