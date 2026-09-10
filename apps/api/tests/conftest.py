@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import asyncio
 import os
 from collections.abc import AsyncIterator
 from pathlib import Path
 
 import asyncpg
 import pytest
+import redis.asyncio
+import redis.exceptions
 from alembic.config import Config
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
@@ -52,8 +55,6 @@ def test_db_url() -> str:
         finally:
             await conn.close()
 
-    import asyncio
-
     try:
         asyncio.run(ensure())
     except OSError as exc:
@@ -98,3 +99,25 @@ async def user(session: AsyncSession) -> User:
     u = await get_or_create_user(session, "test@example.com")
     await session.commit()
     return u
+
+
+DEFAULT_TEST_REDIS_URL = "redis://localhost:6379/1"
+
+
+@pytest.fixture(scope="session")
+def test_redis_url() -> str:
+    """URL of a reachable Redis, or skip. Mirrors `test_db_url` for the broker-backed tests."""
+    url = os.environ.get("RHAPTO_TEST_REDIS_URL", DEFAULT_TEST_REDIS_URL)
+
+    async def ping() -> None:
+        client = redis.asyncio.from_url(url)
+        try:
+            await client.ping()
+        finally:
+            await client.aclose()
+
+    try:
+        asyncio.run(ping())
+    except (OSError, redis.exceptions.RedisError) as exc:
+        pytest.skip(f"Redis not reachable at {url}: {exc}. Run `docker compose up -d db redis`.")
+    return url
