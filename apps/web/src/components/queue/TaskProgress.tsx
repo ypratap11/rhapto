@@ -13,6 +13,7 @@ export function TaskProgress({ taskId, jobId, onFinished }: { taskId: string; jo
   useEffect(() => {
     const controller = new AbortController();
     let current = initialProgress;
+    let aborted = false;
     readTaskEvents(
       taskId,
       (event) => {
@@ -22,10 +23,12 @@ export function TaskProgress({ taskId, jobId, onFinished }: { taskId: string; jo
       controller.signal,
     )
       .catch((error: unknown) => {
+        if (aborted || controller.signal.aborted || (error instanceof DOMException && error.name === "AbortError")) return;
         current = { ...current, status: "failed", error: error instanceof Error ? error.message : String(error) };
         setState(current);
       })
       .finally(() => {
+        if (aborted) return;
         if (finished.current) return;
         finished.current = true;
         if (current.status === "succeeded" && current.packageId) {
@@ -37,7 +40,10 @@ export function TaskProgress({ taskId, jobId, onFinished }: { taskId: string; jo
         }
         onFinished(current);
       });
-    return () => controller.abort();
+    return () => {
+      aborted = true;
+      controller.abort();
+    };
   }, [taskId, jobId, onFinished]);
 
   const activeIndex = state.step ? PIPELINE_STEPS.indexOf(state.step as (typeof PIPELINE_STEPS)[number]) : -1;

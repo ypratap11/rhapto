@@ -23,12 +23,9 @@ export function TailorButton({ job }: { job: JobOut }) {
   async function start() {
     try {
       const task = await tailor.mutateAsync({ jobId: job.id, body: { track_id: trackId ?? null } });
-      if (task.status === "succeeded" || task.status === "failed") {
-        invalidateJobs(queryClient);
-        if (task.status === "failed") toast.error(task.error ?? "Tailoring failed");
-        else toast.success("Package ready");
-        return;
-      }
+      // Always route through TaskProgress, even when the mutation already returned a
+      // finished task: the SSE endpoint replays the terminal `state` event and closes
+      // for finished tasks, so this is the single path that surfaces the result.
       setTaskId(task.id);
     } catch (error) {
       toast.error(error instanceof ApiError ? error.message : "Could not start tailoring");

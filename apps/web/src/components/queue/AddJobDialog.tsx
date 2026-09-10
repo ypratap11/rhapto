@@ -30,7 +30,7 @@ export function AddJobDialog({ open, onOpenChange }: { open: boolean; onOpenChan
     if (mode === "paste" && text.trim().length < 50) return setError("Paste at least 50 characters of the job description.");
     if (mode === "url" && !/^https?:\/\//i.test(url.trim())) return setError("Enter an http(s) URL.");
     try {
-      const job = await create.mutateAsync({
+      await create.mutateAsync({
         jd_text: mode === "paste" ? text : null,
         url: mode === "url" ? url.trim() : null,
         company: company.trim() || null,
@@ -39,10 +39,8 @@ export function AddJobDialog({ open, onOpenChange }: { open: boolean; onOpenChan
       });
       toast.success("Job added");
       onOpenChange(false);
-      router.push(`/`);
       setText("");
       setUrl("");
-      void job;
     } catch (e) {
       if (e instanceof ApiError && e.status === 409) {
         const id = e.problem?.existing_job_id;
@@ -52,6 +50,16 @@ export function AddJobDialog({ open, onOpenChange }: { open: boolean; onOpenChan
         setError(e instanceof ApiError ? e.message : "Could not add the job.");
       }
     }
+  }
+
+  function showExisting() {
+    if (!existing) return;
+    const id = existing;
+    onOpenChange(false);
+    router.push(`/#${id}`);
+    setTimeout(() => {
+      document.getElementById(id)?.scrollIntoView({ behavior: "smooth" });
+    }, 0);
   }
 
   return (
@@ -92,9 +100,9 @@ export function AddJobDialog({ open, onOpenChange }: { open: boolean; onOpenChan
           <p role="alert" className="text-sm text-red-700">
             {error}{" "}
             {existing ? (
-              <a className="underline" href={`/#${existing}`}>
+              <button type="button" className="underline" onClick={showExisting}>
                 Show it
-              </a>
+              </button>
             ) : null}
           </p>
         ) : null}

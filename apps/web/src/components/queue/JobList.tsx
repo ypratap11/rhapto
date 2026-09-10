@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ApiErrorBanner } from "@/components/shell/ApiErrorBanner";
+import { ApiError } from "@/lib/api/client";
 import { useDeleteJob, useJobs, type JobOut } from "@/lib/api/queries";
 import { JobCard } from "./JobCard";
 
@@ -36,9 +37,13 @@ export function JobList({ search }: { search: string }) {
             <AlertDialogAction
               onClick={async () => {
                 if (!pending) return;
-                await remove.mutateAsync(pending.id);
-                toast.success("Job deleted");
-                setPending(null);
+                try {
+                  await remove.mutateAsync(pending.id);
+                  toast.success("Job deleted");
+                  setPending(null);
+                } catch (error) {
+                  toast.error(error instanceof ApiError ? error.message : "Could not delete the job.");
+                }
               }}
             >
               Delete
