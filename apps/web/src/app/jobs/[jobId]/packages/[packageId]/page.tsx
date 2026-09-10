@@ -1,29 +1,36 @@
 "use client";
 
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
+import { toast } from "sonner";
 import { ApiErrorBanner } from "@/components/shell/ApiErrorBanner";
 import { GuardrailPanel } from "@/components/review/GuardrailPanel";
 import { JdPane } from "@/components/review/JdPane";
 import { PackageActions } from "@/components/review/PackageActions";
+import { RegenerateDialog } from "@/components/review/RegenerateDialog";
 import { ResumePane } from "@/components/review/ResumePane";
 import { SourceBlockCard } from "@/components/review/SourceBlockCard";
 import { VersionSwitcher } from "@/components/review/VersionSwitcher";
+import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { StatusBadge } from "@/components/ui/StatusBadge";
-import { useApplications, useBlocks, useJob, usePackage, usePackages, type Block } from "@/lib/api/queries";
+import { ApiError } from "@/lib/api/client";
+import { useApplications, useBlocks, useJob, usePackage, usePackages, usePatchPackage, type Block, type ResumeDocument } from "@/lib/api/queries";
 import { formatDate } from "@/lib/format";
 import { parsePath } from "@/lib/resume-paths";
 import { PACKAGE_STATUS_TONE } from "@/lib/status";
 
 export default function PackageReviewPage() {
   const { jobId, packageId } = useParams<{ jobId: string; packageId: string }>();
+  const router = useRouter();
   const job = useJob(jobId);
   const pkg = usePackage(packageId);
   const packages = usePackages(jobId);
   const blocks = useBlocks();
   const applications = useApplications();
+  const patch = usePatchPackage();
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
+  const [regenOpen, setRegenOpen] = useState(false);
 
   const blockMap = useMemo(() => new Map<string, Block>((blocks.data ?? []).map((b) => [b.id, b])), [blocks.data]);
   const violationsByPath = useMemo(() => new Set((pkg.data?.guardrail_report.violations ?? []).map((v) => v.path)), [pkg.data]);
@@ -59,12 +66,32 @@ export default function PackageReviewPage() {
         <div className="flex flex-wrap items-center gap-2">
           {packages.data ? <VersionSwitcher jobId={jobId} packages={packages.data} currentId={packageId} /> : null}
           <PackageActions job={job.data} pkg={pkg.data} application={application} />
+          <Button variant="outline" onClick={() => setRegenOpen(true)}>
+            Regenerate
+          </Button>
         </div>
       </div>
+      <RegenerateDialog job={job.data} pkg={pkg.data} open={regenOpen} onOpenChange={setRegenOpen} />
       <div className="grid gap-6 lg:grid-cols-[1fr_1.2fr]">
         <JdPane job={job.data} />
         <div className="space-y-4">
-          <ResumePane resume={pkg.data.resume} blocks={blockMap} selectedPath={selectedPath} onSelect={setSelectedPath} violationsByPath={violationsByPath} />
+          <ResumePane
+            key={pkg.data.id}
+            resume={pkg.data.resume}
+            blocks={blockMap}
+            selectedPath={selectedPath}
+            onSelect={setSelectedPath}
+            violationsByPath={violationsByPath}
+            onSave={async (draft: ResumeDocument) => {
+              try {
+                const created = await patch.mutateAsync({ id: packageId, resume: draft });
+                toast.success(created.status === "blocked" ? "Saved as v" + created.version + ", but guardrails blocked it" : "Saved as v" + created.version);
+                router.push(`/jobs/${jobId}/packages/${created.id}`);
+              } catch (e) {
+                toast.error(e instanceof ApiError ? e.message : "Could not save");
+              }
+            }}
+          />
           <GuardrailPanel report={pkg.data.guardrail_report} onSelect={setSelectedPath} />
           <SourceBlockCard block={selectedBlock} />
           <section className="rounded-md border border-border bg-card p-4 text-sm">

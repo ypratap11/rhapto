@@ -122,6 +122,15 @@ export function useBlocks() {
   return useQuery({ queryKey: packageKeys.blocks, queryFn: () => unwrap(apiClient().GET("/api/v1/profile/blocks")) });
 }
 
+export function usePatchPackage() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, resume }: { id: string; resume: ResumeDocument }) =>
+      unwrap(apiClient().PATCH("/api/v1/packages/{package_id}", { params: { path: { package_id: id } }, body: { resume } })),
+    onSuccess: (created) => invalidatePackages(queryClient, created.job_id),
+  });
+}
+
 export function useApplications() {
   return useQuery({ queryKey: packageKeys.applications, queryFn: () => unwrap(apiClient().GET("/api/v1/applications")) });
 }
