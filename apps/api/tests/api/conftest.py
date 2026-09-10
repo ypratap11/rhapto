@@ -22,6 +22,7 @@ from rhapto.services.eventbus import InMemoryEventBus
 from rhapto.services.jobtext import JobTextError
 from rhapto.services.profile_sync import import_profile_dir
 from rhapto.services.storage import PackageStorage
+from rhapto.worker.tasks import TASKS as TASK_REGISTRY
 
 TOKEN = "test-token"
 
@@ -34,14 +35,6 @@ class ScriptableLLM(FakeLLMProvider):
 
     def script(self, *responses: BaseModel | dict[str, Any]) -> None:
         self._queue.extend(responses)
-
-
-async def _noop_task(ctx: dict[str, Any], **kwargs: Any) -> None:
-    return None
-
-
-# Task 8 replaces this with rhapto.worker.tasks.TASKS.
-TASK_REGISTRY: dict[str, Callable[..., Awaitable[None]]] = {"embed_blocks": _noop_task}
 
 
 @pytest.fixture
