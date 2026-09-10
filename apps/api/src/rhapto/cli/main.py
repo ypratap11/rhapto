@@ -10,6 +10,7 @@ from pathlib import Path
 
 import typer
 from alembic.config import Config
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from alembic import command
@@ -167,10 +168,24 @@ def run_migrations(database_url: str) -> None:
     command.upgrade(alembic_config(), "head")
 
 
+def mask_url(url: str) -> str:
+    """Hide the password in a database URL so it is safe to print."""
+    return re.sub(r"(//[^:/?#@]+):[^@]*@", r"\1:***@", url)
+
+
 @db_app.command("upgrade")
 def db_upgrade() -> None:
     """Apply database migrations."""
-    run_migrations(get_settings().database_url)
+    url = get_settings().database_url
+    try:
+        run_migrations(url)
+    except (OSError, SQLAlchemyError) as exc:
+        typer.echo(
+            f"error: cannot reach the database at {mask_url(url)}; "
+            "run `docker compose up -d db redis`",
+            err=True,
+        )
+        raise typer.Exit(1) from exc
     typer.echo("database is up to date")
 
 

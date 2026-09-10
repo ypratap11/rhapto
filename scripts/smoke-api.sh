@@ -6,6 +6,7 @@ BASE="${RHAPTO_API_URL:-http://localhost:8000/api/v1}"
 TOKEN="${RHAPTO_API_TOKEN:-$(grep -E '^RHAPTO_API_TOKEN=' .env 2>/dev/null | cut -d= -f2- || true)}"
 [ -n "$TOKEN" ] || { echo "RHAPTO_API_TOKEN not set (env or .env)" >&2; exit 1; }
 auth=(-H "Authorization: Bearer $TOKEN")
+mkdir -p out
 
 echo "health: $(curl -fsS "$BASE/health")"
 echo "me: $(curl -fsS "${auth[@]}" "$BASE/me")"
@@ -26,4 +27,9 @@ for _ in $(seq 1 60); do
 done
 curl -fsS "${auth[@]}" "$BASE/tasks/$task_id" | jq '{status, error, step: .progress.step}'
 package_id=$(curl -fsS "${auth[@]}" "$BASE/tasks/$task_id" | jq -r .result_ref)
-[ "$package_id" != "null" ] && curl -fsS "${auth[@]}" "$BASE/packages/$package_id/download" -o out/smoke-package.zip && echo "downloaded out/smoke-package.zip"
+if [ "$package_id" = "null" ] || [ -z "$package_id" ]; then
+  echo "no package produced (task failed); see the status above and \`docker compose logs worker\`" >&2
+  exit 1
+fi
+curl -fsS "${auth[@]}" "$BASE/packages/$package_id/download" -o out/smoke-package.zip
+echo "downloaded out/smoke-package.zip"

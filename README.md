@@ -46,17 +46,26 @@ Development: `uv run pytest`, `uv run ruff check .`, `uv run mypy`, `uv run lint
 ## Backend (phase 0.2)
 
 ```bash
-cp .env.example .env          # set ANTHROPIC_API_KEY and RHAPTO_API_TOKEN
+cp .env.example .env          # set ANTHROPIC_API_KEY and generate RHAPTO_API_TOKEN
 docker compose up -d          # db, redis, api (http://localhost:8000), worker
-docker compose exec api rhapto profile import /work/profile   # or use POST /api/v1/profile/import
+
+# upload a profile (swap profile.example for your own gitignored profile/ when you have one)
+TOKEN=$(grep RHAPTO_API_TOKEN .env | cut -d= -f2-)
+curl -fsS -H "Authorization: Bearer $TOKEN" -X POST http://localhost:8000/api/v1/profile/import \
+  -F files=@profile.example/blocks.yaml -F files=@profile.example/tracks.yaml \
+  -F files=@profile.example/guardrails.yaml -F files=@profile.example/answers.yaml \
+  -F files=@profile.example/watchlist.yaml
+
 open http://localhost:8000/api/v1/docs
 ```
 
-Every request except `/api/v1/health` needs `Authorization: Bearer <RHAPTO_API_TOKEN>`. Paste a job description with
+Every request except `/api/v1/health`, `/api/v1/openapi.json` and `/api/v1/docs` needs
+`Authorization: Bearer <RHAPTO_API_TOKEN>`. Paste a job description with
 `POST /api/v1/jobs`, start tailoring with `POST /api/v1/jobs/{id}/tailor`, follow progress on
 `GET /api/v1/tasks/{id}/events` (Server-Sent Events), then fetch, edit, or download the package under `/api/v1/packages`.
 Editing a package re-runs the guardrails and creates a new version; a `blocked` status means a guardrail failed and the
-report says why. PDFs for edited versions are rendered by the worker a few seconds after the edit; the DOCX is
+report says why. Downloads of a blocked package carry `X-Rhapto-Guardrails: blocked` and a `GUARDRAILS-BLOCKED.md` in
+the zip, so a blocked draft cannot be mistaken for a clean one. PDFs for edited versions are rendered by the worker a few seconds after the edit; the DOCX is
 immediate. The tracker lives under `/api/v1/applications`. Nothing here submits an application anywhere.
 
 Development without Docker for the app itself: `docker compose up -d db redis`, then from `apps/api`:

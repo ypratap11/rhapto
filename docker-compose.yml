@@ -6,7 +6,7 @@ services:
       POSTGRES_PASSWORD: rhapto
       POSTGRES_DB: rhapto
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -18,7 +18,7 @@ services:
   redis:
     image: redis:7-alpine
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
@@ -36,7 +36,7 @@ services:
       REDIS_URL: redis://redis:6379/0
       RHAPTO_PACKAGES_DIR: /data/packages
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
     volumes:
       - packages:/data/packages
     depends_on:

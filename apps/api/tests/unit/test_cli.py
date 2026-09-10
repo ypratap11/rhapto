@@ -252,3 +252,22 @@ def test_db_upgrade_and_profile_import_export_commands_exist() -> None:
     assert result.exit_code == 0 and "upgrade" in result.output
     result = runner.invoke(cli.app, ["profile", "--help"])
     assert "import" in result.output and "export" in result.output
+
+
+def test_db_upgrade_reports_an_unreachable_database(monkeypatch: pytest.MonkeyPatch) -> None:
+    from rhapto.config import Settings
+
+    monkeypatch.setenv("DATABASE_URL", "unused")  # restored on teardown
+    monkeypatch.setattr(
+        cli,
+        "get_settings",
+        lambda: Settings(
+            _env_file=None,
+            database_url="postgresql+asyncpg://rhapto:sup3rsecret@127.0.0.1:1/rhapto",
+        ),
+    )
+    result = runner.invoke(cli.app, ["db", "upgrade"])
+    assert result.exit_code == 1
+    assert "cannot reach the database" in result.output
+    assert "docker compose up -d db redis" in result.output
+    assert "sup3rsecret" not in result.output and "***" in result.output
