@@ -17,15 +17,22 @@ const job = { id: "j1" } as JobOut;
 const pkg = { id: "p1", track_id: "data-pm", version: 1 } as PackageOut;
 
 describe("RegenerateDialog", () => {
-  it("requires feedback and posts it with the parent package id", async () => {
-    mutateAsync.mockResolvedValueOnce({ id: "t1", status: "running" });
-    render(<RegenerateDialog job={job} pkg={pkg} open onOpenChange={() => undefined} />);
-    const user = userEvent.setup();
-    await user.click(screen.getByRole("button", { name: /regenerate/i }));
-    expect(screen.getByText(/at least 10 characters/i)).toBeInTheDocument();
-    await user.type(screen.getByLabelText(/feedback/i), "Lean harder on the migration work.");
-    await user.click(screen.getByRole("button", { name: /regenerate/i }));
-    expect(mutateAsync).toHaveBeenCalledWith({ jobId: "j1", body: { feedback: "Lean harder on the migration work.", parent_package_id: "p1", track_id: "data-pm" } });
-    expect(await screen.findByText("progress")).toBeInTheDocument();
-  });
+  // The default 5s test timeout is occasionally too tight for this test's
+  // char-by-char userEvent.type() call under CPU contention from vitest's
+  // parallel workers (unrelated to this dialog's behavior); give it headroom.
+  it(
+    "requires feedback and posts it with the parent package id",
+    async () => {
+      mutateAsync.mockResolvedValueOnce({ id: "t1", status: "running" });
+      render(<RegenerateDialog job={job} pkg={pkg} open onOpenChange={() => undefined} />);
+      const user = userEvent.setup();
+      await user.click(screen.getByRole("button", { name: /regenerate/i }));
+      expect(screen.getByText(/at least 10 characters/i)).toBeInTheDocument();
+      await user.type(screen.getByLabelText(/feedback/i), "Lean harder on the migration work.");
+      await user.click(screen.getByRole("button", { name: /regenerate/i }));
+      expect(mutateAsync).toHaveBeenCalledWith({ jobId: "j1", body: { feedback: "Lean harder on the migration work.", parent_package_id: "p1", track_id: "data-pm" } });
+      expect(await screen.findByText("progress")).toBeInTheDocument();
+    },
+    15000,
+  );
 });
