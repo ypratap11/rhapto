@@ -85,7 +85,7 @@ function SheetBody({ application, onOpenChange }: { application: ApplicationOut;
         <h3 className="mb-1 font-sans text-xs font-semibold uppercase tracking-wide text-muted-foreground">History</h3>
         <ol className="space-y-1 text-sm">
           {application.status_history.map((h, i) => (
-            <li key={i} className="flex justify-between">
+            <li key={`${h.status}-${h.at}-${i}`} className="flex justify-between">
               <span>{STATUS_LABEL[h.status as keyof typeof STATUS_LABEL] ?? h.status}</span>
               <span className="font-mono text-xs text-muted-foreground">{formatDate(h.at)}</span>
             </li>
