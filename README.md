@@ -72,3 +72,27 @@ Development without Docker for the app itself: `docker compose up -d db redis`, 
 `uv run rhapto db upgrade`, `uv run uvicorn rhapto.api.app:app --reload`, and in another shell
 `uv run arq rhapto.worker.main.WorkerSettings`. Tests: `uv run pytest` (API tests need the compose `db`).
 `bash scripts/smoke-api.sh` exercises a running stack end to end (needs `curl` and `jq`).
+
+## Web app (phase 0.2)
+
+```bash
+docker compose up -d        # db, redis, api, worker, web
+open http://localhost:3000
+```
+
+On first visit the app asks for the API URL (`http://localhost:8000`) and the bearer token from your `.env`
+(`RHAPTO_API_TOKEN`). Then:
+
+1. **Profile**: import your five YAML files (or the demo `profile.example` to try it) and edit blocks, tracks, and rules.
+2. **Queue**: paste a job description or a posting URL, pick a track, and press Tailor. Progress streams live;
+   the package opens when the engine finishes.
+3. **Review**: job description on the left with requirements highlighted, resume on the right. Click a bullet to
+   see the exact block it came from. The guardrail panel lists anything blocked. Edit a bullet and save as a new
+   version (guardrails run again), or regenerate with feedback. Download the zip and open the posting yourself.
+4. **Pipeline**: drag applications across the board and keep notes and history.
+
+Rhapto never submits anything. The last click is yours.
+
+Development: from `apps/web`, `pnpm install`, `pnpm dev` (http://localhost:3000), `pnpm test`, `pnpm typecheck`,
+`pnpm lint`, `pnpm build`. After changing the API, run `bash scripts/codegen.sh` to refresh
+`packages/schemas/openapi.json` and the generated client types.

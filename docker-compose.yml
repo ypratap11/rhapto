@@ -73,6 +73,18 @@ services:
       redis:
         condition: service_healthy
 
+  web:
+    build:
+      context: ./apps/web
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: ${RHAPTO_PUBLIC_API_URL:-http://localhost:8000}
+    ports:
+      - "3000:3000"
+    depends_on:
+      api:
+        condition: service_started
+
 volumes:
   pgdata:
   packages:
