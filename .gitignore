@@ -21,6 +21,10 @@ __pycache__/
 # node
 node_modules/
 .next/
+apps/web/.next/
+apps/web/out/
+apps/web/next-env.d.ts
+apps/web/coverage/
 
 # superpowers scratch (ledgers, briefs, review packages)
 .superpowers/
