@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Nav } from "./Nav";
+import { TokenGate } from "./TokenGate";
 
 export function Shell({ children }: { children: React.ReactNode }) {
   return (
@@ -12,7 +13,9 @@ export function Shell({ children }: { children: React.ReactNode }) {
           <Nav />
         </div>
       </header>
-      <main className="mx-auto max-w-6xl px-6 py-8">{children}</main>
+      <main className="mx-auto max-w-6xl px-6 py-8">
+        <TokenGate>{children}</TokenGate>
+      </main>
     </div>
   );
 }
