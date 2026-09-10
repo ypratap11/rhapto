@@ -5,7 +5,7 @@ from typing import Any, TypedDict
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from rhapto.db.models import EMBEDDING_DIMENSIONS, Job, Task
+from rhapto.db.models import EMBEDDING_DIMENSIONS, Job, Package, Task
 from rhapto.db.repositories import packages as package_repo
 from rhapto.db.repositories import tasks as task_repo
 from rhapto.db.repositories.profile import get_block
@@ -138,6 +138,20 @@ async def tailor_job(ctx: dict[str, Any], task_id: str) -> None:
             await bus.publish(channel, {"event": "error", "message": str(exc)})
 
 
+async def render_package_pdf(ctx: dict[str, Any], package_id: str) -> None:
+    """Render the PDF for an already-persisted package's DOCX, off the API's request path."""
+    factory: async_sessionmaker[AsyncSession] = ctx["session_factory"]
+    storage: PackageStorage = ctx["storage"]
+    async with factory() as session:
+        row = await session.get(Package, uuid.UUID(package_id))
+        if row is None or row.docx_path is None:
+            return
+        pdf = storage.render_pdf(package_id, ctx["soffice_binary"])
+        if pdf is not None:
+            row.pdf_path = str(pdf)
+        await session.commit()
+
+
 async def embed_blocks(ctx: dict[str, Any], user_id: str, block_ids: list[str]) -> None:
     """Compute and store embeddings for the given blocks; unknown ids are ignored."""
     factory: async_sessionmaker[AsyncSession] = ctx["session_factory"]
@@ -159,4 +173,8 @@ async def embed_blocks(ctx: dict[str, Any], user_id: str, block_ids: list[str]) 
         await session.commit()
 
 
-TASKS: dict[str, TaskFn] = {"tailor_job": tailor_job, "embed_blocks": embed_blocks}
+TASKS: dict[str, TaskFn] = {
+    "tailor_job": tailor_job,
+    "embed_blocks": embed_blocks,
+    "render_package_pdf": render_package_pdf,
+}

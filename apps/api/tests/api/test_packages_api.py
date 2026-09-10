@@ -47,7 +47,9 @@ async def test_list_and_get(client: httpx.AsyncClient, fake_llm) -> None:  # typ
 
 
 @pytest.mark.usefixtures("imported_profile")
-async def test_patch_creates_new_validated_version(client: httpx.AsyncClient, fake_llm) -> None:  # type: ignore[no-untyped-def]
+async def test_patch_creates_new_validated_version(
+    client: httpx.AsyncClient, fake_llm, enqueuer
+) -> None:  # type: ignore[no-untyped-def]
     job_id, package_id = await _tailored(client, fake_llm)
     resume = (await client.get(f"/api/v1/packages/{package_id}")).json()["resume"]
     resume["sections"][0]["entries"][0]["bullets"][0]["text"] = (
@@ -68,6 +70,7 @@ async def test_patch_creates_new_validated_version(client: httpx.AsyncClient, fa
         1,
         2,
     ]
+    assert ("render_package_pdf", {"package_id": new["id"]}) in enqueuer.calls
 
 
 @pytest.mark.usefixtures("imported_profile")

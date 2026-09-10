@@ -10,7 +10,7 @@ from rhapto.engine.providers.anthropic import AnthropicProvider
 from rhapto.engine.providers.embeddings import FastEmbedProvider
 from rhapto.services.eventbus import RedisEventBus
 from rhapto.services.storage import PackageStorage
-from rhapto.worker.tasks import embed_blocks, tailor_job
+from rhapto.worker.tasks import embed_blocks, render_package_pdf, tailor_job
 
 
 async def on_startup(ctx: dict[str, Any]) -> None:
@@ -33,7 +33,7 @@ async def on_shutdown(ctx: dict[str, Any]) -> None:
 
 
 class WorkerSettings:
-    functions = [tailor_job, embed_blocks]
+    functions = [tailor_job, embed_blocks, render_package_pdf]
     on_startup = on_startup
     on_shutdown = on_shutdown
     redis_settings = RedisSettings.from_dsn(get_settings().redis_url)

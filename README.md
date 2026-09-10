@@ -56,7 +56,8 @@ Every request except `/api/v1/health` needs `Authorization: Bearer <RHAPTO_API_T
 `POST /api/v1/jobs`, start tailoring with `POST /api/v1/jobs/{id}/tailor`, follow progress on
 `GET /api/v1/tasks/{id}/events` (Server-Sent Events), then fetch, edit, or download the package under `/api/v1/packages`.
 Editing a package re-runs the guardrails and creates a new version; a `blocked` status means a guardrail failed and the
-report says why. The tracker lives under `/api/v1/applications`. Nothing here submits an application anywhere.
+report says why. PDFs for edited versions are rendered by the worker a few seconds after the edit; the DOCX is
+immediate. The tracker lives under `/api/v1/applications`. Nothing here submits an application anywhere.
 
 Development without Docker for the app itself: `docker compose up -d db redis`, then from `apps/api`:
 `uv run rhapto db upgrade`, `uv run uvicorn rhapto.api.app:app --reload`, and in another shell

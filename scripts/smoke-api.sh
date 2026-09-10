@@ -3,7 +3,8 @@
 # Requires: docker compose up -d (all services), .env with RHAPTO_API_TOKEN and ANTHROPIC_API_KEY, curl, jq.
 set -euo pipefail
 BASE="${RHAPTO_API_URL:-http://localhost:8000/api/v1}"
-TOKEN="${RHAPTO_API_TOKEN:-$(grep -E '^RHAPTO_API_TOKEN=' .env | cut -d= -f2-)}"
+TOKEN="${RHAPTO_API_TOKEN:-$(grep -E '^RHAPTO_API_TOKEN=' .env 2>/dev/null | cut -d= -f2- || true)}"
+[ -n "$TOKEN" ] || { echo "RHAPTO_API_TOKEN not set (env or .env)" >&2; exit 1; }
 auth=(-H "Authorization: Bearer $TOKEN")
 
 echo "health: $(curl -fsS "$BASE/health")"

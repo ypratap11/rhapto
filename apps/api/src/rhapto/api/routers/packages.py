@@ -7,10 +7,9 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import FileResponse, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from rhapto.api.deps import current_user, get_session, get_settings_dep, get_storage
+from rhapto.api.deps import current_user, get_enqueuer, get_session, get_storage
 from rhapto.api.errors import not_found
 from rhapto.api.schemas import PackageOut, PackagePatch
-from rhapto.config import Settings
 from rhapto.db.models import Package
 from rhapto.db.repositories import jobs as job_repo
 from rhapto.db.repositories import packages as repo
@@ -19,6 +18,7 @@ from rhapto.engine.render.docx import OrphanBulletError, render_docx
 from rhapto.models.guardrail_report import GuardrailReport
 from rhapto.models.jd_extract import JDExtract
 from rhapto.models.resume_document import ResumeDocument
+from rhapto.services.enqueue import Enqueuer
 from rhapto.services.profile_sync import load_profile_from_db
 from rhapto.services.storage import PackageStorage
 
@@ -29,7 +29,7 @@ PDF_MEDIA = "application/pdf"
 UserDep = Annotated[uuid.UUID, Depends(current_user)]
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
 StorageDep = Annotated[PackageStorage, Depends(get_storage)]
-SettingsDep = Annotated[Settings, Depends(get_settings_dep)]
+EnqueuerDep = Annotated[Enqueuer, Depends(get_enqueuer)]
 
 
 def package_to_out(row: Package) -> PackageOut:
@@ -82,7 +82,7 @@ async def patch_package(
     user_id: UserDep,
     session: SessionDep,
     storage: StorageDep,
-    settings: SettingsDep,
+    enqueuer: EnqueuerDep,
 ) -> PackageOut:
     """Edited resume -> re-validate with the stored selection -> re-render -> new version.
 
@@ -131,19 +131,15 @@ async def patch_package(
         docx_path=None,
         pdf_path=None,
     )
-    # Commit the new package row before touching LibreOffice, same as the worker: no
-    # transaction spans the (possibly slow) external subprocess call.
     await session.commit()
 
     docx_path: str | None = None
-    pdf_path: str | None = None
     if docx:
         docx_path = str(storage.write_docx(str(row.id), docx))
-        pdf = storage.render_pdf(str(row.id), settings.rhapto_soffice_binary)
-        pdf_path = str(pdf) if pdf else None
     row.docx_path = docx_path
-    row.pdf_path = pdf_path
     await session.commit()
+    # PDF rendering needs LibreOffice, which lives on the worker, not the slim api image.
+    await enqueuer.enqueue("render_package_pdf", package_id=str(row.id))
     return package_to_out(row)
 
 

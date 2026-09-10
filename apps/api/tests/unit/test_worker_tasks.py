@@ -2,6 +2,7 @@ import uuid
 from pathlib import Path
 from typing import Any
 
+import pytest
 from helpers import bullet, demo_extract, demo_resume
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -11,10 +12,11 @@ from rhapto.db.repositories import tasks as task_repo
 from rhapto.db.repositories.jobs import create_job
 from rhapto.engine.compose import ComposeOutput
 from rhapto.engine.providers.fake import FakeEmbeddingProvider, FakeLLMProvider
+from rhapto.services import storage as storage_module
 from rhapto.services.eventbus import InMemoryEventBus
 from rhapto.services.profile_sync import import_profile_dir
 from rhapto.services.storage import PackageStorage
-from rhapto.worker.tasks import TASKS, embed_blocks, tailor_job
+from rhapto.worker.tasks import TASKS, embed_blocks, render_package_pdf, tailor_job
 
 JD = "ExampleCo seeks a Data Platform Program Manager to lead our Snowflake migration. " * 3
 
@@ -81,7 +83,9 @@ def _ctx(
 
 
 async def test_registry() -> None:
-    assert set(TASKS) == {"tailor_job", "embed_blocks"} and TASKS["tailor_job"] is tailor_job
+    assert set(TASKS) == {"tailor_job", "embed_blocks", "render_package_pdf"}
+    assert TASKS["tailor_job"] is tailor_job
+    assert TASKS["render_package_pdf"] is render_package_pdf
 
 
 async def test_tailor_job_success_path(
@@ -221,3 +225,48 @@ async def test_embed_blocks_stores_vectors(
         assert row is not None and row.embedding is not None and len(list(row.embedding)) == 384
         other = await get_block(session, user.id, "cred-pmp")
         assert other is not None and other.embedding is None
+
+
+async def test_render_package_pdf_sets_pdf_path(
+    session_factory,
+    user: User,
+    demo_profile_dir: Path,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:  # type: ignore[no-untyped-def]
+    job_id, task_id = await _setup(session_factory, user, demo_profile_dir)
+    bus, storage = InMemoryEventBus(), PackageStorage(tmp_path / "pkg")
+    await tailor_job(
+        _ctx(session_factory, FakeLLMProvider([demo_extract(), good_output()]), bus, storage),
+        task_id=str(task_id),
+    )
+    async with session_factory() as session:
+        task = await task_repo.get_task(session, user.id, task_id)
+        assert task is not None and task.result_ref is not None
+        package_id = task.result_ref
+
+    def fake_convert(
+        docx_path: Path, out_dir: Path, binary: str = "soffice", timeout: int = 180
+    ) -> Path:
+        pdf = out_dir / "resume.pdf"
+        pdf.write_bytes(b"%PDF")
+        return pdf
+
+    monkeypatch.setattr(storage_module, "soffice_available", lambda binary: True)
+    monkeypatch.setattr(storage_module, "convert_docx_to_pdf", fake_convert)
+
+    await render_package_pdf(
+        _ctx(session_factory, FakeLLMProvider([]), bus, storage), package_id=package_id
+    )
+
+    async with session_factory() as session:
+        package = await package_repo.get_package(session, user.id, uuid.UUID(package_id))
+        assert package is not None and package.pdf_path is not None
+        assert Path(package.pdf_path).exists()
+
+
+async def test_render_package_pdf_ignores_unknown_id(session_factory, tmp_path: Path) -> None:  # type: ignore[no-untyped-def]
+    bus, storage = InMemoryEventBus(), PackageStorage(tmp_path / "pkg")
+    await render_package_pdf(
+        _ctx(session_factory, FakeLLMProvider([]), bus, storage), package_id=str(uuid.uuid4())
+    )
