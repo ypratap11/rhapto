@@ -71,8 +71,14 @@ export function EntityTable<T>({
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
               onClick={async () => {
-                if (pending && onDelete) await onDelete(pending);
-                setPending(null);
+                try {
+                  if (pending && onDelete) await onDelete(pending);
+                } catch {
+                  // The caller's onDelete is responsible for surfacing the error (e.g. a toast);
+                  // this catch only guarantees the confirm dialog always closes.
+                } finally {
+                  setPending(null);
+                }
               }}
             >
               Delete

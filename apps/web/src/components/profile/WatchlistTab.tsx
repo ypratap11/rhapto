@@ -38,9 +38,10 @@ function WatchlistBody({ initial }: { initial: WatchlistEntry[] }) {
 
   async function save() {
     const entries = rows.filter((r) => r.company.trim() && r.board.trim());
+    const dropped = rows.length - entries.length;
     try {
       await put.mutateAsync(entries);
-      toast.success("Saved watchlist");
+      toast.success(dropped > 0 ? `Saved watchlist (${dropped} empty row${dropped === 1 ? "" : "s"} ignored)` : "Saved watchlist");
     } catch (e) {
       toast.error(e instanceof ApiError ? e.message : "Could not save the watchlist");
     }

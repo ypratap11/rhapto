@@ -72,8 +72,12 @@ export function BlocksTab() {
         emptyText="No blocks yet. Import your profile or add a block."
         onEdit={open}
         onDelete={async (b) => {
-          await remove.mutateAsync(b.id);
-          toast.success(`Deleted ${b.id}`);
+          try {
+            await remove.mutateAsync(b.id);
+            toast.success(`Deleted ${b.id}`);
+          } catch (e) {
+            toast.error(e instanceof ApiError ? e.message : "Could not delete the block");
+          }
         }}
         columns={[
           { key: "id", header: "Id", render: (b) => <span className="font-mono text-xs">{b.id}</span> },
@@ -111,8 +115,8 @@ export function BlocksTab() {
               {field("period", "Period")}
               {field("content", "Content", true)}
               {field("metric", "Metric (only used when verified)")}
-              <CheckboxField id="block-verified" label="Verified" checked={form.verified} onCheckedChange={(v) => set({ verified: v })} />
-              <CheckboxField id="block-concurrent" label="Concurrent with other roles" checked={form.concurrent} onCheckedChange={(v) => set({ concurrent: v })} />
+              <CheckboxField name="block-verified" label="Verified" checked={form.verified} onCheckedChange={(v) => set({ verified: v })} />
+              <CheckboxField name="block-concurrent" label="Concurrent with other roles" checked={form.concurrent} onCheckedChange={(v) => set({ concurrent: v })} />
               {field("tags", "Tags (comma separated)")}
               {field("attribution", "Attribution phrase")}
               {field("exclude_when", "Exclude when context is (comma separated)")}

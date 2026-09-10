@@ -12,9 +12,12 @@ import { Switch } from "@/components/ui/switch";
  * ambiguous for assistive tech. Labelling the visible checkbox directly via `aria-labelledby`
  * (pointed at a plain `<label>` with its own `id`, not linked through `htmlFor`) keeps the
  * association to a single element while a manual `onClick` preserves click-to-toggle.
+ *
+ * `name` only namespaces the generated label id (`${name}-label`) — it is never set on the
+ * control itself, since the control is labelled via `aria-labelledby`, not `htmlFor`/`id`.
  */
-export function CheckboxField({ id, label, checked, onCheckedChange, disabled }: { id: string; label: string; checked: boolean; onCheckedChange: (checked: boolean) => void; disabled?: boolean }) {
-  const labelId = `${id}-label`;
+export function CheckboxField({ name, label, checked, onCheckedChange, disabled }: { name: string; label: string; checked: boolean; onCheckedChange: (checked: boolean) => void; disabled?: boolean }) {
+  const labelId = `${name}-label`;
   return (
     <div className="flex items-center gap-2">
       <Checkbox aria-labelledby={labelId} checked={checked} onCheckedChange={(v) => onCheckedChange(v === true)} disabled={disabled} />
@@ -26,8 +29,8 @@ export function CheckboxField({ id, label, checked, onCheckedChange, disabled }:
 }
 
 /** Same rationale as {@link CheckboxField}, for the Switch primitive. */
-export function SwitchField({ id, label, checked, onCheckedChange, disabled }: { id: string; label: string; checked: boolean; onCheckedChange: (checked: boolean) => void; disabled?: boolean }) {
-  const labelId = `${id}-label`;
+export function SwitchField({ name, label, checked, onCheckedChange, disabled }: { name: string; label: string; checked: boolean; onCheckedChange: (checked: boolean) => void; disabled?: boolean }) {
+  const labelId = `${name}-label`;
   return (
     <div className="flex items-center gap-2">
       <Switch aria-labelledby={labelId} checked={checked} onCheckedChange={(v) => onCheckedChange(v === true)} disabled={disabled} />

@@ -71,8 +71,12 @@ export function GuardrailsTab() {
         emptyText="No guardrail overrides yet. Defaults apply until you add one."
         onEdit={open}
         onDelete={async (r) => {
-          await remove.mutateAsync(r.rule);
-          toast.success(`Deleted ${r.rule}`);
+          try {
+            await remove.mutateAsync(r.rule);
+            toast.success(`Deleted ${r.rule}`);
+          } catch (e) {
+            toast.error(e instanceof ApiError ? e.message : "Could not delete the guardrail");
+          }
         }}
         columns={[
           { key: "rule", header: "Rule", render: (r) => <span className="font-mono text-xs">{r.rule}</span> },
@@ -106,7 +110,7 @@ export function GuardrailsTab() {
                   <p className="font-mono text-sm">{form.rule}</p>
                 )}
               </div>
-              <SwitchField id="guardrail-active" label="Active" checked={form.active} onCheckedChange={(v) => set({ active: v })} />
+              <SwitchField name="guardrail-active" label="Active" checked={form.active} onCheckedChange={(v) => set({ active: v })} />
               <div className="space-y-1">
                 <Label htmlFor="guardrail-config">Config (JSON object)</Label>
                 <Textarea id="guardrail-config" rows={6} value={form.config} onChange={(e) => set({ config: e.target.value })} placeholder="{}" />

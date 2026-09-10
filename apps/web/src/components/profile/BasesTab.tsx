@@ -10,7 +10,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 import { Skeleton } from "@/components/ui/skeleton";
 import { ApiError } from "@/lib/api/client";
 import { useBases, useBlocks, useDeleteBase, usePutBase, type ResumeBase } from "@/lib/api/queries";
-import { splitList, joinList } from "@/lib/profile-forms";
+import { ID_RE, splitList, joinList } from "@/lib/profile-forms";
 import { CheckboxField } from "./fields";
 import { EntityTable } from "./EntityTable";
 
@@ -37,7 +37,7 @@ function formToBase(form: BaseForm): ResumeBase {
 
 function validateBaseForm(form: BaseForm): Record<string, string> {
   const errors: Record<string, string> = {};
-  if (!/^[a-z0-9][a-z0-9-]*$/.test(form.id.trim())) errors.id = "Use lowercase letters, digits, and hyphens, starting with a letter or digit.";
+  if (!ID_RE.test(form.id.trim())) errors.id = "Use lowercase letters, digits, and hyphens, starting with a letter or digit.";
   if (!form.name.trim()) errors.name = "Name is required.";
   return errors;
 }
@@ -92,8 +92,12 @@ export function BasesTab() {
         emptyText="No resume bases yet. Import your profile or add a base."
         onEdit={open}
         onDelete={async (b) => {
-          await remove.mutateAsync(b.id);
-          toast.success(`Deleted ${b.id}`);
+          try {
+            await remove.mutateAsync(b.id);
+            toast.success(`Deleted ${b.id}`);
+          } catch (e) {
+            toast.error(e instanceof ApiError ? e.message : "Could not delete the base");
+          }
         }}
         columns={[
           { key: "id", header: "Id", render: (b) => <span className="font-mono text-xs">{b.id}</span> },
@@ -124,12 +128,18 @@ export function BasesTab() {
               </div>
               <div className="space-y-1">
                 <Label>Blocks</Label>
-                <div className="max-h-64 space-y-1.5 overflow-y-auto rounded-md border p-2">
-                  {availableBlocks.length === 0 ? <p className="text-xs text-muted-foreground">No blocks yet.</p> : null}
-                  {availableBlocks.map((b) => (
-                    <CheckboxField key={b.id} id={`base-block-${b.id}`} label={b.id} checked={form.block_ids.includes(b.id)} onCheckedChange={(checked) => toggleBlock(b.id, checked)} />
-                  ))}
-                </div>
+                {blocks.isLoading ? (
+                  <Skeleton className="h-24 w-full" />
+                ) : blocks.error ? (
+                  <ApiErrorBanner error={blocks.error} />
+                ) : (
+                  <div className="max-h-64 space-y-1.5 overflow-y-auto rounded-md border p-2">
+                    {availableBlocks.length === 0 ? <p className="text-xs text-muted-foreground">No blocks yet.</p> : null}
+                    {availableBlocks.map((b) => (
+                      <CheckboxField key={b.id} name={`base-block-${b.id}`} label={b.id} checked={form.block_ids.includes(b.id)} onCheckedChange={(checked) => toggleBlock(b.id, checked)} />
+                    ))}
+                  </div>
+                )}
               </div>
               <div className="flex justify-end gap-2">
                 <Button variant="outline" onClick={() => setForm(null)}>

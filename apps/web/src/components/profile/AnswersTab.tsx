@@ -38,13 +38,15 @@ function AnswersBody({ initial }: { initial: Record<string, string> }) {
 
   async function save() {
     const map: Record<string, string> = {};
+    let dropped = 0;
     for (const row of rows) {
       const key = row.key.trim();
       if (key) map[key] = row.value;
+      else dropped += 1;
     }
     try {
       await put.mutateAsync(map);
-      toast.success("Saved answers");
+      toast.success(dropped > 0 ? `Saved answers (${dropped} empty row${dropped === 1 ? "" : "s"} ignored)` : "Saved answers");
     } catch (e) {
       toast.error(e instanceof ApiError ? e.message : "Could not save answers");
     }

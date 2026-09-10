@@ -2,7 +2,7 @@ import type { Block } from "@/lib/api/queries";
 
 export const KNOWN_RULES = ["no-unverified-metrics", "no-invented-entities", "date-consistency", "attribution", "visibility-context"] as const;
 export const BLOCK_TYPES = ["achievement", "role", "project", "skill", "credential"] as const;
-const ID_RE = /^[a-z0-9][a-z0-9-]*$/;
+export const ID_RE = /^[a-z0-9][a-z0-9-]*$/;
 const PERIOD_RE =
   /^(?:(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)[a-z]*\.?\s+)?\d{4}(?:\s*(?:-|–|—|to)\s*(?:(?:[A-Z][a-z]+\.?\s+)?\d{4}|[Pp]resent|[Cc]urrent|[Nn]ow))?$/;
 

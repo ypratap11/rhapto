@@ -12,7 +12,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import { ApiError } from "@/lib/api/client";
 import { useBases, useDeleteTrack, usePutTrack, useTracks, type Track } from "@/lib/api/queries";
-import { splitList, joinList } from "@/lib/profile-forms";
+import { ID_RE, splitList, joinList } from "@/lib/profile-forms";
 import { EntityTable } from "./EntityTable";
 
 type TrackForm = { id: string; name: string; description: string; keywords: string; resume_base: string; min_fit: string };
@@ -37,7 +37,7 @@ function formToTrack(form: TrackForm): Track {
 
 function validateTrackForm(form: TrackForm): Record<string, string> {
   const errors: Record<string, string> = {};
-  if (!/^[a-z0-9][a-z0-9-]*$/.test(form.id.trim())) errors.id = "Use lowercase letters, digits, and hyphens, starting with a letter or digit.";
+  if (!ID_RE.test(form.id.trim())) errors.id = "Use lowercase letters, digits, and hyphens, starting with a letter or digit.";
   if (!form.name.trim()) errors.name = "Name is required.";
   if (!form.resume_base.trim()) errors.resume_base = "Pick a resume base.";
   const minFit = Number(form.min_fit);
@@ -91,8 +91,12 @@ export function TracksTab() {
         emptyText="No tracks yet. Import your profile or add a track."
         onEdit={open}
         onDelete={async (t) => {
-          await remove.mutateAsync(t.id);
-          toast.success(`Deleted ${t.id}`);
+          try {
+            await remove.mutateAsync(t.id);
+            toast.success(`Deleted ${t.id}`);
+          } catch (e) {
+            toast.error(e instanceof ApiError ? e.message : "Could not delete the track");
+          }
         }}
         columns={[
           { key: "id", header: "Id", render: (t) => <span className="font-mono text-xs">{t.id}</span> },
@@ -128,7 +132,11 @@ export function TracksTab() {
               </div>
               <div className="space-y-1">
                 <Label>Resume base</Label>
-                {availableBases.length > 0 ? (
+                {bases.isLoading ? (
+                  <Skeleton className="h-8 w-full" />
+                ) : bases.error ? (
+                  <ApiErrorBanner error={bases.error} />
+                ) : availableBases.length > 0 ? (
                   <Select value={form.resume_base || undefined} onValueChange={(v) => v && set({ resume_base: v })}>
                     <SelectTrigger aria-label="Resume base">
                       <SelectValue placeholder="Choose a base" />
