@@ -1,0 +1,43 @@
+# Stage 3 follow-ups (parked during review, for stage 4)
+
+Items the stage 3 reviews raised that were deliberately not fixed on the stage 3 branch. None blocks
+merging; each is small and scoped. The 0.3 pollers plan comes before stage 4 (decision 2026-09-10).
+
+## Web
+
+- Split `apps/web/src/lib/api/queries.ts` by resource (`jobs`, `packages`, `applications`, `profile`)
+  with one shared `keys` root; `packageKeys.blocks` and `packageKeys.applications` no longer describe
+  their contents.
+- Remove create-next-app scaffold: `apps/web/README.md` boilerplate, unused `public/*.svg`; add the
+  planned `public/favicon.svg`.
+- `Board.tsx`: closing the sheet leaves `selectedId` set (a refetch that re-adds the row reopens it);
+  two quick drags can have the first completion clear the second's optimistic override.
+- `ApplicationCard.tsx`: dnd-kit `attributes` (role=button, tabIndex) spread on a container that wraps
+  a `Link` and a `Button`; document that the keyboard path across columns is the sheet's Status select.
+- `settings/page.tsx` `disconnect()` toasts "Disconnected" even when the localStorage write fails.
+- `globals.css` still declares `@custom-variant dark`; dark mode is out of scope.
+- Track filter on the queue lands with 0.3 classification (`GET /jobs` has only `search` today).
+- Documented deviation: `RHAPTO_PUBLIC_API_URL` (root `.env`) feeds the `NEXT_PUBLIC_API_URL` build
+  arg; spec section 10 named `NEXT_PUBLIC_API_URL` directly.
+
+## API / engine
+
+- `apps/api/tests/unit/test_enqueue_arq.py`: two tests error on Windows hosts with
+  `redis.exceptions.TimeoutError` inside arq's `create_pool()` while redis itself answers; look at
+  arq's pool under Windows' default asyncio event-loop policy. Pre-dates stage 3.
+- Pipeline budget: add a test for a retry consumed by an earlier step followed by a malformed later
+  step (traced by hand: `LLMBudgetExceeded`, never a fourth call).
+- Strict tool mode was tried with claude-sonnet-5 and rejected (output split across two tool_use
+  blocks, empty sections); revisit if a later model handles it, since it would replace the
+  wrapper-unwrap heuristic in `parse_tool_input`.
+- Profile schema: support a free-text `notes` field on blocks (real profiles use it; the strict schema
+  rejects it today).
+
+## Repo hygiene before publishing
+
+- Rewrite history to drop the real employer name committed in a9838fb (the file was corrected later,
+  the history was not).
+- CI: regenerate `packages/schemas/openapi.json`, `schema.d.ts`, and the Pydantic models and fail on
+  diff; run the personal-data check; run web and api suites.
+- Web test suite: `testTimeout` is 20s repo-wide because jsdom + Base UI + `userEvent.type` is slow;
+  consider `delay: null` in the remaining typing tests and fewer parallel workers instead.
