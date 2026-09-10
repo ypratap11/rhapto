@@ -4,8 +4,9 @@ import uuid
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel, field_validator, model_validator
 
+from rhapto.db.models import APPLICATION_STATUSES
 from rhapto.models.guardrail_report import GuardrailReport
 from rhapto.models.jd_extract import JDExtract
 from rhapto.models.resume_document import ResumeDocument
@@ -91,6 +92,50 @@ class PackageOut(BaseModel):
 
 class PackagePatch(BaseModel):
     resume: ResumeDocument
+
+
+class StatusChange(BaseModel):
+    status: str
+    at: datetime
+
+
+class ApplicationCreate(BaseModel):
+    job_id: uuid.UUID
+    package_id: uuid.UUID | None = None
+
+
+class ApplicationPatch(BaseModel):
+    status: str | None = None
+    notes: str | None = None
+
+    @field_validator("status")
+    @classmethod
+    def _known_status(cls, value: str | None) -> str | None:
+        if value is not None and value not in APPLICATION_STATUSES:
+            raise ValueError(f"status must be one of {', '.join(APPLICATION_STATUSES)}")
+        return value
+
+
+class JobRef(BaseModel):
+    id: uuid.UUID
+    company: str | None
+    title: str | None
+
+
+class ApplicationOut(BaseModel):
+    id: uuid.UUID
+    job: JobRef
+    package_id: uuid.UUID | None
+    status: str
+    applied_at: datetime | None
+    notes: str
+    status_history: list[StatusChange]
+    created_at: datetime
+    updated_at: datetime
+
+
+class BoardOut(BaseModel):
+    columns: dict[str, list[ApplicationOut]]
 
 
 class TaskOut(BaseModel):
