@@ -4,10 +4,10 @@ from typing import Any
 import pytest
 from helpers import bullet, demo_extract, demo_resume
 
-from rhapto.engine.compose import ComposeOutput
+from rhapto.engine.compose import AnswerItem, ComposeOutput
 from rhapto.engine.pipeline import CallBudget, LLMBudgetExceeded, TailorResult, tailor
 from rhapto.engine.providers.fake import FakeEmbeddingProvider, FakeLLMProvider
-from rhapto.engine.providers.llm import TokenUsage
+from rhapto.engine.providers.llm import MalformedOutputError, TokenUsage
 from rhapto.engine.types import Profile, ProfileError, TailorRequest
 from rhapto.profile.loader import load_profile
 
@@ -26,7 +26,7 @@ def good_output() -> dict[str, Any]:
         sections=resume.sections,
         cover_note="Dear ExampleCo team, " + "word " * 120,
         change_log="Emphasised migration.",
-        answers={"why_this_company": "Data."},
+        answers=[AnswerItem(key="why_this_company", value="Data.")],
     ).model_dump(mode="json")
 
 
@@ -74,6 +74,30 @@ async def test_happy_path_uses_two_calls(profile: Profile) -> None:
     assert "acme-migration" in result.selection.block_ids
     assert result.docx[:2] == b"PK"
     assert steps == ["extract", "select", "compose", "validate", "render"]
+
+
+MALFORMED = {"$PARAMETER_NAME": "$PARAMETER_VALUE"}  # seen verbatim from a forced tool call
+
+
+async def test_malformed_compose_is_retried_within_the_budget(profile: Profile) -> None:
+    llm = FakeLLMProvider([demo_extract(), MALFORMED, good_output()])
+    result = await tailor(TailorRequest(jd_text=JD), profile, llm, FakeEmbeddingProvider())
+    assert result.package.status == "draft" and result.package.llm_calls == 3
+    assert len(llm.calls) == 3
+
+
+async def test_malformed_compose_twice_raises_instead_of_a_fourth_call(profile: Profile) -> None:
+    llm = FakeLLMProvider([demo_extract(), MALFORMED, MALFORMED, good_output()])
+    with pytest.raises(MalformedOutputError):
+        await tailor(TailorRequest(jd_text=JD), profile, llm, FakeEmbeddingProvider())
+    assert len(llm.calls) == 3
+
+
+async def test_malformed_repair_keeps_the_blocked_draft(profile: Profile) -> None:
+    llm = FakeLLMProvider([demo_extract(), bad_output(), MALFORMED])
+    result = await tailor(TailorRequest(jd_text=JD), profile, llm, FakeEmbeddingProvider())
+    assert result.package.status == "blocked" and result.package.llm_calls == 3
+    assert not result.package.guardrail_report.passed
 
 
 async def test_repair_path_uses_three_calls_and_passes(profile: Profile) -> None:

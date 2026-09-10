@@ -10,7 +10,7 @@ from rhapto.models.guardrail_report import GuardrailReport, Violation
 async def test_repair_sends_violations_and_previous_output() -> None:
     resume = demo_resume()
     previous = ComposeOutput(
-        summary=resume.summary, sections=resume.sections, cover_note="c", change_log="l", answers={}
+        summary=resume.summary, sections=resume.sections, cover_note="c", change_log="l", answers=[]
     )
     fixed = previous.model_copy(update={"cover_note": "fixed"})
     report = GuardrailReport(

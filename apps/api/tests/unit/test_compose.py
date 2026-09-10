@@ -4,6 +4,7 @@ from pathlib import Path
 from helpers import bullet, demo_extract, demo_resume
 
 from rhapto.engine.compose import (
+    AnswerItem,
     ComposeOutput,
     application_answers,
     assemble_resume,
@@ -33,7 +34,7 @@ def _output() -> ComposeOutput:
         sections=resume.sections,
         cover_note="Dear team, ...",
         change_log="Emphasised Snowflake migration.",
-        answers={"why_this_company": "Because data."},
+        answers=[AnswerItem(key="why_this_company", value="Because data.")],
     )
 
 

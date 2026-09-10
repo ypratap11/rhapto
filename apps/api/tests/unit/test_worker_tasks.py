@@ -11,7 +11,7 @@ from rhapto.db.models import Job, User
 from rhapto.db.repositories import packages as package_repo
 from rhapto.db.repositories import tasks as task_repo
 from rhapto.db.repositories.jobs import create_job
-from rhapto.engine.compose import ComposeOutput
+from rhapto.engine.compose import AnswerItem, ComposeOutput
 from rhapto.engine.providers.fake import FakeEmbeddingProvider, FakeLLMProvider
 from rhapto.services import storage as storage_module
 from rhapto.services.eventbus import InMemoryEventBus
@@ -29,7 +29,7 @@ def good_output() -> dict[str, Any]:
         sections=resume.sections,
         cover_note="Dear team, " + "word " * 130,
         change_log="Emphasised migration.",
-        answers={"why_this_company": "Data."},
+        answers=[AnswerItem(key="why_this_company", value="Data.")],
     ).model_dump(mode="json")
 
 

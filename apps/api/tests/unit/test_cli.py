@@ -8,7 +8,7 @@ from helpers import bullet, demo_extract, demo_resume
 from typer.testing import CliRunner
 
 from rhapto.cli import main as cli
-from rhapto.engine.compose import ComposeOutput
+from rhapto.engine.compose import AnswerItem, ComposeOutput
 from rhapto.engine.providers.fake import FakeEmbeddingProvider, FakeLLMProvider
 
 runner = CliRunner()
@@ -22,7 +22,7 @@ def _good() -> dict[str, Any]:
         sections=resume.sections,
         cover_note="Dear team.",
         change_log="Emphasised migration.",
-        answers={"why_this_company": "Data."},
+        answers=[AnswerItem(key="why_this_company", value="Data.")],
     ).model_dump(mode="json")
 
 

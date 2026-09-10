@@ -15,6 +15,13 @@ from rhapto.models.resume_document import ResumeBullet, ResumeDocument, ResumeHe
 HEADER_KEYS = frozenset({"name", "email", "phone", "location", "links"})
 
 
+class AnswerItem(BaseModel):
+    """One application answer. A list of pairs, not a map, so the tool schema can be strict."""
+
+    key: str
+    value: str
+
+
 class ComposeOutput(BaseModel):
     """Exactly what the LLM returns. The header is added deterministically by assemble_resume."""
 
@@ -22,7 +29,10 @@ class ComposeOutput(BaseModel):
     sections: list[ResumeSection]
     cover_note: str
     change_log: str
-    answers: dict[str, str] = Field(default_factory=dict)
+    answers: list[AnswerItem] = Field(default_factory=list)
+
+    def answers_dict(self) -> dict[str, str]:
+        return {item.key: item.value for item in self.answers}
 
 
 def build_header(answers: dict[str, str]) -> ResumeHeader:

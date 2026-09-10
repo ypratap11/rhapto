@@ -2,9 +2,46 @@ from __future__ import annotations
 
 from typing import Any
 
-from rhapto.engine.providers.llm import Message, StructuredResult, SystemBlock, T, TokenUsage
+from pydantic import ValidationError
+
+from rhapto.engine.providers.llm import (
+    MalformedOutputError,
+    Message,
+    StructuredResult,
+    SystemBlock,
+    T,
+    TokenUsage,
+)
 
 TOOL_NAME = "emit"
+
+# Strict tool mode (``"strict": True``) was tried and rejected: with the forced-tool prompts here the
+# model split its output across two tool_use blocks and returned empty sections. Malformed inputs are
+# instead surfaced as MalformedOutputError so the pipeline can retry within its call budget.
+
+
+def parse_tool_input(output_schema: type[T], payload: Any) -> T:
+    """Validate a forced tool call's input, tolerating one wrapper object around the real payload.
+
+    Observed failure modes: a placeholder input (``{"$PARAMETER_NAME": "$PARAMETER_VALUE"}``) and the
+    whole object nested under a single key (the schema title, or one of its own fields). The wrapper
+    case is unwrapped when the inner object validates; anything else raises MalformedOutputError.
+    """
+    try:
+        return output_schema.model_validate(payload)
+    except ValidationError as exc:
+        if isinstance(payload, dict) and len(payload) == 1:
+            (inner,) = payload.values()
+            if isinstance(inner, dict):
+                try:
+                    return output_schema.model_validate(inner)
+                except ValidationError:
+                    pass
+        keys = sorted(payload) if isinstance(payload, dict) else type(payload).__name__
+        raise MalformedOutputError(
+            f"{output_schema.__name__} tool input did not match the schema (keys: {keys}): "
+            f"{exc.error_count()} validation error(s)"
+        ) from exc
 
 
 class AnthropicProvider:
@@ -36,10 +73,15 @@ class AnthropicProvider:
         output_schema: type[T],
         max_tokens: int = 4096,
     ) -> StructuredResult[T]:
+        schema = output_schema.model_json_schema()
+        top_level = ", ".join(schema.get("properties", {}))
         tool = {
             "name": TOOL_NAME,
-            "description": f"Return the {output_schema.__name__} exactly as specified by the schema.",
-            "input_schema": output_schema.model_json_schema(),
+            "description": (
+                f"Return the {output_schema.__name__}. The tool input is that object itself, "
+                f"with these top-level keys: {top_level}. Do not wrap it in another object."
+            ),
+            "input_schema": schema,
         }
         response = await self._client.messages.create(
             model=self.model,
@@ -56,7 +98,7 @@ class AnthropicProvider:
             raise RuntimeError("Anthropic response contained no tool_use block")
         usage = response.usage
         return StructuredResult(
-            value=output_schema.model_validate(tool_use.input),
+            value=parse_tool_input(output_schema, tool_use.input),
             usage=TokenUsage(
                 input_tokens=getattr(usage, "input_tokens", 0) or 0,
                 output_tokens=getattr(usage, "output_tokens", 0) or 0,

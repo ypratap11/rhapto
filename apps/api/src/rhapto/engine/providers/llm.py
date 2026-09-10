@@ -36,6 +36,10 @@ class TokenUsage(BaseModel):
         )
 
 
+class MalformedOutputError(RuntimeError):
+    """The model answered, but its structured output did not match the requested schema."""
+
+
 @dataclass(frozen=True)
 class StructuredResult(Generic[T]):  # noqa: UP046
     value: T

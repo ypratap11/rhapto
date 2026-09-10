@@ -7,9 +7,16 @@ from collections.abc import Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
-from rhapto.engine.providers.llm import Message, StructuredResult, SystemBlock, T, TokenUsage
+from rhapto.engine.providers.llm import (
+    MalformedOutputError,
+    Message,
+    StructuredResult,
+    SystemBlock,
+    T,
+    TokenUsage,
+)
 
 
 @dataclass
@@ -41,10 +48,16 @@ class FakeLLMProvider:
             raise AssertionError("FakeLLMProvider: no scripted response left")
         raw = self._queue.pop(0)
         payload = raw if isinstance(raw, dict) else raw.model_dump(mode="json")
-        value = output_schema.model_validate(payload)
+        # Record the call first: a malformed scripted answer is still a call the model was asked for.
         self.calls.append(
             FakeCall(system=list(system), messages=list(messages), output_schema=output_schema)
         )
+        try:
+            value = output_schema.model_validate(payload)
+        except ValidationError as exc:
+            raise MalformedOutputError(
+                f"scripted {output_schema.__name__} did not match the schema: {exc.error_count()}"
+            ) from exc
         return StructuredResult(value=value, usage=TokenUsage(input_tokens=10, output_tokens=5))
 
 

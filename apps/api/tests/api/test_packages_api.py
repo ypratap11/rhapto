@@ -6,7 +6,7 @@ import httpx
 import pytest
 from helpers import bullet, demo_extract, demo_resume
 
-from rhapto.engine.compose import ComposeOutput
+from rhapto.engine.compose import AnswerItem, ComposeOutput
 
 JD = "ExampleCo seeks a Data Platform Program Manager to lead our Snowflake migration. " * 3
 
@@ -18,7 +18,7 @@ def good_output() -> dict[str, Any]:
         sections=resume.sections,
         cover_note="Dear team, " + "word " * 130,
         change_log="Emphasised migration.",
-        answers={"why_this_company": "Data."},
+        answers=[AnswerItem(key="why_this_company", value="Data.")],
     ).model_dump(mode="json")
 
 

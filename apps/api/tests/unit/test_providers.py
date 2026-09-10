@@ -4,9 +4,9 @@ from typing import Any
 import pytest
 from pydantic import BaseModel
 
-from rhapto.engine.providers.anthropic import AnthropicProvider
+from rhapto.engine.providers.anthropic import AnthropicProvider, parse_tool_input
 from rhapto.engine.providers.fake import FakeEmbeddingProvider, FakeLLMProvider
-from rhapto.engine.providers.llm import Message, SystemBlock, TokenUsage
+from rhapto.engine.providers.llm import MalformedOutputError, Message, SystemBlock, TokenUsage
 
 
 class Answer(BaseModel):
@@ -89,4 +89,21 @@ async def test_anthropic_provider_builds_forced_tool_call_with_cache_control() -
     assert "cache_control" not in kw["system"][1]
     assert kw["tool_choice"] == {"type": "tool", "name": "emit"}
     assert kw["tools"][0]["input_schema"]["properties"]["score"]["type"] == "integer"
+    assert "text, score" in kw["tools"][0]["description"]
     assert kw["messages"] == [{"role": "user", "content": "go"}]
+
+
+def test_parse_tool_input_unwraps_a_single_wrapper_object() -> None:
+    assert parse_tool_input(Answer, {"Answer": {"text": "ok", "score": 1}}) == Answer(
+        text="ok", score=1
+    )
+    assert parse_tool_input(Answer, {"text": "ok", "score": 1}) == Answer(text="ok", score=1)
+
+
+def test_parse_tool_input_raises_malformed_for_placeholders_and_bad_wrappers() -> None:
+    with pytest.raises(MalformedOutputError, match=r"\$PARAMETER_NAME"):
+        parse_tool_input(Answer, {"$PARAMETER_NAME": "$PARAMETER_VALUE"})
+    with pytest.raises(MalformedOutputError):
+        parse_tool_input(Answer, {"Answer": {"text": "ok"}})
+    with pytest.raises(MalformedOutputError, match="list"):
+        parse_tool_input(Answer, [{"text": "ok", "score": 1}])
