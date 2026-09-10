@@ -5,6 +5,8 @@ from typing import Generic, Literal, Protocol, TypeVar
 
 from pydantic import BaseModel
 
+from rhapto.engine.types import EngineError
+
 T = TypeVar("T", bound=BaseModel)
 
 
@@ -36,7 +38,7 @@ class TokenUsage(BaseModel):
         )
 
 
-class MalformedOutputError(RuntimeError):
+class MalformedOutputError(EngineError):
     """The model answered, but its structured output did not match the requested schema."""
 
 

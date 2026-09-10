@@ -20,7 +20,7 @@ from rhapto.db.session import make_engine, make_session_factory
 from rhapto.engine.pipeline import LLMBudgetExceeded, TailorResult, tailor
 from rhapto.engine.providers.anthropic import AnthropicProvider
 from rhapto.engine.providers.embeddings import EmbeddingProvider, FastEmbedProvider
-from rhapto.engine.providers.llm import LLMProvider
+from rhapto.engine.providers.llm import LLMProvider, MalformedOutputError
 from rhapto.engine.render.pdf import PdfRenderError, convert_docx_to_pdf, soffice_available
 from rhapto.engine.types import Profile, ProfileError, TailorRequest
 from rhapto.profile.loader import load_profile
@@ -104,7 +104,7 @@ def tailor_cmd(
                 on_step=on_step,
             )
         )
-    except LLMBudgetExceeded as exc:
+    except (LLMBudgetExceeded, MalformedOutputError) as exc:
         typer.echo(f"error: {exc}", err=True)
         raise typer.Exit(1) from exc
 

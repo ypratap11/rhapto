@@ -16,7 +16,8 @@ HEADER_KEYS = frozenset({"name", "email", "phone", "location", "links"})
 
 
 class AnswerItem(BaseModel):
-    """One application answer. A list of pairs, not a map, so the tool schema can be strict."""
+    """One application answer. A list of pairs, not a free-form map: a map field invited the model
+    to nest the whole output under it."""
 
     key: str
     value: str
