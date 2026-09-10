@@ -77,3 +77,76 @@ export function useTask(id: string | null, enabled = true) {
     enabled: enabled && id !== null,
   });
 }
+
+export type PackageOut = Schemas["PackageOut"];
+export type PackageSummary = Schemas["PackageSummary"];
+export type ResumeDocument = Schemas["ResumeDocument"];
+export type ResumeBullet = Schemas["ResumeBullet"];
+export type ResumeEntry = Schemas["ResumeEntry"];
+export type ResumeSection = Schemas["ResumeSection"];
+export type GuardrailReport = Schemas["GuardrailReport"];
+export type Violation = Schemas["Violation"];
+export type Block = Schemas["Block"];
+export type ApplicationOut = Schemas["ApplicationOut"];
+export type BoardOut = Schemas["BoardOut"];
+export type ApplicationCreate = Schemas["ApplicationCreate"];
+export type ApplicationPatch = Schemas["ApplicationPatch"];
+
+export const packageKeys = {
+  package: (id: string) => ["package", id] as const,
+  packages: (jobId: string) => ["packages", jobId] as const,
+  blocks: ["profile", "blocks"] as const,
+  applications: ["applications"] as const,
+};
+
+export function invalidatePackages(queryClient: QueryClient, jobId: string): void {
+  void queryClient.invalidateQueries({ queryKey: packageKeys.packages(jobId) });
+  void queryClient.invalidateQueries({ queryKey: ["package"] });
+  invalidateJobs(queryClient);
+}
+
+export function invalidateApplications(queryClient: QueryClient): void {
+  void queryClient.invalidateQueries({ queryKey: packageKeys.applications });
+  invalidateJobs(queryClient);
+}
+
+export function usePackage(id: string) {
+  return useQuery({ queryKey: packageKeys.package(id), queryFn: () => unwrap(apiClient().GET("/api/v1/packages/{package_id}", { params: { path: { package_id: id } } })) });
+}
+
+export function usePackages(jobId: string) {
+  return useQuery({ queryKey: packageKeys.packages(jobId), queryFn: () => unwrap(apiClient().GET("/api/v1/jobs/{job_id}/packages", { params: { path: { job_id: jobId } } })) });
+}
+
+export function useBlocks() {
+  return useQuery({ queryKey: packageKeys.blocks, queryFn: () => unwrap(apiClient().GET("/api/v1/profile/blocks")) });
+}
+
+export function useApplications() {
+  return useQuery({ queryKey: packageKeys.applications, queryFn: () => unwrap(apiClient().GET("/api/v1/applications")) });
+}
+
+export function useCreateApplication() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: ApplicationCreate) => unwrap(apiClient().POST("/api/v1/applications", { body })),
+    onSuccess: () => invalidateApplications(queryClient),
+  });
+}
+
+export function usePatchApplication() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, body }: { id: string; body: ApplicationPatch }) =>
+      unwrap(apiClient().PATCH("/api/v1/applications/{application_id}", { params: { path: { application_id: id } }, body })),
+    onSuccess: () => invalidateApplications(queryClient),
+  });
+}
+
+export function useDeleteApplication() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => unwrap(apiClient().DELETE("/api/v1/applications/{application_id}", { params: { path: { application_id: id } } })),
+    onSuccess: () => invalidateApplications(queryClient),
+  });
+}
