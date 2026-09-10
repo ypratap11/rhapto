@@ -162,6 +162,13 @@ async def test_tailor_job_failure_marks_task_failed(
     assert bus.published[-1][1]["event"] == "error"
 
 
+async def test_tailor_job_with_bad_task_id_publishes_error(session_factory, tmp_path: Path) -> None:  # type: ignore[no-untyped-def]
+    bus, storage = InMemoryEventBus(), PackageStorage(tmp_path / "pkg")
+    await tailor_job(_ctx(session_factory, FakeLLMProvider([]), bus, storage), task_id="not-a-uuid")
+    assert bus.published[-1][0] == "task:not-a-uuid"
+    assert bus.published[-1][1]["event"] == "error"
+
+
 async def test_tailor_job_regeneration_increments_version(
     session_factory, user: User, demo_profile_dir: Path, tmp_path: Path
 ) -> None:  # type: ignore[no-untyped-def]

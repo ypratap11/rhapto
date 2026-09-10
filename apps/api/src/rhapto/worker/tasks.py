@@ -37,21 +37,22 @@ async def tailor_job(ctx: dict[str, Any], task_id: str) -> None:
     bus: EventBus = ctx["event_bus"]
     storage: PackageStorage = ctx["storage"]
     channel = task_channel(task_id)
-    tid = uuid.UUID(task_id)
 
     async with factory() as session:
-        task = await session.get(Task, tid)
-        if task is None:
-            return
-        active_task: Task = task
-        request = active_task.progress_json.get("request", {})
-        task_repo.mark_running(active_task)
-        await session.commit()
-        user_id = active_task.user_id
         try:
+            tid = uuid.UUID(task_id)
+            task = await session.get(Task, tid)
+            if task is None:
+                return
+            active_task: Task = task
+            request = active_task.progress_json.get("request", {})
+            task_repo.mark_running(active_task)
+            await session.commit()
+            user_id = active_task.user_id
+
             job = await session.get(Job, uuid.UUID(request["job_id"]))
             if job is None or job.user_id != user_id:
-                raise ValueError("job not found for task")
+                raise ValueError(f"job {request['job_id']} not found for task {task_id}")
             profile = await load_profile_from_db(session, user_id)
             previous = None
             parent_id = (
@@ -62,7 +63,7 @@ async def tailor_job(ctx: dict[str, Any], task_id: str) -> None:
             if parent_id is not None:
                 parent = await package_repo.get_package(session, user_id, parent_id)
                 if parent is None:
-                    raise ValueError("parent package not found")
+                    raise ValueError(f"parent package {parent_id} not found")
                 previous = package_repo.package_row_to_model(
                     parent,
                     job_company=job.company or "",
@@ -100,10 +101,21 @@ async def tailor_job(ctx: dict[str, Any], task_id: str) -> None:
                 docx_path=None,
                 pdf_path=None,
             )
+            # Commit the package row before touching LibreOffice so no transaction is held
+            # open across the (possibly slow) external subprocess call.
+            if active_task.progress_json.get("step") != "render":
+                task_repo.set_step(active_task, "render")
+            await session.commit()
+
+            docx_path: str | None = None
+            pdf_path: str | None = None
             if result.docx:
-                row.docx_path = str(storage.write_docx(str(row.id), result.docx))
+                docx_path = str(storage.write_docx(str(row.id), result.docx))
                 pdf = storage.render_pdf(str(row.id), ctx["soffice_binary"])
-                row.pdf_path = str(pdf) if pdf else None
+                pdf_path = str(pdf) if pdf else None
+
+            row.docx_path = docx_path
+            row.pdf_path = pdf_path
             job.extracted_json = package.jd_extract.model_dump(mode="json")
             job.company = job.company or package.jd_extract.company
             job.title = job.title or package.jd_extract.title
@@ -114,10 +126,15 @@ async def tailor_job(ctx: dict[str, Any], task_id: str) -> None:
             )
         except Exception as exc:  # task boundary: record and report, never crash the worker
             await session.rollback()
-            failed_task = await session.get(Task, tid)
-            if failed_task is not None:
-                task_repo.mark_failed(failed_task, f"{type(exc).__name__}: {exc}")
-                await session.commit()
+            try:
+                failed_tid: uuid.UUID | None = uuid.UUID(task_id)
+            except ValueError:
+                failed_tid = None
+            if failed_tid is not None:
+                failed_task = await session.get(Task, failed_tid)
+                if failed_task is not None:
+                    task_repo.mark_failed(failed_task, f"{type(exc).__name__}: {exc}")
+                    await session.commit()
             await bus.publish(channel, {"event": "error", "message": str(exc)})
 
 

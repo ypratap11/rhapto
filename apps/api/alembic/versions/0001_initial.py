@@ -184,7 +184,8 @@ def upgrade() -> None:
     sa.ForeignKeyConstraint(['job_id'], ['jobs.id'], ondelete='CASCADE'),
     sa.ForeignKeyConstraint(['parent_package_id'], ['packages.id'], ondelete='SET NULL'),
     sa.ForeignKeyConstraint(['user_id'], ['users.id'], ondelete='CASCADE'),
-    sa.PrimaryKeyConstraint('id')
+    sa.PrimaryKeyConstraint('id'),
+    sa.UniqueConstraint('job_id', 'version')
     )
     op.create_index(op.f('ix_packages_job_id'), 'packages', ['job_id'], unique=False)
     op.create_index(op.f('ix_packages_user_id'), 'packages', ['user_id'], unique=False)

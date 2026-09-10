@@ -111,6 +111,7 @@ class Job(UserScopedMixin, TimestampMixin, Base):
 
 class Package(UserScopedMixin, TimestampMixin, Base):
     __tablename__ = "packages"
+    __table_args__ = (UniqueConstraint("job_id", "version"),)
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=new_uuid)
     job_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("jobs.id", ondelete="CASCADE"), index=True, nullable=False
