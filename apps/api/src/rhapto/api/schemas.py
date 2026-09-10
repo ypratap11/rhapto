@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
+from typing import Any
 
 from pydantic import BaseModel, model_validator
 
@@ -59,3 +60,20 @@ class JobOut(BaseModel):
     discovered_at: datetime
     latest_package: PackageSummary | None
     application_status: str | None
+
+
+class TailorBody(BaseModel):
+    track_id: str | None = None
+    feedback: str | None = None
+    parent_package_id: uuid.UUID | None = None
+
+
+class TaskOut(BaseModel):
+    id: uuid.UUID
+    type: str
+    status: str
+    progress: dict[str, Any]
+    error: str | None
+    result_ref: str | None
+    created_at: datetime
+    finished_at: datetime | None
