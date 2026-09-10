@@ -1,4 +1,11 @@
+import uuid
+from datetime import UTC, datetime
+
 import httpx
+from helpers import demo_extract, demo_resume
+
+from rhapto.models.guardrail_report import GuardrailReport
+from rhapto.models.package import ApplicationPackage, JobSnapshot
 
 JD = "ExampleCo seeks a Data Platform Program Manager to lead our Snowflake migration. " * 3
 
@@ -75,16 +82,83 @@ async def test_delete(client: httpx.AsyncClient) -> None:
     assert (await client.delete(f"/api/v1/jobs/{job_id}")).status_code == 404
 
 
+def _other_package(jd_text: str) -> ApplicationPackage:
+    return ApplicationPackage(
+        job=JobSnapshot(company="Other Co", title="Other Role", jd_text=jd_text),
+        track_id="data-pm",
+        jd_extract=demo_extract(),
+        resume=demo_resume(),
+        cover_note="Dear team.",
+        change_log="none",
+        answers={},
+        guardrail_report=GuardrailReport(passed=True, rules_run=[], violations=[]),
+        version=1,
+        status="draft",
+        llm_calls=0,
+        created_at=datetime.now(UTC),
+    )
+
+
 async def test_jobs_are_user_scoped(client: httpx.AsyncClient, session_factory, user_id) -> None:  # type: ignore[no-untyped-def]
+    from rhapto.db.repositories.applications import create_application
     from rhapto.db.repositories.jobs import create_job
+    from rhapto.db.repositories.packages import create_package
     from rhapto.db.repositories.users import get_or_create_user
 
+    mine = (await client.post("/api/v1/jobs", json={"jd_text": JD})).json()
+    other_text = "Someone else's job description text that is long enough. " * 2
     async with session_factory() as session:
         other = await get_or_create_user(session, "other@example.com")
-        await create_job(
+        their_job = await create_job(session, other.id, jd_text=other_text)
+        # Their package and application, on their own job.
+        await create_package(
             session,
             other.id,
-            jd_text="Someone else's job description text that is long enough. " * 2,
+            their_job.id,
+            _other_package(other_text),
+            selection_block_ids=[],
+            parent_package_id=None,
+            docx_path=None,
+            pdf_path=None,
         )
+        await create_application(session, other.id, their_job.id, None)
+        # And the same rows mis-stitched onto *my* job: only the user_id filter keeps these out.
+        await create_package(
+            session,
+            other.id,
+            uuid.UUID(mine["id"]),
+            _other_package(JD),
+            selection_block_ids=[],
+            parent_package_id=None,
+            docx_path=None,
+            pdf_path=None,
+        )
+        await create_application(session, other.id, uuid.UUID(mine["id"]), None)
         await session.commit()
-    assert (await client.get("/api/v1/jobs")).json() == []
+
+    listed = (await client.get("/api/v1/jobs")).json()
+    assert [j["id"] for j in listed] == [mine["id"]]
+    assert listed[0]["latest_package"] is None and listed[0]["application_status"] is None
+    fetched = (await client.get(f"/api/v1/jobs/{mine['id']}")).json()
+    assert fetched["latest_package"] is None and fetched["application_status"] is None
+
+
+async def test_search_does_not_treat_percent_as_a_wildcard(client: httpx.AsyncClient) -> None:
+    await client.post(
+        "/api/v1/jobs",
+        json={
+            "jd_text": "PercentCo migrated 100% of its pipelines to Snowflake last year. " * 3,
+            "company": "PercentCo",
+        },
+    )
+    await client.post(
+        "/api/v1/jobs",
+        json={
+            "jd_text": "PlainCo runs 100 pipelines and wants a program manager to own them. " * 3,
+            "company": "PlainCo",
+        },
+    )
+    literal = (await client.get("/api/v1/jobs", params={"search": "100%"})).json()
+    assert [j["company"] for j in literal] == ["PercentCo"]
+    both = (await client.get("/api/v1/jobs", params={"search": "100"})).json()
+    assert {j["company"] for j in both} == {"PercentCo", "PlainCo"}

@@ -48,15 +48,25 @@ def job_to_out(job: Job, latest: Package | None, application: Application | None
     )
 
 
-async def _out(session: AsyncSession, job: Job) -> JobOut:
+async def _out(session: AsyncSession, user_id: uuid.UUID, job: Job) -> JobOut:
     return job_to_out(
         job,
-        await repo.latest_package(session, job.id),
-        await repo.application_for_job(session, job.id),
+        await repo.latest_package(session, user_id, job.id),
+        await repo.application_for_job(session, user_id, job.id),
     )
 
 
-@router.post("", response_model=JobOut, status_code=201)
+@router.post(
+    "",
+    response_model=JobOut,
+    status_code=201,
+    responses={
+        409: {
+            "description": "A job with the same description already exists",
+            "content": {"application/problem+json": {}},
+        }
+    },
+)
 async def create_job(
     body: JobCreate,
     user_id: UserDep,
@@ -82,7 +92,7 @@ async def create_job(
         url=body.url,
     )
     await session.commit()
-    return await _out(session, job)
+    return await _out(session, user_id, job)
 
 
 @router.get("", response_model=list[JobOut])
@@ -92,7 +102,8 @@ async def list_jobs(
     search: str | None = Query(default=None),
 ) -> list[JobOut]:
     return [
-        await _out(session, job) for job in await repo.list_jobs(session, user_id, search=search)
+        await _out(session, user_id, job)
+        for job in await repo.list_jobs(session, user_id, search=search)
     ]
 
 
@@ -101,7 +112,7 @@ async def get_job(job_id: uuid.UUID, user_id: UserDep, session: SessionDep) -> J
     job = await repo.get_job(session, user_id, job_id)
     if job is None:
         raise not_found("job", job_id)
-    return await _out(session, job)
+    return await _out(session, user_id, job)
 
 
 @router.delete("/{job_id}", status_code=204)
@@ -111,7 +122,7 @@ async def delete_job(
     session: SessionDep,
     storage: StorageDep,
 ) -> Response:
-    package_ids = await repo.package_ids_for_job(session, job_id)
+    package_ids = await repo.package_ids_for_job(session, user_id, job_id)
     if not await repo.delete_job(session, user_id, job_id):
         raise not_found("job", job_id)
     await session.commit()

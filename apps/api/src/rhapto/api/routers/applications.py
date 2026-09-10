@@ -49,7 +49,17 @@ async def _out(session: AsyncSession, row: Application) -> ApplicationOut:
     return application_to_out(row, job)
 
 
-@router.post("", response_model=ApplicationOut, status_code=201)
+@router.post(
+    "",
+    response_model=ApplicationOut,
+    status_code=201,
+    responses={
+        409: {
+            "description": "This job already has an application",
+            "content": {"application/problem+json": {}},
+        }
+    },
+)
 async def create_application(
     body: ApplicationCreate,
     user_id: UserDep,
@@ -62,7 +72,7 @@ async def create_application(
         package = await package_repo.get_package(session, user_id, body.package_id)
         if package is None or package.job_id != job.id:
             raise not_found("package", body.package_id)
-    existing = await job_repo.application_for_job(session, job.id)
+    existing = await job_repo.application_for_job(session, user_id, job.id)
     if existing is not None:
         return problem(
             409,

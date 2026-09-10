@@ -54,9 +54,15 @@ async def list_jobs(
 ) -> list[Job]:
     query = select(Job).where(Job.user_id == user_id)
     if search:
-        pattern = f"%{search.lower()}%"
+        # Escape LIKE metacharacters so a search for "100%" is a literal, not a wildcard.
+        escaped = search.lower().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        pattern = f"%{escaped}%"
         query = query.where(
-            or_(Job.company.ilike(pattern), Job.title.ilike(pattern), Job.jd_text.ilike(pattern))
+            or_(
+                Job.company.ilike(pattern, escape="\\"),
+                Job.title.ilike(pattern, escape="\\"),
+                Job.jd_text.ilike(pattern, escape="\\"),
+            )
         )
     return list(
         await session.scalars(
@@ -80,21 +86,34 @@ async def delete_job(session: AsyncSession, user_id: uuid.UUID, job_id: uuid.UUI
     return bool(result.rowcount)
 
 
-async def package_ids_for_job(session: AsyncSession, job_id: uuid.UUID) -> list[uuid.UUID]:
-    return list(await session.scalars(select(Package.id).where(Package.job_id == job_id)))
+async def package_ids_for_job(
+    session: AsyncSession, user_id: uuid.UUID, job_id: uuid.UUID
+) -> list[uuid.UUID]:
+    return list(
+        await session.scalars(
+            select(Package.id).where(Package.user_id == user_id, Package.job_id == job_id)
+        )
+    )
 
 
-async def latest_package(session: AsyncSession, job_id: uuid.UUID) -> Package | None:
+async def latest_package(
+    session: AsyncSession, user_id: uuid.UUID, job_id: uuid.UUID
+) -> Package | None:
     result: Package | None = await session.scalar(
-        select(Package).where(Package.job_id == job_id).order_by(Package.version.desc()).limit(1)
+        select(Package)
+        .where(Package.user_id == user_id, Package.job_id == job_id)
+        .order_by(Package.version.desc())
+        .limit(1)
     )
     return result
 
 
-async def application_for_job(session: AsyncSession, job_id: uuid.UUID) -> Application | None:
+async def application_for_job(
+    session: AsyncSession, user_id: uuid.UUID, job_id: uuid.UUID
+) -> Application | None:
     result: Application | None = await session.scalar(
         select(Application)
-        .where(Application.job_id == job_id)
+        .where(Application.user_id == user_id, Application.job_id == job_id)
         .order_by(Application.created_at.desc())
         .limit(1)
     )

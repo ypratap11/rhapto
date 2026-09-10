@@ -130,3 +130,20 @@ async def test_events_unknown_task_404(client: httpx.AsyncClient) -> None:
     assert (
         await client.get("/api/v1/tasks/00000000-0000-0000-0000-000000000000/events")
     ).status_code == 404
+
+
+@pytest.mark.usefixtures("imported_profile")
+async def test_repeated_streams_do_not_exhaust_the_pool(
+    client: httpx.AsyncClient, fake_llm
+) -> None:  # type: ignore[no-untyped-def]
+    """Each stream must release its connection; 20 sequential streams outlast the 5+10 pool."""
+    fake_llm.script(demo_extract(), good_output())
+    job_id = await _job(client)
+    task = (await client.post(f"/api/v1/jobs/{job_id}/tailor", json={})).json()
+    for _ in range(20):
+        async with client.stream("GET", f"/api/v1/tasks/{task['id']}/events") as response:
+            assert response.status_code == 200
+            raw = (await asyncio.wait_for(response.aread(), timeout=5)).decode()
+        events = _events(raw)
+        assert [name for name, _ in events] == ["state"]
+        assert events[0][1]["status"] == "succeeded"

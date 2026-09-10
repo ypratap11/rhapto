@@ -3,7 +3,7 @@ from __future__ import annotations
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from rhapto.api.deps import current_user, get_session
@@ -24,5 +24,6 @@ async def me(
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> MeOut:
     user = await session.get(User, user_id)
-    assert user is not None
+    if user is None:
+        raise HTTPException(status_code=503, detail="user not bootstrapped")
     return MeOut(email=user.email, user_id=user.id)

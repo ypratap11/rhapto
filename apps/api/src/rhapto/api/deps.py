@@ -1,11 +1,12 @@
 from __future__ import annotations
 
+import secrets
 import uuid
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from typing import Annotated
 
-from fastapi import Depends, Header, HTTPException, Request
+from fastapi import Header, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from rhapto.config import Settings
@@ -67,14 +68,14 @@ async def current_user(
         if authorization and authorization.startswith("Bearer ")
         else None
     )
-    if not expected or provided != expected or state.user_id is None:
+    if not expected or not secrets.compare_digest(provided or "", expected):
         raise HTTPException(
             status_code=401,
             detail="missing or invalid bearer token",
             headers={"WWW-Authenticate": "Bearer"},
         )
+    if state.user_id is None:
+        # The lifespan bootstraps the user row; a request that beats it is a readiness problem,
+        # not an auth problem.
+        raise HTTPException(status_code=503, detail="server not ready")
     return state.user_id
-
-
-SessionDep = Depends(get_session)
-UserDep = Depends(current_user)

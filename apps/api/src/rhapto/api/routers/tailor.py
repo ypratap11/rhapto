@@ -78,7 +78,8 @@ async def tailor_job_endpoint(
     await enqueuer.enqueue("tailor_job", task_id=str(task_id))
     session.expire_all()
     refreshed = await task_repo.get_task(session, user_id, task_id)
-    assert refreshed is not None
+    if refreshed is None:  # committed above, so this cannot happen without a concurrent delete
+        raise RuntimeError(f"task {task_id} vanished after commit")
     return task_to_out(refreshed)
 
 
@@ -94,19 +95,23 @@ async def get_task(task_id: uuid.UUID, user_id: UserDep, session: SessionDep) ->
 async def task_events(
     task_id: uuid.UUID,
     user_id: UserDep,
-    session: SessionDep,
     bus: EventBusDep,
     state: StateDep,
 ) -> EventSourceResponse:
-    task = await task_repo.get_task(session, user_id, task_id)
-    if task is None:
-        raise not_found("task", task_id)
+    # No request-scoped session here: a `SessionDep` would stay open (and hold its pooled
+    # connection in an idle read transaction) for the whole life of the stream.
+    async with state.session_factory() as check:
+        if await task_repo.get_task(check, user_id, task_id) is None:
+            raise not_found("task", task_id)
 
     async def stream() -> AsyncIterator[dict[str, str]]:
         async with bus.subscription(task_channel(str(task_id))) as events:
+            # Read the state *after* subscribing, on its own short-lived session, so an event
+            # published between the existence check and the subscribe cannot be missed.
             async with state.session_factory() as fresh:
                 current = await task_repo.get_task(fresh, user_id, task_id)
-            assert current is not None
+            if current is None:  # deleted while we were subscribing
+                return
             yield {"event": "state", "data": task_to_out(current).model_dump_json()}
             if current.status in FINISHED:
                 return

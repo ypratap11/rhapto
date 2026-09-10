@@ -25,7 +25,10 @@ FetchText = Callable[[str], Awaitable[str]]
 MIN_TEXT_CHARS = 200
 TIMEOUT_SECONDS = 20.0
 MAX_REDIRECTS = 5
+MAX_BYTES = 5 * 1024 * 1024
+ALLOWED_CONTENT_TYPES = frozenset({"text/html", "application/xhtml+xml", "text/plain"})
 _REDIRECT_STATUS_CODES = (301, 302, 303, 307, 308)
+_USER_AGENT = {"User-Agent": "rhapto/0.1 (+https://github.com)"}
 
 
 class JobTextError(Exception):
@@ -93,6 +96,34 @@ def _strip_tags(html: str) -> str:
     return re.sub(r"\s+", " ", text).strip()
 
 
+def _check_content_type(header: str | None) -> None:
+    """Only markup and plain text can be a job posting. An absent header is allowed, since
+    plenty of servers omit it; anything else (a PDF, an image, a tarball) is refused before
+    its bytes are read."""
+    if not header:
+        return
+    mime = header.split(";", 1)[0].strip().lower()
+    if mime and mime not in ALLOWED_CONTENT_TYPES:
+        raise JobTextError("unsupported content type")
+
+
+async def _read_capped(response: httpx.Response) -> str:
+    """Accumulate at most MAX_BYTES of the body; a remote host is the one place where bytes
+    entering this process are not under our control."""
+    chunks: list[bytes] = []
+    total = 0
+    async for chunk in response.aiter_bytes():
+        total += len(chunk)
+        if total > MAX_BYTES:
+            raise JobTextError("page too large")
+        chunks.append(chunk)
+    body = b"".join(chunks)
+    try:
+        return body.decode(response.encoding or "utf-8", errors="replace")
+    except LookupError:  # the server named an encoding Python does not know
+        return body.decode("utf-8", errors="replace")
+
+
 async def fetch_job_text(url: str, *, client: httpx.AsyncClient | None = None) -> str:
     await _check_url(url)
     own_client = client is None
@@ -100,27 +131,30 @@ async def fetch_job_text(url: str, *, client: httpx.AsyncClient | None = None) -
     try:
         current_url = url
         redirects = 0
+        html = ""
         while True:
+            next_url: str | None = None
             try:
-                response = await client.get(
-                    current_url, headers={"User-Agent": "rhapto/0.1 (+https://github.com)"}
-                )
+                async with client.stream("GET", current_url, headers=_USER_AGENT) as response:
+                    if response.status_code in _REDIRECT_STATUS_CODES:
+                        if redirects >= MAX_REDIRECTS:
+                            raise JobTextError("too many redirects")
+                        location = response.headers.get("location")
+                        if not location:
+                            raise JobTextError(f"fetch failed with HTTP {response.status_code}")
+                        next_url = urljoin(current_url, location)
+                    elif response.status_code >= 400:
+                        raise JobTextError(f"fetch failed with HTTP {response.status_code}")
+                    else:
+                        _check_content_type(response.headers.get("content-type"))
+                        html = await _read_capped(response)
             except httpx.HTTPError as exc:
                 raise JobTextError(f"fetch failed: {exc}") from exc
-            if response.status_code in _REDIRECT_STATUS_CODES:
-                if redirects >= MAX_REDIRECTS:
-                    raise JobTextError("too many redirects")
-                location = response.headers.get("location")
-                if not location:
-                    raise JobTextError(f"fetch failed with HTTP {response.status_code}")
-                redirects += 1
-                current_url = urljoin(current_url, location)
-                await _check_url(current_url)
-                continue
-            if response.status_code >= 400:
-                raise JobTextError(f"fetch failed with HTTP {response.status_code}")
-            html = response.text
-            break
+            if next_url is None:
+                break
+            redirects += 1
+            current_url = next_url
+            await _check_url(current_url)
     finally:
         if own_client:
             await client.aclose()

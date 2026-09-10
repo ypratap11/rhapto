@@ -59,7 +59,14 @@ async def list_blocks(user_id: UserDep, session: SessionDep) -> list[Block]:
     return [block_row_to_model(r) for r in await repo.list_blocks(session, user_id)]
 
 
-@router.put("/blocks/{block_id}", response_model=Block)
+@router.put(
+    "/blocks/{block_id}",
+    response_model=Block,
+    responses={
+        200: {"description": "The block already existed and was replaced"},
+        201: {"description": "The block was created", "model": Block},
+    },
+)
 async def put_block(
     block_id: str,
     body: Block,
@@ -90,7 +97,14 @@ async def list_bases(user_id: UserDep, session: SessionDep) -> list[ResumeBase]:
     return [base_row_to_model(r) for r in await repo.list_bases(session, user_id)]
 
 
-@router.put("/bases/{base_id}", response_model=ResumeBase)
+@router.put(
+    "/bases/{base_id}",
+    response_model=ResumeBase,
+    responses={
+        200: {"description": "The base already existed and was replaced"},
+        201: {"description": "The base was created", "model": ResumeBase},
+    },
+)
 async def put_base(
     base_id: str, body: ResumeBase, response: Response, user_id: UserDep, session: SessionDep
 ) -> ResumeBase:
@@ -115,7 +129,14 @@ async def list_tracks(user_id: UserDep, session: SessionDep) -> list[Track]:
     return [track_row_to_model(r) for r in await repo.list_tracks(session, user_id)]
 
 
-@router.put("/tracks/{track_id}", response_model=Track)
+@router.put(
+    "/tracks/{track_id}",
+    response_model=Track,
+    responses={
+        200: {"description": "The track already existed and was replaced"},
+        201: {"description": "The track was created", "model": Track},
+    },
+)
 async def put_track(
     track_id: str, body: Track, response: Response, user_id: UserDep, session: SessionDep
 ) -> Track:
@@ -140,7 +161,14 @@ async def list_guardrails(user_id: UserDep, session: SessionDep) -> list[Guardra
     return [guardrail_row_to_model(r) for r in await repo.list_guardrails(session, user_id)]
 
 
-@router.put("/guardrails/{rule}", response_model=GuardrailRule)
+@router.put(
+    "/guardrails/{rule}",
+    response_model=GuardrailRule,
+    responses={
+        200: {"description": "The guardrail rule already existed and was replaced"},
+        201: {"description": "The guardrail rule was created", "model": GuardrailRule},
+    },
+)
 async def put_guardrail(
     rule: str, body: GuardrailRule, response: Response, user_id: UserDep, session: SessionDep
 ) -> GuardrailRule:

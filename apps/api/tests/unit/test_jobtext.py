@@ -86,7 +86,7 @@ async def test_redirect_to_public_host_is_followed() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         if request.url.path == "/old":
             return httpx.Response(301, headers={"location": "/new"})
-        return httpx.Response(200, text=HTML)
+        return httpx.Response(200, text=HTML, headers={"content-type": "text/html"})
 
     async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
         assert "Snowflake migration" in await fetch_job_text(
@@ -110,3 +110,38 @@ async def test_rejects_ipv4_mapped_and_nat64_loopback(monkeypatch: pytest.Monkey
     monkeypatch.setattr(jobtext, "resolve_host", lambda host: ["64:ff9b::7f00:1"])
     with pytest.raises(JobTextError, match="not allowed"):
         await fetch_job_text("http://example.com/jobs")
+
+
+async def test_oversized_body_is_rejected() -> None:
+    """A hostile or broken host must not be able to drive the process into OOM."""
+    body = b"<html><body><p>" + b"x" * (6 * 1024 * 1024) + b"</p></body></html>"
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, content=body, headers={"content-type": "text/html"})
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        with pytest.raises(JobTextError, match="page too large"):
+            await fetch_job_text("https://example.com/huge", client=client)
+
+
+async def test_unsupported_content_type_is_rejected() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200, content=b"%PDF-1.7 ...", headers={"content-type": "application/pdf"}
+        )
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        with pytest.raises(JobTextError, match="unsupported content type"):
+            await fetch_job_text("https://example.com/job.pdf", client=client)
+
+
+async def test_missing_content_type_is_allowed() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200, content=HTML.encode(), headers={"content-length": str(len(HTML))}
+        )
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        assert "Snowflake migration" in await fetch_job_text(
+            "https://example.com/job", client=client
+        )

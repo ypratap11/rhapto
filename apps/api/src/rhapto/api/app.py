@@ -54,6 +54,12 @@ def create_app(
         try:
             yield
         finally:
+            # The arq pool and the redis pub/sub client own connections; the in-memory test
+            # doubles have nothing to close.
+            for collaborator in (state.enqueuer, state.event_bus):
+                close = getattr(collaborator, "close", None)
+                if close is not None:
+                    await close()
             if state.engine is not None:
                 await state.engine.dispose()
 

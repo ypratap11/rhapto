@@ -40,15 +40,18 @@ class ArqEnqueuer:
         self._settings = RedisSettings.from_dsn(redis_url)
         self._pool: ArqRedis | None = None
 
+    async def _connect(self) -> ArqRedis:
+        pool: ArqRedis = await create_pool(self._settings)
+        self._pool = pool
+        return pool
+
     async def connect(self) -> None:
         if self._pool is None:
-            self._pool = await create_pool(self._settings)
+            await self._connect()
 
     async def enqueue(self, task: str, **kwargs: Any) -> None:
-        if self._pool is None:
-            await self.connect()
-        assert self._pool is not None
-        await self._pool.enqueue_job(task, **kwargs)
+        pool = self._pool or await self._connect()
+        await pool.enqueue_job(task, **kwargs)
 
     async def close(self) -> None:
         if self._pool is not None:
