@@ -25,5 +25,47 @@ services:
       timeout: 3s
       retries: 20
 
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+      target: api
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://rhapto:rhapto@db:5432/rhapto
+      REDIS_URL: redis://redis:6379/0
+      RHAPTO_PACKAGES_DIR: /data/packages
+    ports:
+      - "8000:8000"
+    volumes:
+      - packages:/data/packages
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  worker:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+      target: worker
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://rhapto:rhapto@db:5432/rhapto
+      REDIS_URL: redis://redis:6379/0
+      RHAPTO_PACKAGES_DIR: /data/packages
+      FASTEMBED_CACHE_PATH: /models
+    volumes:
+      - packages:/data/packages
+      - models:/models
+    depends_on:
+      api:
+        condition: service_started
+      redis:
+        condition: service_healthy
+
 volumes:
   pgdata:
+  packages:
+  models:

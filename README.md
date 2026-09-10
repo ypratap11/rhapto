@@ -42,3 +42,23 @@ docker run --rm --env-file .env -v "$PWD:/work" rhapto-cli tailor --jd jd.txt --
 
 Development: `uv run pytest`, `uv run ruff check .`, `uv run mypy`, `uv run lint-imports` from `apps/api`;
 `bash scripts/codegen.sh` after editing `packages/schemas`.
+
+## Backend (phase 0.2)
+
+```bash
+cp .env.example .env          # set ANTHROPIC_API_KEY and RHAPTO_API_TOKEN
+docker compose up -d          # db, redis, api (http://localhost:8000), worker
+docker compose exec api rhapto profile import /work/profile   # or use POST /api/v1/profile/import
+open http://localhost:8000/api/v1/docs
+```
+
+Every request except `/api/v1/health` needs `Authorization: Bearer <RHAPTO_API_TOKEN>`. Paste a job description with
+`POST /api/v1/jobs`, start tailoring with `POST /api/v1/jobs/{id}/tailor`, follow progress on
+`GET /api/v1/tasks/{id}/events` (Server-Sent Events), then fetch, edit, or download the package under `/api/v1/packages`.
+Editing a package re-runs the guardrails and creates a new version; a `blocked` status means a guardrail failed and the
+report says why. The tracker lives under `/api/v1/applications`. Nothing here submits an application anywhere.
+
+Development without Docker for the app itself: `docker compose up -d db redis`, then from `apps/api`:
+`uv run rhapto db upgrade`, `uv run uvicorn rhapto.api.app:app --reload`, and in another shell
+`uv run arq rhapto.worker.main.WorkerSettings`. Tests: `uv run pytest` (API tests need the compose `db`).
+`bash scripts/smoke-api.sh` exercises a running stack end to end (needs `curl` and `jq`).

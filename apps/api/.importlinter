@@ -9,4 +9,61 @@ source_modules =
 forbidden_modules =
     rhapto.config
     rhapto.profile
+    rhapto.db
+    rhapto.services
+    rhapto.worker
+    rhapto.api
     rhapto.cli
+
+[importlinter:contract:db-imports-only-models]
+name = db must not import engine, profile, services, worker, api, cli, or config
+type = forbidden
+source_modules =
+    rhapto.db
+forbidden_modules =
+    rhapto.engine
+    rhapto.profile
+    rhapto.services
+    rhapto.worker
+    rhapto.api
+    rhapto.cli
+    rhapto.config
+
+[importlinter:contract:profile-imports-only-models-and-engine]
+name = profile must not import db, services, worker, api, cli, or config
+type = forbidden
+source_modules =
+    rhapto.profile
+forbidden_modules =
+    rhapto.db
+    rhapto.services
+    rhapto.worker
+    rhapto.api
+    rhapto.cli
+    rhapto.config
+
+[importlinter:contract:services-do-not-import-entrypoints]
+name = services must not import worker, api, or cli
+type = forbidden
+source_modules =
+    rhapto.services
+forbidden_modules =
+    rhapto.worker
+    rhapto.api
+    rhapto.cli
+
+[importlinter:contract:worker-and-api-are-separate]
+name = worker and api must not import each other or cli
+type = forbidden
+source_modules =
+    rhapto.worker
+    rhapto.api
+forbidden_modules =
+    rhapto.cli
+
+[importlinter:contract:worker-api-independence]
+name = worker and api are independent
+type = independence
+modules =
+    rhapto.worker
+    rhapto.api
