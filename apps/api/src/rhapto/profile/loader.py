@@ -92,6 +92,7 @@ def load_profile(path: Path) -> Profile:
         guardrails=guardrails_file.guardrails if guardrails_file else default_guardrails(),
         answers=answers_file.answers if answers_file else {},
         watchlist=watchlist_file.watchlist if watchlist_file else [],
+        aggregators=watchlist_file.aggregators if watchlist_file else [],
     )
 
 
@@ -112,4 +113,7 @@ def dump_profile(profile: Profile, path: Path) -> None:
     _write(path / "bases.yaml", BasesFile(bases=profile.bases))
     _write(path / "guardrails.yaml", GuardrailsFile(guardrails=profile.guardrails))
     _write(path / "answers.yaml", AnswersFile(answers=profile.answers))
-    _write(path / "watchlist.yaml", WatchlistFile(watchlist=profile.watchlist))
+    _write(
+        path / "watchlist.yaml",
+        WatchlistFile(watchlist=profile.watchlist, aggregators=profile.aggregators),
+    )

@@ -6,7 +6,8 @@
   "additionalProperties": false,
   "required": ["watchlist"],
   "properties": {
-    "watchlist": { "type": "array", "items": { "$ref": "#/$defs/WatchlistEntry" } }
+    "watchlist": { "type": "array", "items": { "$ref": "#/$defs/WatchlistEntry" } },
+    "aggregators": { "type": "array", "items": { "$ref": "#/$defs/AggregatorEntry" }, "default": [] }
   },
   "$defs": {
     "WatchlistEntry": {
@@ -17,7 +18,19 @@
       "properties": {
         "company": { "type": "string" },
         "source": { "type": "string", "enum": ["greenhouse", "lever", "ashby", "smartrecruiters", "workable"] },
-        "board": { "type": "string" }
+        "board": { "type": "string" },
+        "keywords": { "type": "array", "items": { "type": "string" }, "default": [] }
+      }
+    },
+    "AggregatorEntry": {
+      "title": "AggregatorEntry",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source"],
+      "properties": {
+        "source": { "type": "string", "enum": ["remoteok", "hn-hiring"] },
+        "enabled": { "type": "boolean", "default": true },
+        "keywords": { "type": "array", "items": { "type": "string" }, "default": [] }
       }
     }
   }

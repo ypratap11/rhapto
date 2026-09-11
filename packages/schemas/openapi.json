@@ -1375,6 +1375,14 @@
             "title": "Company",
             "type": "string"
           },
+          "keywords": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Keywords",
+            "type": "array"
+          },
           "source": {
             "enum": [
               "greenhouse",

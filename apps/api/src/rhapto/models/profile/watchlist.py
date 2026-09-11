@@ -3,9 +3,9 @@
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class WatchlistEntry(BaseModel):
@@ -15,6 +15,16 @@ class WatchlistEntry(BaseModel):
     company: str
     source: Literal['greenhouse', 'lever', 'ashby', 'smartrecruiters', 'workable']
     board: str
+    keywords: list[str] = []
+
+
+class AggregatorEntry(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    source: Literal['remoteok', 'hn-hiring']
+    enabled: bool = True
+    keywords: list[str] = []
 
 
 class WatchlistFile(BaseModel):
@@ -22,3 +32,4 @@ class WatchlistFile(BaseModel):
         extra='forbid',
     )
     watchlist: list[WatchlistEntry]
+    aggregators: Annotated[list[AggregatorEntry], Field(validate_default=True)] = []

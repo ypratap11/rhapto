@@ -972,6 +972,11 @@ export interface components {
             /** Company */
             company: string;
             /**
+             * Keywords
+             * @default []
+             */
+            keywords: string[];
+            /**
              * Source
              * @enum {string}
              */

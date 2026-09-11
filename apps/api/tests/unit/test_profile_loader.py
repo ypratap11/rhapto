@@ -131,3 +131,16 @@ def test_dump_round_trip(demo_profile_dir: Path, tmp_path: Path) -> None:
         "watchlist.yaml",
     }
     assert load_profile(tmp_path) == profile
+
+
+def test_watchlist_keywords_and_aggregators_round_trip(
+    tmp_path: Path, demo_profile_dir: Path
+) -> None:
+    profile = load_profile(demo_profile_dir)
+    assert profile.watchlist[0].keywords == ["program manager"]
+    assert [a.source for a in profile.aggregators] == ["remoteok", "hn-hiring"]
+    assert profile.aggregators[1].enabled is False
+
+    dump_profile(profile, tmp_path)
+    again = load_profile(tmp_path)
+    assert again.aggregators == profile.aggregators and again.watchlist == profile.watchlist

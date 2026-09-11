@@ -1,2 +1,5 @@
 watchlist:
-  - { company: ExampleCo, source: greenhouse, board: exampleco }
+  - { company: ExampleCo, source: greenhouse, board: exampleco, keywords: ["program manager"] }
+aggregators:
+  - { source: remoteok, enabled: true, keywords: ["data program manager", "AI product manager"] }
+  - { source: hn-hiring, enabled: false }

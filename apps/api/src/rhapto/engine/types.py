@@ -7,7 +7,7 @@ from rhapto.models.profile.bases import ResumeBase
 from rhapto.models.profile.blocks import Block
 from rhapto.models.profile.guardrails import GuardrailRule
 from rhapto.models.profile.tracks import Track
-from rhapto.models.profile.watchlist import WatchlistEntry
+from rhapto.models.profile.watchlist import AggregatorEntry, WatchlistEntry
 
 
 class EngineError(Exception):
@@ -27,6 +27,7 @@ class Profile(BaseModel):
     guardrails: list[GuardrailRule]
     answers: dict[str, str] = Field(default_factory=dict)
     watchlist: list[WatchlistEntry] = Field(default_factory=list)
+    aggregators: list[AggregatorEntry] = Field(default_factory=list)
 
     def block_map(self) -> dict[str, Block]:
         return {b.id: b for b in self.blocks}
