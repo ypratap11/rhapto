@@ -41,6 +41,57 @@ export interface paths {
         patch: operations["patch_application_api_v1_applications__application_id__patch"];
         trace?: never;
     };
+    "/api/v1/discovery/poll": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Poll */
+        post: operations["poll_api_v1_discovery_poll_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/discovery/runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Runs */
+        get: operations["runs_api_v1_discovery_runs_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/discovery/sources": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Sources */
+        get: operations["sources_api_v1_discovery_sources_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/health": {
         parameters: {
             query?: never;
@@ -105,6 +156,23 @@ export interface paths {
         get: operations["list_packages_api_v1_jobs__job_id__packages_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/jobs/{job_id}/rescue": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Rescue Job */
+        post: operations["rescue_job_api_v1_jobs__job_id__rescue_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -692,6 +760,12 @@ export interface components {
         JobOut: {
             /** Application Status */
             application_status: string | null;
+            /** Best Fit */
+            best_fit?: number | null;
+            /** Best Track Id */
+            best_track_id?: string | null;
+            /** Bucket */
+            bucket?: ("fit" | "low") | null;
             /** Company */
             company: string | null;
             /**
@@ -710,6 +784,20 @@ export interface components {
             latest_package: components["schemas"]["PackageSummary"] | null;
             /** Location */
             location: string | null;
+            /** Posted At */
+            posted_at?: string | null;
+            /** Repost Of */
+            repost_of?: string | null;
+            /**
+             * Rescued
+             * @default false
+             */
+            rescued: boolean;
+            /**
+             * Scores
+             * @default []
+             */
+            scores: components["schemas"]["JobScoreOut"][];
             /** Source */
             source: string;
             /** Title */
@@ -728,6 +816,17 @@ export interface components {
             id: string;
             /** Title */
             title: string | null;
+        };
+        /** JobScoreOut */
+        JobScoreOut: {
+            /** Fit Score */
+            fit_score: number;
+            /** Rationale */
+            rationale: {
+                [key: string]: unknown;
+            };
+            /** Track Id */
+            track_id: string;
         };
         /** MeOut */
         MeOut: {
@@ -802,6 +901,31 @@ export interface components {
             status: string;
             /** Version */
             version: number;
+        };
+        /** PollRunOut */
+        PollRunOut: {
+            /** Board */
+            board: string | null;
+            /** Error */
+            error: string | null;
+            /** Finished At */
+            finished_at: string | null;
+            /** Found */
+            found: number;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** New */
+            new: number;
+            /** Source */
+            source: string;
+            /**
+             * Started At
+             * Format: date-time
+             */
+            started_at: string;
         };
         /** ResumeBase */
         ResumeBase: {
@@ -896,6 +1020,20 @@ export interface components {
             kind: "experience" | "projects" | "skills" | "credentials";
             /** Title */
             title: string;
+        };
+        /** SourceInfoOut */
+        SourceInfoOut: {
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "board" | "aggregator";
+            /** Label */
+            label: string;
+            /** Name */
+            name: string;
+            /** Needs Board */
+            needs_board: boolean;
         };
         /** StatusChange */
         StatusChange: {
@@ -1203,6 +1341,99 @@ export interface operations {
             };
         };
     };
+    poll_api_v1_discovery_poll_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    runs_api_v1_discovery_runs_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PollRunOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    sources_api_v1_discovery_sources_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SourceInfoOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     health_api_v1_health_get: {
         parameters: {
             query?: never;
@@ -1227,6 +1458,9 @@ export interface operations {
         parameters: {
             query?: {
                 search?: string | null;
+                track?: string | null;
+                bucket?: ("fit" | "low") | null;
+                sort?: "fit" | "newest";
             };
             header?: {
                 authorization?: string | null;
@@ -1384,6 +1618,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PackageOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    rescue_job_api_v1_jobs__job_id__rescue_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobOut"];
                 };
             };
             /** @description Validation Error */

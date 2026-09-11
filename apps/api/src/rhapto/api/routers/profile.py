@@ -139,12 +139,18 @@ async def list_tracks(user_id: UserDep, session: SessionDep) -> list[Track]:
     },
 )
 async def put_track(
-    track_id: str, body: Track, response: Response, user_id: UserDep, session: SessionDep
+    track_id: str,
+    body: Track,
+    response: Response,
+    user_id: UserDep,
+    session: SessionDep,
+    enqueuer: EnqueuerDep,
 ) -> Track:
     _check_id(track_id, body.id)
     existed = await repo.get_track(session, user_id, track_id) is not None
     row = await repo.upsert_track(session, user_id, body)
     await session.commit()
+    await enqueuer.enqueue("rescore_jobs", user_id=str(user_id))
     response.status_code = 200 if existed else 201
     return track_row_to_model(row)
 
@@ -253,6 +259,7 @@ async def import_profile(
     await enqueuer.enqueue(
         "embed_blocks", user_id=str(user_id), block_ids=[b.id for b in profile.blocks]
     )
+    await enqueuer.enqueue("rescore_jobs", user_id=str(user_id))
     return ImportOut(
         blocks=len(profile.blocks),
         tracks=len(profile.tracks),

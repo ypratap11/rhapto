@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, field_validator, model_validator
 
@@ -51,6 +51,12 @@ class PackageSummary(BaseModel):
     created_at: datetime
 
 
+class JobScoreOut(BaseModel):
+    track_id: str
+    fit_score: int
+    rationale: dict[str, Any]
+
+
 class JobOut(BaseModel):
     id: uuid.UUID
     source: str
@@ -63,6 +69,13 @@ class JobOut(BaseModel):
     discovered_at: datetime
     latest_package: PackageSummary | None
     application_status: str | None
+    best_track_id: str | None = None
+    best_fit: int | None = None
+    bucket: Literal["fit", "low"] | None = None
+    rescued: bool = False
+    repost_of: uuid.UUID | None = None
+    posted_at: datetime | None = None
+    scores: list[JobScoreOut] = []
 
 
 class TailorBody(BaseModel):
@@ -147,3 +160,21 @@ class TaskOut(BaseModel):
     result_ref: str | None
     created_at: datetime
     finished_at: datetime | None
+
+
+class PollRunOut(BaseModel):
+    id: uuid.UUID
+    source: str
+    board: str | None
+    started_at: datetime
+    finished_at: datetime | None
+    found: int
+    new: int
+    error: str | None
+
+
+class SourceInfoOut(BaseModel):
+    name: str
+    kind: Literal["board", "aggregator"]
+    label: str
+    needs_board: bool

@@ -54,7 +54,7 @@ packages = ["src/rhapto"]
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
-pythonpath = ["tests"]
+pythonpath = ["tests", "tests/unit"]
 timeout = 60
 
 [tool.ruff]

@@ -96,9 +96,10 @@ async def test_import_and_export_round_trip(
     response = await client.post("/api/v1/profile/import", files=files)
     assert response.status_code == 200, response.text
     assert response.json() == {"blocks": 4, "tracks": 2, "bases": 2, "guardrails": 5}
-    assert enqueuer.calls[-1][0] == "embed_blocks" and sorted(
-        enqueuer.calls[-1][1]["block_ids"]
+    assert enqueuer.calls[-2][0] == "embed_blocks" and sorted(
+        enqueuer.calls[-2][1]["block_ids"]
     ) == ["acme-data-pm", "acme-migration", "cred-pmp", "side-llm-tool"]
+    assert enqueuer.calls[-1][0] == "rescore_jobs"
     blocks = (await client.get("/api/v1/profile/blocks")).json()
     assert {b["id"] for b in blocks} == {
         "acme-data-pm",

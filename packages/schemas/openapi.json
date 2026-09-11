@@ -565,6 +565,43 @@
             ],
             "title": "Application Status"
           },
+          "best_fit": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Best Fit"
+          },
+          "best_track_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Best Track Id"
+          },
+          "bucket": {
+            "anyOf": [
+              {
+                "enum": [
+                  "fit",
+                  "low"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bucket"
+          },
           "company": {
             "anyOf": [
               {
@@ -620,6 +657,43 @@
               }
             ],
             "title": "Location"
+          },
+          "posted_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Posted At"
+          },
+          "repost_of": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Repost Of"
+          },
+          "rescued": {
+            "default": false,
+            "title": "Rescued",
+            "type": "boolean"
+          },
+          "scores": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/JobScoreOut"
+            },
+            "title": "Scores",
+            "type": "array"
           },
           "source": {
             "title": "Source",
@@ -700,6 +774,30 @@
           "title"
         ],
         "title": "JobRef",
+        "type": "object"
+      },
+      "JobScoreOut": {
+        "properties": {
+          "fit_score": {
+            "title": "Fit Score",
+            "type": "integer"
+          },
+          "rationale": {
+            "additionalProperties": true,
+            "title": "Rationale",
+            "type": "object"
+          },
+          "track_id": {
+            "title": "Track Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "track_id",
+          "fit_score",
+          "rationale"
+        ],
+        "title": "JobScoreOut",
         "type": "object"
       },
       "MeOut": {
@@ -860,6 +958,78 @@
           "created_at"
         ],
         "title": "PackageSummary",
+        "type": "object"
+      },
+      "PollRunOut": {
+        "properties": {
+          "board": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Board"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          },
+          "found": {
+            "title": "Found",
+            "type": "integer"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "new": {
+            "title": "New",
+            "type": "integer"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
+          "started_at": {
+            "format": "date-time",
+            "title": "Started At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "source",
+          "board",
+          "started_at",
+          "finished_at",
+          "found",
+          "new",
+          "error"
+        ],
+        "title": "PollRunOut",
         "type": "object"
       },
       "ResumeBase": {
@@ -1111,6 +1281,38 @@
           "entries"
         ],
         "title": "ResumeSection",
+        "type": "object"
+      },
+      "SourceInfoOut": {
+        "properties": {
+          "kind": {
+            "enum": [
+              "board",
+              "aggregator"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "needs_board": {
+            "title": "Needs Board",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "name",
+          "kind",
+          "label",
+          "needs_board"
+        ],
+        "title": "SourceInfoOut",
         "type": "object"
       },
       "StatusChange": {
@@ -1730,6 +1932,161 @@
         ]
       }
     },
+    "/api/v1/discovery/poll": {
+      "post": {
+        "operationId": "poll_api_v1_discovery_poll_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Poll",
+        "tags": [
+          "discovery"
+        ]
+      }
+    },
+    "/api/v1/discovery/runs": {
+      "get": {
+        "operationId": "runs_api_v1_discovery_runs_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/PollRunOut"
+                  },
+                  "title": "Response Runs Api V1 Discovery Runs Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Runs",
+        "tags": [
+          "discovery"
+        ]
+      }
+    },
+    "/api/v1/discovery/sources": {
+      "get": {
+        "operationId": "sources_api_v1_discovery_sources_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/SourceInfoOut"
+                  },
+                  "title": "Response Sources Api V1 Discovery Sources Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Sources",
+        "tags": [
+          "discovery"
+        ]
+      }
+    },
     "/api/v1/health": {
       "get": {
         "operationId": "health_api_v1_health_get",
@@ -1769,6 +2126,56 @@
                 }
               ],
               "title": "Search"
+            }
+          },
+          {
+            "in": "query",
+            "name": "track",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Track"
+            }
+          },
+          {
+            "in": "query",
+            "name": "bucket",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "fit",
+                    "low"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Bucket"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sort",
+            "required": false,
+            "schema": {
+              "default": "fit",
+              "enum": [
+                "fit",
+                "newest"
+              ],
+              "title": "Sort",
+              "type": "string"
             }
           },
           {
@@ -2052,6 +2459,65 @@
         "summary": "List Packages",
         "tags": [
           "packages"
+        ]
+      }
+    },
+    "/api/v1/jobs/{job_id}/rescue": {
+      "post": {
+        "operationId": "rescue_job_api_v1_jobs__job_id__rescue_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Job Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Rescue Job",
+        "tags": [
+          "jobs"
         ]
       }
     },
