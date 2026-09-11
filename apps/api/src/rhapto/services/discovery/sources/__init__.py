@@ -29,4 +29,10 @@ def aggregator_sources() -> list[SourceInfo]:
     return [i for i in all_sources() if i.kind == "aggregator"]
 
 
-from rhapto.services.discovery.sources import ashby, greenhouse, lever  # noqa: E402,F401,I001  (registration)
+from rhapto.services.discovery.sources import (  # noqa: E402,F401,I001  (registration)
+    ashby,
+    greenhouse,
+    hn_hiring,
+    lever,
+    remoteok,
+)

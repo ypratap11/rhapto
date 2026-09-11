@@ -1,0 +1,21 @@
+{
+  "search_by_date?query=%22who%20is%20hiring%22": {
+    "hits": [{"objectID": "49500001", "title": "Ask HN: Who is hiring? (September 2026)", "created_at": "2026-09-01T15:01:17Z"}]
+  },
+  "/items/49500001": {
+    "id": 49500001,
+    "children": [
+      {
+        "id": 49500002, "author": "exampleco_hr", "created_at": "2026-09-01T15:05:00.000Z", "story_id": 49500001,
+        "text": "ExampleCo | Data Program Manager | Denver, CO or Remote | Full-time | $150k-$180k<p>We are hiring a program manager for our analytics data platform and ETL modernisation. Apply at <a href=\"https://example.com/careers/dpm\">example.com/careers</a>",
+        "children": []
+      },
+      {
+        "id": 49500003, "author": "cafeco", "created_at": "2026-09-01T16:00:00.000Z", "story_id": 49500001,
+        "text": "CafeCo | Barista | Onsite | Part-time<p>Espresso and pastries.",
+        "children": []
+      },
+      {"id": 49500004, "author": "someone", "created_at": "2026-09-01T16:30:00.000Z", "story_id": 49500001, "text": null, "children": []}
+    ]
+  }
+}

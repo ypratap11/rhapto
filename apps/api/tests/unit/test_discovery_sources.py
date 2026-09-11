@@ -37,7 +37,6 @@ async def test_source_contract(name: str) -> None:
         assert p.posted_at is None or p.posted_at.tzinfo is not None
 
 
-@pytest.mark.xfail(strict=True, reason="adapters land in Tasks 5 and 6")
 def test_registry_matches_profile_schema_enums() -> None:
     board_enum = set(WatchlistEntry.model_fields["source"].annotation.__args__)  # type: ignore[union-attr]
     aggregator_enum = set(AggregatorEntry.model_fields["source"].annotation.__args__)  # type: ignore[union-attr]

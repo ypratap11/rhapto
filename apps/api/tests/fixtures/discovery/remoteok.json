@@ -1,0 +1,17 @@
+{
+  "remoteok.com/api": [
+    {"last_updated": 1788300000, "legal": "fictional fixture"},
+    {
+      "id": "1500001", "slug": "remote-data-program-manager-exampleco", "company": "ExampleCo",
+      "position": "Data Program Manager", "tags": ["program manager", "data", "etl"],
+      "location": "Worldwide", "url": "https://remoteOK.com/remote-jobs/1500001",
+      "description": "<strong>ExampleCo</strong><br>Lead the analytics data platform program and ETL cutover.",
+      "date": "2026-09-08T14:57:50+00:00", "epoch": 1788965870
+    },
+    {
+      "id": "1500002", "slug": "remote-barista", "company": "CafeCo", "position": "Barista",
+      "tags": ["coffee"], "location": "", "url": "https://remoteOK.com/remote-jobs/1500002",
+      "description": "Prepare espresso drinks.", "date": "2026-09-07T10:00:00+00:00", "epoch": 1788861600
+    }
+  ]
+}
