@@ -92,6 +92,32 @@ async def test_list_jobs_filters_and_sort(session: AsyncSession, user: User) -> 
     assert newest[0].id == other.id
 
 
+async def test_list_jobs_bucket_covers_unscored_rescued_and_orphaned_track(
+    session: AsyncSession, user: User
+) -> None:
+    await profile_repo.upsert_track(
+        session, user.id, Track(id="data-pm", name="Data", resume_base="b", min_fit=60)
+    )
+    unscored = await jobs_repo.create_job(session, user.id, jd_text="unscored " * 60)
+    rescued = await jobs_repo.create_job(session, user.id, jd_text="rescued " * 60)
+    rescued.best_track_id, rescued.best_fit = "data-pm", 10
+    jobs_repo.set_rescued(rescued, True)
+    orphaned = await jobs_repo.create_job(session, user.id, jd_text="orphaned " * 60)
+    # best_track_id names a track that was never created (deleted/renamed since scoring).
+    orphaned.best_track_id, orphaned.best_fit = "ghost-track", 90
+    await session.flush()
+
+    fit_ids = {j.id for j in await jobs_repo.list_jobs(session, user.id, bucket="fit")}
+    low_ids = {j.id for j in await jobs_repo.list_jobs(session, user.id, bucket="low")}
+
+    # (1) rescued job stays in fit despite a low score.
+    assert rescued.id in fit_ids and rescued.id not in low_ids
+    # (2) an unscored job (best_fit is None) is visible in fit, never in low.
+    assert unscored.id in fit_ids and unscored.id not in low_ids
+    # (3) a scored job whose best_track_id has no track row counts as low, not fit.
+    assert orphaned.id in low_ids and orphaned.id not in fit_ids
+
+
 async def test_aggregators_replace_and_list(session: AsyncSession, user: User) -> None:
     await profile_repo.replace_aggregators(
         session, user.id, [AggregatorEntry(source="remoteok", enabled=True, keywords=["pm"])]

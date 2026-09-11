@@ -36,6 +36,11 @@ async def latest_runs(session: AsyncSession, user_id: uuid.UUID) -> list[PollRun
     return sorted(rows, key=lambda r: r.started_at, reverse=True)
 
 
+#: The poller pauses a source/board after this many consecutive failed runs
+#: (Task 7's PAUSE_AFTER); consecutive_failures only needs to look back this far.
+PAUSE_AFTER = 3
+
+
 async def consecutive_failures(
     session: AsyncSession, user_id: uuid.UUID, source: str, board: str | None
 ) -> int:
@@ -45,10 +50,12 @@ async def consecutive_failures(
             .where(
                 PollRun.user_id == user_id,
                 PollRun.source == source,
-                PollRun.board.is_(board) if board is None else PollRun.board == board,
+                # SQLAlchemy compiles `== None` to `IS NULL`, so this covers both
+                # a real board and the no-board (board=None) case in one comparison.
+                PollRun.board == board,
             )
             .order_by(PollRun.started_at.desc())
-            .limit(3)
+            .limit(PAUSE_AFTER)
         )
     )
     count = 0

@@ -4,7 +4,7 @@ import uuid
 from datetime import UTC, datetime
 from typing import Any, cast
 
-from sqlalchemy import CursorResult, and_, delete, not_, nulls_last, or_, select
+from sqlalchemy import CursorResult, and_, delete, func, not_, nulls_last, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from rhapto.db.hashing import dedupe_hash
@@ -77,8 +77,14 @@ async def list_jobs(
         )
     if track:
         query = query.where(Job.best_track_id == track)
+    # `best_track_id` has no FK, so a scored job whose track was deleted or renamed
+    # outer-joins to a NULL min_fit. Coalesce to a value above any real min_fit (0-100)
+    # so the comparison is always a definite boolean rather than NULL: an orphaned
+    # track can never satisfy `best_fit >= min_fit` and the job counts as low fit,
+    # per the brief, instead of silently vanishing from both buckets.
+    min_fit = func.coalesce(tracks.c.min_fit, 101)
     fit_condition = or_(
-        Job.rescued.is_(True), and_(Job.best_fit.is_not(None), Job.best_fit >= tracks.c.min_fit)
+        Job.rescued.is_(True), and_(Job.best_fit.is_not(None), Job.best_fit >= min_fit)
     )
     if bucket == "fit":
         query = query.where(
