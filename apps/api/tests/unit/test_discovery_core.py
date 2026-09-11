@@ -36,6 +36,23 @@ def test_matches_keywords_whole_word_any_text() -> None:
     assert matches_keywords([], None, None)
 
 
+async def test_discovery_http_base_override_rewrites_scheme_and_host() -> None:
+    seen: list[str] = []
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(str(request.url))
+        return httpx.Response(200, json={"jobs": []})
+
+    http = DiscoveryHttp(
+        user_agent="t",
+        base_override="http://127.0.0.1:8089",
+        client=httpx.AsyncClient(transport=httpx.MockTransport(handler)),
+    )
+    result = await http.get_json("https://boards-api.greenhouse.io/v1/boards/x/jobs")
+    assert result == {"jobs": []}
+    assert seen == ["http://127.0.0.1:8089/v1/boards/x/jobs"]
+
+
 async def test_discovery_http_rejects_private_hosts_and_large_bodies() -> None:
     http = DiscoveryHttp(user_agent="t", max_bytes=10)
     with pytest.raises(SourceError):

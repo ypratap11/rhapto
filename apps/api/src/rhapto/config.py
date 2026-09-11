@@ -24,6 +24,7 @@ class Settings(BaseSettings):
     rhapto_web_origin: str = "http://localhost:3000"
     rhapto_poll_interval_hours: int = 6
     rhapto_discovery_user_agent: str = "rhapto-discovery/0.3"
+    rhapto_discovery_base_override: str = ""
 
 
 @lru_cache(maxsize=1)

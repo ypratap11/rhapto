@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from typing import Any
-from urllib.parse import urljoin, urlparse
+from urllib.parse import urljoin, urlparse, urlunparse
 
 import httpx
 
@@ -12,6 +13,8 @@ from rhapto.services.jobtext import assert_public_host
 DEFAULT_MAX_BYTES = 25 * 1024 * 1024
 MAX_REDIRECTS = 5
 _REDIRECT_STATUS_CODES = (301, 302, 303, 307, 308)
+
+logger = logging.getLogger(__name__)
 
 
 class DiscoveryHttp:
@@ -29,15 +32,36 @@ class DiscoveryHttp:
         timeout: float = 20.0,
         max_bytes: int = DEFAULT_MAX_BYTES,
         client: httpx.AsyncClient | None = None,
+        base_override: str = "",
     ) -> None:
         self.user_agent = user_agent
         self.max_bytes = max_bytes
         self._client = client or httpx.AsyncClient(timeout=timeout, follow_redirects=False)
+        self.base_override = base_override
+        if base_override:
+            logger.warning(
+                "DiscoveryHttp base_override is set to %s: every request's scheme and host are "
+                "rewritten and the public-host (SSRF) check is skipped. Smoke/testing only — "
+                "never set this in production.",
+                base_override,
+            )
 
     async def aclose(self) -> None:
         await self._client.aclose()
 
+    def _rewrite(self, url: str) -> str:
+        """When `base_override` is set, rewrite the URL's scheme and host to it, keeping the
+        path and query untouched. Smoke/testing only: it lets `rhapto discover` be pointed at a
+        loopback fixture server without the vendor's real host ever being contacted."""
+        if not self.base_override:
+            return url
+        override = urlparse(self.base_override)
+        parsed = urlparse(url)
+        return urlunparse(parsed._replace(scheme=override.scheme, netloc=override.netloc))
+
     async def _assert_public(self, url: str) -> None:
+        if self.base_override:
+            return
         host = urlparse(url).hostname or ""
         try:
             await assert_public_host(host)
@@ -81,9 +105,9 @@ class DiscoveryHttp:
                 raise SourceError(f"{url}: {exc}") from exc
 
     async def _get(self, url: str) -> httpx.Response:
-        await self._assert_public(url)
+        current_url = self._rewrite(url)
+        await self._assert_public(current_url)
         headers = {"User-Agent": self.user_agent, "Accept": "application/json, text/html;q=0.8"}
-        current_url = url
         for _ in range(MAX_REDIRECTS + 1):
             # _get_once already raises SourceError for any >= 400 status, so a response that
             # comes back here is either a success (< 400) or a redirect (3xx, also < 400).
@@ -93,7 +117,7 @@ class DiscoveryHttp:
             location = response.headers.get("location")
             if not location:
                 raise SourceError(f"{current_url} redirected with no Location header")
-            current_url = urljoin(current_url, location)
+            current_url = self._rewrite(urljoin(current_url, location))
             await self._assert_public(current_url)
         raise SourceError(f"{url}: too many redirects")
 

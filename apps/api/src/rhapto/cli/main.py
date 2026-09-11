@@ -258,7 +258,10 @@ def profile_export(
 
 
 def build_discovery_http(settings: Settings) -> DiscoveryHttp:
-    return DiscoveryHttp(user_agent=settings.rhapto_discovery_user_agent)
+    return DiscoveryHttp(
+        user_agent=settings.rhapto_discovery_user_agent,
+        base_override=settings.rhapto_discovery_base_override,
+    )
 
 
 def build_embedder(settings: Settings, kind: str) -> EmbeddingProvider:

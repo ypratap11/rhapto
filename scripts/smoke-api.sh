@@ -33,3 +33,15 @@ if [ "$package_id" = "null" ] || [ -z "$package_id" ]; then
 fi
 curl -fsS "${auth[@]}" "$BASE/packages/$package_id/download" -o out/smoke-package.zip
 echo "downloaded out/smoke-package.zip"
+
+# discover: runs through the CLI (not the worker), since the SSRF guard correctly refuses a
+# host-local fixture server and the worker container cannot reach the host's localhost anyway.
+python scripts/discovery-fixture-server.py 8089 &
+fixture_pid=$!
+trap 'kill "$fixture_pid" 2>/dev/null || true' EXIT
+sleep 1
+discover=$(RHAPTO_DISCOVERY_BASE_OVERRIDE=http://127.0.0.1:8089 uv run --project apps/api rhapto discover --profile profile.example --source greenhouse --board exampleco --json)
+echo "discover: $(echo "$discover" | jq 'length') posting(s)"
+echo "$discover" | jq -e 'length > 0' >/dev/null
+kill "$fixture_pid" 2>/dev/null || true
+trap - EXIT

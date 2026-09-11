@@ -212,6 +212,7 @@ export function useDeleteApplication() {
 export type ResumeBase = Schemas["ResumeBase"];
 export type GuardrailRule = Schemas["GuardrailRule"];
 export type WatchlistEntry = Schemas["WatchlistEntry"];
+export type AggregatorEntry = Schemas["AggregatorEntry"];
 export type ImportOut = Schemas["ImportOut"];
 
 export const profileKeys = {
@@ -219,6 +220,7 @@ export const profileKeys = {
   guardrails: ["profile", "guardrails"] as const,
   answers: ["profile", "answers"] as const,
   watchlist: ["profile", "watchlist"] as const,
+  aggregators: ["profile", "aggregators"] as const,
 };
 
 export function invalidateProfile(queryClient: QueryClient): void {
@@ -236,6 +238,9 @@ export function useAnswers() {
 }
 export function useWatchlist() {
   return useQuery({ queryKey: profileKeys.watchlist, queryFn: () => unwrap(apiClient().GET("/api/v1/profile/watchlist")) });
+}
+export function useAggregators() {
+  return useQuery({ queryKey: profileKeys.aggregators, queryFn: () => unwrap(apiClient().GET("/api/v1/profile/aggregators")) });
 }
 
 function useProfileMutation<TVars, TData = unknown>(fn: (vars: TVars) => Promise<TData>) {
@@ -272,6 +277,9 @@ export function usePutAnswers() {
 }
 export function usePutWatchlist() {
   return useProfileMutation((entries: WatchlistEntry[]) => unwrap(apiClient().PUT("/api/v1/profile/watchlist", { body: entries })));
+}
+export function usePutAggregators() {
+  return useProfileMutation<AggregatorEntry[], AggregatorEntry[]>((entries) => unwrap(apiClient().PUT("/api/v1/profile/aggregators", { body: entries })));
 }
 export function useImportProfile() {
   return useProfileMutation(async (files: File[]) => {

@@ -96,3 +96,19 @@ Rhapto never submits anything. The last click is yours.
 Development: from `apps/web`, `pnpm install`, `pnpm dev` (http://localhost:3000), `pnpm test`, `pnpm typecheck`,
 `pnpm lint`, `pnpm build`. After changing the API, run `bash scripts/codegen.sh` to refresh
 `packages/schemas/openapi.json` and the generated client types.
+
+## Job discovery (phase 0.3)
+
+Add the companies you follow to `profile/watchlist.yaml` (Greenhouse, Lever, or Ashby board slugs) and switch on
+the aggregators you want (RemoteOK, Hacker News Who's Hiring). The worker polls every `RHAPTO_POLL_INTERVAL_HOURS`
+(default 6) and the Queue's **Poll now** button runs a poll on demand. Every new posting is deduped, embedded
+locally, and scored 0–100 against each of your tracks; the queue sorts by fit, low-fit jobs sit in their own
+bucket you can rescue from, and re-posts are flagged, not re-queued. Scoring never calls the LLM.
+
+```bash
+rhapto discover --profile ./profile          # one poll from the terminal, nothing stored
+rhapto score --jd job.txt --profile ./profile # per-track breakdown for one description
+```
+
+Adding a source is one adapter module plus a registry entry (`apps/api/src/rhapto/services/discovery/sources/`);
+LinkedIn and Indeed scraping stay out of core.
