@@ -62,3 +62,8 @@ merging; each is small and scoped. The 0.3 pollers plan comes before stage 4 (de
 - `test_track_put_rescores` passes without rescoring (bucket is derived in `job_to_out`); `score_cmd` lacks the
   `ProfileError` handler `discover_cmd` has; CLI track-keyword union is not deduped.
 - `assert_public_host` resolves DNS separately from httpx (rebinding TOCTOU); pre-existing.
+- Live poll 2026-09-11: the task summary reported `new:222` while the per-source `poll_runs.new` values summed
+  to 15; verify how `finish_run` and `latest_runs` account for new jobs (possibly runs from an earlier poll of
+  the same source shadowing, or reposts counted differently).
+- A renamed board slug leaves the old `(source, board)` run row in the runs drawer forever; consider pruning
+  runs whose entry no longer exists.
