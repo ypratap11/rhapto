@@ -22,6 +22,8 @@ class Settings(BaseSettings):
     rhapto_user_email: str = "user@example.com"
     rhapto_packages_dir: Path = Path("data/packages")
     rhapto_web_origin: str = "http://localhost:3000"
+    rhapto_poll_interval_hours: int = 6
+    rhapto_discovery_user_agent: str = "rhapto-discovery/0.3"
 
 
 @lru_cache(maxsize=1)

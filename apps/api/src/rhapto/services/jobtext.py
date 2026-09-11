@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import html as html_module
 import ipaddress
 import re
 import socket
@@ -18,6 +19,7 @@ __all__ = [
     "assert_public_host",
     "dedupe_hash",
     "fetch_job_text",
+    "html_to_text",
     "resolve_host",
 ]
 
@@ -93,7 +95,21 @@ async def _check_url(url: str) -> None:
 def _strip_tags(html: str) -> str:
     text = re.sub(r"<(script|style)[^>]*>.*?</\1>", " ", html, flags=re.S | re.I)
     text = re.sub(r"<[^>]+>", " ", text)
+    text = html_module.unescape(text)
     return re.sub(r"\s+", " ", text).strip()
+
+
+def html_to_text(html: str) -> str:
+    """Plain text from HTML: trafilatura first, then a tag-strip fallback; whitespace collapsed.
+
+    `<p>` and `<br>` tags are turned into newlines before extraction so a leading line (e.g.
+    a title line in a plain-text-ish snippet) stays separate from the body that follows it.
+    """
+    unescaped = html_module.unescape(html) if "&lt;" in html and "<" not in html else html
+    unescaped = re.sub(r"<\s*(p|br)\b[^>]*>", "\n", unescaped, flags=re.I)
+    extracted = trafilatura.extract(unescaped, include_comments=False, include_tables=True) or ""
+    text = extracted.strip() or _strip_tags(unescaped)
+    return re.sub(r"[ \t]+", " ", re.sub(r"\n{3,}", "\n\n", text)).strip()
 
 
 def _check_content_type(header: str | None) -> None:
@@ -158,10 +174,7 @@ async def fetch_job_text(url: str, *, client: httpx.AsyncClient | None = None) -
     finally:
         if own_client:
             await client.aclose()
-    extracted = trafilatura.extract(
-        html, include_comments=False, include_tables=True
-    ) or _strip_tags(html)
-    text = extracted.strip()
+    text = html_to_text(html)
     if len(text) < MIN_TEXT_CHARS:
         raise JobTextError("too little text extracted from the page; paste the description instead")
     return text
