@@ -19,10 +19,11 @@ from rhapto.models.profile.bases import ResumeBase
 from rhapto.models.profile.blocks import Block
 from rhapto.models.profile.guardrails import GuardrailRule
 from rhapto.models.profile.tracks import Track
-from rhapto.models.profile.watchlist import WatchlistEntry
+from rhapto.models.profile.watchlist import AggregatorEntry, WatchlistEntry
 from rhapto.profile.loader import dump_profile
 from rhapto.services.enqueue import Enqueuer
 from rhapto.services.profile_sync import (
+    aggregator_row_to_model,
     base_row_to_model,
     block_row_to_model,
     guardrail_row_to_model,
@@ -212,6 +213,20 @@ async def put_watchlist(
     body: list[WatchlistEntry], user_id: UserDep, session: SessionDep
 ) -> list[WatchlistEntry]:
     await repo.replace_watchlist(session, user_id, body)
+    await session.commit()
+    return body
+
+
+@router.get("/aggregators", response_model=list[AggregatorEntry])
+async def get_aggregators(user_id: UserDep, session: SessionDep) -> list[AggregatorEntry]:
+    return [aggregator_row_to_model(r) for r in await repo.list_aggregators(session, user_id)]
+
+
+@router.put("/aggregators", response_model=list[AggregatorEntry])
+async def put_aggregators(
+    body: list[AggregatorEntry], user_id: UserDep, session: SessionDep
+) -> list[AggregatorEntry]:
+    await repo.replace_aggregators(session, user_id, body)
     await session.commit()
     return body
 

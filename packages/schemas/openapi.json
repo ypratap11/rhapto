@@ -1,6 +1,37 @@
 {
   "components": {
     "schemas": {
+      "AggregatorEntry": {
+        "additionalProperties": false,
+        "properties": {
+          "enabled": {
+            "default": true,
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "keywords": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Keywords",
+            "type": "array"
+          },
+          "source": {
+            "enum": [
+              "remoteok",
+              "hn-hiring"
+            ],
+            "title": "Source",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source"
+        ],
+        "title": "AggregatorEntry",
+        "type": "object"
+      },
       "ApplicationCreate": {
         "properties": {
           "job_id": {
@@ -2398,6 +2429,124 @@
         "summary": "Package File",
         "tags": [
           "packages"
+        ]
+      }
+    },
+    "/api/v1/profile/aggregators": {
+      "get": {
+        "operationId": "get_aggregators_api_v1_profile_aggregators_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/AggregatorEntry"
+                  },
+                  "title": "Response Get Aggregators Api V1 Profile Aggregators Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Aggregators",
+        "tags": [
+          "profile"
+        ]
+      },
+      "put": {
+        "operationId": "put_aggregators_api_v1_profile_aggregators_put",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "items": {
+                  "$ref": "#/components/schemas/AggregatorEntry"
+                },
+                "title": "Body",
+                "type": "array"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/AggregatorEntry"
+                  },
+                  "title": "Response Put Aggregators Api V1 Profile Aggregators Put",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Put Aggregators",
+        "tags": [
+          "profile"
         ]
       }
     },

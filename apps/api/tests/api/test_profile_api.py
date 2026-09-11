@@ -73,6 +73,19 @@ async def test_answers_and_watchlist(client: httpx.AsyncClient) -> None:
     assert (await client.get("/api/v1/profile/watchlist")).json() == expected
 
 
+async def test_aggregators_put_and_get(client: httpx.AsyncClient) -> None:
+    body = [
+        {"source": "remoteok", "enabled": True, "keywords": ["pm"]},
+        {"source": "hn-hiring", "enabled": False, "keywords": []},
+    ]
+    put = await client.put("/api/v1/profile/aggregators", json=body)
+    assert put.status_code == 200 and put.json() == body
+    got = await client.get("/api/v1/profile/aggregators")
+    assert got.json() == body
+    bad = await client.put("/api/v1/profile/aggregators", json=[{"source": "linkedin"}])
+    assert bad.status_code == 422
+
+
 async def test_import_and_export_round_trip(
     client: httpx.AsyncClient, demo_profile_dir: Path, enqueuer
 ) -> None:  # type: ignore[no-untyped-def]

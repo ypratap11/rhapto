@@ -13,7 +13,7 @@ from rhapto.models.profile.bases import ResumeBase
 from rhapto.models.profile.blocks import Block, Visibility
 from rhapto.models.profile.guardrails import GuardrailRule
 from rhapto.models.profile.tracks import Track
-from rhapto.models.profile.watchlist import WatchlistEntry
+from rhapto.models.profile.watchlist import AggregatorEntry, WatchlistEntry
 from rhapto.profile.loader import default_guardrails, dump_profile, load_profile, synthesize_bases
 
 
@@ -62,7 +62,13 @@ def guardrail_row_to_model(row: db.Guardrail) -> GuardrailRule:
 
 
 def watchlist_row_to_model(row: db.WatchlistEntry) -> WatchlistEntry:
-    return WatchlistEntry(company=row.company, source=row.source, board=row.board)
+    return WatchlistEntry(
+        company=row.company, source=row.source, board=row.board, keywords=list(row.keywords)
+    )
+
+
+def aggregator_row_to_model(row: db.Aggregator) -> AggregatorEntry:
+    return AggregatorEntry(source=row.source, enabled=row.enabled, keywords=list(row.keywords))
 
 
 async def load_profile_from_db(session: AsyncSession, user_id: uuid.UUID) -> Profile:
@@ -91,6 +97,9 @@ async def load_profile_from_db(session: AsyncSession, user_id: uuid.UUID) -> Pro
         guardrails=guardrails,
         answers=await repo.get_answers(session, user_id),
         watchlist=[watchlist_row_to_model(r) for r in await repo.list_watchlist(session, user_id)],
+        aggregators=[
+            aggregator_row_to_model(r) for r in await repo.list_aggregators(session, user_id)
+        ],
     )
 
 
@@ -108,6 +117,7 @@ async def replace_profile_in_db(
         await repo.upsert_guardrail(session, user_id, rule, position=index)
     await repo.set_answers(session, user_id, profile.answers)
     await repo.replace_watchlist(session, user_id, profile.watchlist)
+    await repo.replace_aggregators(session, user_id, profile.aggregators)
 
 
 async def import_profile_dir(session: AsyncSession, user_id: uuid.UUID, path: Path) -> Profile:

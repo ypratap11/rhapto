@@ -67,6 +67,7 @@ class Track(UserScopedMixin, TimestampMixin, Base):
     keywords: Mapped[list[str]] = mapped_column(ARRAY(String), default=list, nullable=False)
     resume_base: Mapped[str] = mapped_column(String(100), nullable=False)
     min_fit: Mapped[int] = mapped_column(Integer, default=50, nullable=False)
+    embedding: Mapped[list[float] | None] = mapped_column(Vector(EMBEDDING_DIMENSIONS))
 
 
 class Guardrail(UserScopedMixin, TimestampMixin, Base):
@@ -92,6 +93,9 @@ class WatchlistEntry(UserScopedMixin, TimestampMixin, Base):
     company: Mapped[str] = mapped_column(String(200), nullable=False)
     source: Mapped[str] = mapped_column(String(50), nullable=False)
     board: Mapped[str] = mapped_column(String(200), nullable=False)
+    keywords: Mapped[list[str]] = mapped_column(
+        ARRAY(String), default=list, server_default="{}", nullable=False
+    )
 
 
 class Job(UserScopedMixin, TimestampMixin, Base):
@@ -107,6 +111,15 @@ class Job(UserScopedMixin, TimestampMixin, Base):
     extracted_json: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
     dedupe_hash: Mapped[str] = mapped_column(String(64), index=True, nullable=False)
     discovered_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    external_id: Mapped[str | None] = mapped_column(String(200))
+    posted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    best_track_id: Mapped[str | None] = mapped_column(String(100))
+    best_fit: Mapped[int | None] = mapped_column(Integer)
+    repost_of: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("jobs.id", ondelete="SET NULL"))
+    rescued: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="false", nullable=False
+    )
+    identity_hash: Mapped[str | None] = mapped_column(String(64), index=True)
 
 
 class Package(UserScopedMixin, TimestampMixin, Base):
@@ -162,3 +175,41 @@ class Task(UserScopedMixin, TimestampMixin, Base):
     error: Mapped[str | None] = mapped_column(Text)
     result_ref: Mapped[str | None] = mapped_column(String(100))
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class Aggregator(UserScopedMixin, TimestampMixin, Base):
+    __tablename__ = "aggregators"
+    __table_args__ = (UniqueConstraint("user_id", "source"),)
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=new_uuid)
+    source: Mapped[str] = mapped_column(String(50), nullable=False)
+    enabled: Mapped[bool] = mapped_column(
+        Boolean, default=True, server_default="true", nullable=False
+    )
+    keywords: Mapped[list[str]] = mapped_column(
+        ARRAY(String), default=list, server_default="{}", nullable=False
+    )
+
+
+class JobScore(UserScopedMixin, TimestampMixin, Base):
+    __tablename__ = "job_scores"
+    __table_args__ = (UniqueConstraint("job_id", "track_id"),)
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=new_uuid)
+    job_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("jobs.id", ondelete="CASCADE"), index=True, nullable=False
+    )
+    track_id: Mapped[str] = mapped_column(String(100), nullable=False)
+    fit_score: Mapped[int] = mapped_column(Integer, nullable=False)
+    rationale_json: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict, nullable=False)
+    scored_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class PollRun(UserScopedMixin, TimestampMixin, Base):
+    __tablename__ = "poll_runs"
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=new_uuid)
+    source: Mapped[str] = mapped_column(String(50), nullable=False)
+    board: Mapped[str | None] = mapped_column(String(200))
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    found: Mapped[int] = mapped_column(Integer, default=0, server_default="0", nullable=False)
+    new: Mapped[int] = mapped_column(Integer, default=0, server_default="0", nullable=False)
+    error: Mapped[str | None] = mapped_column(Text)

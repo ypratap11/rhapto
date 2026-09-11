@@ -1,16 +1,26 @@
 from __future__ import annotations
 
 import uuid
+from datetime import UTC, datetime, timedelta
 from typing import Any, cast
 
 from sqlalchemy import CursorResult, delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from rhapto.db.models import Answers, Guardrail, ResumeBase, ResumeBlock, Track, WatchlistEntry
+from rhapto.db.models import (
+    Aggregator,
+    Answers,
+    Guardrail,
+    ResumeBase,
+    ResumeBlock,
+    Track,
+    WatchlistEntry,
+)
 from rhapto.models.profile.bases import ResumeBase as ResumeBaseModel
 from rhapto.models.profile.blocks import Block
 from rhapto.models.profile.guardrails import GuardrailRule
 from rhapto.models.profile.tracks import Track as TrackModel
+from rhapto.models.profile.watchlist import AggregatorEntry
 from rhapto.models.profile.watchlist import WatchlistEntry as WatchlistEntryModel
 
 
@@ -169,11 +179,19 @@ async def upsert_track(
         session.add(row)
     elif position is not None:
         row.position = position
+    embedding_stale = (
+        row.name != data.name
+        or row.description != data.description
+        or list(row.keywords or []) != list(data.keywords)
+    )
     row.name = data.name
     row.description = data.description
     row.keywords = list(data.keywords)
     row.resume_base = data.resume_base
     row.min_fit = data.min_fit
+    if embedding_stale:
+        row.embedding = None
+    row.updated_at = datetime.now(UTC)
     await session.flush()
     return row
 
@@ -261,13 +279,55 @@ async def replace_watchlist(
     session: AsyncSession, user_id: uuid.UUID, entries: list[WatchlistEntryModel]
 ) -> None:
     await session.execute(delete(WatchlistEntry).where(WatchlistEntry.user_id == user_id))
+    now = datetime.now(UTC)
     for entry in entries:
         session.add(
             WatchlistEntry(
-                user_id=user_id, company=entry.company, source=entry.source, board=entry.board
+                user_id=user_id,
+                company=entry.company,
+                source=entry.source,
+                board=entry.board,
+                keywords=list(entry.keywords),
+                updated_at=now,
             )
         )
     await session.flush()
+
+
+async def list_aggregators(session: AsyncSession, user_id: uuid.UUID) -> list[Aggregator]:
+    return list(
+        await session.scalars(
+            select(Aggregator).where(Aggregator.user_id == user_id).order_by(Aggregator.created_at)
+        )
+    )
+
+
+async def replace_aggregators(
+    session: AsyncSession, user_id: uuid.UUID, entries: list[AggregatorEntry]
+) -> None:
+    await session.execute(delete(Aggregator).where(Aggregator.user_id == user_id))
+    now = datetime.now(UTC)
+    for index, entry in enumerate(entries):
+        # Explicit, strictly increasing timestamps: the mixin's server_default is the
+        # transaction start time, so every row in this loop would otherwise tie and
+        # list_aggregators' insertion-order guarantee (relied on by the profile API
+        # round trip) would not hold.
+        stamp = now + timedelta(microseconds=index)
+        session.add(
+            Aggregator(
+                user_id=user_id,
+                source=entry.source,
+                enabled=entry.enabled,
+                keywords=list(entry.keywords),
+                created_at=stamp,
+                updated_at=stamp,
+            )
+        )
+    await session.flush()
+
+
+def set_track_embedding(track: Track, vector: list[float]) -> None:
+    track.embedding = vector
 
 
 async def delete_all_profile_rows(session: AsyncSession, user_id: uuid.UUID) -> None:
