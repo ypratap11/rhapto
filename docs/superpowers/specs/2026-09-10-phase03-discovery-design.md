@@ -38,6 +38,7 @@ One Alembic migration `0002_discovery`:
 | `best_fit` | int, nullable | that score, 0 to 100 |
 | `repost_of` | uuid FK jobs.id, nullable | set when a posting's dedupe hash matches an earlier job under a new external id |
 | `rescued` | bool, default false | user moved a low-fit job into the fit bucket |
+| `identity_hash` | text, nullable, indexed | sha256 of normalized company, title, and location; drives re-post detection |
 
 `tracks` (existing) gains `embedding` (vector, nullable): the cached embedding of the track description,
 recomputed on every track PUT and on profile import.
@@ -69,10 +70,12 @@ aggregator enum from the aggregator registry. Pydantic models and TypeScript typ
 
 ## 5. Sources
 
-Package `apps/api/src/rhapto/engine/discovery/`:
+Layering (import-linter forbids `rhapto.engine` from importing `db` or `services`): the pure scorer lives in
+`apps/api/src/rhapto/engine/scoring.py`; everything that does network or database I/O lives in
+`apps/api/src/rhapto/services/discovery/` (services may import engine and db). Package layout:
 
 ```
-discovery/
+services/discovery/
   __init__.py
   posting.py        Posting model (external_id, company, title, location, url, jd_text, posted_at)
   http.py           fetch_json(url) / fetch_text(url): SSRF guard, 5 MB cap, 20 s timeout, one retry
@@ -85,9 +88,12 @@ discovery/
     remoteok.py     remoteok.com/api, filtered by keywords in title or tags
     hn_hiring.py    hn.algolia.com: newest "Ask HN: Who is hiring?" story, comments filtered by keywords
   dedupe.py         normalize_title, dedupe_hash (reuses db.hashing), repost detection
-  scoring.py        score_job(jd_text, embedding, tracks, track_embeddings) -> list[TrackScore]
-  poller.py         poll_sources(...) orchestration used by the worker task and the CLI
+  poller.py         poll_sources(...) orchestration used by the worker task
 ```
+
+`services/scoring.py` wraps the engine scorer with persistence: ensures track embeddings, embeds jobs, upserts
+`job_scores`, sets `best_track_id` and `best_fit`. The API process has no embedding model (the api image is
+slim), so scoring of manual jobs and re-scoring after a track edit are worker tasks the API enqueues.
 
 Rules for every adapter:
 
@@ -167,9 +173,10 @@ Pipeline: unchanged. Discovered jobs do not create application rows until the us
 
 ## 10. CLI
 
-- `rhapto discover --profile ./profile [--source S --board B] [--out jobs.json]`: one poll against the
-  profile's watchlist (or a single source), prints new postings with best track and score. Uses the same
-  `poll_sources` with an in-memory store when no database is configured.
+- `rhapto discover --profile ./profile [--source S --board B] [--json]`: fetches the profile's watchlist
+  boards and enabled aggregators (or one source) directly, scores every posting against the profile's tracks
+  with the local embedder, and prints them sorted by fit. It does not persist anything; the web app's Poll now
+  is the persistent path.
 - `rhapto score --jd file --profile ./profile`: prints the per-track breakdown for one JD.
 
 ## 11. Configuration
