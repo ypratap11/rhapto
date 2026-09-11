@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import os
 import re
 import uuid
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 import typer
 from alembic.config import Config
@@ -20,10 +22,16 @@ from rhapto.db.session import make_engine, make_session_factory
 from rhapto.engine.pipeline import LLMBudgetExceeded, TailorResult, tailor
 from rhapto.engine.providers.anthropic import AnthropicProvider
 from rhapto.engine.providers.embeddings import EmbeddingProvider, FastEmbedProvider
+from rhapto.engine.providers.fake import FakeEmbeddingProvider
 from rhapto.engine.providers.llm import LLMProvider, MalformedOutputError
 from rhapto.engine.render.pdf import PdfRenderError, convert_docx_to_pdf, soffice_available
+from rhapto.engine.scoring import best_track, bucket_for, score_job, track_text
 from rhapto.engine.types import Profile, ProfileError, TailorRequest
 from rhapto.profile.loader import load_profile
+from rhapto.services.discovery.http import DiscoveryHttp
+from rhapto.services.discovery.posting import Posting
+from rhapto.services.discovery.sources import get_source
+from rhapto.services.discovery.sources.base import SourceError
 from rhapto.services.profile_sync import export_profile_dir, import_profile_dir
 
 app = typer.Typer(
@@ -247,3 +255,131 @@ def profile_export(
         typer.echo(f"error: {exc}", err=True)
         raise typer.Exit(1) from exc
     typer.echo(f"exported {len(profile.blocks)} blocks to {path}")
+
+
+def build_discovery_http(settings: Settings) -> DiscoveryHttp:
+    return DiscoveryHttp(user_agent=settings.rhapto_discovery_user_agent)
+
+
+def build_embedder(settings: Settings, kind: str) -> EmbeddingProvider:
+    if kind == "fake":
+        return FakeEmbeddingProvider(dimensions=384)
+    return FastEmbedProvider(settings.rhapto_embedding_model)
+
+
+async def _score_postings(
+    profile: Profile, postings: list[tuple[str, Posting]], embedder: EmbeddingProvider
+) -> list[dict[str, Any]]:
+    tracks = profile.tracks
+    vectors = await embedder.embed(
+        [track_text(t) for t in tracks] + [f"{p.title}\n{p.jd_text}" for _, p in postings]
+    )
+    track_vectors = {t.id: v for t, v in zip(tracks, vectors[: len(tracks)], strict=True)}
+    rows: list[dict[str, Any]] = []
+    for (source, posting), vector in zip(postings, vectors[len(tracks) :], strict=True):
+        scores = score_job(posting.title, posting.jd_text, vector, tracks, track_vectors)
+        best = best_track(scores, tracks)
+        rows.append(
+            {
+                "source": source,
+                "company": posting.company,
+                "title": posting.title,
+                "location": posting.location,
+                "url": posting.url,
+                "fit": best.fit_score if best else 0,
+                "track": best.track_id if best else None,
+                "bucket": bucket_for(best, tracks, rescued=False),
+            }
+        )
+    return sorted(rows, key=lambda r: -r["fit"])
+
+
+@app.command(name="discover")
+def discover_cmd(
+    profile: Path = typer.Option(Path("./profile"), "--profile", help="Profile directory"),
+    source: str | None = typer.Option(None, "--source", help="Poll one source only"),
+    board: str | None = typer.Option(None, "--board", help="Board slug for a single board source"),
+    as_json: bool = typer.Option(False, "--json", help="Print a JSON array"),
+    embedder_kind: str = typer.Option("fastembed", "--embedder", hidden=True),
+) -> None:
+    """Fetch the watchlist boards and enabled aggregators, score every posting, print them by fit.
+
+    Nothing is stored.
+    """
+    settings = get_settings()
+    try:
+        loaded = load_profile(profile)
+    except ProfileError as exc:
+        typer.echo(f"profile error: {exc}", err=True)
+        raise typer.Exit(1) from exc
+    track_keywords = [k for t in loaded.tracks for k in t.keywords]
+    specs: list[tuple[str, str | None, str | None, list[str]]] = []
+    if source:
+        specs.append((source, board, board, track_keywords if board is None else []))
+    else:
+        specs.extend((e.source, e.board, e.company, list(e.keywords)) for e in loaded.watchlist)
+        specs.extend(
+            (a.source, None, None, list(a.keywords) or track_keywords)
+            for a in loaded.aggregators
+            if a.enabled
+        )
+    http = build_discovery_http(settings)
+
+    async def run() -> tuple[list[tuple[str, Posting]], list[str]]:
+        found: list[tuple[str, Posting]] = []
+        errors: list[str] = []
+        try:
+            for name, slug, company, keywords in specs:
+                try:
+                    for p in await get_source(name).fetch(http, board=slug, keywords=keywords):
+                        found.append((name, p.model_copy(update={"company": company or p.company})))
+                except SourceError as exc:
+                    errors.append(f"{name}/{slug or '-'}: {exc}")
+        finally:
+            await http.aclose()
+        return found, errors
+
+    found, errors = asyncio.run(run())
+    for line in errors:
+        typer.echo(f"error: {line}", err=True)
+    rows = (
+        asyncio.run(_score_postings(loaded, found, build_embedder(settings, embedder_kind)))
+        if found
+        else []
+    )
+    if as_json:
+        typer.echo(json.dumps(rows, indent=1))
+    else:
+        for r in rows:
+            typer.echo(
+                f"{r['fit']:>3}  {r['track'] or '-':<14} {r['company']} | {r['title']} | "
+                f"{r['location'] or '-'}  {r['url']}"
+            )
+        typer.echo(f"{len(rows)} postings from {len(specs) - len(errors)} of {len(specs)} sources")
+    if specs and len(errors) == len(specs):
+        raise typer.Exit(1)
+
+
+@app.command(name="score")
+def score_cmd(
+    jd: Path = typer.Option(..., "--jd", help="Job description text file"),
+    profile: Path = typer.Option(Path("./profile"), "--profile", help="Profile directory"),
+    embedder_kind: str = typer.Option("fastembed", "--embedder", hidden=True),
+) -> None:
+    """Print the per-track fit breakdown for one job description."""
+    settings = get_settings()
+    loaded = load_profile(profile)
+    text = jd.read_text(encoding="utf-8")
+    embedder = build_embedder(settings, embedder_kind)
+
+    async def run() -> None:
+        vectors = await embedder.embed([track_text(t) for t in loaded.tracks] + [text])
+        track_vectors = {t.id: v for t, v in zip(loaded.tracks, vectors[:-1], strict=True)}
+        title = text.strip().splitlines()[0][:200] if text.strip() else None
+        for s in score_job(title, text, vectors[-1], loaded.tracks, track_vectors):
+            typer.echo(
+                f"{s.track_id:<14} fit={s.fit_score:>3} semantic={s.semantic:>3} "
+                f"keywords={s.keywords:>3} matched={', '.join(s.matched) or '-'}"
+            )
+
+    asyncio.run(run())

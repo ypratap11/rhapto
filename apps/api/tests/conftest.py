@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import os
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Iterator
 from pathlib import Path
 
 import asyncpg
@@ -24,6 +25,27 @@ DEMO_PROFILE = REPO_ROOT / "profile.example"
 
 DEFAULT_TEST_URL = "postgresql+asyncpg://rhapto:rhapto@localhost:5432/rhapto_test"
 API_DIR = Path(__file__).resolve().parents[1]
+
+
+@pytest.fixture(autouse=True)
+def _reset_root_logging_handlers() -> Iterator[None]:
+    """`rhapto db upgrade` runs alembic/env.py, which calls `logging.config.fileConfig` and
+    installs a `StreamHandler` on the root logger bound to whatever `sys.stderr` object is
+    current at that moment. Inside a `CliRunner`-invoked test that stream is a capture pipe
+    torn down when the test ends, so a later, unrelated log call anywhere else in the suite
+    that propagates to the root logger fails to write to it; Python's logging module then
+    dumps a "Logging error" traceback into *that* test's captured output. Snapshot and
+    restore the root logger's handlers/level around every test so this can't leak across
+    tests.
+    """
+    root = logging.getLogger()
+    handlers = list(root.handlers)
+    level = root.level
+    try:
+        yield
+    finally:
+        root.handlers[:] = handlers
+        root.setLevel(level)
 
 
 @pytest.fixture
