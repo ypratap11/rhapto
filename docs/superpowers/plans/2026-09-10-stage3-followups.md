@@ -41,3 +41,24 @@ merging; each is small and scoped. The 0.3 pollers plan comes before stage 4 (de
   diff; run the personal-data check; run web and api suites.
 - Web test suite: `testTimeout` is 20s repo-wide because jsdom + Base UI + `userEvent.type` is slow;
   consider `delay: null` in the remaining typing tests and fewer parallel workers instead.
+
+## Phase 0.3 follow-ups (from the whole-branch review, 2026-09-11)
+
+- `GET /jobs` still runs `latest_package` and `application_for_job` per job and has no `limit`/`offset`; with
+  polling the table grows unboundedly. Fold both lookups into the listing query and add pagination (cursor vs
+  offset is a design decision).
+- Spec section 13 weak-score signal: an empty-description posting falls back to the title only, not title plus
+  location, and the rationale carries no `weak` flag.
+- The worker publishes `discovery` events but nothing subscribes; a cron poll gives an open Queue page no
+  signal. Add an SSE consumer (and align the channel/event names with spec section 7) or defer to 0.4.
+- `AggregatorsSection`'s shared keyword field seeds from the first row and writes to every row, so divergent
+  per-source keywords (as in `profile.example`) are clobbered on save; seed from the union or block Save.
+- `scripts/discovery-fixture-server.py` binds `0.0.0.0` and flattens all fixtures into one namespace.
+- Migration `0002` creates the partial unique index `uq_jobs_user_source_external` but the ORM declares no
+  matching `Index`; autogenerate would propose dropping it.
+- `tests/unit` on pytest's `pythonpath` (for the shared `fake_http_for` helper) invites module-name collisions;
+  move the helper to `tests/helpers/`.
+- `delete_all_profile_rows` omits `Aggregator` (harmless today).
+- `test_track_put_rescores` passes without rescoring (bucket is derived in `job_to_out`); `score_cmd` lacks the
+  `ProfileError` handler `discover_cmd` has; CLI track-keyword union is not deduped.
+- `assert_public_host` resolves DNS separately from httpx (rebinding TOCTOU); pre-existing.

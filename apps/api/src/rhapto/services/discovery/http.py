@@ -60,9 +60,12 @@ class DiscoveryHttp:
         return urlunparse(parsed._replace(scheme=override.scheme, netloc=override.netloc))
 
     async def _assert_public(self, url: str) -> None:
+        parsed = urlparse(url)
+        if parsed.scheme not in ("http", "https"):
+            raise SourceError(f"refusing to fetch {url}: unsupported scheme {parsed.scheme!r}")
         if self.base_override:
             return
-        host = urlparse(url).hostname or ""
+        host = parsed.hostname or ""
         try:
             await assert_public_host(host)
         except Exception as exc:  # JobTextError or resolution failure

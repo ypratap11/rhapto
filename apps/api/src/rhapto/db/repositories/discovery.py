@@ -42,18 +42,31 @@ PAUSE_AFTER = 3
 
 
 async def consecutive_failures(
-    session: AsyncSession, user_id: uuid.UUID, source: str, board: str | None
+    session: AsyncSession,
+    user_id: uuid.UUID,
+    source: str,
+    board: str | None,
+    *,
+    since: datetime | None = None,
 ) -> int:
+    """Failed runs in a row, newest first, capped at PAUSE_AFTER.
+
+    ``since`` restarts the streak: runs started at or before it (for example before the user
+    re-saved the watchlist entry) are not counted, so a save grants a fresh three attempts.
+    """
+    conditions = [
+        PollRun.user_id == user_id,
+        PollRun.source == source,
+        # SQLAlchemy compiles `== None` to `IS NULL`, so this covers both
+        # a real board and the no-board (board=None) case in one comparison.
+        PollRun.board == board,
+    ]
+    if since is not None:
+        conditions.append(PollRun.started_at > since)
     rows = list(
         await session.scalars(
             select(PollRun)
-            .where(
-                PollRun.user_id == user_id,
-                PollRun.source == source,
-                # SQLAlchemy compiles `== None` to `IS NULL`, so this covers both
-                # a real board and the no-board (board=None) case in one comparison.
-                PollRun.board == board,
-            )
+            .where(*conditions)
             .order_by(PollRun.started_at.desc())
             .limit(PAUSE_AFTER)
         )

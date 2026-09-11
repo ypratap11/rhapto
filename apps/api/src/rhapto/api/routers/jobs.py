@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import uuid
 from typing import Annotated, Any, Literal
 
@@ -17,6 +18,8 @@ from rhapto.models.jd_extract import JDExtract
 from rhapto.services.enqueue import Enqueuer
 from rhapto.services.jobtext import FetchText
 from rhapto.services.storage import PackageStorage
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/jobs")
 
@@ -151,7 +154,12 @@ async def create_job(
     )
     await session.commit()
     job_id = job.id
-    await enqueuer.enqueue("score_jobs", user_id=str(user_id), job_ids=[str(job_id)])
+    try:
+        await enqueuer.enqueue("score_jobs", user_id=str(user_id), job_ids=[str(job_id)])
+    except Exception:  # the row is committed; a queue outage must not fail the request
+        logger.exception(
+            "could not enqueue %s; the record is saved but not (re)scored", "score_jobs"
+        )
     session.expire_all()
     refreshed = await repo.get_job(session, user_id, job_id)
     if refreshed is None:  # committed above, so this cannot happen without a concurrent delete

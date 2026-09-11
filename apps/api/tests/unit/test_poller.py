@@ -240,3 +240,27 @@ async def test_ingest_failure_rolls_back_but_keeps_run_and_other_sources(
     runs = await disc_repo.latest_runs(session, user_id)
     greenhouse_run = next(r for r in runs if r.source == "greenhouse")
     assert greenhouse_run.error is not None and "IntegrityError" in greenhouse_run.error
+
+
+async def test_resaving_the_entry_grants_three_fresh_attempts(
+    session: AsyncSession, user: User
+) -> None:
+    await seed(session, user)
+    http = FakeDiscoveryHttp({"greenhouse.io": SourceError("HTTP 500"), "remoteok.com/api": []})
+    embedder = FakeEmbeddingProvider(dimensions=384)
+    for _ in range(3):
+        await poll_sources(session, user.id, http=http, embedder=embedder)
+    paused = await poll_sources(session, user.id, http=http, embedder=embedder)
+    assert next(r for r in paused.results if r.source == "greenhouse").error == PAUSED_MESSAGE
+    await profile_repo.replace_watchlist(
+        session,
+        user.id,
+        [WatchlistModel(company="ExampleCo", source="greenhouse", board="exampleco", keywords=[])],
+    )
+    await session.flush()
+    # Three attempts after the save, all failing, before the pause returns.
+    for _ in range(3):
+        summary = await poll_sources(session, user.id, http=http, embedder=embedder)
+        assert next(r for r in summary.results if r.source == "greenhouse").error == "HTTP 500"
+    summary = await poll_sources(session, user.id, http=http, embedder=embedder)
+    assert next(r for r in summary.results if r.source == "greenhouse").error == PAUSED_MESSAGE

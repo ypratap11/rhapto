@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import io
+import logging
 import tempfile
 import uuid
 import zipfile
@@ -32,6 +33,8 @@ from rhapto.services.profile_sync import (
     track_row_to_model,
     watchlist_row_to_model,
 )
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/profile")
 PROFILE_FILES = {
@@ -150,7 +153,12 @@ async def put_track(
     existed = await repo.get_track(session, user_id, track_id) is not None
     row = await repo.upsert_track(session, user_id, body)
     await session.commit()
-    await enqueuer.enqueue("rescore_jobs", user_id=str(user_id))
+    try:
+        await enqueuer.enqueue("rescore_jobs", user_id=str(user_id))
+    except Exception:  # the row is committed; a queue outage must not fail the request
+        logger.exception(
+            "could not enqueue %s; the record is saved but not (re)scored", "score_jobs"
+        )
     response.status_code = 200 if existed else 201
     return track_row_to_model(row)
 
@@ -259,7 +267,12 @@ async def import_profile(
     await enqueuer.enqueue(
         "embed_blocks", user_id=str(user_id), block_ids=[b.id for b in profile.blocks]
     )
-    await enqueuer.enqueue("rescore_jobs", user_id=str(user_id))
+    try:
+        await enqueuer.enqueue("rescore_jobs", user_id=str(user_id))
+    except Exception:  # the row is committed; a queue outage must not fail the request
+        logger.exception(
+            "could not enqueue %s; the record is saved but not (re)scored", "score_jobs"
+        )
     return ImportOut(
         blocks=len(profile.blocks),
         tracks=len(profile.tracks),

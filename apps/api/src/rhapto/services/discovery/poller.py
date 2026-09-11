@@ -88,10 +88,12 @@ async def _is_paused(session: AsyncSession, user_id: uuid.UUID, spec: SourceSpec
         # No watchlist/aggregator entry behind this spec (e.g. an explicit CLI/test spec) ->
         # there is nothing a human could "save" to lift a pause, so it is never paused.
         return False
-    if (
-        await disc_repo.consecutive_failures(session, user_id, spec.source, spec.board)
-        < PAUSE_AFTER
-    ):
+    # Only failures after the entry was last saved count, so a save grants three fresh attempts
+    # instead of a single retry.
+    failures = await disc_repo.consecutive_failures(
+        session, user_id, spec.source, spec.board, since=spec.entry_updated_at
+    )
+    if failures < PAUSE_AFTER:
         return False
     runs = await disc_repo.latest_runs(session, user_id)
     last = next((r for r in runs if r.source == spec.source and r.board == spec.board), None)

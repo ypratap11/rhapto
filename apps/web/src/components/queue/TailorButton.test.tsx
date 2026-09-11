@@ -47,9 +47,11 @@ describe("TailorButton", () => {
   });
 
   it("preselects the job's best-fit track", () => {
+    // The best track is deliberately NOT the first loaded track, so this fails if the
+    // first-track fallback wins over job.best_track_id.
     tracksData = [
-      { id: "ai-pm", name: "AI PM", min_fit: 60 },
       { id: "other", name: "Other Track", min_fit: 50 },
+      { id: "ai-pm", name: "AI PM", min_fit: 60 },
     ];
     renderButton({ best_track_id: "ai-pm" });
     // The Select's popup (and its items, which resolve a value to its label) is

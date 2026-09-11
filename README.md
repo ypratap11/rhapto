@@ -71,7 +71,9 @@ immediate. The tracker lives under `/api/v1/applications`. Nothing here submits 
 Development without Docker for the app itself: `docker compose up -d db redis`, then from `apps/api`:
 `uv run rhapto db upgrade`, `uv run uvicorn rhapto.api.app:app --reload`, and in another shell
 `uv run arq rhapto.worker.main.WorkerSettings`. Tests: `uv run pytest` (API tests need the compose `db`).
-`bash scripts/smoke-api.sh` exercises a running stack end to end (needs `curl` and `jq`).
+`bash scripts/smoke-api.sh` exercises a running stack end to end (needs `curl` and `jq`). It is destructive:
+its import step replaces the target instance's profile with `profile.example`, so never run it against an
+instance that holds your real profile.
 
 ## Web app (phase 0.2)
 
