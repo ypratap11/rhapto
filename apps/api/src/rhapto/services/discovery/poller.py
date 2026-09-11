@@ -84,6 +84,10 @@ async def build_specs(session: AsyncSession, user_id: uuid.UUID) -> list[SourceS
 
 
 async def _is_paused(session: AsyncSession, user_id: uuid.UUID, spec: SourceSpec) -> bool:
+    if spec.entry_updated_at is None:
+        # No watchlist/aggregator entry behind this spec (e.g. an explicit CLI/test spec) ->
+        # there is nothing a human could "save" to lift a pause, so it is never paused.
+        return False
     if (
         await disc_repo.consecutive_failures(session, user_id, spec.source, spec.board)
         < PAUSE_AFTER
@@ -91,7 +95,7 @@ async def _is_paused(session: AsyncSession, user_id: uuid.UUID, spec: SourceSpec
         return False
     runs = await disc_repo.latest_runs(session, user_id)
     last = next((r for r in runs if r.source == spec.source and r.board == spec.board), None)
-    if last is None or spec.entry_updated_at is None:
+    if last is None:
         return True
     return spec.entry_updated_at <= last.started_at
 
@@ -99,6 +103,11 @@ async def _is_paused(session: AsyncSession, user_id: uuid.UUID, spec: SourceSpec
 async def _ingest(
     session: AsyncSession, user_id: uuid.UUID, spec: SourceSpec, postings: list[Posting]
 ) -> list[Job]:
+    """Dedupe order: external id -> skip; in-batch text-hash repeat -> skip; text hash of an
+    EXISTING job (any source) -> insert flagged as a repost of it; else an identity-hash match
+    -> insert flagged as a repost of it; else a plain new job. A text-hash match against an
+    existing job is never silently dropped -- only a duplicate seen earlier in this same fetch
+    is."""
     created: list[Job] = []
     seen_hashes: set[str] = set()
     for posting in postings:
@@ -109,14 +118,13 @@ async def _ingest(
         ):
             continue
         text_hash = dedupe_hash(posting.jd_text)
-        if (
-            text_hash in seen_hashes
-            or await jobs_repo.find_duplicate(session, user_id, text_hash) is not None
-        ):
+        if text_hash in seen_hashes:
             continue
         seen_hashes.add(text_hash)
         ident = identity_hash(company, posting.title, posting.location)
-        earlier = await jobs_repo.find_by_identity(session, user_id, ident)
+        repost_source = await jobs_repo.find_duplicate(
+            session, user_id, text_hash
+        ) or await jobs_repo.find_by_identity(session, user_id, ident)
         job = await jobs_repo.create_discovered_job(
             session,
             user_id,
@@ -129,7 +137,7 @@ async def _ingest(
             jd_text=posting.jd_text,
             posted_at=posting.posted_at,
             identity_hash=ident,
-            repost_of=earlier.id if earlier else None,
+            repost_of=repost_source.id if repost_source else None,
         )
         created.append(job)
     return created
@@ -160,6 +168,10 @@ async def poll_sources(
             results.append(RunResult(spec.source, spec.board, 0, 0, PAUSED_MESSAGE))
             continue
         run = await disc_repo.start_run(session, user_id, spec.source, spec.board)
+        # Commit the run row now, before any risky work, so it survives a rollback below: a
+        # failure inside the try (including at commit time) rolls back only the fetch/ingest/
+        # score work, never this already-persisted row.
+        await session.commit()
         try:
             # Source.fetch is typed against the concrete DiscoveryHttp for production callers;
             # FakeDiscoveryHttp implements the same get_json/get_text/aclose surface used by
@@ -172,15 +184,20 @@ async def poll_sources(
             await step("score")
             await score_and_store(session, user_id, created, embedder)
             disc_repo.finish_run(run, found=len(postings), new=len(created), error=None)
+            await session.commit()
             results.append(RunResult(spec.source, spec.board, len(postings), len(created), None))
             new_ids.extend(j.id for j in created)
         except SourceError as exc:
+            await session.rollback()
             disc_repo.finish_run(run, found=0, new=0, error=str(exc))
+            await session.commit()
             results.append(RunResult(spec.source, spec.board, 0, 0, str(exc)))
         except Exception as exc:  # a bug in one adapter must not take the others down
             logger.exception("poll of %s/%s failed", spec.source, spec.board)
-            disc_repo.finish_run(run, found=0, new=0, error=f"{type(exc).__name__}: {exc}")
-            results.append(RunResult(spec.source, spec.board, 0, 0, f"{type(exc).__name__}: {exc}"))
-        await session.commit()
+            await session.rollback()
+            message = f"{type(exc).__name__}: {exc}"
+            disc_repo.finish_run(run, found=0, new=0, error=message)
+            await session.commit()
+            results.append(RunResult(spec.source, spec.board, 0, 0, message))
     await step("done")
     return PollSummary(results=results, new_jobs=len(new_ids), new_job_ids=new_ids)
