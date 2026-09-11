@@ -47,11 +47,18 @@ async def test_poll_creates_jobs_runs_and_scored_queue(
 async def test_rescue_moves_job_into_fit_bucket(
     client: httpx.AsyncClient, imported_profile: None, discovery_http: FakeDiscoveryHttp
 ) -> None:
+    # A manual job with no track keywords scores low against every track, so the low bucket is
+    # guaranteed non-empty regardless of what the polled fixtures produce.
+    barista = (
+        "CafeCo hires a barista to prepare espresso drinks, keep the counter clean, and greet customers. "
+        * 2
+    )
+    created = await client.post("/api/v1/jobs", json={"jd_text": barista, "title": "Barista"})
+    assert created.status_code == 201 and created.json()["bucket"] == "low"
     await client.post("/api/v1/discovery/poll")
     low = (await client.get("/api/v1/jobs", params={"bucket": "low"})).json()
-    if not low:
-        pytest.skip("fixture produced no low-fit job with this embedder")
-    rescued = await client.post(f"/api/v1/jobs/{low[0]['id']}/rescue")
+    assert created.json()["id"] in {j["id"] for j in low}
+    rescued = await client.post(f"/api/v1/jobs/{created.json()['id']}/rescue")
     assert (
         rescued.status_code == 200
         and rescued.json()["rescued"] is True

@@ -338,6 +338,8 @@ def discover_cmd(
                         found.append((name, p.model_copy(update={"company": company or p.company})))
                 except SourceError as exc:
                     errors.append(f"{name}/{slug or '-'}: {exc}")
+                except Exception as exc:  # a bug in one adapter must not take the others down
+                    errors.append(f"{name}/{slug or '-'}: {type(exc).__name__}: {exc}")
         finally:
             await http.aclose()
         return found, errors
