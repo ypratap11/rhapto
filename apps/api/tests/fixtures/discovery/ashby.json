@@ -1,0 +1,27 @@
+{
+  "api.ashbyhq.com/posting-api/job-board/exampleco": {
+    "jobs": [
+      {
+        "id": "7458d4e9-0000-4000-8000-000000000001",
+        "title": "ML Platform Program Manager",
+        "location": "Remote - US",
+        "isRemote": true,
+        "isListed": true,
+        "jobUrl": "https://jobs.ashbyhq.com/exampleco/7458d4e9-0000-4000-8000-000000000001",
+        "publishedAt": "2026-08-30T14:29:08.532+00:00",
+        "descriptionPlain": "Program manage the ML platform: LLM serving and GenAI evaluation tooling.",
+        "descriptionHtml": "<p>Program manage the ML platform: LLM serving and GenAI evaluation tooling.</p>",
+        "department": "Engineering", "team": "ML Platform", "employmentType": "FullTime", "workplaceType": "Remote"
+      },
+      {
+        "id": "7458d4e9-0000-4000-8000-000000000002",
+        "title": "Hidden role",
+        "location": "Nowhere",
+        "isListed": false,
+        "jobUrl": "https://jobs.ashbyhq.com/exampleco/hidden",
+        "publishedAt": "2026-08-30T14:29:08.532+00:00",
+        "descriptionPlain": "should be skipped"
+      }
+    ]
+  }
+}

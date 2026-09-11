@@ -1,0 +1,26 @@
+{
+  "boards-api.greenhouse.io/v1/boards/exampleco/jobs?content=true": {
+    "jobs": [
+      {
+        "id": 4001,
+        "title": "Data Platform Program Manager",
+        "updated_at": "2026-09-03T14:19:37-04:00",
+        "first_published": "2026-08-20T10:00:00-04:00",
+        "location": {"name": "Denver, CO"},
+        "absolute_url": "https://boards.greenhouse.io/exampleco/jobs/4001",
+        "company_name": "ExampleCo",
+        "content": "&lt;p&gt;ExampleCo seeks a &lt;b&gt;Data Program Manager&lt;/b&gt; to lead our Snowflake migration and ETL modernisation.&lt;/p&gt;&lt;ul&gt;&lt;li&gt;5+ years program management&lt;/li&gt;&lt;/ul&gt;"
+      },
+      {
+        "id": 4002,
+        "title": "AI Product Manager",
+        "updated_at": "2026-09-01T09:00:00-04:00",
+        "first_published": "2026-08-28T09:00:00-04:00",
+        "location": {"name": "Remote"},
+        "absolute_url": "https://boards.greenhouse.io/exampleco/jobs/4002",
+        "company_name": "ExampleCo",
+        "content": "&lt;p&gt;Ship LLM features on our GenAI platform.&lt;/p&gt;"
+      }
+    ]
+  }
+}

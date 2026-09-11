@@ -27,3 +27,6 @@ def board_sources() -> list[SourceInfo]:
 
 def aggregator_sources() -> list[SourceInfo]:
     return [i for i in all_sources() if i.kind == "aggregator"]
+
+
+from rhapto.services.discovery.sources import ashby, greenhouse, lever  # noqa: E402,F401,I001  (registration)

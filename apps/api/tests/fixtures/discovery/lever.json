@@ -1,0 +1,15 @@
+{
+  "api.lever.co/v0/postings/exampleco?mode=json": [
+    {
+      "id": "8f1c2a3b-0000-4000-8000-000000000001",
+      "text": "Senior Program Manager, Data Platform",
+      "categories": {"commitment": "Full Time", "department": "Data", "location": "Seattle, WA", "team": "Platform", "allLocations": ["Seattle, WA"]},
+      "hostedUrl": "https://jobs.lever.co/exampleco/8f1c2a3b-0000-4000-8000-000000000001",
+      "createdAt": 1788134400000,
+      "descriptionPlain": "Run the data platform program: warehouse consolidation and ETL pipelines.",
+      "description": "<p>Run the data platform program: warehouse consolidation and ETL pipelines.</p>",
+      "lists": [{"text": "What you'll do", "content": "<li>Own analytics enablement</li><li>Partner with data engineering</li>"}],
+      "additionalPlain": "ExampleCo is an equal opportunity employer."
+    }
+  ]
+}
