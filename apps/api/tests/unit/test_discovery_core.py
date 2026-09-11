@@ -1,6 +1,7 @@
 import httpx
 import pytest
 
+import rhapto.services.jobtext as jobtext
 from rhapto.services.discovery.dedupe import identity_hash, normalize_title
 from rhapto.services.discovery.http import DiscoveryHttp, FakeDiscoveryHttp
 from rhapto.services.discovery.sources.base import SourceError, matches_keywords
@@ -10,6 +11,14 @@ from rhapto.services.jobtext import html_to_text
 def test_html_to_text_strips_markup_and_entities() -> None:
     text = html_to_text("<p>Lead the <b>data platform</b> &amp; ETL.</p><ul><li>Remote</li></ul>")
     assert "data platform & ETL" in text and "<" not in text and "Remote" in text
+
+
+def test_html_to_text_turns_p_and_br_into_newlines() -> None:
+    text = html_to_text("Company | Role | Remote<p>Body text<br>more")
+    lines = text.splitlines()
+    assert lines[0] == "Company | Role | Remote"
+    assert len(lines) > 1
+    assert "Body text" in text and "more" in text
 
 
 def test_normalize_title_and_identity_hash() -> None:
@@ -58,6 +67,55 @@ async def test_discovery_http_retries_once_on_5xx_and_sends_user_agent() -> None
     )
     assert await http.get_json("https://example.com/api") == {"ok": True}
     assert seen == ["rhapto-test/1", "rhapto-test/1"]
+
+
+async def test_discovery_http_rejects_redirect_to_private_host(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A vendor that 302s to a private/loopback address must not have that hop followed."""
+    hops = {"example.com": ["93.184.216.34"], "127.0.0.1": ["127.0.0.1"]}
+    monkeypatch.setattr(jobtext, "resolve_host", lambda host: hops[host])
+    requested: list[str] = []
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        requested.append(str(request.url))
+        return httpx.Response(302, headers={"location": "http://127.0.0.1/x"})
+
+    http = DiscoveryHttp(
+        user_agent="t", client=httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    )
+    with pytest.raises(SourceError):
+        await http.get_text("https://example.com/start")
+    assert requested == ["https://example.com/start"]
+
+
+async def test_discovery_http_follows_one_redirect_to_public_host(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(jobtext, "resolve_host", lambda host: ["93.184.216.34"])
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/old":
+            return httpx.Response(302, headers={"location": "/new"})
+        return httpx.Response(200, text="final body")
+
+    http = DiscoveryHttp(
+        user_agent="t", client=httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    )
+    assert await http.get_text("https://example.com/old") == "final body"
+
+
+async def test_discovery_http_too_many_redirects_raises(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(jobtext, "resolve_host", lambda host: ["93.184.216.34"])
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(302, headers={"location": "/again"})
+
+    http = DiscoveryHttp(
+        user_agent="t", client=httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    )
+    with pytest.raises(SourceError, match="too many redirects"):
+        await http.get_text("https://example.com/loop")
 
 
 async def test_fake_http_routes_by_substring_and_records_calls() -> None:

@@ -93,10 +93,13 @@ async def _check_url(url: str) -> None:
 
 
 def _strip_tags(html: str) -> str:
+    """Strip tags, collapsing horizontal whitespace only. Newlines are preserved (not folded
+    into spaces) so a caller that pre-converts `<p>`/`<br>` into `\\n` (see `html_to_text`)
+    keeps those line breaks through this fallback path."""
     text = re.sub(r"<(script|style)[^>]*>.*?</\1>", " ", html, flags=re.S | re.I)
     text = re.sub(r"<[^>]+>", " ", text)
     text = html_module.unescape(text)
-    return re.sub(r"\s+", " ", text).strip()
+    return re.sub(r"[ \t]+", " ", text).strip()
 
 
 def html_to_text(html: str) -> str:

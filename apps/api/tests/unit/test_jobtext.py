@@ -11,6 +11,17 @@ HTML = (
     + "</p></main></body></html>"
 )
 
+TWO_PARAGRAPH_HTML = (
+    "<html><body><main>"
+    + "<p>"
+    + "We need Snowflake migration experience. " * 10
+    + "</p>"
+    + "<p>"
+    + "Remote work and quarterly OKRs are required. " * 10
+    + "</p>"
+    + "</main></body></html>"
+)
+
 
 @pytest.fixture(autouse=True)
 def public_dns(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -30,6 +41,19 @@ async def test_fetch_extracts_main_text() -> None:
     async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
         text = await fetch_job_text("https://example.com/job", client=client)
     assert "Snowflake migration" in text and "<p>" not in text
+
+
+async def test_fetch_extracts_both_paragraphs() -> None:
+    """Regression guard for the html_to_text refactor: a two-paragraph page must still yield
+    both paragraphs' text, not just the first."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, text=TWO_PARAGRAPH_HTML, headers={"content-type": "text/html"})
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        text = await fetch_job_text("https://example.com/job", client=client)
+    assert "Snowflake migration" in text
+    assert "quarterly OKRs" in text
 
 
 async def test_fetch_http_error_raises() -> None:
