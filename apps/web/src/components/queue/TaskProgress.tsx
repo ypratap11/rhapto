@@ -46,8 +46,13 @@ export function TaskProgress({
         finished.current = true;
         if (kind === "poll") {
           if (current.status === "succeeded") {
-            const n = current.newJobs ?? 0;
-            toast.success(n > 0 ? `Poll finished: ${n} new jobs` : "Poll finished: no new jobs");
+            if (current.newJobs === null) {
+              // Neither a "done" event nor a parsable state-replay result_ref gave a
+              // count — don't claim zero when we don't actually know.
+              toast.success("Poll finished");
+            } else {
+              toast.success(current.newJobs > 0 ? `Poll finished: ${current.newJobs} new jobs` : "Poll finished: no new jobs");
+            }
           } else if (current.status === "failed") {
             toast.error(current.error ?? "Poll failed");
           } else if (current.status === "running") {

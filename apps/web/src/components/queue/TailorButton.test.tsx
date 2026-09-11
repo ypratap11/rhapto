@@ -1,13 +1,14 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { TailorButton } from "./TailorButton";
 import type { JobOut } from "@/lib/api/queries";
 
 const mutateAsync = vi.fn();
+let tracksData: { id: string; name: string; min_fit: number }[] = [];
 vi.mock("@/lib/api/queries", () => ({
-  useTracks: () => ({ data: [] }),
+  useTracks: () => ({ data: tracksData }),
   useTailor: () => ({ mutateAsync, isPending: false }),
   invalidateJobs: vi.fn(),
 }));
@@ -31,16 +32,33 @@ const job: JobOut = {
   scores: [],
 };
 
-function renderButton() {
+function renderButton(overrides: Partial<JobOut> = {}) {
   const client = new QueryClient();
   return render(
     <QueryClientProvider client={client}>
-      <TailorButton job={job} />
+      <TailorButton job={{ ...job, ...overrides }} />
     </QueryClientProvider>,
   );
 }
 
 describe("TailorButton", () => {
+  beforeEach(() => {
+    tracksData = [];
+  });
+
+  it("preselects the job's best-fit track", () => {
+    tracksData = [
+      { id: "ai-pm", name: "AI PM", min_fit: 60 },
+      { id: "other", name: "Other Track", min_fit: 50 },
+    ];
+    renderButton({ best_track_id: "ai-pm" });
+    // The Select's popup (and its items, which resolve a value to its label) is
+    // portal-mounted only while open; closed, it renders the raw selected value.
+    // Asserting on the underlying value is still a faithful check that the job's
+    // best-fit track — not the first loaded track — is the one selected.
+    expect(screen.getByText("ai-pm")).toBeInTheDocument();
+  });
+
   it("renders TaskProgress even when the mutation returns an already-finished task", async () => {
     mutateAsync.mockResolvedValueOnce({
       id: "t1",

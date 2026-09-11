@@ -23,6 +23,8 @@ function num(value: unknown): number | null {
   return typeof value === "number" ? value : null;
 }
 
+const NEW_JOBS_RESULT_REF = /^new:(\d+)$/;
+
 export function reduceTaskEvent(state: ProgressState, event: TaskEvent): ProgressState {
   const d = event.data;
   switch (event.event) {
@@ -30,7 +32,16 @@ export function reduceTaskEvent(state: ProgressState, event: TaskEvent): Progres
       const progress = (d.progress ?? {}) as Record<string, unknown>;
       const status = str(d.status);
       const step = str(progress.step) ?? state.step;
-      if (status === "succeeded") return { status: "succeeded", step, packageId: str(d.result_ref), packageStatus: state.packageStatus, error: null, newJobs: state.newJobs };
+      if (status === "succeeded") {
+        const resultRef = str(d.result_ref);
+        // A finished poll task's `result_ref` is the worker-set string `new:<n>`
+        // (not a package id) — a replayed "state" event, sent when the SSE request
+        // lands after the task already finished, is the only source for that count,
+        // since there's no separate "done" event to carry it in that case.
+        const newMatch = resultRef ? NEW_JOBS_RESULT_REF.exec(resultRef) : null;
+        if (newMatch) return { status: "succeeded", step, packageId: null, packageStatus: state.packageStatus, error: null, newJobs: Number(newMatch[1]) };
+        return { status: "succeeded", step, packageId: resultRef, packageStatus: state.packageStatus, error: null, newJobs: state.newJobs };
+      }
       if (status === "failed") return { status: "failed", step, packageId: null, packageStatus: null, error: str(d.error) ?? "task failed", newJobs: null };
       return { ...state, status: "running", step };
     }

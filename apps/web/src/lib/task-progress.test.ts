@@ -18,6 +18,11 @@ describe("reduceTaskEvent", () => {
     expect(f).toMatchObject({ status: "failed", error: "boom" });
   });
 
+  it("reads the new-job count from a finished poll's state-replay result_ref", () => {
+    const s = reduceTaskEvent(initialProgress, { event: "state", data: { status: "succeeded", result_ref: "new:3", progress: {} } });
+    expect(s).toMatchObject({ status: "succeeded", packageId: null, newJobs: 3 });
+  });
+
   it("maps error events", () => {
     const s = reduceTaskEvent(initialProgress, { event: "error", data: { event: "error", message: "no blocks" } });
     expect(s).toMatchObject({ status: "failed", error: "no blocks" });

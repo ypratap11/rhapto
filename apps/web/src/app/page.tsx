@@ -46,7 +46,9 @@ export default function QueuePage() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <FilterBar filters={filters} onChange={setFilters} tracks={(tracks.data ?? []).map((t) => ({ id: t.id, name: t.name }))} />
         <div className="text-sm text-muted-foreground">
-          {lastRun ? (
+          {runs.isLoading ? null : runs.error ? (
+            "Could not load poll runs "
+          ) : lastRun ? (
             <>
               Last poll {formatRelative(lastRun.finished_at ?? lastRun.started_at)} · {newCount} new{" "}
             </>

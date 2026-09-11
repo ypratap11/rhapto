@@ -6,6 +6,13 @@ import type { JobFilters } from "@/lib/api/queries";
 
 const ALL_TRACKS = "__all__";
 
+// The active segment must read as "selected" without reaching for the accent
+// (reserved for primary actions like Tailor/Add job/Poll now), and the
+// `secondary` button variant is too close in tone to the page background to
+// read as clearly selected next to the `outline` inactive segments — so this
+// is a plain neutral filled style instead of a `Button` variant.
+const ACTIVE_SEGMENT_CLASS = "bg-foreground text-background border-foreground hover:bg-foreground/90 hover:text-background";
+
 export function FilterBar({
   filters,
   onChange,
@@ -36,7 +43,8 @@ export function FilterBar({
       <div className="flex gap-1" role="group" aria-label="Fit bucket">
         <Button
           type="button"
-          variant={filters.bucket === "fit" ? "default" : "outline"}
+          variant="outline"
+          className={filters.bucket === "fit" ? ACTIVE_SEGMENT_CLASS : undefined}
           size="sm"
           aria-pressed={filters.bucket === "fit"}
           onClick={() => onChange({ ...filters, bucket: "fit" })}
@@ -45,7 +53,8 @@ export function FilterBar({
         </Button>
         <Button
           type="button"
-          variant={filters.bucket === "low" ? "default" : "outline"}
+          variant="outline"
+          className={filters.bucket === "low" ? ACTIVE_SEGMENT_CLASS : undefined}
           size="sm"
           aria-pressed={filters.bucket === "low"}
           onClick={() => onChange({ ...filters, bucket: "low" })}
@@ -56,7 +65,8 @@ export function FilterBar({
       <div className="flex gap-1" role="group" aria-label="Sort">
         <Button
           type="button"
-          variant={filters.sort === "fit" ? "default" : "outline"}
+          variant="outline"
+          className={filters.sort === "fit" ? ACTIVE_SEGMENT_CLASS : undefined}
           size="sm"
           aria-pressed={filters.sort === "fit"}
           onClick={() => onChange({ ...filters, sort: "fit" })}
@@ -65,7 +75,8 @@ export function FilterBar({
         </Button>
         <Button
           type="button"
-          variant={filters.sort === "newest" ? "default" : "outline"}
+          variant="outline"
+          className={filters.sort === "newest" ? ACTIVE_SEGMENT_CLASS : undefined}
           size="sm"
           aria-pressed={filters.sort === "newest"}
           onClick={() => onChange({ ...filters, sort: "newest" })}

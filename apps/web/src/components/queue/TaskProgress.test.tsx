@@ -130,4 +130,27 @@ describe("TaskProgress", () => {
     await vi.waitFor(() => expect(onFinished).toHaveBeenCalled());
     expect(toastSuccess).toHaveBeenCalledWith("Poll finished: no new jobs");
   });
+
+  it("in poll mode, reads the new-job count from a state-replay's result_ref instead of claiming zero", async () => {
+    mockReadTaskEvents.mockImplementation(async (_taskId, onEvent) => {
+      onEvent({ event: "state", data: { status: "succeeded", result_ref: "new:3", progress: {} } });
+    });
+    const onFinished = vi.fn();
+    renderTaskProgress({ taskId: "t8", jobId: "", onFinished, kind: "poll" });
+
+    await vi.waitFor(() => expect(onFinished).toHaveBeenCalled());
+    expect(resolvePackageStatus).not.toHaveBeenCalled();
+    expect(toastSuccess).toHaveBeenCalledWith("Poll finished: 3 new jobs");
+  });
+
+  it("in poll mode, toasts a neutral message when a state-replay carries no parsable count", async () => {
+    mockReadTaskEvents.mockImplementation(async (_taskId, onEvent) => {
+      onEvent({ event: "state", data: { status: "succeeded", result_ref: null, progress: {} } });
+    });
+    const onFinished = vi.fn();
+    renderTaskProgress({ taskId: "t9", jobId: "", onFinished, kind: "poll" });
+
+    await vi.waitFor(() => expect(onFinished).toHaveBeenCalled());
+    expect(toastSuccess).toHaveBeenCalledWith("Poll finished");
+  });
 });
