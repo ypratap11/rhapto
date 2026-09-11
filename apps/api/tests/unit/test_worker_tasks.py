@@ -86,7 +86,15 @@ def _ctx(
 
 
 async def test_registry() -> None:
-    assert set(TASKS) == {"tailor_job", "embed_blocks", "render_package_pdf"}
+    assert set(TASKS) == {
+        "tailor_job",
+        "embed_blocks",
+        "render_package_pdf",
+        "poll_now",
+        "poll_all_sources",
+        "score_jobs",
+        "rescore_jobs",
+    }
     assert TASKS["tailor_job"] is tailor_job
     assert TASKS["render_package_pdf"] is render_package_pdf
 

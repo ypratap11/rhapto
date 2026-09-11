@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import uuid
+
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -13,3 +15,7 @@ async def get_or_create_user(session: AsyncSession, email: str) -> User:
         session.add(user)
         await session.flush()
     return user
+
+
+async def list_user_ids(session: AsyncSession) -> list[uuid.UUID]:
+    return list(await session.scalars(select(User.id).order_by(User.created_at)))

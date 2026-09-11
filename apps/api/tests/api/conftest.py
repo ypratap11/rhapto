@@ -17,6 +17,7 @@ from rhapto.api.deps import AppState
 from rhapto.config import Settings
 from rhapto.db.repositories.users import get_or_create_user
 from rhapto.engine.providers.fake import FakeEmbeddingProvider, FakeLLMProvider
+from rhapto.services.discovery.http import FakeDiscoveryHttp
 from rhapto.services.enqueue import InlineEnqueuer
 from rhapto.services.eventbus import InMemoryEventBus
 from rhapto.services.jobtext import JobTextError
@@ -90,12 +91,11 @@ def worker_ctx(
     return {
         "session_factory": session_factory,
         "llm": fake_llm,
-        "embedder": FakeEmbeddingProvider(),
+        "embedder": FakeEmbeddingProvider(dimensions=384),
         "event_bus": event_bus,
         "storage": storage,
         "soffice_binary": api_settings.rhapto_soffice_binary,
-        # FakeEmbeddingProvider is 64-dim; opt into reshaping rather than dropping the vector.
-        "allow_dimension_mismatch": True,
+        "discovery_http": FakeDiscoveryHttp({}),
     }
 
 

@@ -11,15 +11,19 @@ from rhapto.db.models import EMBEDDING_DIMENSIONS, Job, Package, Task
 from rhapto.db.repositories import packages as package_repo
 from rhapto.db.repositories import tasks as task_repo
 from rhapto.db.repositories.profile import get_block
+from rhapto.db.repositories.users import list_user_ids
 from rhapto.engine.pipeline import tailor
 from rhapto.engine.providers.embeddings import EmbeddingProvider
 from rhapto.engine.providers.llm import LLMProvider
 from rhapto.engine.select import block_text
 from rhapto.engine.types import TailorRequest
+from rhapto.services.discovery.http import DiscoveryHttp
+from rhapto.services.discovery.poller import poll_sources
 from rhapto.services.enqueue import TaskFn
 from rhapto.services.eventbus import EventBus, task_channel
 from rhapto.services.packaging import persist_package
 from rhapto.services.profile_sync import block_row_to_model, load_profile_from_db
+from rhapto.services.scoring import rescore_user, score_and_store
 from rhapto.services.storage import PackageStorage
 
 logger = logging.getLogger("rhapto.worker")
@@ -34,6 +38,7 @@ class WorkerContext(TypedDict):
     event_bus: EventBus
     storage: PackageStorage
     soffice_binary: str
+    discovery_http: DiscoveryHttp
 
 
 async def tailor_job(ctx: dict[str, Any], task_id: str) -> None:
@@ -201,8 +206,105 @@ async def embed_blocks(ctx: dict[str, Any], user_id: str, block_ids: list[str]) 
         return
 
 
+DISCOVERY_CHANNEL = "discovery"
+
+
+async def poll_now(ctx: dict[str, Any], task_id: str) -> None:
+    """User-triggered poll: progress on the task channel, summary on the discovery channel."""
+    factory: async_sessionmaker[AsyncSession] = ctx["session_factory"]
+    bus: EventBus = ctx["event_bus"]
+    channel = task_channel(task_id)
+    async with factory() as session:
+        try:
+            tid = uuid.UUID(task_id)
+            task = await session.get(Task, tid)
+            if task is None:
+                return
+            active: Task = task
+            task_repo.mark_running(active)
+            await session.commit()
+
+            async def on_step(step: str) -> None:
+                task_repo.set_step(active, step)
+                await session.commit()
+                await bus.publish(channel, {"event": "progress", "step": step})
+
+            summary = await poll_sources(
+                session,
+                active.user_id,
+                http=ctx["discovery_http"],
+                embedder=ctx["embedder"],
+                on_step=on_step,
+            )
+            task_repo.mark_succeeded(active, f"new:{summary.new_jobs}")
+            await session.commit()
+            results = [r.__dict__ for r in summary.results]
+            await bus.publish(
+                channel, {"event": "done", "new_jobs": summary.new_jobs, "results": results}
+            )
+            await bus.publish(
+                DISCOVERY_CHANNEL, {"event": "discovery", "new_jobs": summary.new_jobs}
+            )
+        except Exception as exc:  # task boundary
+            await session.rollback()
+            failed = await session.get(Task, uuid.UUID(task_id))
+            if failed is not None:
+                task_repo.mark_failed(failed, f"{type(exc).__name__}: {exc}")
+                await session.commit()
+            await bus.publish(channel, {"event": "error", "message": str(exc)})
+
+
+async def poll_all_sources(ctx: dict[str, Any]) -> None:
+    """Cron entry point: poll every user's sources; failures are recorded per source."""
+    factory: async_sessionmaker[AsyncSession] = ctx["session_factory"]
+    bus: EventBus = ctx["event_bus"]
+    async with factory() as session:
+        for user_id in await list_user_ids(session):
+            try:
+                summary = await poll_sources(
+                    session, user_id, http=ctx["discovery_http"], embedder=ctx["embedder"]
+                )
+                await bus.publish(
+                    DISCOVERY_CHANNEL, {"event": "discovery", "new_jobs": summary.new_jobs}
+                )
+            except Exception:
+                logger.exception("scheduled poll failed for user %s", user_id)
+                await session.rollback()
+
+
+async def score_jobs(ctx: dict[str, Any], user_id: str, job_ids: list[str]) -> None:
+    factory: async_sessionmaker[AsyncSession] = ctx["session_factory"]
+    try:
+        uid = uuid.UUID(user_id)
+        async with factory() as session:
+            jobs = [
+                j
+                for j in [await session.get(Job, uuid.UUID(i)) for i in job_ids]
+                if j is not None and j.user_id == uid
+            ]
+            await score_and_store(session, uid, jobs, ctx["embedder"])
+            await session.commit()
+    except Exception:
+        logger.exception("score_jobs failed for user %s", user_id)
+
+
+async def rescore_jobs(ctx: dict[str, Any], user_id: str) -> None:
+    factory: async_sessionmaker[AsyncSession] = ctx["session_factory"]
+    try:
+        uid = uuid.UUID(user_id)
+        async with factory() as session:
+            await rescore_user(session, uid, ctx["embedder"])
+            await session.commit()
+    except Exception:
+        logger.exception("rescore_jobs failed for user %s", user_id)
+
+
 TASKS: dict[str, TaskFn] = {
     "tailor_job": tailor_job,
     "embed_blocks": embed_blocks,
     "render_package_pdf": render_package_pdf,
+    "poll_now": poll_now,
+    "poll_all_sources": poll_all_sources,
+    "score_jobs": score_jobs,
+    "rescore_jobs": rescore_jobs,
 }
