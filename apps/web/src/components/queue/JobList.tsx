@@ -1,18 +1,25 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ApiErrorBanner } from "@/components/shell/ApiErrorBanner";
 import { ApiError } from "@/lib/api/client";
-import { useDeleteJob, useJobs, type JobOut } from "@/lib/api/queries";
-import { JobCard } from "./JobCard";
+import { useDeleteJob, useJobs, useTracks, type JobFilters, type JobOut } from "@/lib/api/queries";
+import { JobCard, type TrackInfo } from "./JobCard";
 
-export function JobList({ search }: { search: string }) {
-  const jobs = useJobs(search);
+export function JobList({ filters }: { filters: JobFilters }) {
+  const jobs = useJobs(filters);
+  const tracksQuery = useTracks();
   const remove = useDeleteJob();
   const [pending, setPending] = useState<JobOut | null>(null);
+
+  const tracks = useMemo(() => {
+    const map: Record<string, TrackInfo> = {};
+    for (const t of tracksQuery.data ?? []) map[t.id] = { name: t.name, min_fit: t.min_fit };
+    return map;
+  }, [tracksQuery.data]);
 
   if (jobs.isLoading) return <Skeleton className="h-32 w-full" />;
   if (jobs.error) return <ApiErrorBanner error={jobs.error} />;
@@ -23,7 +30,7 @@ export function JobList({ search }: { search: string }) {
     <div className="space-y-4">
       {items.map((job) => (
         <div key={job.id} id={job.id}>
-          <JobCard job={job} onDelete={setPending} />
+          <JobCard job={job} onDelete={setPending} tracks={tracks} />
         </div>
       ))}
       <AlertDialog open={pending !== null} onOpenChange={(open) => !open && setPending(null)}>

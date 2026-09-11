@@ -6,9 +6,19 @@ import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
 import { readTaskEvents } from "@/lib/api/sse";
 import { invalidateJobs } from "@/lib/api/queries";
-import { PIPELINE_STEPS, initialProgress, reduceTaskEvent, resolvePackageStatus, type ProgressState } from "@/lib/task-progress";
+import { PIPELINE_STEPS, POLL_STEPS, initialProgress, reduceTaskEvent, resolvePackageStatus, type ProgressState } from "@/lib/task-progress";
 
-export function TaskProgress({ taskId, jobId, onFinished }: { taskId: string; jobId: string; onFinished: (state: ProgressState) => void }) {
+export function TaskProgress({
+  taskId,
+  jobId,
+  onFinished,
+  kind = "tailor",
+}: {
+  taskId: string;
+  jobId: string;
+  onFinished: (state: ProgressState) => void;
+  kind?: "tailor" | "poll";
+}) {
   const [state, setState] = useState<ProgressState>(initialProgress);
   const finished = useRef(false);
   const queryClient = useQueryClient();
@@ -34,7 +44,17 @@ export function TaskProgress({ taskId, jobId, onFinished }: { taskId: string; jo
         if (aborted) return;
         if (finished.current) return;
         finished.current = true;
-        if (current.status === "succeeded" && current.packageId) {
+        if (kind === "poll") {
+          if (current.status === "succeeded") {
+            const n = current.newJobs ?? 0;
+            toast.success(n > 0 ? `Poll finished: ${n} new jobs` : "Poll finished: no new jobs");
+          } else if (current.status === "failed") {
+            toast.error(current.error ?? "Poll failed");
+          } else if (current.status === "running") {
+            // The stream ended without a terminal ("done"/"error") event.
+            toast.error("Poll was interrupted; refresh to check for new jobs");
+          }
+        } else if (current.status === "succeeded" && current.packageId) {
           let packageStatus = current.packageStatus;
           if (packageStatus === null) {
             // The task was already finished when the SSE request landed: the API
@@ -69,13 +89,14 @@ export function TaskProgress({ taskId, jobId, onFinished }: { taskId: string; jo
       aborted = true;
       controller.abort();
     };
-  }, [taskId, jobId, onFinished, queryClient]);
+  }, [taskId, jobId, onFinished, queryClient, kind]);
 
-  const activeIndex = state.step ? PIPELINE_STEPS.indexOf(state.step as (typeof PIPELINE_STEPS)[number]) : -1;
+  const steps: readonly string[] = kind === "poll" ? POLL_STEPS : PIPELINE_STEPS;
+  const activeIndex = state.step ? steps.indexOf(state.step) : -1;
   return (
     <div className="mt-3 space-y-2" aria-live="polite">
       <ol className="flex flex-wrap gap-2 text-xs">
-        {PIPELINE_STEPS.map((step, i) => {
+        {steps.map((step, i) => {
           const done = state.status === "succeeded" || i < activeIndex;
           const active = i === activeIndex && state.status === "running";
           return (
@@ -86,7 +107,7 @@ export function TaskProgress({ taskId, jobId, onFinished }: { taskId: string; jo
         })}
       </ol>
       {state.status === "failed" ? <p className="text-sm text-red-700">{state.error}</p> : null}
-      {state.status === "succeeded" && state.packageId ? (
+      {kind === "tailor" && state.status === "succeeded" && state.packageId ? (
         <Link href={`/jobs/${jobId}/packages/${state.packageId}`} className="text-sm text-accent underline">
           Open package {state.packageStatus === "blocked" ? "(blocked)" : ""}
         </Link>

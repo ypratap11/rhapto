@@ -27,6 +27,8 @@ const job: JobOut = {
   discovered_at: "2026-09-09T10:00:00Z",
   latest_package: null,
   application_status: null,
+  rescued: false,
+  scores: [],
 };
 
 function renderButton() {

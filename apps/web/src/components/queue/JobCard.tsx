@@ -2,21 +2,42 @@
 
 import Link from "next/link";
 import { ExternalLink, Trash2 } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { StatusBadge } from "@/components/ui/StatusBadge";
-import type { JobOut } from "@/lib/api/queries";
+import { ApiError } from "@/lib/api/client";
+import { useRescueJob, type JobOut } from "@/lib/api/queries";
+import { SOURCE_LABEL } from "@/lib/fit";
 import { formatRelative, truncate } from "@/lib/format";
 import { PACKAGE_STATUS_TONE, STATUS_LABEL, statusTone, type ApplicationStatus } from "@/lib/status";
+import { FitBadge } from "./FitBadge";
 import { TailorButton } from "./TailorButton";
 
-export function JobCard({ job, onDelete }: { job: JobOut; onDelete: (job: JobOut) => void }) {
+export type TrackInfo = { name: string; min_fit: number };
+
+export function JobCard({ job, onDelete, tracks }: { job: JobOut; onDelete: (job: JobOut) => void; tracks: Record<string, TrackInfo> }) {
   const pkg = job.latest_package;
+  const rescue = useRescueJob();
+  const track = job.best_track_id ? tracks[job.best_track_id] : undefined;
+
+  async function onRescue() {
+    try {
+      await rescue.mutateAsync(job.id);
+      toast.success("Moved to the fit list");
+    } catch (error) {
+      toast.error(error instanceof ApiError ? error.message : "Could not rescue the job");
+    }
+  }
+
   return (
     <Card>
       <CardContent className="flex flex-col gap-4 p-5 md:flex-row md:items-start md:justify-between">
         <div className="min-w-0 space-y-1">
           <div className="flex flex-wrap items-center gap-2">
+            <FitBadge fit={job.best_fit ?? null} trackName={track?.name ?? null} minFit={track?.min_fit ?? null} />
+            <StatusBadge tone="zinc">{SOURCE_LABEL[job.source] ?? job.source}</StatusBadge>
+            {job.repost_of ? <StatusBadge tone="zinc">Re-post</StatusBadge> : null}
             <span className="font-medium">{job.company ?? "Unknown company"}</span>
             {pkg ? <StatusBadge tone={PACKAGE_STATUS_TONE[pkg.status] ?? "slate"}>{`v${pkg.version} · ${pkg.status}`}</StatusBadge> : null}
             {job.application_status ? (
@@ -43,6 +64,11 @@ export function JobCard({ job, onDelete }: { job: JobOut; onDelete: (job: JobOut
         </div>
         <div className="flex shrink-0 flex-col items-end gap-2">
           <TailorButton job={job} />
+          {job.bucket === "low" ? (
+            <Button variant="ghost" size="sm" onClick={onRescue} disabled={rescue.isPending}>
+              Rescue
+            </Button>
+          ) : null}
           <Button variant="ghost" size="sm" onClick={() => onDelete(job)} aria-label={`Delete ${job.title ?? "job"}`}>
             <Trash2 className="size-4" aria-hidden />
           </Button>

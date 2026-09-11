@@ -2,6 +2,7 @@ import { apiClient, unwrap } from "./api/client";
 import type { TaskEvent } from "./api/sse";
 
 export const PIPELINE_STEPS = ["extract", "select", "compose", "validate", "repair", "render"] as const;
+export const POLL_STEPS = ["fetch", "dedupe", "score", "done"] as const;
 
 export type ProgressState = {
   status: "idle" | "running" | "succeeded" | "failed";
@@ -9,12 +10,17 @@ export type ProgressState = {
   packageId: string | null;
   packageStatus: string | null;
   error: string | null;
+  newJobs: number | null;
 };
 
-export const initialProgress: ProgressState = { status: "idle", step: null, packageId: null, packageStatus: null, error: null };
+export const initialProgress: ProgressState = { status: "idle", step: null, packageId: null, packageStatus: null, error: null, newJobs: null };
 
 function str(value: unknown): string | null {
   return typeof value === "string" ? value : null;
+}
+
+function num(value: unknown): number | null {
+  return typeof value === "number" ? value : null;
 }
 
 export function reduceTaskEvent(state: ProgressState, event: TaskEvent): ProgressState {
@@ -24,16 +30,19 @@ export function reduceTaskEvent(state: ProgressState, event: TaskEvent): Progres
       const progress = (d.progress ?? {}) as Record<string, unknown>;
       const status = str(d.status);
       const step = str(progress.step) ?? state.step;
-      if (status === "succeeded") return { status: "succeeded", step, packageId: str(d.result_ref), packageStatus: state.packageStatus, error: null };
-      if (status === "failed") return { status: "failed", step, packageId: null, packageStatus: null, error: str(d.error) ?? "task failed" };
+      if (status === "succeeded") return { status: "succeeded", step, packageId: str(d.result_ref), packageStatus: state.packageStatus, error: null, newJobs: state.newJobs };
+      if (status === "failed") return { status: "failed", step, packageId: null, packageStatus: null, error: str(d.error) ?? "task failed", newJobs: null };
       return { ...state, status: "running", step };
     }
     case "progress":
       return { ...state, status: "running", step: str(d.step) ?? state.step };
     case "done":
-      return { status: "succeeded", step: "render", packageId: str(d.package_id), packageStatus: str(d.status), error: null };
+      // The poll task's "done" event has no package_id (str() returns null for the
+      // missing field), so this same branch naturally covers both the tailor and
+      // poll pipelines: the former resolves a package, the latter a new-jobs count.
+      return { status: "succeeded", step: "render", packageId: str(d.package_id), packageStatus: str(d.status), error: null, newJobs: num(d.new_jobs) };
     case "error":
-      return { status: "failed", step: state.step, packageId: null, packageStatus: null, error: str(d.message) ?? "task failed" };
+      return { status: "failed", step: state.step, packageId: null, packageStatus: null, error: str(d.message) ?? "task failed", newJobs: null };
     default:
       return state;
   }

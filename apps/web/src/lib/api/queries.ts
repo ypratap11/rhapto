@@ -11,13 +11,22 @@ export type TaskOut = Schemas["TaskOut"];
 export type TailorBody = Schemas["TailorBody"];
 export type Track = Schemas["Track"];
 export type MeOut = Schemas["MeOut"];
+export type PollRunOut = Schemas["PollRunOut"];
+export type SourceInfoOut = Schemas["SourceInfoOut"];
+
+export type JobFilters = { search: string; track: string | null; bucket: "fit" | "low"; sort: "fit" | "newest" };
 
 export const keys = {
   me: ["me"] as const,
-  jobs: (search: string) => ["jobs", search] as const,
+  jobs: (f: JobFilters) => ["jobs", f.search, f.track, f.bucket, f.sort] as const,
   job: (id: string) => ["job", id] as const,
   task: (id: string) => ["task", id] as const,
   tracks: ["profile", "tracks"] as const,
+};
+
+export const discoveryKeys = {
+  runs: ["discovery", "runs"] as const,
+  sources: ["discovery", "sources"] as const,
 };
 
 export function invalidateJobs(queryClient: QueryClient): void {
@@ -25,14 +34,51 @@ export function invalidateJobs(queryClient: QueryClient): void {
   void queryClient.invalidateQueries({ queryKey: ["job"] });
 }
 
+export function invalidateDiscovery(queryClient: QueryClient): void {
+  void queryClient.invalidateQueries({ queryKey: ["discovery"] });
+  invalidateJobs(queryClient);
+}
+
 export function useMe() {
   return useQuery({ queryKey: keys.me, queryFn: () => unwrap(apiClient().GET("/api/v1/me")) });
 }
 
-export function useJobs(search: string) {
+export function useJobs(filters: JobFilters) {
   return useQuery({
-    queryKey: keys.jobs(search),
-    queryFn: () => unwrap(apiClient().GET("/api/v1/jobs", { params: { query: search ? { search } : {} } })),
+    queryKey: keys.jobs(filters),
+    queryFn: () =>
+      unwrap(
+        apiClient().GET("/api/v1/jobs", {
+          params: {
+            query: {
+              ...(filters.search ? { search: filters.search } : {}),
+              ...(filters.track ? { track: filters.track } : {}),
+              bucket: filters.bucket,
+              sort: filters.sort,
+            },
+          },
+        }),
+      ),
+  });
+}
+
+export function useDiscoveryRuns() {
+  return useQuery({ queryKey: discoveryKeys.runs, queryFn: () => unwrap(apiClient().GET("/api/v1/discovery/runs")), staleTime: 30_000 });
+}
+
+export function useSources() {
+  return useQuery({ queryKey: discoveryKeys.sources, queryFn: () => unwrap(apiClient().GET("/api/v1/discovery/sources")), staleTime: Infinity });
+}
+
+export function usePollNow() {
+  return useMutation({ mutationFn: () => unwrap(apiClient().POST("/api/v1/discovery/poll")) });
+}
+
+export function useRescueJob() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (jobId: string) => unwrap(apiClient().POST("/api/v1/jobs/{job_id}/rescue", { params: { path: { job_id: jobId } } })),
+    onSuccess: () => invalidateJobs(queryClient),
   });
 }
 

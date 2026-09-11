@@ -18,7 +18,7 @@ const mockReadTaskEvents = vi.mocked(readTaskEvents);
 const toastSuccess = vi.mocked(toast.success);
 const toastError = vi.mocked(toast.error);
 
-function renderTaskProgress(props: { taskId: string; jobId: string; onFinished: (state: unknown) => void }) {
+function renderTaskProgress(props: { taskId: string; jobId: string; onFinished: (state: unknown) => void; kind?: "tailor" | "poll" }) {
   return render(
     <QueryClientProvider client={new QueryClient()}>
       <TaskProgress {...props} />
@@ -103,5 +103,31 @@ describe("TaskProgress", () => {
     await vi.waitFor(() => expect(onFinished).toHaveBeenCalled());
     expect(toastError).toHaveBeenCalledWith("Tailoring was interrupted; refresh to check the job");
     expect(toastSuccess).not.toHaveBeenCalled();
+  });
+
+  it("in poll mode, renders the poll steps and toasts the new-job count without a package lookup", async () => {
+    mockReadTaskEvents.mockImplementation(async (_taskId, onEvent) => {
+      onEvent({ event: "done", data: { event: "done", new_jobs: 3 } });
+    });
+    const onFinished = vi.fn();
+    renderTaskProgress({ taskId: "t6", jobId: "", onFinished, kind: "poll" });
+
+    expect(screen.getByText("fetch")).toBeInTheDocument();
+    expect(screen.getByText("score")).toBeInTheDocument();
+    await vi.waitFor(() => expect(onFinished).toHaveBeenCalled());
+    expect(resolvePackageStatus).not.toHaveBeenCalled();
+    expect(toastSuccess).toHaveBeenCalledWith("Poll finished: 3 new jobs");
+    expect(toastError).not.toHaveBeenCalled();
+  });
+
+  it("in poll mode, toasts when there are no new jobs", async () => {
+    mockReadTaskEvents.mockImplementation(async (_taskId, onEvent) => {
+      onEvent({ event: "done", data: { event: "done", new_jobs: 0 } });
+    });
+    const onFinished = vi.fn();
+    renderTaskProgress({ taskId: "t7", jobId: "", onFinished, kind: "poll" });
+
+    await vi.waitFor(() => expect(onFinished).toHaveBeenCalled());
+    expect(toastSuccess).toHaveBeenCalledWith("Poll finished: no new jobs");
   });
 });

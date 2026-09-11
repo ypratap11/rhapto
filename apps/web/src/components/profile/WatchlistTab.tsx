@@ -98,7 +98,7 @@ function WatchlistBody({ initial }: { initial: WatchlistEntry[] }) {
         </TableBody>
       </Table>
       <div className="flex justify-between">
-        <Button variant="outline" onClick={() => setRows((r) => [...r, { company: "", source: "greenhouse", board: "" }])}>
+        <Button variant="outline" onClick={() => setRows((r) => [...r, { company: "", source: "greenhouse", board: "", keywords: [] }])}>
           Add row
         </Button>
         <Button onClick={save} disabled={put.isPending}>

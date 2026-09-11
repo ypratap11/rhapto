@@ -20,9 +20,15 @@ export function TailorButton({ job }: { job: JobOut }) {
     invalidateJobs(queryClient);
   }, [queryClient]);
 
+  // Preselect the job's best-fit track (falling back to the first loaded track)
+  // until the user makes an explicit choice, which then wins from then on. Derived
+  // from props/query data rather than synced via an effect, per the lint rule
+  // against synchronous setState in effects.
+  const selectedTrackId = trackId ?? job.best_track_id ?? tracks.data?.[0]?.id;
+
   async function start() {
     try {
-      const task = await tailor.mutateAsync({ jobId: job.id, body: { track_id: trackId ?? null } });
+      const task = await tailor.mutateAsync({ jobId: job.id, body: { track_id: selectedTrackId ?? null } });
       // Always route through TaskProgress, even when the mutation already returned a
       // finished task: the SSE endpoint replays the terminal `state` event and closes
       // for finished tasks, so this is the single path that surfaces the result.
@@ -35,7 +41,7 @@ export function TailorButton({ job }: { job: JobOut }) {
   return (
     <div>
       <div className="flex items-center gap-2">
-        <Select value={trackId} onValueChange={(value: string | null) => setTrackId(value ?? undefined)}>
+        <Select value={selectedTrackId} onValueChange={(value: string | null) => setTrackId(value ?? undefined)}>
           <SelectTrigger className="w-44" aria-label="Track">
             <SelectValue placeholder={tracks.data?.[0]?.name ?? "Track"} />
           </SelectTrigger>
