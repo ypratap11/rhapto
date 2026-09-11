@@ -143,3 +143,22 @@ async def test_fake_http_routes_by_substring_and_records_calls() -> None:
     with pytest.raises(SourceError):
         await fake.get_json("https://x/bad")
     assert len(fake.calls) == 2
+
+
+async def test_discovery_http_handles_gzip_responses() -> None:
+    """Vendors gzip their JSON; the decoded body must not be inflated a second time."""
+    import gzip
+
+    payload = gzip.compress(b'{"jobs": [1, 2]}')
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            content=payload,
+            headers={"content-type": "application/json", "content-encoding": "gzip"},
+        )
+
+    http = DiscoveryHttp(
+        user_agent="t", client=httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    )
+    assert await http.get_json("https://example.com/api") == {"jobs": [1, 2]}

@@ -95,10 +95,17 @@ class DiscoveryHttp:
                         if size > self.max_bytes:
                             raise SourceError(f"{url} exceeds {self.max_bytes} bytes")
                         chunks.append(chunk)
+                    # aiter_bytes() already decoded the transfer encoding, so the copied headers
+                    # must not claim the body is still compressed (httpx would inflate it twice).
+                    headers = {
+                        k: v
+                        for k, v in response.headers.items()
+                        if k.lower() not in ("content-encoding", "content-length")
+                    }
                     return httpx.Response(
                         response.status_code,
                         content=b"".join(chunks),
-                        headers=response.headers,
+                        headers=headers,
                         request=response.request,
                     )
             except httpx.HTTPError as exc:
