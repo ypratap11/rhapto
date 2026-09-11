@@ -1,19 +1,24 @@
+import uuid
 from datetime import UTC, datetime
 from typing import Any
 
+import pytest
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from test_discovery_sources import fake_http_for
 
-from rhapto.db.models import Job, Task, User
+from rhapto.db.models import Job, JobScore, Task, User
 from rhapto.db.repositories import profile as profile_repo
 from rhapto.db.repositories import tasks as task_repo
+from rhapto.db.repositories.users import get_or_create_user
 from rhapto.engine.providers.fake import FakeEmbeddingProvider
 from rhapto.models.profile.tracks import Track
 from rhapto.models.profile.watchlist import WatchlistEntry
+from rhapto.services.discovery.poller import PollSummary
 from rhapto.services.eventbus import InMemoryEventBus, task_channel
+from rhapto.worker import tasks as worker_tasks
 from rhapto.worker.main import cron_hours
-from rhapto.worker.tasks import TASKS, poll_now, rescore_jobs, score_jobs
+from rhapto.worker.tasks import TASKS, poll_all_sources, poll_now, rescore_jobs, score_jobs
 
 
 async def seed(session: AsyncSession, user: User) -> None:
@@ -74,11 +79,19 @@ async def test_poll_now_records_failure(
 ) -> None:
     task = await task_repo.create_task(session, user.id, "poll_now", {})
     await session.commit()
-    ctx = ctx_for(session_factory, InMemoryEventBus())
+    bus = InMemoryEventBus()
+    ctx = ctx_for(session_factory, bus)
     del ctx[
         "embedder"
     ]  # KeyError at the poll_sources call site, i.e. at the task boundary, not inside one source
-    await poll_now(ctx, str(task.id))
+    events: list[dict[str, Any]] = []
+    async with bus.subscription(task_channel(str(task.id))) as stream:
+        await poll_now(ctx, str(task.id))
+        async for event in stream:
+            events.append(event)
+            if event["event"] in ("done", "error"):
+                break
+    assert events[-1]["event"] == "error" and "embedder" in events[-1]["message"]
     async with session_factory() as check:
         row = await check.get(Task, task.id)
         assert row is not None and row.status == "failed" and row.error
@@ -102,8 +115,57 @@ async def test_score_and_rescore_tasks(
     async with session_factory() as check:
         scored = await check.get(Job, job.id)
         assert scored is not None and scored.best_track_id == "data-pm"
+
+    async with session_factory() as reset:
+        to_reset = await reset.get(Job, job.id)
+        assert to_reset is not None
+        to_reset.best_track_id = None
+        to_reset.best_fit = None
+        await reset.commit()
+
     await rescore_jobs(ctx, str(user.id))
+    async with session_factory() as check:
+        rescored = await check.get(Job, job.id)
+        assert (
+            rescored is not None
+            and rescored.best_track_id == "data-pm"
+            and rescored.best_fit is not None
+        )
+        scores = list(await check.scalars(select(JobScore).where(JobScore.job_id == job.id)))
+        assert any(s.track_id == "data-pm" for s in scores)
     assert set(TASKS) >= {"poll_now", "poll_all_sources", "score_jobs", "rescore_jobs"}
+
+
+async def test_poll_all_sources_never_raises_and_continues_after_failure(
+    session_factory: async_sessionmaker[AsyncSession],
+    session: AsyncSession,
+    user: User,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    await seed(session, user)
+    other = await get_or_create_user(session, "other@example.com")
+    await session.commit()
+
+    calls: list[uuid.UUID] = []
+
+    async def fake_poll_sources(
+        session: AsyncSession,
+        user_id: uuid.UUID,
+        *,
+        http: Any,
+        embedder: Any,
+        specs: Any = None,
+        on_step: Any = None,
+    ) -> PollSummary:
+        calls.append(user_id)
+        if user_id == user.id:
+            raise RuntimeError("boom")
+        return PollSummary(results=[], new_jobs=0, new_job_ids=[])
+
+    monkeypatch.setattr(worker_tasks, "poll_sources", fake_poll_sources)
+    ctx = ctx_for(session_factory, InMemoryEventBus())
+    await poll_all_sources(ctx)  # must not raise despite the first user's source failing
+    assert set(calls) == {user.id, other.id}
 
 
 def test_cron_hours_from_interval() -> None:

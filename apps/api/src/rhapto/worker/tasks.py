@@ -215,6 +215,7 @@ async def poll_now(ctx: dict[str, Any], task_id: str) -> None:
     bus: EventBus = ctx["event_bus"]
     channel = task_channel(task_id)
     async with factory() as session:
+        tid: uuid.UUID | None = None
         try:
             tid = uuid.UUID(task_id)
             task = await session.get(Task, tid)
@@ -245,12 +246,19 @@ async def poll_now(ctx: dict[str, Any], task_id: str) -> None:
             await bus.publish(
                 DISCOVERY_CHANNEL, {"event": "discovery", "new_jobs": summary.new_jobs}
             )
-        except Exception as exc:  # task boundary
+        except Exception as exc:  # task boundary: record and report, never crash the worker
+            logger.exception("poll_now failed for task %s", task_id)
             await session.rollback()
-            failed = await session.get(Task, uuid.UUID(task_id))
-            if failed is not None:
-                task_repo.mark_failed(failed, f"{type(exc).__name__}: {exc}")
-                await session.commit()
+            if tid is None:
+                try:
+                    tid = uuid.UUID(task_id)
+                except ValueError:
+                    tid = None
+            if tid is not None:
+                failed = await session.get(Task, tid)
+                if failed is not None:
+                    task_repo.mark_failed(failed, f"{type(exc).__name__}: {exc}")
+                    await session.commit()
             await bus.publish(channel, {"event": "error", "message": str(exc)})
 
 
