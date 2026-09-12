@@ -28,6 +28,20 @@ describe("downloadAuthenticated", () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
+  it("keeps the download attribute present (empty) when no filename is given so the server's name wins", async () => {
+    setSettings({ token: "secret", apiUrl: "http://api.example:8000" });
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("pdf bytes", { status: 200 })));
+    let seen: { hasAttr: boolean; value: string } | null = null;
+    vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(function (this: HTMLAnchorElement) {
+      seen = { hasAttr: this.hasAttribute("download"), value: this.getAttribute("download") ?? "" };
+    });
+    vi.stubGlobal("URL", Object.assign(URL, { createObjectURL: vi.fn(() => "blob:mock-url"), revokeObjectURL: vi.fn() }));
+
+    await downloadAuthenticated("/api/v1/packages/p1/files/resume.pdf");
+
+    expect(seen).toEqual({ hasAttr: true, value: "" });
+  });
+
   it("defers revoking the object URL instead of doing it synchronously after click", async () => {
     vi.useFakeTimers();
     setSettings({ token: "secret", apiUrl: "http://api.example:8000" });

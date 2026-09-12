@@ -17,7 +17,8 @@ export async function downloadAuthenticated(path: string, filename?: string): Pr
   a.href = url;
   // Only force a filename once we know it; otherwise let the response's
   // Content-Disposition header name win instead of overwriting it.
-  if (filename) a.download = filename;
+  // The attribute must be present to force a download; an empty value keeps the server's name.
+  a.download = filename ?? "";
   document.body.appendChild(a);
   a.click();
   a.remove();
