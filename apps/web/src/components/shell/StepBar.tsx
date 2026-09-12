@@ -5,12 +5,14 @@ import { usePathname } from "next/navigation";
 import { FLOW_STEPS, flowPrompt, nextUp, stepForPath } from "@/lib/flow";
 import { useJobs, usePackageList } from "@/lib/api/queries";
 import { useSkipped } from "@/lib/skipped";
+import { useTailoringCount } from "@/lib/tailoring";
 
-export function StepBar({ tailoring = false }: { tailoring?: boolean }) {
+export function StepBar() {
   const pathname = usePathname();
   const jobs = useJobs({ search: "", track: null, tab: "new", sort: "fit" });
   const review = usePackageList("review");
   const skipped = useSkipped();
+  const tailoring = useTailoringCount() > 0;
   if (pathname.startsWith("/settings")) return null;
   const current = stepForPath(pathname, tailoring);
   const prompt = flowPrompt({ needsReview: review.data?.length ?? 0, next: nextUp(jobs.data ?? [], skipped, 1)[0] ?? null });

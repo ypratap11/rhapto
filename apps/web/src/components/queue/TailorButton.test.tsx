@@ -1,8 +1,9 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
+import { render, renderHook, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { TailorButton } from "./TailorButton";
+import { useTailoringCount } from "@/lib/tailoring";
 import type { JobOut } from "@/lib/api/queries";
 
 const mutateAsync = vi.fn();
@@ -13,7 +14,12 @@ vi.mock("@/lib/api/queries", () => ({
   invalidateJobs: vi.fn(),
 }));
 vi.mock("./TaskProgress", () => ({
-  TaskProgress: ({ taskId }: { taskId: string }) => <div>progress:{taskId}</div>,
+  TaskProgress: ({ taskId, onFinished }: { taskId: string; onFinished: () => void }) => (
+    <div>
+      progress:{taskId}
+      <button onClick={onFinished}>finish</button>
+    </div>
+  ),
 }));
 
 const job: JobOut = {
@@ -77,5 +83,65 @@ describe("TailorButton", () => {
     await user.click(screen.getByRole("button", { name: /tailor/i }));
 
     expect(await screen.findByText("progress:t1")).toBeInTheDocument();
+  });
+
+  it("counts the job as tailoring only between start and finish", async () => {
+    mutateAsync.mockResolvedValueOnce({
+      id: "t1",
+      status: "running",
+      result_ref: null,
+      error: null,
+      created_at: "2026-09-09T10:00:00Z",
+      finished_at: null,
+      progress: {},
+      type: "tailor",
+    });
+    const count = renderHook(() => useTailoringCount());
+    expect(count.result.current).toBe(0);
+
+    renderButton();
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: /tailor/i }));
+    await screen.findByText("progress:t1");
+    expect(count.result.current).toBe(1);
+
+    await user.click(screen.getByRole("button", { name: "finish" }));
+    expect(count.result.current).toBe(0);
+  });
+
+  it("does not increment the count when the mutation fails", async () => {
+    mutateAsync.mockRejectedValueOnce(new Error("boom"));
+    const count = renderHook(() => useTailoringCount());
+    expect(count.result.current).toBe(0);
+
+    renderButton();
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: /tailor/i }));
+    await screen.findByRole("button", { name: /tailor/i }); // still idle, no progress rendered
+
+    expect(count.result.current).toBe(0);
+  });
+
+  it("stops counting the job if the button unmounts while a task is still running", async () => {
+    mutateAsync.mockResolvedValueOnce({
+      id: "t1",
+      status: "running",
+      result_ref: null,
+      error: null,
+      created_at: "2026-09-09T10:00:00Z",
+      finished_at: null,
+      progress: {},
+      type: "tailor",
+    });
+    const count = renderHook(() => useTailoringCount());
+
+    const { unmount } = renderButton();
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: /tailor/i }));
+    await screen.findByText("progress:t1");
+    expect(count.result.current).toBe(1);
+
+    unmount();
+    expect(count.result.current).toBe(0);
   });
 });

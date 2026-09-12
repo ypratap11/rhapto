@@ -86,12 +86,13 @@ On first visit the app asks for the API URL (`http://localhost:8000`) and the be
 (`RHAPTO_API_TOKEN`). Then:
 
 1. **Profile**: import your five YAML files (or the demo `profile.example` to try it) and edit blocks, tracks, and rules.
-2. **Queue**: paste a job description or a posting URL, pick a track, and press Tailor. Progress streams live;
-   a toast with a Review link appears when the engine finishes.
-3. **Review**: job description on the left with requirements highlighted, resume on the right. Click a bullet to
-   see the exact block it came from. The guardrail panel lists anything blocked. Edit a bullet and save as a new
-   version (guardrails run again), or regenerate with feedback. Download the zip and open the posting yourself.
-4. **Pipeline**: drag applications across the board and keep notes and history.
+2. **Jobs** shows *Apply to these first*; press the one button on the top row and it walks the job through
+   Tailor → Review → Mark applied. Progress streams live, and the review step highlights the exact block
+   behind each bullet and lists anything the guardrails blocked.
+3. **Packages** lists everything tailored, so you can pick up any review you didn't finish from the job card.
+4. **Pipeline** tracks what you submitted: drag applications across the board and keep notes and history.
+
+Downloads are named after you, not the job.
 
 Rhapto never submits anything. The last click is yours.
 
