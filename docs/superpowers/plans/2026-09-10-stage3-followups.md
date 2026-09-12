@@ -113,3 +113,7 @@ deferred from the whole-branch review:
   after the upload is fully buffered. Both acceptable for a single-user self-hosted app.
 - Minor: duplicate section headings share a React key in the Resume document tab; the disabled "Tune my resume" option
   uses a native `title` tooltip; "9-5 job" tokenises as two numbers.
+- Web test suite is flaky at vitest's default 20 s `testTimeout` on a loaded machine (42 jsdom environments; the
+  dialog tests in AddJobDialog, Board, BlocksTab, GuardrailsTab, RegenerateDialog use `userEvent.setup()` without
+  `delay: null`); every file passes alone and the suite is green at `--testTimeout=90000`. Switch those tests to
+  `delay: null` and consider `pool: "threads"` with a worker cap.
