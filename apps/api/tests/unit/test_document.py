@@ -1,3 +1,5 @@
+import io
+
 from helpers_docx import build_fixture_docx
 
 from rhapto.engine.document import (
@@ -213,3 +215,29 @@ def test_to_resume_document_routes_bulleted_skills_and_credentials_by_section() 
     assert len(credentials.entries) == 1
     assert credentials.entries[0].title == "EDUCATION"
     assert [b.text for b in credentials.entries[0].bullets] == ["B.S. Computer Science"]
+
+
+def test_bold_caps_contact_line_before_first_heading_is_contact() -> None:
+    raws = [
+        RawParagraph("MAYA CHEN", "Normal", True, True, False, False, True),
+        RawParagraph("MAYA.CHEN@EXAMPLE.COM | 555 0100", "Normal", True, True, False, False, True),
+        RawParagraph("PROFESSIONAL SUMMARY", "Normal", True, True, False, False, False),
+    ]
+    roles = [p.role for p in classify(raws)]
+    assert roles == ["name", "contact", "heading"]
+
+
+def test_raw_detects_word_numbering() -> None:
+    """A Normal-style paragraph with a w:numPr element (Word's bullet/numbering) is a bullet."""
+    from docx import Document
+    from docx.oxml.ns import qn
+
+    d = Document()
+    d.add_paragraph("MAYA CHEN")
+    numbered = d.add_paragraph("Shipped the thing")
+    ppr = numbered._p.get_or_add_pPr()
+    ppr.append(ppr.makeelement(qn("w:numPr"), {}))
+    buf = io.BytesIO()
+    d.save(buf)
+    doc = parse_docx(buf.getvalue(), "r.docx")
+    assert doc.paragraphs[1].role == "bullet"

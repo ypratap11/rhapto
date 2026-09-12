@@ -70,6 +70,10 @@ def _raw(paragraph) -> RawParagraph:  # type: ignore[no-untyped-def]
     )
 
 
+def _looks_like_contact(raw: RawParagraph) -> bool:
+    return bool(raw.centered or "|" in raw.text or "@" in raw.text or PHONE_RUN.search(raw.text))
+
+
 def _is_heading(raw: RawParagraph) -> bool:
     """A section heading: either bold+ALL-CAPS text, or a Word "Heading" paragraph style.
 
@@ -111,17 +115,16 @@ def classify(raws: list[RawParagraph]) -> list[DocParagraph]:
             continue
         if seen_text == 0:
             role = "name"
+        elif heading is None and _looks_like_contact(raw):
+            # Any paragraph between the name and the first heading is part of the contact
+            # block, not just the line right after the name (multi-line contact blocks are
+            # common: address on one line, phone/email on the next). Checked before the
+            # heading rule so a bold, all-caps "EMAIL | PHONE" line is not taken for a heading.
+            role = "contact"
         elif _is_heading(raw):
             role = "heading"
             heading = raw.text
             kind = _section_kind(raw.text)
-        elif heading is None and (
-            raw.centered or "|" in raw.text or "@" in raw.text or PHONE_RUN.search(raw.text)
-        ):
-            # Any paragraph between the name and the first heading is part of the contact
-            # block, not just the line right after the name (multi-line contact blocks are
-            # common: address on one line, phone/email on the next).
-            role = "contact"
         elif raw.has_numbering or raw.style.startswith("List"):
             role = "bullet"
         elif raw.bold and YEAR_RANGE.search(raw.text):
