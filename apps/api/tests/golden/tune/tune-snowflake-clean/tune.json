@@ -1,0 +1,31 @@
+{
+  "edits": [
+    {
+      "paragraph_id": "p3",
+      "text": "Senior Data Program Manager with 8 years owning warehouse migrations and analytics programs end to end.",
+      "reason": "leads with the warehouse migration ownership the job asks for"
+    },
+    {
+      "paragraph_id": "p5",
+      "text": "Program Delivery:  Cutover  •  Integrated Planning  •  RAID Management",
+      "reason": "leads the competency line with the cutover keyword the job names"
+    },
+    {
+      "paragraph_id": "p9",
+      "text": "Owned the Snowflake migration for 12 teams end to end, cutting warehouse cost 30%.",
+      "reason": "mirrors the job's ownership and cost language"
+    }
+  ],
+  "cover_note": "I have owned a Snowflake migration end to end, coordinating the cutover across data engineering, analytics, and product while keeping warehouse cost under control. That is the shape of the work your Data Platform Program Manager role describes, and it is the part of program management I enjoy most: integrated planning, honest RAID management, and a cutover nobody has to stay up for. At Acme Analytics I ran the analytics roadmap alongside finance and engineering stakeholders, which taught me to translate platform trade-offs into language each group can act on. I would bring the same habits to ExampleCo: a plan the teams actually believe, clear escalation paths, and a migration that lands without surprises.",
+  "change_log": "Led the summary with warehouse migration ownership.\nLed the competency line with cutover.\nReframed the Snowflake bullet around end-to-end ownership.\nKept every number and employer exactly as written.",
+  "answers": [
+    {
+      "key": "why_this_company",
+      "value": "ExampleCo is doing the migration work I have already owned, at a scale where program management actually matters."
+    },
+    {
+      "key": "work_authorization",
+      "value": "US citizen."
+    }
+  ]
+}

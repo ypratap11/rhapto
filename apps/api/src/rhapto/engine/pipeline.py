@@ -2,21 +2,33 @@ from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
+from typing import Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
-from rhapto.engine.compose import assemble_resume, build_system_blocks, compose
+from rhapto.engine.compose import assemble_resume, build_header, build_system_blocks, compose
+from rhapto.engine.document import apply_edits, to_resume_document
 from rhapto.engine.extract import extract
 from rhapto.engine.guardrails.registry import run_guardrails
+from rhapto.engine.guardrails.tune import run_tune_guardrails
 from rhapto.engine.providers.embeddings import EmbeddingProvider
 from rhapto.engine.providers.llm import LLMProvider, MalformedOutputError, TokenUsage
 from rhapto.engine.render.docx import OrphanBulletError, render_docx
+from rhapto.engine.render.tune_docx import render_tuned_docx
 from rhapto.engine.repair import repair
 from rhapto.engine.select import Selection, SelectionConfig, select_blocks
+from rhapto.engine.tune import build_tune_system_blocks, to_edits, tune, tune_repair
 from rhapto.engine.types import EngineError, Profile, TailorRequest
+from rhapto.models.guardrail_report import GuardrailReport
+from rhapto.models.jd_extract import JDExtract
 from rhapto.models.package import ApplicationPackage, JobSnapshot
+from rhapto.models.profile.tracks import Track
+from rhapto.models.resume_document import ResumeDocument
+from rhapto.models.source_document import Edit, SourceDocument
 
-STEPS = ("extract", "select", "compose", "validate", "repair", "render")
+# "tune" is the progress step tune mode emits in place of "select" and "compose". Steps may be
+# added but never removed: the web progress bar maps task events onto these names.
+STEPS = ("extract", "select", "compose", "tune", "validate", "repair", "render")
 ProgressCallback = Callable[[str], Awaitable[None]]
 
 
@@ -43,6 +55,7 @@ class TailorResult(BaseModel):
     package: ApplicationPackage
     docx: bytes
     selection: Selection
+    edits: list[Edit] = Field(default_factory=list)
 
 
 async def _notify(on_step: ProgressCallback | None, step: str) -> None:
@@ -69,6 +82,43 @@ async def _structured_call[R](
     return value
 
 
+def _build_package(
+    request: TailorRequest,
+    track: Track,
+    jd_extract: JDExtract,
+    resume: ResumeDocument,
+    cover_note: str,
+    change_log: str,
+    answers: dict[str, str],
+    report: GuardrailReport,
+    budget: CallBudget,
+    *,
+    mode: Literal["blocks", "tune"] = "blocks",
+    edits: list[Edit] | None = None,
+    source_document: SourceDocument | None = None,
+) -> ApplicationPackage:
+    """The parts of the package that are identical in both modes, in one place."""
+    return ApplicationPackage(
+        job=JobSnapshot(
+            company=jd_extract.company, title=jd_extract.title, jd_text=request.jd_text
+        ),
+        track_id=track.id,
+        jd_extract=jd_extract,
+        resume=resume,
+        cover_note=cover_note,
+        change_log=change_log,
+        answers=answers,
+        guardrail_report=report,
+        version=(request.previous_package.version + 1) if request.previous_package else 1,
+        status="draft" if report.passed else "blocked",
+        llm_calls=budget.calls,
+        created_at=datetime.now(UTC),
+        mode=mode,
+        edits=edits or [],
+        source_document=source_document,
+    )
+
+
 async def tailor(
     request: TailorRequest,
     profile: Profile,
@@ -79,12 +129,20 @@ async def tailor(
     budget: CallBudget | None = None,
     on_step: ProgressCallback | None = None,
 ) -> TailorResult:
-    """extract -> select -> compose -> validate -> (repair -> validate) -> render. At most 3 LLM calls."""
+    """extract -> select -> compose -> validate -> (repair -> validate) -> render. At most 3 LLM calls.
+
+    In tune mode the middle of that changes to extract -> tune -> validate -> (repair ->
+    validate) -> render: there is nothing to select (the user's document is the selection) and
+    nothing to compose (the paragraphs already exist). The call budget is unchanged.
+    """
     budget = budget or CallBudget()
     track = profile.get_track(request.track_id)
 
     await _notify(on_step, "extract")
     jd_extract = await _structured_call(budget, lambda: extract(request.jd_text, llm))
+
+    if request.mode == "tune":
+        return await _tune_branch(request, profile, track, jd_extract, llm, budget, on_step)
 
     await _notify(on_step, "select")
     selection = await select_blocks(jd_extract, profile, track, embedder, selection_config)
@@ -124,20 +182,86 @@ async def tailor(
     except OrphanBulletError:
         docx = b""  # provenance violation is already in the report; nothing safe to render
 
-    package = ApplicationPackage(
-        job=JobSnapshot(
-            company=jd_extract.company, title=jd_extract.title, jd_text=request.jd_text
-        ),
-        track_id=track.id,
-        jd_extract=jd_extract,
-        resume=resume,
-        cover_note=output.cover_note,
-        change_log=output.change_log,
-        answers=output.answers_dict(),
-        guardrail_report=report,
-        version=(request.previous_package.version + 1) if request.previous_package else 1,
-        status="draft" if report.passed else "blocked",
-        llm_calls=budget.calls,
-        created_at=datetime.now(UTC),
+    package = _build_package(
+        request,
+        track,
+        jd_extract,
+        resume,
+        output.cover_note,
+        output.change_log,
+        output.answers_dict(),
+        report,
+        budget,
     )
     return TailorResult(package=package, docx=docx, selection=selection)
+
+
+async def _tune_branch(
+    request: TailorRequest,
+    profile: Profile,
+    track: Track,
+    jd_extract: JDExtract,
+    llm: LLMProvider,
+    budget: CallBudget,
+    on_step: ProgressCallback | None,
+) -> TailorResult:
+    """tune -> validate -> (repair -> validate) -> render, against the user's own document."""
+    doc = request.source_document
+    source_docx = request.source_docx
+    assert doc is not None and source_docx is not None  # validated on the request
+
+    await _notify(on_step, "tune")
+    previous_edits = request.previous_package.edits if request.previous_package else None
+    output = await _structured_call(
+        budget,
+        lambda: tune(jd_extract, doc, profile.answers, llm, request.feedback, previous_edits),
+    )
+    edits = to_edits(doc, output)
+
+    await _notify(on_step, "validate")
+    report = run_tune_guardrails(
+        doc, edits, jd_extract, profile.guardrails, cover_note=output.cover_note
+    )
+
+    if not report.passed:
+        await _notify(on_step, "repair")
+        budget.before_call()
+        try:
+            repaired, usage = await tune_repair(output, report, build_tune_system_blocks(doc), llm)
+        except MalformedOutputError:
+            # The retry budget is spent; keep the blocked draft so the human sees the report.
+            budget.after_call(TokenUsage())
+        else:
+            budget.after_call(usage)
+            output = repaired
+            edits = to_edits(doc, output)
+            report = run_tune_guardrails(
+                doc, edits, jd_extract, profile.guardrails, cover_note=output.cover_note
+            )
+
+    await _notify(on_step, "render")
+    # Unlike blocks mode there is no safe partial artefact: the writer edits the user's own file
+    # in place, so a failing report means we write nothing and let the human read the violations.
+    docx = render_tuned_docx(source_docx, edits) if report.passed else b""
+    resume = to_resume_document(apply_edits(doc, edits), build_header(profile.answers))
+
+    package = _build_package(
+        request,
+        track,
+        jd_extract,
+        resume,
+        output.cover_note,
+        output.change_log,
+        output.answers_dict(),
+        report,
+        budget,
+        mode="tune",
+        edits=edits,
+        source_document=doc,
+    )
+    return TailorResult(
+        package=package,
+        docx=docx,
+        selection=Selection(block_ids=[], scores={}, excluded_block_ids=[], requirements_text=""),
+        edits=edits,
+    )

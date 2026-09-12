@@ -1,0 +1,11 @@
+{
+  "company": "ExampleCo",
+  "title": "Data Platform Program Manager",
+  "location_policy": "remote",
+  "seniority": "senior",
+  "must_have": ["senior program management on data platforms", "warehouse migration delivery", "cross-functional leadership"],
+  "nice_to_have": ["warehouse cost optimisation", "cutover planning"],
+  "keywords": ["Snowflake", "migration", "warehouse", "data platform", "program management", "cutover", "cross-functional"],
+  "likely_knockouts": ["US work authorization"],
+  "context_tags": []
+}

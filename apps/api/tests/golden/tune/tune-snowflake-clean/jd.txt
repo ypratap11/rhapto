@@ -1,0 +1,6 @@
+ExampleCo is hiring a Data Platform Program Manager (Remote, US).
+
+You will own our Snowflake migration end to end and coordinate warehouse cost work across product,
+data engineering, and analytics teams. Must have: senior program management on data platforms,
+hands-on warehouse migration delivery, strong cross-functional leadership. Nice to have: warehouse
+cost optimisation, cutover planning.

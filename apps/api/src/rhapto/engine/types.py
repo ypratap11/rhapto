@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from pydantic import BaseModel, Field
+from typing import Literal
+
+from pydantic import BaseModel, Field, model_validator
 
 from rhapto.models.package import ApplicationPackage
 from rhapto.models.profile.bases import ResumeBase
@@ -8,6 +10,7 @@ from rhapto.models.profile.blocks import Block
 from rhapto.models.profile.guardrails import GuardrailRule
 from rhapto.models.profile.tracks import Track
 from rhapto.models.profile.watchlist import AggregatorEntry, WatchlistEntry
+from rhapto.models.source_document import SourceDocument
 
 
 class EngineError(Exception):
@@ -50,7 +53,28 @@ class Profile(BaseModel):
 
 
 class TailorRequest(BaseModel):
+    """One tailoring run.
+
+    `mode` picks which pipeline branch runs: "blocks" writes a resume from the block library,
+    "tune" rewrites the document the user uploaded. Tune mode needs both halves of that
+    document -- the parsed `source_document` the engine reasons about and the original
+    `source_docx` bytes the writer edits in place -- so the validator insists on both rather
+    than letting the pipeline discover a half-populated request.
+    """
+
     jd_text: str
     track_id: str | None = None
     feedback: str | None = None
     previous_package: ApplicationPackage | None = None
+    mode: Literal["blocks", "tune"] = "blocks"
+    source_document: SourceDocument | None = None
+    # The raw upload. Excluded from dumps: the API stores the request dict on a task row, and a
+    # multi-megabyte base64 DOCX has no business in a JSON column (or in a log line, or in a
+    # repr of a failing request).
+    source_docx: bytes | None = Field(default=None, exclude=True, repr=False)
+
+    @model_validator(mode="after")
+    def _tune_needs_a_document(self) -> TailorRequest:
+        if self.mode == "tune" and (self.source_document is None or self.source_docx is None):
+            raise ValueError("mode 'tune' requires both source_document and source_docx")
+        return self

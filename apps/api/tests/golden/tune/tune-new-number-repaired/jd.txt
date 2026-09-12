@@ -1,0 +1,5 @@
+ExampleCo is hiring a Senior Program Manager, Analytics Platform (Remote, US).
+
+You will run the analytics roadmap with finance and engineering partners and keep a multi-team
+warehouse migration on schedule. Must have: senior program management, warehouse migration delivery,
+stakeholder communication. Nice to have: cost optimisation, dbt and Airflow familiarity.

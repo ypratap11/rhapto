@@ -1,0 +1,9 @@
+{
+  "status": "draft",
+  "passed": true,
+  "llm_calls": 3,
+  "violation_rules": [],
+  "edited_paragraph_ids": ["p9", "p10"],
+  "rules_run": ["tune-scope", "no-new-numbers", "no-invented-entities", "date-consistency"],
+  "docx_contains": ["Led the Snowflake migration for 12 teams across the platform, cutting warehouse cost 30%."]
+}

@@ -1,0 +1,22 @@
+{
+  "edits": [
+    {
+      "paragraph_id": "p9",
+      "text": "Led the Snowflake migration for 12 teams across the platform, cutting warehouse cost 30%.",
+      "reason": "keeps the document's own scope and numbers while surfacing the migration"
+    },
+    {
+      "paragraph_id": "p10",
+      "text": "Ran the analytics roadmap with finance and engineering stakeholders end to end.",
+      "reason": "mirrors the roadmap and stakeholder language in the job"
+    }
+  ],
+  "cover_note": "I ran a warehouse migration and the analytics roadmap alongside finance and engineering partners, which is the combination your Senior Program Manager role asks for. The migration work taught me how to keep a multi-team cutover honest: a schedule the teams believe, risks raised early, and a plan that survives the week it actually ships. The roadmap work taught me the rest, which is translating platform trade-offs into language finance and engineering can both act on. At Acme Analytics those jobs were really the same job, and I would expect them to be the same job at ExampleCo. I would start by listening to where the current migration hurts, then make the plan boring again.",
+  "change_log": "Restored the document's own migration scope and cost figures.\nMirrored the roadmap and stakeholder language.\nRemoved the tool name that was not in the resume.",
+  "answers": [
+    {
+      "key": "why_this_company",
+      "value": "The analytics roadmap work is exactly what I have been running."
+    }
+  ]
+}

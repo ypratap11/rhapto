@@ -1,0 +1,11 @@
+{
+  "company": "ExampleCo",
+  "title": "Senior Program Manager, Analytics Platform",
+  "location_policy": "remote",
+  "seniority": "senior",
+  "must_have": ["senior program management", "warehouse migration delivery", "stakeholder communication"],
+  "nice_to_have": ["cost optimisation", "dbt and Airflow familiarity"],
+  "keywords": ["analytics", "roadmap", "warehouse", "migration", "stakeholders", "dbt", "Airflow", "cost"],
+  "likely_knockouts": ["US work authorization"],
+  "context_tags": []
+}

@@ -1,14 +1,21 @@
+import io
 from pathlib import Path
 from typing import Any
 
 import pytest
+from docx import Document
 from helpers import bullet, demo_extract, demo_resume
+from helpers_docx import build_fixture_docx
+from pydantic import ValidationError
 
 from rhapto.engine.compose import AnswerItem, ComposeOutput
+from rhapto.engine.document import parse_docx
 from rhapto.engine.pipeline import CallBudget, LLMBudgetExceeded, TailorResult, tailor
 from rhapto.engine.providers.fake import FakeEmbeddingProvider, FakeLLMProvider
 from rhapto.engine.providers.llm import MalformedOutputError, TokenUsage
+from rhapto.engine.tune import ProposedEdit, TuneOutput
 from rhapto.engine.types import Profile, ProfileError, TailorRequest
+from rhapto.models.source_document import SourceDocument
 from rhapto.profile.loader import load_profile
 
 JD = "ExampleCo seeks a Data Platform Program Manager to lead our Snowflake migration."
@@ -181,3 +188,131 @@ async def test_cover_note_metric_blocks_even_when_the_resume_is_clean(profile: P
     assert [v.path for v in violations] == ["cover_note"]
     assert violations[0].rule == "no-unverified-metrics" and violations[0].block_id is None
     assert "37%" in violations[0].message
+
+
+# --- tune mode -------------------------------------------------------------------------------
+
+CLEAN_BULLET = "Led the Snowflake migration for 12 teams, reducing warehouse cost 30%."
+DIRTY_BULLET = "Led the Snowflake migration for 45 teams, reducing warehouse cost 30%."
+
+
+def _source() -> tuple[SourceDocument, bytes]:
+    data = build_fixture_docx()
+    return parse_docx(data, "resume.docx"), data
+
+
+def tune_output(text: str) -> dict[str, Any]:
+    return TuneOutput(
+        edits=[ProposedEdit(paragraph_id="p9", text=text, reason="mirrors the JD")],
+        cover_note="I have led Snowflake migrations end to end for platform teams.",
+        change_log="Emphasised the migration.",
+        answers=[AnswerItem(key="why_this_company", value="Data.")],
+    ).model_dump(mode="json")
+
+
+def tune_request(doc: SourceDocument, data: bytes, **kwargs: Any) -> TailorRequest:
+    return TailorRequest(jd_text=JD, mode="tune", source_document=doc, source_docx=data, **kwargs)
+
+
+def _docx_paragraph_texts(data: bytes) -> list[str]:
+    return [p.text for p in Document(io.BytesIO(data)).paragraphs]
+
+
+async def test_tune_mode_happy_path_uses_two_calls(profile: Profile) -> None:
+    doc, data = _source()
+    llm = FakeLLMProvider([demo_extract(), tune_output(CLEAN_BULLET)])
+    steps: list[str] = []
+
+    async def on_step(name: str) -> None:
+        steps.append(name)
+
+    result = await tailor(
+        tune_request(doc, data), profile, llm, FakeEmbeddingProvider(), on_step=on_step
+    )
+    package = result.package
+    assert package.mode == "tune"
+    assert package.status == "draft" and package.guardrail_report.passed
+    assert package.llm_calls == 2 and len(llm.calls) == 2
+    assert package.track_id == "data-pm"
+    assert [e.paragraph_id for e in package.edits] == ["p9"]
+    assert (
+        package.edits[0].before
+        == "Led the Snowflake migration for 12 teams, cutting warehouse cost 30%."
+    )
+    assert package.edits[0].after == CLEAN_BULLET
+    assert result.edits == package.edits
+    assert package.source_document is not None
+    assert package.resume.header.name == "Maya Chen"
+    assert any(
+        b.text == CLEAN_BULLET
+        for s in package.resume.sections
+        for e in s.entries
+        for b in e.bullets
+    )
+    assert result.docx[:2] == b"PK"
+    assert CLEAN_BULLET in _docx_paragraph_texts(result.docx)
+    assert steps == ["extract", "tune", "validate", "render"]
+    assert result.selection.block_ids == []
+
+
+async def test_tune_mode_repair_path(profile: Profile) -> None:
+    doc, data = _source()
+    llm = FakeLLMProvider([demo_extract(), tune_output(DIRTY_BULLET), tune_output(CLEAN_BULLET)])
+    result = await tailor(tune_request(doc, data), profile, llm, FakeEmbeddingProvider())
+    assert result.package.status == "draft" and result.package.llm_calls == 3
+    assert result.package.edits[0].after == CLEAN_BULLET
+    repair_call = llm.calls[2]
+    assert repair_call.output_schema is TuneOutput
+    assert "45" in repair_call.messages[0].content
+    assert repair_call.system == llm.calls[1].system  # same cached system blocks as tune
+
+
+async def test_tune_mode_unrepairable_is_blocked(profile: Profile) -> None:
+    doc, data = _source()
+    llm = FakeLLMProvider([demo_extract(), tune_output(DIRTY_BULLET), tune_output(DIRTY_BULLET)])
+    result = await tailor(tune_request(doc, data), profile, llm, FakeEmbeddingProvider())
+    assert result.package.status == "blocked" and result.package.llm_calls == 3
+    assert {v.rule for v in result.package.guardrail_report.violations} == {"no-new-numbers"}
+    assert result.docx == b""  # nothing safe to write back into the user's document
+
+
+async def test_tune_mode_malformed_repair_keeps_the_blocked_draft(profile: Profile) -> None:
+    doc, data = _source()
+    llm = FakeLLMProvider([demo_extract(), tune_output(DIRTY_BULLET), MALFORMED])
+    result = await tailor(tune_request(doc, data), profile, llm, FakeEmbeddingProvider())
+    assert result.package.status == "blocked" and result.package.llm_calls == 3
+    assert not result.package.guardrail_report.passed
+
+
+async def test_tune_mode_regeneration_passes_previous_edits(profile: Profile) -> None:
+    doc, data = _source()
+    first = await tailor(
+        tune_request(doc, data),
+        profile,
+        FakeLLMProvider([demo_extract(), tune_output(CLEAN_BULLET)]),
+        FakeEmbeddingProvider(),
+    )
+    llm = FakeLLMProvider([demo_extract(), tune_output(CLEAN_BULLET)])
+    second = await tailor(
+        tune_request(doc, data, feedback="shorter", previous_package=first.package),
+        profile,
+        llm,
+        FakeEmbeddingProvider(),
+    )
+    assert second.package.version == 2
+    content = llm.calls[1].messages[0].content
+    assert "<previous_edits>" in content and "shorter" in content
+
+
+def test_tune_mode_requires_document() -> None:
+    with pytest.raises(ValidationError):
+        TailorRequest(jd_text=JD, mode="tune")
+    with pytest.raises(ValidationError):
+        TailorRequest(jd_text=JD, mode="tune", source_document=_source()[0])
+
+
+def test_source_docx_is_excluded_from_json_dumps() -> None:
+    doc, data = _source()
+    dumped = tune_request(doc, data).model_dump(mode="json")
+    assert "source_docx" not in dumped
+    assert b"PK" not in tune_request(doc, data).model_dump_json().encode()

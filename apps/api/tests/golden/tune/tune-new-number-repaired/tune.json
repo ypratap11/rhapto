@@ -1,0 +1,19 @@
+{
+  "edits": [
+    {
+      "paragraph_id": "p9",
+      "text": "Led the Snowflake migration for 40 teams, cutting warehouse cost 65% with Databricks.",
+      "reason": "stretches the scope to look closer to the job's multi-team framing"
+    },
+    {
+      "paragraph_id": "p10",
+      "text": "Ran the analytics roadmap with finance and engineering stakeholders every quarter.",
+      "reason": "mirrors the roadmap and stakeholder language in the job"
+    }
+  ],
+  "cover_note": "I tripled the size of the migration programme I ran and would do the same here.",
+  "change_log": "Scaled up the migration bullet.\nMirrored the roadmap language.",
+  "answers": [
+    {"key": "why_this_company", "value": "The analytics roadmap work is exactly what I have been running."}
+  ]
+}
