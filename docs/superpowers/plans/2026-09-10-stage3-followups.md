@@ -95,3 +95,21 @@ merging; each is small and scoped. The 0.3 pollers plan comes before stage 4 (de
   selected bullets, skills lines) to match the job's requirements. Guardrails still apply to the changed text
   (numbers must trace to the original document or verified blocks). Done by hand for the Scale AI TPM role on
   2026-09-11 with a paragraph-edit script; the edits list is the spec for the feature.
+
+**Shipped 2026-09-12** (branch `tune-mode`: spec `docs/superpowers/specs/2026-09-11-tune-mode-design.md`). Follow-ups
+deferred from the whole-branch review:
+
+- `no-new-numbers` keys an unrecognised unit as `plain`, so "12 teams" in the document licenses "12 days" in an edit.
+  Keying the unit word itself would close it but risks false positives on rewording ("12 engineering teams"); needs a
+  design pass (unit synonyms / ignore adjectives between number and noun).
+- `no-invented-entities` accepts an employer recombined from document words ("Example Analytics" from "Example
+  University" + "Acme Analytics"); flag multi-word runs that borrow a word from a `name`/`entry_org`/`entry_title`
+  paragraph without matching that paragraph.
+- The cover note is number-checked but not entity- or date-checked; an entity check must first allow the JD extract's
+  company, products and tools, otherwise every cover note (which names the target employer) would be blocked.
+- A tune package whose DOCX render fails ends as `draft` with no DOCX and no explanation (same shape as blocks mode's
+  orphan-bullet path); surface a note on the review page or mark it blocked with a synthetic violation.
+- `upsert_document` is read-then-write (a same-user double upload races to the 409 handler); the 5 MB cap is checked
+  after the upload is fully buffered. Both acceptable for a single-user self-hosted app.
+- Minor: duplicate section headings share a React key in the Resume document tab; the disabled "Tune my resume" option
+  uses a native `title` tooltip; "9-5 job" tokenises as two numbers.
