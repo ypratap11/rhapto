@@ -274,6 +274,10 @@ export type GuardrailRule = Schemas["GuardrailRule"];
 export type WatchlistEntry = Schemas["WatchlistEntry"];
 export type AggregatorEntry = Schemas["AggregatorEntry"];
 export type ImportOut = Schemas["ImportOut"];
+export type SourceDocument = Schemas["SourceDocument"];
+export type DocParagraph = Schemas["DocParagraph"];
+export type DocSection = Schemas["DocSection"];
+export type ResumeDocumentOut = Schemas["ResumeDocumentOut"];
 
 export const profileKeys = {
   bases: ["profile", "bases"] as const,
@@ -281,6 +285,7 @@ export const profileKeys = {
   answers: ["profile", "answers"] as const,
   watchlist: ["profile", "watchlist"] as const,
   aggregators: ["profile", "aggregators"] as const,
+  resumeDocument: ["profile", "resume-document"] as const,
 };
 
 export function invalidateProfile(queryClient: QueryClient): void {
@@ -356,5 +361,53 @@ export function useImportProfile() {
       throw new ApiError(response.status, problem, `HTTP ${response.status}`);
     }
     return (await response.json()) as ImportOut;
+  });
+}
+
+export function useResumeDocument() {
+  return useQuery({
+    queryKey: profileKeys.resumeDocument,
+    queryFn: async (): Promise<ResumeDocumentOut | null> => {
+      try {
+        return await unwrap(apiClient().GET("/api/v1/profile/resume-document"));
+      } catch (e) {
+        if (e instanceof ApiError && e.status === 404) return null;
+        throw e;
+      }
+    },
+  });
+}
+
+export function useUploadResumeDocument() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (file: File): Promise<ResumeDocumentOut> => {
+      const form = new FormData();
+      form.append("file", file, file.name);
+      const response = await fetch(apiUrl("/api/v1/profile/resume-document"), { method: "POST", body: form, headers: authHeaders() });
+      if (!response.ok) {
+        let problem: Problem | null = null;
+        try {
+          problem = (await response.json()) as Problem;
+        } catch {
+          problem = null;
+        }
+        throw new ApiError(response.status, problem, `HTTP ${response.status}`);
+      }
+      return (await response.json()) as ResumeDocumentOut;
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: profileKeys.resumeDocument });
+    },
+  });
+}
+
+export function useDeleteResumeDocument() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => unwrap(apiClient().DELETE("/api/v1/profile/resume-document")),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: profileKeys.resumeDocument });
+    },
   });
 }

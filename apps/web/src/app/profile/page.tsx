@@ -5,11 +5,13 @@ import { BasesTab } from "@/components/profile/BasesTab";
 import { BlocksTab } from "@/components/profile/BlocksTab";
 import { GuardrailsTab } from "@/components/profile/GuardrailsTab";
 import { ImportExport } from "@/components/profile/ImportExport";
+import { ResumeDocumentTab } from "@/components/profile/ResumeDocumentTab";
 import { TracksTab } from "@/components/profile/TracksTab";
 import { WatchlistTab } from "@/components/profile/WatchlistTab";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 const TABS = [
+  ["resume-document", "Resume document", <ResumeDocumentTab key="resume-document" />],
   ["blocks", "Blocks", <BlocksTab key="blocks" />],
   ["bases", "Bases", <BasesTab key="bases" />],
   ["tracks", "Tracks", <TracksTab key="tracks" />],
@@ -26,7 +28,7 @@ export default function ProfilePage() {
         <p className="text-sm text-muted-foreground">Blocks, bases, tracks, guardrails, answers, and watchlist.</p>
       </div>
       <ImportExport />
-      <Tabs defaultValue="blocks">
+      <Tabs defaultValue="resume-document">
         <TabsList>
           {TABS.map(([value, label]) => (
             <TabsTrigger key={value} value={value}>

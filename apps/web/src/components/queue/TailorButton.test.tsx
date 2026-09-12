@@ -4,13 +4,15 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { TailorButton } from "./TailorButton";
 import { useTailoringCount } from "@/lib/tailoring";
-import type { JobOut } from "@/lib/api/queries";
+import type { JobOut, ResumeDocumentOut } from "@/lib/api/queries";
 
 const mutateAsync = vi.fn();
 let tracksData: { id: string; name: string; min_fit: number }[] = [];
+let resumeDocumentData: ResumeDocumentOut | null = null;
 vi.mock("@/lib/api/queries", () => ({
   useTracks: () => ({ data: tracksData }),
   useTailor: () => ({ mutateAsync, isPending: false }),
+  useResumeDocument: () => ({ data: resumeDocumentData }),
   invalidateJobs: vi.fn(),
 }));
 vi.mock("./TaskProgress", () => ({
@@ -47,9 +49,16 @@ function renderButton(overrides: Partial<JobOut> = {}) {
   );
 }
 
+const resumeDocument: ResumeDocumentOut = {
+  filename: "resume.docx",
+  uploaded_at: "2026-09-01T00:00:00Z",
+  document: { filename: "resume.docx", paragraphs: [], sections: [] },
+};
+
 describe("TailorButton", () => {
   beforeEach(() => {
     tracksData = [];
+    resumeDocumentData = null;
   });
 
   it("preselects the job's best-fit track", () => {
@@ -143,5 +152,52 @@ describe("TailorButton", () => {
 
     unmount();
     expect(count.result.current).toBe(0);
+  });
+
+  it("defaults to tune mode and sends it in the tailor body when a resume document exists", async () => {
+    resumeDocumentData = resumeDocument;
+    mutateAsync.mockResolvedValueOnce({
+      id: "t1",
+      status: "running",
+      result_ref: null,
+      error: null,
+      created_at: "2026-09-09T10:00:00Z",
+      finished_at: null,
+      progress: {},
+      type: "tailor",
+    });
+    renderButton();
+    expect(screen.getByRole("combobox", { name: /mode/i })).toHaveTextContent("Tune my resume");
+
+    const user = userEvent.setup({ delay: null });
+    await user.click(screen.getByRole("button", { name: /tailor/i }));
+
+    expect(mutateAsync).toHaveBeenCalledWith(expect.objectContaining({ body: expect.objectContaining({ mode: "tune" }) }));
+  });
+
+  it("defaults to blocks mode and disables tune mode when there is no resume document", async () => {
+    resumeDocumentData = null;
+    mutateAsync.mockResolvedValueOnce({
+      id: "t1",
+      status: "running",
+      result_ref: null,
+      error: null,
+      created_at: "2026-09-09T10:00:00Z",
+      finished_at: null,
+      progress: {},
+      type: "tailor",
+    });
+    renderButton();
+    const modeSelect = screen.getByRole("combobox", { name: /mode/i });
+    expect(modeSelect).toHaveTextContent("Build from blocks");
+
+    const user = userEvent.setup({ delay: null });
+    await user.click(modeSelect);
+    await user.click(await screen.findByRole("option", { name: /tune my resume/i }));
+    // Selecting the disabled option must not change the selection.
+    expect(screen.getByRole("combobox", { name: /mode/i })).toHaveTextContent("Build from blocks");
+
+    await user.click(screen.getByRole("button", { name: /tailor/i }));
+    expect(mutateAsync).toHaveBeenCalledWith(expect.objectContaining({ body: expect.objectContaining({ mode: "blocks" }) }));
   });
 });

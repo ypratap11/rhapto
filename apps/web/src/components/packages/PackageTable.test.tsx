@@ -16,6 +16,7 @@ const rows: PackageListItem[] = [
     best_track_id: "track-1",
     application_status: null,
     created_at: new Date().toISOString(),
+    mode: "tune",
   },
   {
     id: "pkg-2",
@@ -28,6 +29,7 @@ const rows: PackageListItem[] = [
     best_track_id: null,
     application_status: null,
     created_at: new Date().toISOString(),
+    mode: "blocks",
   },
 ];
 
@@ -41,6 +43,8 @@ describe("PackageTable", () => {
     expect(screen.getByText("Blockedco")).toBeInTheDocument();
     expect(screen.getByText("v1 · draft")).toBeInTheDocument();
     expect(screen.getByText("v2 · blocked")).toBeInTheDocument();
+    expect(screen.getByText("tune")).toBeInTheDocument();
+    expect(screen.getByText("blocks")).toBeInTheDocument();
 
     const reviewLinks = screen.getAllByRole("link", { name: /review/i });
     expect(reviewLinks).toHaveLength(2);

@@ -6,15 +6,19 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ApiError } from "@/lib/api/client";
-import { invalidateJobs, useTailor, useTracks, type JobOut } from "@/lib/api/queries";
+import { invalidateJobs, useResumeDocument, useTailor, useTracks, type JobOut } from "@/lib/api/queries";
 import { startTailoring, stopTailoring } from "@/lib/tailoring";
 import { TaskProgress } from "./TaskProgress";
+
+const MODE_LABEL: Record<"tune" | "blocks", string> = { tune: "Tune my resume", blocks: "Build from blocks" };
 
 export function TailorButton({ job }: { job: JobOut }) {
   const tracks = useTracks();
   const tailor = useTailor();
+  const resumeDocument = useResumeDocument();
   const queryClient = useQueryClient();
   const [trackId, setTrackId] = useState<string | undefined>(undefined);
+  const [mode, setMode] = useState<"blocks" | "tune" | undefined>(undefined);
   const [taskId, setTaskId] = useState<string | null>(null);
   // Tracks whether the tailoring store currently counts this job as running,
   // so the unmount cleanup below only stops it if it was never finished.
@@ -43,10 +47,14 @@ export function TailorButton({ job }: { job: JobOut }) {
   // from props/query data rather than synced via an effect, per the lint rule
   // against synchronous setState in effects.
   const selectedTrackId = trackId ?? job.best_track_id ?? tracks.data?.[0]?.id;
+  // Same derived-not-effect pattern as the track select: default to tune mode once a resume
+  // document exists, but let an explicit user choice win from then on.
+  const hasResumeDocument = resumeDocument.data != null;
+  const selectedMode = mode ?? (hasResumeDocument ? "tune" : "blocks");
 
   async function start() {
     try {
-      const task = await tailor.mutateAsync({ jobId: job.id, body: { track_id: selectedTrackId ?? null } });
+      const task = await tailor.mutateAsync({ jobId: job.id, body: { track_id: selectedTrackId ?? null, mode: selectedMode } });
       // Always route through TaskProgress, even when the mutation already returned a
       // finished task: the SSE endpoint replays the terminal `state` event and closes
       // for finished tasks, so this is the single path that surfaces the result.
@@ -71,6 +79,21 @@ export function TailorButton({ job }: { job: JobOut }) {
                 {t.name}
               </SelectItem>
             ))}
+          </SelectContent>
+        </Select>
+        <Select value={selectedMode} onValueChange={(value: string | null) => value && setMode(value as "blocks" | "tune")}>
+          <SelectTrigger className="w-44" aria-label="Mode">
+            <SelectValue>{(value: string) => MODE_LABEL[value as "tune" | "blocks"] ?? value}</SelectValue>
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem
+              value="tune"
+              disabled={!hasResumeDocument}
+              title={hasResumeDocument ? undefined : "Upload a resume document in the Profile tab to enable tune mode."}
+            >
+              Tune my resume
+            </SelectItem>
+            <SelectItem value="blocks">Build from blocks</SelectItem>
           </SelectContent>
         </Select>
         <Button onClick={start} disabled={tailor.isPending || taskId !== null}>

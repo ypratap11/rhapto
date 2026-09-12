@@ -55,7 +55,10 @@ export function PackageTable({
                 <FitBadge fit={row.best_fit} trackName={track?.name ?? null} minFit={track?.min_fit ?? null} />
               </TableCell>
               <TableCell>
-                <StatusBadge tone={PACKAGE_STATUS_TONE[row.status] ?? "slate"}>{`v${row.version} · ${row.status}`}</StatusBadge>
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <StatusBadge tone={PACKAGE_STATUS_TONE[row.status] ?? "slate"}>{`v${row.version} · ${row.status}`}</StatusBadge>
+                  <StatusBadge tone="zinc">{row.mode}</StatusBadge>
+                </div>
               </TableCell>
               <TableCell>
                 {row.application_status ? (
