@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -11,11 +12,10 @@ import { RegenerateDialog } from "@/components/review/RegenerateDialog";
 import { ResumePane } from "@/components/review/ResumePane";
 import { SourceBlockCard } from "@/components/review/SourceBlockCard";
 import { VersionSwitcher } from "@/components/review/VersionSwitcher";
-import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { ApiError } from "@/lib/api/client";
-import { useApplications, useBlocks, useJob, usePackage, usePackages, usePatchPackage, type Block, type ResumeDocument } from "@/lib/api/queries";
+import { useApplications, useBlocks, useJob, usePackage, usePackageList, usePackages, usePatchPackage, type Block, type ResumeDocument } from "@/lib/api/queries";
 import { formatDate } from "@/lib/format";
 import { parsePath } from "@/lib/resume-paths";
 import { PACKAGE_STATUS_TONE } from "@/lib/status";
@@ -28,6 +28,7 @@ export default function PackageReviewPage() {
   const packages = usePackages(jobId);
   const blocks = useBlocks();
   const applications = useApplications();
+  const reviewQueue = usePackageList("review");
   const patch = usePatchPackage();
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
   const [regenOpen, setRegenOpen] = useState(false);
@@ -38,6 +39,7 @@ export default function PackageReviewPage() {
     const columns = applications.data?.columns ?? {};
     return Object.values(columns).flat().find((a) => a.job.id === jobId) ?? null;
   }, [applications.data, jobId]);
+  const nextPackage = useMemo(() => (reviewQueue.data ?? []).find((row) => row.id !== packageId) ?? null, [reviewQueue.data, packageId]);
 
   if (job.error || pkg.error) return <ApiErrorBanner error={job.error ?? pkg.error} />;
   if (!job.data || !pkg.data) return <Skeleton className="h-64 w-full" />;
@@ -52,23 +54,25 @@ export default function PackageReviewPage() {
     return null;
   })();
 
+  const blocked = pkg.data.status === "blocked";
+  const guardrailPanel = <GuardrailPanel report={pkg.data.guardrail_report} onSelect={setSelectedPath} />;
+
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <p className="text-sm text-muted-foreground">{job.data.company}</p>
-          <h1 className="text-2xl">{job.data.title ?? "Package review"}</h1>
-          <p className="mt-1 flex items-center gap-2 text-sm text-muted-foreground">
-            <StatusBadge tone={PACKAGE_STATUS_TONE[pkg.data.status] ?? "slate"}>{`v${pkg.data.version} · ${pkg.data.status}`}</StatusBadge>
-            created {formatDate(pkg.data.created_at)} · {pkg.data.llm_calls} LLM calls · track {pkg.data.track_id}
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          {packages.data ? <VersionSwitcher jobId={jobId} packages={packages.data} currentId={packageId} /> : null}
-          <PackageActions job={job.data} pkg={pkg.data} application={application} />
-          <Button variant="outline" onClick={() => setRegenOpen(true)}>
-            Regenerate
-          </Button>
+      <div className="sticky top-0 z-10 -mx-6 border-b border-border bg-background/95 px-6 py-3 backdrop-blur">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <p className="text-sm text-muted-foreground">{job.data.company}</p>
+            <h1 className="text-2xl">{job.data.title ?? "Package review"}</h1>
+            <p className="mt-1 flex items-center gap-2 text-sm text-muted-foreground">
+              <StatusBadge tone={PACKAGE_STATUS_TONE[pkg.data.status] ?? "slate"}>{`v${pkg.data.version} · ${pkg.data.status}`}</StatusBadge>
+              created {formatDate(pkg.data.created_at)} · {pkg.data.llm_calls} LLM calls · track {pkg.data.track_id}
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            {packages.data ? <VersionSwitcher jobId={jobId} packages={packages.data} currentId={packageId} /> : null}
+            <PackageActions job={job.data} pkg={pkg.data} application={application} onRegenerate={() => setRegenOpen(true)} />
+          </div>
         </div>
       </div>
       <RegenerateDialog job={job.data} pkg={pkg.data} open={regenOpen} onOpenChange={setRegenOpen} />
@@ -82,6 +86,7 @@ export default function PackageReviewPage() {
       <div className="grid gap-6 lg:grid-cols-[1fr_1.2fr]">
         <JdPane job={job.data} />
         <div className="space-y-4">
+          {blocked ? guardrailPanel : null}
           <ResumePane
             key={pkg.data.id}
             resume={pkg.data.resume}
@@ -99,7 +104,7 @@ export default function PackageReviewPage() {
               }
             }}
           />
-          <GuardrailPanel report={pkg.data.guardrail_report} onSelect={setSelectedPath} />
+          {blocked ? null : guardrailPanel}
           <SourceBlockCard block={selectedBlock} />
           <section className="rounded-md border border-border bg-card p-4 text-sm">
             <h3 className="mb-1 font-sans text-xs font-semibold uppercase tracking-wide text-muted-foreground">Cover note</h3>
@@ -108,6 +113,15 @@ export default function PackageReviewPage() {
             <p className="whitespace-pre-wrap text-muted-foreground">{pkg.data.change_log}</p>
           </section>
         </div>
+      </div>
+      <div className="flex justify-end border-t border-border pt-4">
+        {nextPackage ? (
+          <Link href={`/jobs/${nextPackage.job_id}/packages/${nextPackage.id}`} className="text-sm font-medium text-primary underline-offset-4 hover:underline">
+            Next tailored job →
+          </Link>
+        ) : (
+          <p className="text-sm text-muted-foreground">All reviewed</p>
+        )}
       </div>
     </div>
   );
