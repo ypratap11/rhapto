@@ -1,11 +1,17 @@
 import { describe, expect, it } from "vitest";
-import { flowPrompt, jobState, nextUp, stepForPath } from "./flow";
-import type { JobOut } from "./api/queries";
+import { flowPrompt, jobState, nextReviewPackage, nextUp, stepForPath } from "./flow";
+import type { JobOut, PackageListItem } from "./api/queries";
 
 const base = (over: Partial<JobOut>): JobOut => ({
   id: "j", source: "manual", company: "ExampleCo", title: "Data PM", location: null, url: null, jd_text: "x",
   extracted: null, discovered_at: "2026-09-01T00:00:00Z", latest_package: null, application_status: null,
   best_track_id: "data-pm", best_fit: 70, bucket: "fit", rescued: false, repost_of: null, posted_at: null, scores: [],
+  ...over,
+});
+
+const row = (over: Partial<PackageListItem>): PackageListItem => ({
+  id: "p", job_id: "j", company: "ExampleCo", title: "Data PM", status: "draft", version: 1,
+  created_at: "2026-09-01T00:00:00Z", best_fit: 70, best_track_id: "data-pm", application_status: null,
   ...over,
 });
 
@@ -29,13 +35,44 @@ describe("flow", () => {
     expect(nextUp(jobs, ["e"], 5).map((j) => j.id)).toEqual(["b", "a"]);
     expect(nextUp(jobs, [], 1).map((j) => j.id)).toEqual(["b"]);
   });
-  it("maps paths to steps and builds the prompt", () => {
+  it("maps paths to steps", () => {
     expect(stepForPath("/", false)).toBe(0);
     expect(stepForPath("/", true)).toBe(1);
+    expect(stepForPath("/profile", false)).toBe(0);
+    expect(stepForPath("/profile", true)).toBe(0);
+    expect(stepForPath("/packages", false)).toBe(2);
     expect(stepForPath("/jobs/j/packages/p", false)).toBe(2);
     expect(stepForPath("/pipeline", false)).toBe(3);
-    expect(flowPrompt({ needsReview: 3, next: null })).toEqual({ text: "3 packages ready to review", href: "/packages?filter=review" });
-    expect(flowPrompt({ needsReview: 0, next: base({ id: "z", best_fit: 72 }) })).toEqual({ text: "Next: tailor ExampleCo, Data PM (fit 72)", href: "/#job-z" });
-    expect(flowPrompt({ needsReview: 0, next: null })).toBeNull();
+  });
+  it("builds the flow prompt with needsReview > nextTailor > nextReview priority", () => {
+    const tailorJob = base({ id: "z", best_fit: 72 });
+    const reviewJob = base({
+      id: "y",
+      best_fit: 65,
+      latest_package: { id: "p9", version: 1, status: "blocked", created_at: "" },
+    });
+    expect(flowPrompt({ needsReview: 3, nextTailor: tailorJob, nextReview: reviewJob })).toEqual({
+      text: "3 packages ready to review",
+      href: "/packages?filter=review",
+    });
+    expect(flowPrompt({ needsReview: 0, nextTailor: tailorJob, nextReview: reviewJob })).toEqual({
+      text: "Next: tailor ExampleCo, Data PM (fit 72)",
+      href: "/#job-z",
+    });
+    // Blocked-package case: no packages need review, but there's a review-state job.
+    expect(flowPrompt({ needsReview: 0, nextTailor: null, nextReview: reviewJob })).toEqual({
+      text: "Next: review ExampleCo, Data PM",
+      href: "/jobs/y/packages/p9",
+    });
+    expect(flowPrompt({ needsReview: 0, nextTailor: null, nextReview: null })).toBeNull();
+  });
+  it("advances through the review queue without ping-ponging", () => {
+    const list = [row({ id: "row1" }), row({ id: "row2" }), row({ id: "row3" })];
+    expect(nextReviewPackage(list, "row1")?.id).toBe("row2");
+    expect(nextReviewPackage(list, "row2")?.id).toBe("row3");
+    expect(nextReviewPackage(list, "row3")).toBeNull();
+    // A blocked (not-in-list) package goes to the first review row.
+    expect(nextReviewPackage(list, "blocked-id")?.id).toBe("row1");
+    expect(nextReviewPackage([], "row1")).toBeNull();
   });
 });

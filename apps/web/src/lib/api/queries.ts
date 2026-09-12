@@ -18,7 +18,10 @@ export type JobFilters = { search: string; track: string | null; tab: "new" | "t
 
 export const keys = {
   me: ["me"] as const,
-  jobs: (f: JobFilters) => ["jobs", f.search, f.track, f.tab, f.sort] as const,
+  // New and Tailored share one cache entry: both fetch the same "fit" bucket from
+  // the API and differ only in client-side filtering (see JobList.tsx), so keying
+  // on the derived bucket avoids a refetch/skeleton flash when switching tabs.
+  jobs: (f: JobFilters) => ["jobs", f.search, f.track, f.tab === "low" ? "low" : "fit", f.sort] as const,
   job: (id: string) => ["job", id] as const,
   task: (id: string) => ["task", id] as const,
   tracks: ["profile", "tracks"] as const,
@@ -156,7 +159,7 @@ export const packageListKeys = {
   list: (filter: PackageListFilter) => ["package-list", filter] as const,
 };
 
-const PACKAGE_LIST_PARAMS: Record<PackageListFilter, { status?: "draft" | "blocked"; applied?: boolean }> = {
+export const PACKAGE_LIST_PARAMS: Record<PackageListFilter, { status?: "draft" | "blocked"; applied?: boolean }> = {
   all: {},
   review: { applied: false, status: "draft" },
   blocked: { status: "blocked" },

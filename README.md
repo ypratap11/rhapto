@@ -86,10 +86,10 @@ On first visit the app asks for the API URL (`http://localhost:8000`) and the be
 (`RHAPTO_API_TOKEN`). Then:
 
 1. **Profile**: import your five YAML files (or the demo `profile.example` to try it) and edit blocks, tracks, and rules.
-2. **Jobs** shows *Apply to these first*; press the one button on the top row and it walks the job through
-   Tailor → Review → Mark applied. Progress streams live, and the review step highlights the exact block
-   behind each bullet and lists anything the guardrails blocked.
-3. **Packages** lists everything tailored, so you can pick up any review you didn't finish from the job card.
+2. **Jobs** shows *Apply to these first*; press the action on the top row (Tailor, then Review, then Mark applied).
+   Progress streams live, and the review step highlights the exact block behind each bullet and lists anything
+   the guardrails blocked.
+3. **Packages** lists what needs review (switch the filter for blocked, applied, or all).
 4. **Pipeline** tracks what you submitted: drag applications across the board and keep notes and history.
 
 Downloads are named after you, not the job.

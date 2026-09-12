@@ -5,6 +5,7 @@ import { JobCard } from "./JobCard";
 import type { JobOut } from "@/lib/api/queries";
 
 vi.mock("./TailorButton", () => ({ TailorButton: () => <button>Tailor</button> }));
+vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn() }) }));
 
 const rescueMutateAsync = vi.fn();
 const markApplied = vi.fn();

@@ -3,7 +3,7 @@ import { act, renderHook } from "@testing-library/react";
 import { createElement, type ReactNode } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { ApiError } from "./client";
-import { useMarkApplied } from "./queries";
+import { keys, PACKAGE_LIST_PARAMS, useMarkApplied, type JobFilters } from "./queries";
 
 const postMock = vi.fn();
 const patchMock = vi.fn();
@@ -33,5 +33,26 @@ describe("useMarkApplied", () => {
       params: { path: { application_id: "a9" } },
       body: { status: "applied" },
     });
+  });
+});
+
+describe("keys.jobs", () => {
+  const filters = (over: Partial<JobFilters>): JobFilters => ({ search: "", track: null, tab: "new", sort: "fit", ...over });
+
+  it("shares one cache entry between New and Tailored so switching tabs doesn't refetch", () => {
+    expect(keys.jobs(filters({ tab: "new" }))).toEqual(keys.jobs(filters({ tab: "tailored" })));
+  });
+
+  it("keys Low fit separately", () => {
+    expect(keys.jobs(filters({ tab: "new" }))).not.toEqual(keys.jobs(filters({ tab: "low" })));
+  });
+});
+
+describe("PACKAGE_LIST_PARAMS", () => {
+  it("maps each PackageListFilter to its query params", () => {
+    expect(PACKAGE_LIST_PARAMS.all).toEqual({});
+    expect(PACKAGE_LIST_PARAMS.review).toEqual({ applied: false, status: "draft" });
+    expect(PACKAGE_LIST_PARAMS.blocked).toEqual({ status: "blocked" });
+    expect(PACKAGE_LIST_PARAMS.applied).toEqual({ applied: true });
   });
 });

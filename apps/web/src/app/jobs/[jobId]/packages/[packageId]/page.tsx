@@ -17,6 +17,7 @@ import { StatusBadge } from "@/components/ui/StatusBadge";
 import { ApiError } from "@/lib/api/client";
 import { useApplications, useBlocks, useJob, usePackage, usePackageList, usePackages, usePatchPackage, type Block, type ResumeDocument } from "@/lib/api/queries";
 import { formatDate } from "@/lib/format";
+import { nextReviewPackage } from "@/lib/flow";
 import { parsePath } from "@/lib/resume-paths";
 import { PACKAGE_STATUS_TONE } from "@/lib/status";
 
@@ -39,7 +40,7 @@ export default function PackageReviewPage() {
     const columns = applications.data?.columns ?? {};
     return Object.values(columns).flat().find((a) => a.job.id === jobId) ?? null;
   }, [applications.data, jobId]);
-  const nextPackage = useMemo(() => (reviewQueue.data ?? []).find((row) => row.id !== packageId) ?? null, [reviewQueue.data, packageId]);
+  const nextPackage = useMemo(() => nextReviewPackage(reviewQueue.data ?? [], packageId), [reviewQueue.data, packageId]);
 
   if (job.error || pkg.error) return <ApiErrorBanner error={job.error ?? pkg.error} />;
   if (!job.data || !pkg.data) return <Skeleton className="h-64 w-full" />;

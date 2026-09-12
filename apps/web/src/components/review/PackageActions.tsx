@@ -8,9 +8,8 @@ import { StatusBadge } from "@/components/ui/StatusBadge";
 import { ApiError } from "@/lib/api/client";
 import { useAnswers, useMarkApplied, type ApplicationOut, type JobOut, type PackageOut } from "@/lib/api/queries";
 import { downloadAuthenticated, resumeFilename } from "@/lib/download";
+import { APPLIED_STATUSES } from "@/lib/flow";
 import { STATUS_LABEL, statusTone, type ApplicationStatus } from "@/lib/status";
-
-const APPLIED_STATUSES: ReadonlySet<ApplicationStatus> = new Set(["applied", "screen", "interview", "offer", "closed"]);
 
 export function PackageActions({
   job,
@@ -31,7 +30,7 @@ export function PackageActions({
   async function downloadFile(kind: "pdf" | "docx" | "zip") {
     const path = kind === "zip" ? `/api/v1/packages/${pkg.id}/download` : `/api/v1/packages/${pkg.id}/files/resume.${kind}`;
     try {
-      await downloadAuthenticated(path, resumeFilename(name, kind));
+      await downloadAuthenticated(path, answers.isLoading ? undefined : resumeFilename(name, kind));
     } catch (e) {
       toast.error(e instanceof ApiError ? e.message : "Download failed");
     }
@@ -48,7 +47,7 @@ export function PackageActions({
     }
   }
 
-  const showStatusBadge = application !== null && APPLIED_STATUSES.has(application.status as ApplicationStatus);
+  const showStatusBadge = application !== null && (APPLIED_STATUSES as readonly string[]).includes(application.status);
 
   return (
     <div className="flex flex-wrap items-center gap-2">

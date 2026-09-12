@@ -38,7 +38,9 @@ export function PackageTable({
           <TableHead>Version · status</TableHead>
           <TableHead>Application</TableHead>
           <TableHead>Created</TableHead>
-          <TableHead className="sr-only">Review</TableHead>
+          <TableHead>
+            <span className="sr-only">Review</span>
+          </TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>

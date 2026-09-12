@@ -3,6 +3,7 @@ from datetime import UTC, datetime
 import pytest
 from pydantic import ValidationError
 
+from rhapto.db.models import APPLICATION_STATUSES, APPLIED_STATUSES
 from rhapto.models.guardrail_report import GuardrailReport, Violation
 from rhapto.models.jd_extract import JDExtract
 from rhapto.models.package import ApplicationPackage, JobSnapshot
@@ -19,6 +20,15 @@ from rhapto.models.resume_document import (
     ResumeHeader,
     ResumeSection,
 )
+
+
+def test_applied_statuses_partition_application_statuses() -> None:
+    # APPLIED_STATUSES and its complement must exactly cover APPLICATION_STATUSES,
+    # with no overlap and no leftovers -- so "applied" has one definition per language.
+    not_applied = [s for s in APPLICATION_STATUSES if s not in APPLIED_STATUSES]
+    assert set(APPLIED_STATUSES) | set(not_applied) == set(APPLICATION_STATUSES)
+    assert set(APPLIED_STATUSES) & set(not_applied) == set()
+    assert all(status in APPLICATION_STATUSES for status in APPLIED_STATUSES)
 
 
 def test_block_defaults() -> None:

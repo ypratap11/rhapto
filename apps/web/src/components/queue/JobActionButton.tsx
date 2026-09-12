@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/ui/StatusBadge";
@@ -12,6 +13,7 @@ import { TailorButton } from "./TailorButton";
 export function JobActionButton({ job, size = "default" }: { job: JobOut; size?: "sm" | "default" }) {
   const state = jobState(job);
   const mark = useMarkApplied();
+  const router = useRouter();
   if (state === "tailor") return <TailorButton job={job} />;
   if (state === "applied") {
     return (
@@ -29,16 +31,7 @@ export function JobActionButton({ job, size = "default" }: { job: JobOut; size?:
     try {
       await mark.markApplied(job, pkg.id, null);
       toast.success("Marked as applied", {
-        // Mirrors TaskProgress.tsx's toast-action navigation: this callback fires
-        // outside React's render/commit cycle, so it uses the browser navigation
-        // API rather than next/navigation's useRouter (which requires a mounted
-        // App Router context that a toast action does not have).
-        action: {
-          label: "Open pipeline",
-          onClick: () => {
-            window.location.assign("/pipeline");
-          },
-        },
+        action: { label: "Open pipeline", onClick: () => router.push("/pipeline") },
       });
     } catch (e) {
       toast.error(e instanceof ApiError ? e.message : "Could not mark as applied");

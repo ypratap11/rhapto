@@ -9,6 +9,12 @@ import { ApiError } from "@/lib/api/client";
 import { useDeleteJob, useJobs, useTracks, type JobFilters, type JobOut } from "@/lib/api/queries";
 import { JobCard, type TrackInfo } from "./JobCard";
 
+const EMPTY_TEXT: Record<JobFilters["tab"], string> = {
+  new: "No new jobs. Poll for jobs or add one.",
+  tailored: "Nothing tailored yet. Press Tailor on a job.",
+  low: "No low-fit jobs.",
+};
+
 export function JobList({ filters }: { filters: JobFilters }) {
   const jobs = useJobs(filters);
   const tracksQuery = useTracks();
@@ -26,7 +32,7 @@ export function JobList({ filters }: { filters: JobFilters }) {
   const all = jobs.data ?? [];
   const items =
     filters.tab === "low" ? all : all.filter((job) => (filters.tab === "tailored" ? job.latest_package !== null : job.latest_package === null));
-  if (items.length === 0) return <p className="text-muted-foreground">No jobs yet. Add one to start tailoring.</p>;
+  if (items.length === 0) return <p className="text-muted-foreground">{EMPTY_TEXT[filters.tab]}</p>;
 
   return (
     <div className="space-y-4">

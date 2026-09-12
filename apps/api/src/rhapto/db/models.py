@@ -13,6 +13,7 @@ from rhapto.db.base import Base, TimestampMixin, UserScopedMixin, new_uuid
 
 EMBEDDING_DIMENSIONS = 384
 APPLICATION_STATUSES = ("discovered", "queued", "applied", "screen", "interview", "offer", "closed")
+APPLIED_STATUSES = ("applied", "screen", "interview", "offer", "closed")
 TASK_STATUSES = ("queued", "running", "succeeded", "failed")
 PACKAGE_STATUSES = ("draft", "blocked")
 

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { FLOW_STEPS, flowPrompt, nextUp, stepForPath } from "@/lib/flow";
+import { FLOW_STEPS, flowPrompt, jobState, nextUp, stepForPath } from "@/lib/flow";
 import { useJobs, usePackageList } from "@/lib/api/queries";
 import { useSkipped } from "@/lib/skipped";
 import { useTailoringCount } from "@/lib/tailoring";
@@ -15,7 +15,10 @@ export function StepBar() {
   const tailoring = useTailoringCount() > 0;
   if (pathname.startsWith("/settings")) return null;
   const current = stepForPath(pathname, tailoring);
-  const prompt = flowPrompt({ needsReview: review.data?.length ?? 0, next: nextUp(jobs.data ?? [], skipped, 1)[0] ?? null });
+  const candidates = nextUp(jobs.data ?? [], skipped, Infinity);
+  const nextTailor = candidates.find((j) => jobState(j) === "tailor") ?? null;
+  const nextReview = candidates.find((j) => jobState(j) === "review") ?? null;
+  const prompt = flowPrompt({ needsReview: review.data?.length ?? 0, nextTailor, nextReview });
   return (
     <div className="border-b border-border bg-card/60">
       <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-2 px-6 py-2 text-sm">

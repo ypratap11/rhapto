@@ -5,8 +5,10 @@ import uuid
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from rhapto.db.models import Application, Job, Package
+from rhapto.db.models import APPLICATION_STATUSES, APPLIED_STATUSES, Application, Job, Package
 from rhapto.models.package import ApplicationPackage
+
+NOT_APPLIED_STATUSES = tuple(s for s in APPLICATION_STATUSES if s not in APPLIED_STATUSES)
 
 
 async def next_version(session: AsyncSession, job_id: uuid.UUID) -> int:
@@ -96,12 +98,10 @@ async def list_packages(
     if status:
         query = query.where(Package.status == status)
     if applied is True:
-        query = query.where(
-            Application.status.in_(("applied", "screen", "interview", "offer", "closed"))
-        )
+        query = query.where(Application.status.in_(APPLIED_STATUSES))
     elif applied is False:
         query = query.where(
-            or_(Application.id.is_(None), Application.status.in_(("queued", "discovered")))
+            or_(Application.id.is_(None), Application.status.in_(NOT_APPLIED_STATUSES))
         )
     return [(p, j, a) for p, j, a in (await session.execute(query)).all()]
 

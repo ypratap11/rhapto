@@ -1,6 +1,6 @@
 import { ApiError, apiUrl, authHeaders, type Problem } from "./api/client";
 
-export async function downloadAuthenticated(path: string, filename: string): Promise<void> {
+export async function downloadAuthenticated(path: string, filename?: string): Promise<void> {
   const response = await fetch(apiUrl(path), { headers: authHeaders() });
   if (!response.ok) {
     let problem: Problem | null = null;
@@ -15,7 +15,9 @@ export async function downloadAuthenticated(path: string, filename: string): Pro
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = filename;
+  // Only force a filename once we know it; otherwise let the response's
+  // Content-Disposition header name win instead of overwriting it.
+  if (filename) a.download = filename;
   document.body.appendChild(a);
   a.click();
   a.remove();
