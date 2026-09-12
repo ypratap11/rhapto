@@ -42,7 +42,9 @@ MAX_BULLET_EDITS = 6
 BLOCKS_ONLY = frozenset({PROVENANCE, METRICS, ATTRIBUTION, VISIBILITY})
 
 YEAR = re.compile(r"\b(?:19|20)\d{2}\b")
-PRESENT = re.compile(r"\b(?:present|current)\b", re.IGNORECASE)
+# "present"/"current" is a date only in a period context ("2021 – present", "2021 to current");
+# as a verb or adjective ("present findings", "current state") it is ordinary prose.
+PRESENT = re.compile(r"(?:19|20)\d{2}\s*(?:[-–—]|to)\s*(present|current)", re.IGNORECASE)
 # A word that could be part of a capitalised entity name. Apostrophes and internal dots stay in
 # the token so "B.S." and "Moody's" survive as one word; a trailing sentence period is stripped
 # by `_runs` so "at Acme Analytics." is not read as a different org from "Acme Analytics".
@@ -247,6 +249,20 @@ def _mentions(source: str, run: str) -> bool:
     return re.search(rf"(?<!\w){re.escape(run)}(?!\w)", source) is not None
 
 
+def _has_unknown_word(source: str, run: str) -> bool:
+    """Whether `run` contains a word the document never uses, or a word that looks like a name.
+
+    Skills and competency lines are Title Case by convention, so a tune edit that recombines the
+    document's own vocabulary -- "Automated Validation", "Python Hands-on" -- is a rephrasing,
+    not an invented employer or product. A run is only an invention when it brings in a word the
+    document has nowhere ("Globex") or a word with an organisation signal ("Corp", "Acme.io").
+    """
+    for word in normalize_entity(run).split():
+        if _looks_like_a_name(word) or not _mentions(source, word):
+            return True
+    return False
+
+
 def _check_entities(doc: SourceDocument, edits: list[Edit]) -> list[Violation]:
     source = normalize_entity(document_entities(doc))
     out: list[Violation] = []
@@ -254,7 +270,7 @@ def _check_entities(doc: SourceDocument, edits: list[Edit]) -> list[Violation]:
         unknown = [
             run
             for run in capitalised_runs(edit.after)
-            if not _mentions(source, normalize_entity(run))
+            if not _mentions(source, normalize_entity(run)) and _has_unknown_word(source, run)
         ]
         if unknown:
             out.append(

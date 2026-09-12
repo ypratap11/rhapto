@@ -313,3 +313,51 @@ def test_period_codes_are_not_entities() -> None:
     assert capitalised_runs("Delivered Q3 results ahead of schedule.") == []
     assert capitalised_runs("Reduced FY24 operating costs by 12% across H1.") == []
     assert capitalised_runs("Reduced costs with Globex Corp in Q3.") == ["Globex Corp"]
+
+
+def test_recombined_document_words_are_not_invented_entities(demo_profile_dir: Path) -> None:
+    """Title Case skill phrases built from the document's own words pass; a new word does not."""
+    doc = _doc()
+    skill = next(p for p in doc.paragraphs if p.role == "skill")
+    rules = load_profile(demo_profile_dir).guardrails
+
+    def edit(text: str) -> list[Edit]:
+        return [Edit(paragraph_id=skill.id, before=skill.text, after=text, reason="r")]
+
+    ok = run_tune_guardrails(
+        doc,
+        edit("Platforms:  Snowflake Migration  •  Analytics Roadmap  •  Warehouse Cost"),
+        demo_extract(),
+        rules,
+        cover_note=None,
+    )
+    assert not [v for v in ok.violations if v.rule == "no-invented-entities"], ok.violations
+    bad = run_tune_guardrails(
+        doc,
+        edit("Platforms:  Snowflake  •  Databricks Lakehouse"),
+        demo_extract(),
+        rules,
+        cover_note=None,
+    )
+    assert [v.rule for v in bad.violations] == ["no-invented-entities"]
+
+
+def test_present_as_a_verb_is_not_a_date(demo_profile_dir: Path) -> None:
+    doc = _doc()
+    rules = load_profile(demo_profile_dir).guardrails
+    ok = run_tune_guardrails(
+        doc,
+        _after(doc, "Present migration results to finance and engineering stakeholders."),
+        demo_extract(),
+        rules,
+        cover_note=None,
+    )
+    assert not [v for v in ok.violations if v.rule == "date-consistency"], ok.violations
+    bad = run_tune_guardrails(
+        doc,
+        _after(doc, "Ran the analytics roadmap, 2019 – present."),
+        demo_extract(),
+        rules,
+        cover_note=None,
+    )
+    assert [v.rule for v in bad.violations] == ["date-consistency"]
