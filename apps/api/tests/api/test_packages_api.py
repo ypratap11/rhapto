@@ -269,3 +269,23 @@ async def test_patch_edits_with_an_invented_number_is_blocked(
     new = (await client.patch(f"/api/v1/packages/{package_id}", json=body)).json()
     assert new["status"] == "blocked" and new["has_docx"] is False
     assert {v["rule"] for v in new["guardrail_report"]["violations"]} == {"no-new-numbers"}
+
+
+@pytest.mark.usefixtures("imported_profile")
+async def test_patch_edits_after_document_replaced_is_422(
+    client: httpx.AsyncClient, fake_llm
+) -> None:  # type: ignore[no-untyped-def]
+    from docx import Document
+
+    package_id = await _tuned(client, fake_llm)
+    d = Document()
+    d.add_paragraph("MAYA CHEN")
+    d.add_paragraph("A different document entirely.")
+    buf = io.BytesIO()
+    d.save(buf)
+    files = {"file": ("Other.docx", buf.getvalue(), DOCX_MIME)}
+    assert (await client.post("/api/v1/profile/resume-document", files=files)).status_code == 201
+    body = {"edits": [{"paragraph_id": "p3", "after": NEW_SUMMARY}]}
+    response = await client.patch(f"/api/v1/packages/{package_id}", json=body)
+    assert response.status_code == 422, response.text
+    assert "replaced" in response.json()["detail"]

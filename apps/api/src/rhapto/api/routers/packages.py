@@ -21,7 +21,7 @@ from rhapto.engine.guardrails.registry import run_guardrails
 from rhapto.engine.guardrails.tune import run_tune_guardrails
 from rhapto.engine.render.docx import OrphanBulletError, render_docx
 from rhapto.engine.render.tune_docx import render_tuned_docx
-from rhapto.engine.types import Profile
+from rhapto.engine.types import EngineError, Profile
 from rhapto.models.guardrail_report import GuardrailReport
 from rhapto.models.jd_extract import JDExtract
 from rhapto.models.resume_document import ResumeDocument
@@ -188,6 +188,18 @@ async def _edited_tune_version(
             detail="the resume document this package was tuned from is no longer stored; upload it again",
         )
     document, data = source
+    if parent.source_document_json is not None and [
+        p.model_dump() for p in document.paragraphs
+    ] != [
+        p.model_dump()
+        for p in SourceDocument.model_validate(parent.source_document_json).paragraphs
+    ]:
+        # The upload was replaced since this package was tuned: paragraph ids no longer mean
+        # the same lines, so an edit would silently land on the wrong text. Tailor again instead.
+        raise HTTPException(
+            status_code=422,
+            detail="the resume document was replaced after this package was tuned; tailor the job again",
+        )
     originals = {paragraph.id: paragraph.text for paragraph in document.paragraphs}
     edits = [
         Edit(
@@ -203,7 +215,12 @@ async def _edited_tune_version(
     )
     # Same rule as the pipeline: the writer edits the user's own file, so a failing report
     # means nothing is written back and the human reads the violations instead.
-    docx = await asyncio.to_thread(render_tuned_docx, data, edits) if report.passed else b""
+    docx = b""
+    if report.passed:
+        try:
+            docx = await asyncio.to_thread(render_tuned_docx, data, edits)
+        except EngineError:
+            docx = b""
     resume = to_resume_document(apply_edits(document, edits), build_header(profile.answers))
     return EditedVersion(
         {"resume": resume, "edits": edits, "source_document": document}, docx, report
