@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { initialProgress, reduceTaskEvent } from "./task-progress";
+import { PIPELINE_STEPS, initialProgress, reduceTaskEvent } from "./task-progress";
 
 describe("reduceTaskEvent", () => {
   it("tracks steps then done", () => {
@@ -9,6 +9,18 @@ describe("reduceTaskEvent", () => {
     expect(s.step).toBe("compose");
     s = reduceTaskEvent(s, { event: "done", data: { event: "done", package_id: "p1", status: "draft" } });
     expect(s).toMatchObject({ status: "succeeded", packageId: "p1", packageStatus: "draft" });
+  });
+
+  it("follows a tune run's step sequence even though it skips select and compose", () => {
+    let s = reduceTaskEvent(initialProgress, { event: "state", data: { status: "running", progress: { step: "extract" } } });
+    for (const step of ["tune", "validate", "render"]) {
+      s = reduceTaskEvent(s, { event: "progress", data: { event: "progress", step } });
+      expect(s).toMatchObject({ status: "running", step });
+      // Steps are resolved by name, so the skipped ones only leave a gap in the rendered list.
+      expect(PIPELINE_STEPS.indexOf(step as (typeof PIPELINE_STEPS)[number])).toBeGreaterThan(-1);
+    }
+    s = reduceTaskEvent(s, { event: "done", data: { event: "done", package_id: "p2", status: "draft" } });
+    expect(s).toMatchObject({ status: "succeeded", packageId: "p2" });
   });
 
   it("maps a finished state event directly", () => {

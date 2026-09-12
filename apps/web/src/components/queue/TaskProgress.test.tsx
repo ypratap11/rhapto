@@ -60,7 +60,7 @@ describe("TaskProgress", () => {
     });
     renderTaskProgress({ taskId: "t2", jobId: "j1", onFinished: vi.fn() });
 
-    for (const step of ["extract", "select", "compose", "validate", "repair"]) {
+    for (const step of ["extract", "select", "compose", "tune", "validate", "repair"]) {
       expect(screen.getByText(step).className).toContain("border-green-300");
     }
     expect(screen.getByText("render").className).toContain("border-accent");

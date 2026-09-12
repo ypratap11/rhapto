@@ -138,6 +138,8 @@ export type ResumeBullet = Schemas["ResumeBullet"];
 export type ResumeEntry = Schemas["ResumeEntry"];
 export type ResumeSection = Schemas["ResumeSection"];
 export type GuardrailReport = Schemas["GuardrailReport"];
+export type Edit = Schemas["Edit"];
+export type EditPatch = Schemas["EditPatch"];
 export type Violation = Schemas["Violation"];
 export type Block = Schemas["Block"];
 export type ApplicationOut = Schemas["ApplicationOut"];
@@ -208,6 +210,18 @@ export function usePatchPackage() {
   return useMutation({
     mutationFn: ({ id, resume }: { id: string; resume: ResumeDocument }) =>
       unwrap(apiClient().PATCH("/api/v1/packages/{package_id}", { params: { path: { package_id: id } }, body: { resume } })),
+    onSuccess: (created) => {
+      invalidatePackages(queryClient, created.job_id);
+      invalidatePackageList(queryClient);
+    },
+  });
+}
+
+export function usePatchPackageEdits() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, edits }: { id: string; edits: EditPatch[] }) =>
+      unwrap(apiClient().PATCH("/api/v1/packages/{package_id}", { params: { path: { package_id: id } }, body: { edits } })),
     onSuccess: (created) => {
       invalidatePackages(queryClient, created.job_id);
       invalidatePackageList(queryClient);

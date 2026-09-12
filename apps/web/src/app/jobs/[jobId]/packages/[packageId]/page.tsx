@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { ApiErrorBanner } from "@/components/shell/ApiErrorBanner";
+import { ChangesPane } from "@/components/review/ChangesPane";
 import { GuardrailPanel } from "@/components/review/GuardrailPanel";
 import { JdPane } from "@/components/review/JdPane";
 import { PackageActions } from "@/components/review/PackageActions";
@@ -15,11 +16,20 @@ import { VersionSwitcher } from "@/components/review/VersionSwitcher";
 import { Skeleton } from "@/components/ui/skeleton";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { ApiError } from "@/lib/api/client";
-import { useApplications, useBlocks, useJob, usePackage, usePackageList, usePackages, usePatchPackage, type Block, type ResumeDocument } from "@/lib/api/queries";
+import { useApplications, useBlocks, useJob, usePackage, usePackageList, usePackages, usePatchPackage, usePatchPackageEdits, type Block, type EditPatch, type ResumeDocument } from "@/lib/api/queries";
 import { formatDate } from "@/lib/format";
 import { nextReviewPackage } from "@/lib/flow";
 import { parsePath } from "@/lib/resume-paths";
 import { PACKAGE_STATUS_TONE } from "@/lib/status";
+
+const TUNE_VIOLATION_PATH = /^edits\[(\d+)\]$/;
+
+/** Bring a tune-mode change card into view; guardrail paths there address edits, not resume nodes. */
+function scrollToChange(path: string): void {
+  const match = TUNE_VIOLATION_PATH.exec(path);
+  if (!match) return;
+  document.getElementById(`change-${match[1]}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+}
 
 export default function PackageReviewPage() {
   const { jobId, packageId } = useParams<{ jobId: string; packageId: string }>();
@@ -31,6 +41,7 @@ export default function PackageReviewPage() {
   const applications = useApplications();
   const reviewQueue = usePackageList("review");
   const patch = usePatchPackage();
+  const patchEdits = usePatchPackageEdits();
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
   const [regenOpen, setRegenOpen] = useState(false);
 
@@ -56,7 +67,15 @@ export default function PackageReviewPage() {
   })();
 
   const blocked = pkg.data.status === "blocked";
-  const guardrailPanel = <GuardrailPanel report={pkg.data.guardrail_report} onSelect={setSelectedPath} />;
+  const tune = pkg.data.mode === "tune";
+  // A tune-mode violation path is `edits[<i>]`, which addresses a change card rather than a
+  // resume path, so selecting one scrolls the card into view instead of driving the pane.
+  const guardrailPanel = <GuardrailPanel report={pkg.data.guardrail_report} onSelect={tune ? scrollToChange : setSelectedPath} />;
+
+  function saveNewVersion(created: { id: string; status: string; version: number }): void {
+    toast.success(created.status === "blocked" ? "Saved as v" + created.version + ", but guardrails blocked it" : "Saved as v" + created.version);
+    router.push(`/jobs/${jobId}/packages/${created.id}`);
+  }
 
   return (
     <div className="space-y-6">
@@ -88,25 +107,37 @@ export default function PackageReviewPage() {
         <JdPane job={job.data} />
         <div className="space-y-4">
           {blocked ? guardrailPanel : null}
-          <ResumePane
-            key={pkg.data.id}
-            resume={pkg.data.resume}
-            blocks={blockMap}
-            selectedPath={selectedPath}
-            onSelect={setSelectedPath}
-            violationsByPath={violationsByPath}
-            onSave={async (draft: ResumeDocument) => {
-              try {
-                const created = await patch.mutateAsync({ id: packageId, resume: draft });
-                toast.success(created.status === "blocked" ? "Saved as v" + created.version + ", but guardrails blocked it" : "Saved as v" + created.version);
-                router.push(`/jobs/${jobId}/packages/${created.id}`);
-              } catch (e) {
-                toast.error(e instanceof ApiError ? e.message : "Could not save");
-              }
-            }}
-          />
+          {tune ? (
+            <ChangesPane
+              pkg={pkg.data}
+              violationsByPath={violationsByPath}
+              onSave={async (edits: EditPatch[]) => {
+                try {
+                  saveNewVersion(await patchEdits.mutateAsync({ id: packageId, edits }));
+                } catch (e) {
+                  toast.error(e instanceof ApiError ? e.message : "Could not save");
+                }
+              }}
+            />
+          ) : (
+            <ResumePane
+              key={pkg.data.id}
+              resume={pkg.data.resume}
+              blocks={blockMap}
+              selectedPath={selectedPath}
+              onSelect={setSelectedPath}
+              violationsByPath={violationsByPath}
+              onSave={async (draft: ResumeDocument) => {
+                try {
+                  saveNewVersion(await patch.mutateAsync({ id: packageId, resume: draft }));
+                } catch (e) {
+                  toast.error(e instanceof ApiError ? e.message : "Could not save");
+                }
+              }}
+            />
+          )}
           {blocked ? null : guardrailPanel}
-          <SourceBlockCard block={selectedBlock} />
+          {tune ? null : <SourceBlockCard block={selectedBlock} />}
           <section className="rounded-md border border-border bg-card p-4 text-sm">
             <h3 className="mb-1 font-sans text-xs font-semibold uppercase tracking-wide text-muted-foreground">Cover note</h3>
             <p className="whitespace-pre-wrap">{pkg.data.cover_note}</p>

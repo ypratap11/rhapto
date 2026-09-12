@@ -1,7 +1,10 @@
 import { apiClient, unwrap } from "./api/client";
 import type { TaskEvent } from "./api/sse";
 
-export const PIPELINE_STEPS = ["extract", "select", "compose", "validate", "repair", "render"] as const;
+// The engine's step order. Tune mode skips `select` and `compose` (it rewrites the uploaded
+// document instead of composing from blocks), so a run reports a subset of these: steps are
+// matched by name, never by position, and a gap just leaves the skipped pills unhighlighted.
+export const PIPELINE_STEPS = ["extract", "select", "compose", "tune", "validate", "repair", "render"] as const;
 export const POLL_STEPS = ["fetch", "dedupe", "score", "done"] as const;
 
 export type ProgressState = {
