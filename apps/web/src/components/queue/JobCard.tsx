@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { ExternalLink, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -12,7 +11,7 @@ import { SOURCE_LABEL } from "@/lib/fit";
 import { formatRelative, truncate } from "@/lib/format";
 import { PACKAGE_STATUS_TONE, STATUS_LABEL, statusTone, type ApplicationStatus } from "@/lib/status";
 import { FitBadge } from "./FitBadge";
-import { TailorButton } from "./TailorButton";
+import { JobActionButton } from "./JobActionButton";
 
 export type TrackInfo = { name: string; min_fit: number };
 
@@ -50,11 +49,6 @@ export function JobCard({ job, onDelete, tracks }: { job: JobOut; onDelete: (job
           </p>
           <p className="text-sm text-muted-foreground">{truncate(job.jd_text, 160)}</p>
           <div className="flex gap-3 pt-1 text-sm">
-            {pkg ? (
-              <Link href={`/jobs/${job.id}/packages/${pkg.id}`} className="text-accent underline">
-                Review package
-              </Link>
-            ) : null}
             {job.url ? (
               <a href={job.url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 underline">
                 Open posting <ExternalLink className="size-3" aria-hidden />
@@ -63,7 +57,7 @@ export function JobCard({ job, onDelete, tracks }: { job: JobOut; onDelete: (job
           </div>
         </div>
         <div className="flex shrink-0 flex-col items-end gap-2">
-          <TailorButton job={job} />
+          <JobActionButton job={job} />
           {job.bucket === "low" ? (
             <Button variant="ghost" size="sm" onClick={onRescue} disabled={rescue.isPending}>
               Rescue

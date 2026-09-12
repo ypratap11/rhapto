@@ -6,16 +6,18 @@ import { useQueryClient } from "@tanstack/react-query";
 import { AddJobDialog } from "@/components/queue/AddJobDialog";
 import { FilterBar } from "@/components/queue/FilterBar";
 import { JobList } from "@/components/queue/JobList";
+import { NextUp } from "@/components/queue/NextUp";
 import { PollNowButton } from "@/components/queue/PollNowButton";
 import { RunsDrawer } from "@/components/queue/RunsDrawer";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { invalidateDiscovery, useDiscoveryRuns, useTracks, type JobFilters } from "@/lib/api/queries";
+import { invalidateDiscovery, useDiscoveryRuns, useJobs, useTracks, type JobFilters } from "@/lib/api/queries";
 import { formatRelative } from "@/lib/format";
 
 export default function QueuePage() {
   const [query, setQuery] = useState("");
-  const [filters, setFilters] = useState<JobFilters>({ search: "", track: null, bucket: "fit", sort: "fit" });
+  const [filters, setFilters] = useState<JobFilters>({ search: "", track: null, tab: "new", sort: "fit" });
+  const allFit = useJobs({ search: "", track: null, tab: "new", sort: "fit" });
   const [open, setOpen] = useState(false);
   const [runsOpen, setRunsOpen] = useState(false);
   const queryClient = useQueryClient();
@@ -34,7 +36,7 @@ export default function QueuePage() {
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-2xl">Queue</h1>
+        <h1 className="text-2xl">Jobs</h1>
         <div className="flex gap-2">
           <Input aria-label="Search jobs" placeholder="Search company, title, text" value={query} onChange={(e) => setQuery(e.target.value)} className="w-64" />
           <PollNowButton onFinished={() => invalidateDiscovery(queryClient)} />
@@ -43,6 +45,7 @@ export default function QueuePage() {
           </Button>
         </div>
       </div>
+      <NextUp jobs={allFit.data ?? []} />
       <div className="flex flex-wrap items-center justify-between gap-3">
         <FilterBar filters={filters} onChange={setFilters} tracks={(tracks.data ?? []).map((t) => ({ id: t.id, name: t.name }))} />
         <div className="text-sm text-muted-foreground">

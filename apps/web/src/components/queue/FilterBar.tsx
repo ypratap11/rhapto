@@ -2,6 +2,7 @@
 
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { JobFilters } from "@/lib/api/queries";
 
 const ALL_TRACKS = "__all__";
@@ -40,28 +41,13 @@ export function FilterBar({
           ))}
         </SelectContent>
       </Select>
-      <div className="flex gap-1" role="group" aria-label="Fit bucket">
-        <Button
-          type="button"
-          variant="outline"
-          className={filters.bucket === "fit" ? ACTIVE_SEGMENT_CLASS : undefined}
-          size="sm"
-          aria-pressed={filters.bucket === "fit"}
-          onClick={() => onChange({ ...filters, bucket: "fit" })}
-        >
-          Fit
-        </Button>
-        <Button
-          type="button"
-          variant="outline"
-          className={filters.bucket === "low" ? ACTIVE_SEGMENT_CLASS : undefined}
-          size="sm"
-          aria-pressed={filters.bucket === "low"}
-          onClick={() => onChange({ ...filters, bucket: "low" })}
-        >
-          Low fit
-        </Button>
-      </div>
+      <Tabs value={filters.tab} onValueChange={(v) => v && onChange({ ...filters, tab: v as JobFilters["tab"] })}>
+        <TabsList aria-label="Jobs tab">
+          <TabsTrigger value="new">New</TabsTrigger>
+          <TabsTrigger value="tailored">Tailored</TabsTrigger>
+          <TabsTrigger value="low">Low fit</TabsTrigger>
+        </TabsList>
+      </Tabs>
       <div className="flex gap-1" role="group" aria-label="Sort">
         <Button
           type="button"

@@ -23,13 +23,15 @@ export function JobList({ filters }: { filters: JobFilters }) {
 
   if (jobs.isLoading) return <Skeleton className="h-32 w-full" />;
   if (jobs.error) return <ApiErrorBanner error={jobs.error} />;
-  const items = jobs.data ?? [];
+  const all = jobs.data ?? [];
+  const items =
+    filters.tab === "low" ? all : all.filter((job) => (filters.tab === "tailored" ? job.latest_package !== null : job.latest_package === null));
   if (items.length === 0) return <p className="text-muted-foreground">No jobs yet. Add one to start tailoring.</p>;
 
   return (
     <div className="space-y-4">
       {items.map((job) => (
-        <div key={job.id} id={job.id}>
+        <div key={job.id} id={`job-${job.id}`}>
           <JobCard job={job} onDelete={setPending} tracks={tracks} />
         </div>
       ))}

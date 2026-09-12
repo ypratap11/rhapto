@@ -14,11 +14,11 @@ export type MeOut = Schemas["MeOut"];
 export type PollRunOut = Schemas["PollRunOut"];
 export type SourceInfoOut = Schemas["SourceInfoOut"];
 
-export type JobFilters = { search: string; track: string | null; bucket: "fit" | "low"; sort: "fit" | "newest" };
+export type JobFilters = { search: string; track: string | null; tab: "new" | "tailored" | "low"; sort: "fit" | "newest" };
 
 export const keys = {
   me: ["me"] as const,
-  jobs: (f: JobFilters) => ["jobs", f.search, f.track, f.bucket, f.sort] as const,
+  jobs: (f: JobFilters) => ["jobs", f.search, f.track, f.tab, f.sort] as const,
   job: (id: string) => ["job", id] as const,
   task: (id: string) => ["task", id] as const,
   tracks: ["profile", "tracks"] as const,
@@ -54,7 +54,7 @@ export function useJobs(filters: JobFilters) {
             query: {
               ...(filters.search ? { search: filters.search } : {}),
               ...(filters.track ? { track: filters.track } : {}),
-              bucket: filters.bucket,
+              bucket: filters.tab === "low" ? "low" : "fit",
               sort: filters.sort,
             },
           },
@@ -231,6 +231,31 @@ export function usePatchApplication() {
       unwrap(apiClient().PATCH("/api/v1/applications/{application_id}", { params: { path: { application_id: id } }, body })),
     onSuccess: () => invalidateApplications(queryClient),
   });
+}
+
+export function useMarkApplied() {
+  const create = useCreateApplication();
+  const patch = usePatchApplication();
+  return {
+    isPending: create.isPending || patch.isPending,
+    async markApplied(job: Pick<JobOut, "id">, packageId: string, existing: { id: string } | null): Promise<void> {
+      let id: string;
+      if (existing) {
+        id = existing.id;
+      } else {
+        try {
+          id = (await create.mutateAsync({ job_id: job.id, package_id: packageId })).id;
+        } catch (e) {
+          if (e instanceof ApiError && e.status === 409 && typeof e.problem?.existing_application_id === "string") {
+            id = e.problem.existing_application_id;
+          } else {
+            throw e;
+          }
+        }
+      }
+      await patch.mutateAsync({ id, body: { status: "applied" } });
+    },
+  };
 }
 
 export function useDeleteApplication() {

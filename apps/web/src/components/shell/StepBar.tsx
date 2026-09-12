@@ -8,7 +8,7 @@ import { useSkipped } from "@/lib/skipped";
 
 export function StepBar({ tailoring = false }: { tailoring?: boolean }) {
   const pathname = usePathname();
-  const jobs = useJobs({ search: "", track: null, bucket: "fit", sort: "fit" });
+  const jobs = useJobs({ search: "", track: null, tab: "new", sort: "fit" });
   const review = usePackageList("review");
   const skipped = useSkipped();
   if (pathname.startsWith("/settings")) return null;
