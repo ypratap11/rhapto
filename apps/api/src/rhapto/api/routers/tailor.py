@@ -20,6 +20,7 @@ from rhapto.api.deps import (
 from rhapto.api.errors import not_found
 from rhapto.api.schemas import TailorBody, TaskOut
 from rhapto.db.models import Task
+from rhapto.db.repositories import documents as documents_repo
 from rhapto.db.repositories import jobs as job_repo
 from rhapto.db.repositories import packages as package_repo
 from rhapto.db.repositories import tasks as task_repo
@@ -66,11 +67,21 @@ async def tailor_job_endpoint(
         parent = await package_repo.get_package(session, user_id, body.parent_package_id)
         if parent is None or parent.job_id != job_id:
             raise not_found("package", body.parent_package_id)
+    has_document = await documents_repo.get_document(session, user_id) is not None
+    if body.mode == "tune" and not has_document:
+        raise HTTPException(
+            status_code=422,
+            detail="upload a resume document before tailoring in tune mode",
+        )
+    # The worker loads the document itself (the bytes never travel through the task row), so
+    # all the request carries is the resolved mode.
+    mode = body.mode or ("tune" if has_document else "blocks")
     request = {
         "job_id": str(job_id),
         "track_id": body.track_id,
         "feedback": body.feedback,
         "parent_package_id": str(body.parent_package_id) if body.parent_package_id else None,
+        "mode": mode,
     }
     task = await task_repo.create_task(session, user_id, "tailor_job", {"request": request})
     await session.commit()  # the worker (inline or arq) must see the row

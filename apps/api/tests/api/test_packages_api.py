@@ -5,8 +5,10 @@ from typing import Any
 import httpx
 import pytest
 from helpers import bullet, demo_extract, demo_resume
+from helpers_docx import build_fixture_docx
 
 from rhapto.engine.compose import AnswerItem, ComposeOutput
+from rhapto.engine.tune import ProposedEdit, TuneOutput
 
 JD = "ExampleCo seeks a Data Platform Program Manager to lead our Snowflake migration. " * 3
 
@@ -186,3 +188,84 @@ async def test_blocked_package_download_is_unmistakable(
     assert "no-unverified-metrics" in note and "25%" in note
     docx = await client.get(f"/api/v1/packages/{new['id']}/files/resume.docx")
     assert docx.status_code == 200 and docx.headers["x-rhapto-guardrails"] == "blocked"
+
+
+# --- tune mode ---------------------------------------------------------------------------------
+
+CLEAN_BULLET = "Led the Snowflake migration for 12 teams, reducing warehouse cost 30%."
+NEW_SUMMARY = "Data program leader for warehouse migrations."
+DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+
+
+def tune_output() -> dict[str, Any]:
+    return TuneOutput(
+        edits=[ProposedEdit(paragraph_id="p9", text=CLEAN_BULLET, reason="mirrors the JD")],
+        cover_note="I have led Snowflake migrations end to end for platform teams.",
+        change_log="Emphasised the migration.",
+        answers=[AnswerItem(key="why_this_company", value="Data.")],
+    ).model_dump(mode="json")
+
+
+async def _tuned(client: httpx.AsyncClient, fake_llm) -> str:  # type: ignore[no-untyped-def]
+    files = {"file": ("Maya_Chen_Resume.docx", build_fixture_docx(), DOCX_MIME)}
+    assert (await client.post("/api/v1/profile/resume-document", files=files)).status_code == 201
+    fake_llm.script(demo_extract(), tune_output())
+    job_id = str((await client.post("/api/v1/jobs", json={"jd_text": JD})).json()["id"])
+    task = (await client.post(f"/api/v1/jobs/{job_id}/tailor", json={})).json()
+    assert task["status"] == "succeeded", task
+    return str(task["result_ref"])
+
+
+@pytest.mark.usefixtures("imported_profile")
+async def test_patch_edits_creates_new_tune_version(client: httpx.AsyncClient, fake_llm) -> None:  # type: ignore[no-untyped-def]
+    package_id = await _tuned(client, fake_llm)
+    body = {"edits": [{"paragraph_id": "p3", "after": NEW_SUMMARY}]}
+    patched = await client.patch(f"/api/v1/packages/{package_id}", json=body)
+    assert patched.status_code == 201, patched.text
+    new = patched.json()
+    assert new["version"] == 2 and new["mode"] == "tune" and new["status"] == "draft"
+    assert new["parent_package_id"] == package_id and new["llm_calls"] == 0
+    assert [e["paragraph_id"] for e in new["edits"]] == ["p3"]
+    assert new["edits"][0]["after"] == NEW_SUMMARY
+    assert new["edits"][0]["before"].startswith("Senior Data Program Manager with 8 years")
+    assert new["guardrail_report"]["passed"] is True
+    assert new["resume"]["summary"][0]["text"] == NEW_SUMMARY
+    assert new["has_docx"] is True
+    docx = await client.get(f"/api/v1/packages/{new['id']}/files/resume.docx")
+    assert docx.status_code == 200 and docx.content[:2] == b"PK"
+
+
+@pytest.mark.usefixtures("imported_profile")
+async def test_patch_resume_on_a_tune_package_is_422(client: httpx.AsyncClient, fake_llm) -> None:  # type: ignore[no-untyped-def]
+    package_id = await _tuned(client, fake_llm)
+    resume = (await client.get(f"/api/v1/packages/{package_id}")).json()["resume"]
+    response = await client.patch(f"/api/v1/packages/{package_id}", json={"resume": resume})
+    assert response.status_code == 422, response.text
+    assert "tune" in response.json()["detail"]
+
+
+@pytest.mark.usefixtures("imported_profile")
+async def test_patch_edits_on_a_blocks_package_is_422(client: httpx.AsyncClient, fake_llm) -> None:  # type: ignore[no-untyped-def]
+    _, package_id = await _tailored(client, fake_llm)
+    body = {"edits": [{"paragraph_id": "p3", "after": NEW_SUMMARY}]}
+    response = await client.patch(f"/api/v1/packages/{package_id}", json=body)
+    assert response.status_code == 422, response.text
+
+
+@pytest.mark.usefixtures("imported_profile")
+async def test_patch_needs_exactly_one_of_resume_or_edits(
+    client: httpx.AsyncClient, fake_llm
+) -> None:  # type: ignore[no-untyped-def]
+    _, package_id = await _tailored(client, fake_llm)
+    assert (await client.patch(f"/api/v1/packages/{package_id}", json={})).status_code == 422
+
+
+@pytest.mark.usefixtures("imported_profile")
+async def test_patch_edits_with_an_invented_number_is_blocked(
+    client: httpx.AsyncClient, fake_llm
+) -> None:  # type: ignore[no-untyped-def]
+    package_id = await _tuned(client, fake_llm)
+    body = {"edits": [{"paragraph_id": "p3", "after": "Led 47 warehouse migrations."}]}
+    new = (await client.patch(f"/api/v1/packages/{package_id}", json=body)).json()
+    assert new["status"] == "blocked" and new["has_docx"] is False
+    assert {v["rule"] for v in new["guardrail_report"]["violations"]} == {"no-new-numbers"}

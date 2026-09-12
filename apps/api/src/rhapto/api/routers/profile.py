@@ -12,16 +12,20 @@ from fastapi import APIRouter, Depends, HTTPException, Response, UploadFile
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from rhapto.api.deps import current_user, get_enqueuer, get_session
+from rhapto.api.deps import current_user, get_enqueuer, get_session, get_storage
 from rhapto.api.errors import not_found
-from rhapto.api.schemas import ImportOut
+from rhapto.api.schemas import ImportOut, ResumeDocumentOut
+from rhapto.db.models import ResumeDocumentRow
+from rhapto.db.repositories import documents as documents_repo
 from rhapto.db.repositories import profile as repo
 from rhapto.models.profile.bases import ResumeBase
 from rhapto.models.profile.blocks import Block
 from rhapto.models.profile.guardrails import GuardrailRule
 from rhapto.models.profile.tracks import Track
 from rhapto.models.profile.watchlist import AggregatorEntry, WatchlistEntry
+from rhapto.models.source_document import SourceDocument
 from rhapto.profile.loader import dump_profile
+from rhapto.services.documents import DocumentError, delete_resume_document, store_resume_document
 from rhapto.services.enqueue import Enqueuer
 from rhapto.services.profile_sync import (
     aggregator_row_to_model,
@@ -33,6 +37,7 @@ from rhapto.services.profile_sync import (
     track_row_to_model,
     watchlist_row_to_model,
 )
+from rhapto.services.storage import PackageStorage
 
 logger = logging.getLogger(__name__)
 
@@ -49,6 +54,7 @@ PROFILE_FILES = {
 UserDep = Annotated[uuid.UUID, Depends(current_user)]
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
 EnqueuerDep = Annotated[Enqueuer, Depends(get_enqueuer)]
+StorageDep = Annotated[PackageStorage, Depends(get_storage)]
 
 
 def _check_id(path_id: str, body_id: str) -> None:
@@ -296,3 +302,51 @@ async def export_profile(user_id: UserDep, session: SessionDep) -> StreamingResp
         media_type="application/zip",
         headers={"Content-Disposition": 'attachment; filename="profile.zip"'},
     )
+
+
+# --- the resume document tune mode rewrites ----------------------------------------------------
+
+
+def document_out(row: ResumeDocumentRow) -> ResumeDocumentOut:
+    return ResumeDocumentOut(
+        filename=row.filename,
+        uploaded_at=row.uploaded_at,
+        document=SourceDocument.model_validate(row.parsed_json),
+    )
+
+
+@router.post("/resume-document", response_model=ResumeDocumentOut, status_code=201)
+async def upload_resume_document(
+    file: UploadFile,
+    user_id: UserDep,
+    session: SessionDep,
+    storage: StorageDep,
+) -> ResumeDocumentOut:
+    """Accept one .docx, parse it, and keep it as the document tune mode rewrites.
+
+    The bytes go to the storage volume, never into git and never into the package row; only
+    the parsed paragraphs are stored in Postgres.
+    """
+    name = Path(file.filename or "").name
+    try:
+        row = await store_resume_document(session, storage, user_id, name, await file.read())
+    except DocumentError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    await session.commit()
+    return document_out(row)
+
+
+@router.get("/resume-document", response_model=ResumeDocumentOut)
+async def get_resume_document(user_id: UserDep, session: SessionDep) -> ResumeDocumentOut:
+    row = await documents_repo.get_document(session, user_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="no resume document uploaded")
+    return document_out(row)
+
+
+@router.delete("/resume-document", status_code=204)
+async def delete_document(user_id: UserDep, session: SessionDep, storage: StorageDep) -> Response:
+    """Idempotent: deleting nothing is still a 204, and tailoring falls back to blocks mode."""
+    await delete_resume_document(session, storage, user_id)
+    await session.commit()
+    return Response(status_code=204)

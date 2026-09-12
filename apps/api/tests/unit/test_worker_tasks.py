@@ -5,6 +5,7 @@ from typing import Any
 
 import pytest
 from helpers import bullet, demo_extract, demo_resume
+from helpers_docx import build_fixture_docx
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from rhapto.db.models import Job, User
@@ -13,7 +14,9 @@ from rhapto.db.repositories import tasks as task_repo
 from rhapto.db.repositories.jobs import create_job
 from rhapto.engine.compose import AnswerItem, ComposeOutput
 from rhapto.engine.providers.fake import FakeEmbeddingProvider, FakeLLMProvider
+from rhapto.engine.tune import ProposedEdit, TuneOutput
 from rhapto.services import storage as storage_module
+from rhapto.services.documents import store_resume_document
 from rhapto.services.eventbus import InMemoryEventBus
 from rhapto.services.profile_sync import import_profile_dir
 from rhapto.services.storage import PackageStorage
@@ -46,6 +49,7 @@ async def _setup(
     user: User,
     demo_profile_dir: Path,
     track_id: str | None = None,
+    mode: str = "blocks",
 ) -> tuple[uuid.UUID, uuid.UUID]:
     async with session_factory() as session:
         await import_profile_dir(session, user.id, demo_profile_dir)
@@ -60,6 +64,7 @@ async def _setup(
                     "track_id": track_id,
                     "feedback": None,
                     "parent_package_id": None,
+                    "mode": mode,
                 }
             },
         )
@@ -316,3 +321,59 @@ async def test_embed_blocks_logs_and_returns_on_a_bad_user_id(
     with caplog.at_level(logging.ERROR, logger="rhapto.worker"):
         await embed_blocks(ctx, user_id="not-a-uuid", block_ids=["acme-migration"])
     assert "embed_blocks failed" in caplog.text
+
+
+CLEAN_BULLET = "Led the Snowflake migration for 12 teams, reducing warehouse cost 30%."
+
+
+def tune_output() -> dict[str, Any]:
+    return TuneOutput(
+        edits=[ProposedEdit(paragraph_id="p9", text=CLEAN_BULLET, reason="mirrors the JD")],
+        cover_note="I have led Snowflake migrations end to end for platform teams.",
+        change_log="Emphasised the migration.",
+        answers=[AnswerItem(key="why_this_company", value="Data.")],
+    ).model_dump(mode="json")
+
+
+async def test_tailor_job_tune_mode_loads_the_uploaded_document(
+    session_factory, user: User, demo_profile_dir: Path, tmp_path: Path
+) -> None:  # type: ignore[no-untyped-def]
+    storage = PackageStorage(tmp_path / "pkg")
+    _, task_id = await _setup(session_factory, user, demo_profile_dir, mode="tune")
+    async with session_factory() as session:
+        await store_resume_document(
+            session, storage, user.id, "Maya_Chen_Resume.docx", build_fixture_docx()
+        )
+        await session.commit()
+    bus = InMemoryEventBus()
+    await tailor_job(
+        _ctx(session_factory, FakeLLMProvider([demo_extract(), tune_output()]), bus, storage),
+        task_id=str(task_id),
+    )
+    async with session_factory() as session:
+        task = await task_repo.get_task(session, user.id, task_id)
+        assert task is not None and task.status == "succeeded", task.error if task else None
+        package = await package_repo.get_package(session, user.id, uuid.UUID(task.result_ref or ""))
+        assert package is not None and package.mode == "tune" and package.status == "draft"
+        assert [e["paragraph_id"] for e in package.edits_json or []] == ["p9"]
+        assert package.source_document_json is not None
+        assert package.selection_block_ids == []
+        assert package.docx_path and Path(package.docx_path).exists()
+    steps = [e["step"] for _, e in bus.published if e.get("event") == "progress"]
+    assert steps == ["extract", "tune", "validate", "render"]
+
+
+async def test_tailor_job_tune_mode_without_a_document_fails_the_task(
+    session_factory, user: User, demo_profile_dir: Path, tmp_path: Path
+) -> None:  # type: ignore[no-untyped-def]
+    storage = PackageStorage(tmp_path / "pkg")
+    _, task_id = await _setup(session_factory, user, demo_profile_dir, mode="tune")
+    bus = InMemoryEventBus()
+    await tailor_job(
+        _ctx(session_factory, FakeLLMProvider([demo_extract(), tune_output()]), bus, storage),
+        task_id=str(task_id),
+    )
+    async with session_factory() as session:
+        task = await task_repo.get_task(session, user.id, task_id)
+        assert task is not None and task.status == "failed"
+        assert "resume document" in (task.error or "")

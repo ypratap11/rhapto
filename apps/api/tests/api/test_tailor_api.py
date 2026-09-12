@@ -5,8 +5,10 @@ from typing import Any
 import httpx
 import pytest
 from helpers import demo_extract, demo_resume
+from helpers_docx import build_fixture_docx
 
 from rhapto.engine.compose import AnswerItem, ComposeOutput
+from rhapto.engine.tune import ProposedEdit, TuneOutput
 from rhapto.services.eventbus import InMemoryEventBus
 
 JD = "ExampleCo seeks a Data Platform Program Manager to lead our Snowflake migration. " * 3
@@ -147,3 +149,69 @@ async def test_repeated_streams_do_not_exhaust_the_pool(
         events = _events(raw)
         assert [name for name, _ in events] == ["state"]
         assert events[0][1]["status"] == "succeeded"
+
+
+# --- tune mode ---------------------------------------------------------------------------------
+
+CLEAN_BULLET = "Led the Snowflake migration for 12 teams, reducing warehouse cost 30%."
+DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+
+
+def tune_output() -> dict[str, Any]:
+    return TuneOutput(
+        edits=[ProposedEdit(paragraph_id="p9", text=CLEAN_BULLET, reason="mirrors the JD")],
+        cover_note="I have led Snowflake migrations end to end for platform teams.",
+        change_log="Emphasised the migration.",
+        answers=[AnswerItem(key="why_this_company", value="Data.")],
+    ).model_dump(mode="json")
+
+
+async def _upload_document(client: httpx.AsyncClient) -> None:
+    files = {"file": ("Maya_Chen_Resume.docx", build_fixture_docx(), DOCX_MIME)}
+    response = await client.post("/api/v1/profile/resume-document", files=files)
+    assert response.status_code == 201, response.text
+
+
+@pytest.mark.usefixtures("imported_profile")
+async def test_tailor_defaults_to_tune_when_document_exists(
+    client: httpx.AsyncClient, fake_llm
+) -> None:  # type: ignore[no-untyped-def]
+    await _upload_document(client)
+    fake_llm.script(demo_extract(), tune_output())
+    job_id = await _job(client)
+    accepted = await client.post(f"/api/v1/jobs/{job_id}/tailor", json={})
+    assert accepted.status_code == 202, accepted.text
+    task = accepted.json()
+    assert task["status"] == "succeeded", task
+    package = (await client.get(f"/api/v1/packages/{task['result_ref']}")).json()
+    assert package["mode"] == "tune" and package["status"] == "draft"
+    assert [e["paragraph_id"] for e in package["edits"]] == ["p9"]
+    assert package["edits"][0]["after"] == CLEAN_BULLET
+    assert package["source_document"]["filename"] == "Maya_Chen_Resume.docx"
+    assert package["resume"]["summary"][0]["source_block_id"].startswith("p")
+    docx = await client.get(f"/api/v1/packages/{task['result_ref']}/files/resume.docx")
+    assert docx.status_code == 200 and docx.content[:2] == b"PK"
+    listed = (await client.get("/api/v1/packages")).json()
+    assert [item["mode"] for item in listed] == ["tune"]
+
+
+@pytest.mark.usefixtures("imported_profile")
+async def test_tailor_mode_tune_without_document_is_422(client: httpx.AsyncClient) -> None:
+    job_id = await _job(client)
+    response = await client.post(f"/api/v1/jobs/{job_id}/tailor", json={"mode": "tune"})
+    assert response.status_code == 422, response.text
+    assert "resume document" in response.json()["detail"]
+
+
+@pytest.mark.usefixtures("imported_profile")
+async def test_tailor_mode_blocks_still_works_with_document(
+    client: httpx.AsyncClient, fake_llm
+) -> None:  # type: ignore[no-untyped-def]
+    await _upload_document(client)
+    fake_llm.script(demo_extract(), good_output())
+    job_id = await _job(client)
+    task = (await client.post(f"/api/v1/jobs/{job_id}/tailor", json={"mode": "blocks"})).json()
+    assert task["status"] == "succeeded", task
+    package = (await client.get(f"/api/v1/packages/{task['result_ref']}")).json()
+    assert package["mode"] == "blocks" and package["edits"] == []
+    assert package["source_document"] is None

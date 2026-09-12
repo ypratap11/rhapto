@@ -46,6 +46,11 @@ async def create_package(
         docx_path=docx_path,
         pdf_path=pdf_path,
         parent_package_id=parent_package_id,
+        mode=package.mode,
+        edits_json=[e.model_dump(mode="json") for e in package.edits],
+        source_document_json=(
+            package.source_document.model_dump(mode="json") if package.source_document else None
+        ),
     )
     session.add(row)
     await session.flush()
@@ -135,5 +140,10 @@ def package_row_to_model(
             "status": row.status,
             "llm_calls": row.llm_calls,
             "created_at": row.created_at,
+            # Rows written before tune mode existed have NULL here; the defaults keep them
+            # readable as what they were -- a blocks-mode package with no document.
+            "mode": row.mode or "blocks",
+            "edits": row.edits_json or [],
+            "source_document": row.source_document_json,
         }
     )

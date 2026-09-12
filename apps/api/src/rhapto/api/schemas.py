@@ -10,6 +10,7 @@ from rhapto.db.models import APPLICATION_STATUSES
 from rhapto.models.guardrail_report import GuardrailReport
 from rhapto.models.jd_extract import JDExtract
 from rhapto.models.resume_document import ResumeDocument
+from rhapto.models.source_document import Edit, SourceDocument
 
 
 class HealthOut(BaseModel):
@@ -82,6 +83,10 @@ class TailorBody(BaseModel):
     track_id: str | None = None
     feedback: str | None = None
     parent_package_id: uuid.UUID | None = None
+    # None means "pick for me": tune when the user has uploaded a resume document, blocks
+    # otherwise. An explicit value always wins, so a user with a document can still run the
+    # block library against a job.
+    mode: Literal["blocks", "tune"] | None = None
 
 
 class PackageOut(BaseModel):
@@ -101,10 +106,34 @@ class PackageOut(BaseModel):
     has_docx: bool
     has_pdf: bool
     created_at: datetime
+    mode: Literal["blocks", "tune"]
+    edits: list[Edit]
+    source_document: SourceDocument | None
+
+
+class EditPatch(BaseModel):
+    """One paragraph the human rewrote. `before` is not accepted: the stored document is the
+    only authority on what the paragraph said."""
+
+    paragraph_id: str
+    after: str
 
 
 class PackagePatch(BaseModel):
-    resume: ResumeDocument
+    """A human edit to a package: `resume` in blocks mode, `edits` in tune mode.
+
+    Each field carries the complete new state for its mode, not a delta, so a new version is
+    always a full replacement of the thing the mode owns.
+    """
+
+    resume: ResumeDocument | None = None
+    edits: list[EditPatch] | None = None
+
+    @model_validator(mode="after")
+    def _exactly_one(self) -> PackagePatch:
+        if (self.resume is None) == (self.edits is None):
+            raise ValueError("provide exactly one of resume or edits")
+        return self
 
 
 class PackageListItem(BaseModel):
@@ -114,10 +143,17 @@ class PackageListItem(BaseModel):
     title: str | None
     version: int
     status: str
+    mode: Literal["blocks", "tune"]
     application_status: str | None
     best_fit: int | None
     best_track_id: str | None
     created_at: datetime
+
+
+class ResumeDocumentOut(BaseModel):
+    filename: str
+    uploaded_at: datetime
+    document: SourceDocument
 
 
 class StatusChange(BaseModel):

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import uuid
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal, NamedTuple
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from fastapi.responses import FileResponse
@@ -10,16 +10,23 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from rhapto.api.deps import current_user, get_enqueuer, get_session, get_storage
 from rhapto.api.errors import not_found
-from rhapto.api.schemas import PackageListItem, PackageOut, PackagePatch
+from rhapto.api.schemas import EditPatch, PackageListItem, PackageOut, PackagePatch
 from rhapto.db.models import Package
 from rhapto.db.repositories import jobs as job_repo
 from rhapto.db.repositories import packages as repo
 from rhapto.db.repositories import profile as profile_repo
+from rhapto.engine.compose import build_header
+from rhapto.engine.document import apply_edits, to_resume_document
 from rhapto.engine.guardrails.registry import run_guardrails
+from rhapto.engine.guardrails.tune import run_tune_guardrails
 from rhapto.engine.render.docx import OrphanBulletError, render_docx
+from rhapto.engine.render.tune_docx import render_tuned_docx
+from rhapto.engine.types import Profile
 from rhapto.models.guardrail_report import GuardrailReport
 from rhapto.models.jd_extract import JDExtract
 from rhapto.models.resume_document import ResumeDocument
+from rhapto.models.source_document import Edit, SourceDocument
+from rhapto.services.documents import load_source
 from rhapto.services.enqueue import Enqueuer
 from rhapto.services.naming import download_basename
 from rhapto.services.packaging import persist_package
@@ -56,6 +63,13 @@ def package_to_out(row: Package) -> PackageOut:
         has_docx=row.docx_path is not None,
         has_pdf=row.pdf_path is not None,
         created_at=row.created_at,
+        mode="tune" if row.mode == "tune" else "blocks",
+        edits=[Edit.model_validate(e) for e in row.edits_json or []],
+        source_document=(
+            SourceDocument.model_validate(row.source_document_json)
+            if row.source_document_json is not None
+            else None
+        ),
     )
 
 
@@ -103,6 +117,7 @@ async def list_all_packages(
             title=j.title,
             version=p.version,
             status=p.status,
+            mode="tune" if p.mode == "tune" else "blocks",
             application_status=a.status if a else None,
             best_fit=j.best_fit,
             best_track_id=j.best_track_id,
@@ -125,6 +140,74 @@ async def list_packages(
 @router.get("/packages/{package_id}", response_model=PackageOut)
 async def get_package(package_id: uuid.UUID, user_id: UserDep, session: SessionDep) -> PackageOut:
     return package_to_out(await _get_package(session, user_id, package_id))
+
+
+class EditedVersion(NamedTuple):
+    """What a human edit produces: the fields that change on the new version, plus its DOCX."""
+
+    update: dict[str, Any]
+    docx: bytes
+    report: GuardrailReport
+
+
+async def _edited_blocks_version(
+    parent: Package, profile: Profile, extract: JDExtract, resume: ResumeDocument
+) -> EditedVersion:
+    """Re-validate the hand-edited resume against the parent's stored selection and re-render."""
+    report = run_guardrails(
+        resume, profile, parent.selection_block_ids, extract, cover_note=parent.cover_note
+    )
+    try:
+        # python-docx builds a zip in memory; keep it off the event loop with the rest of the IO.
+        docx = await asyncio.to_thread(render_docx, resume, profile.block_map())
+    except OrphanBulletError:
+        docx = b""
+    return EditedVersion({"resume": resume}, docx, report)
+
+
+async def _edited_tune_version(
+    session: AsyncSession,
+    storage: PackageStorage,
+    user_id: uuid.UUID,
+    parent: Package,
+    profile: Profile,
+    extract: JDExtract,
+    patches: list[EditPatch],
+) -> EditedVersion:
+    """Rebuild the edit set against the stored document, re-validate it, and rewrite the DOCX.
+
+    `before` always comes from the document, never from the request: the same rule the LLM is
+    held to, so a client cannot smuggle in a paragraph the document never contained. An edit
+    naming a paragraph that is not in the document keeps an empty `before` and is reported by
+    the `tune-scope` guardrail rather than raising.
+    """
+    source = await load_source(session, storage, user_id)
+    if source is None:
+        raise HTTPException(
+            status_code=422,
+            detail="the resume document this package was tuned from is no longer stored; upload it again",
+        )
+    document, data = source
+    originals = {paragraph.id: paragraph.text for paragraph in document.paragraphs}
+    edits = [
+        Edit(
+            paragraph_id=patch.paragraph_id,
+            before=originals.get(patch.paragraph_id, ""),
+            after=patch.after.strip(),
+            reason="edited by user",
+        )
+        for patch in patches
+    ]
+    report = run_tune_guardrails(
+        document, edits, extract, profile.guardrails, cover_note=parent.cover_note
+    )
+    # Same rule as the pipeline: the writer edits the user's own file, so a failing report
+    # means nothing is written back and the human reads the violations instead.
+    docx = await asyncio.to_thread(render_tuned_docx, data, edits) if report.passed else b""
+    resume = to_resume_document(apply_edits(document, edits), build_header(profile.answers))
+    return EditedVersion(
+        {"resume": resume, "edits": edits, "source_document": document}, docx, report
+    )
 
 
 @router.patch(
@@ -153,10 +236,12 @@ async def patch_package(
     storage: StorageDep,
     enqueuer: EnqueuerDep,
 ) -> PackageOut:
-    """Edited resume -> re-validate with the stored selection -> re-render -> new version.
+    """Human edit -> re-validate -> re-render -> new version. Never bypasses guardrails.
 
-    Never bypasses guardrails: the edited resume is re-run through run_guardrails with the
-    parent's stored selection and job's cover note before it is persisted as a new version.
+    Blocks-mode packages are patched with `resume` and re-run through `run_guardrails` with the
+    parent's stored selection; tune-mode packages are patched with `edits` and re-run through
+    `run_tune_guardrails` against the uploaded document. The body must match the parent's mode:
+    a resume has no meaning for a tuned document, and vice versa.
     """
     parent = await _get_package(session, user_id, package_id)
     job = await job_repo.get_job(session, user_id, parent.job_id)
@@ -164,14 +249,25 @@ async def patch_package(
         raise not_found("job", parent.job_id)
     profile = await load_profile_from_db(session, user_id)
     extract = JDExtract.model_validate(parent.jd_extract_json)
-    report = run_guardrails(
-        body.resume, profile, parent.selection_block_ids, extract, cover_note=parent.cover_note
-    )
-    try:
-        # python-docx builds a zip in memory; keep it off the event loop with the rest of the IO.
-        docx = await asyncio.to_thread(render_docx, body.resume, profile.block_map())
-    except OrphanBulletError:
-        docx = b""
+    tune = parent.mode == "tune"
+    if body.edits is not None:
+        if not tune:
+            raise HTTPException(
+                status_code=422,
+                detail="this package was written from your block library; patch it with `resume`",
+            )
+        version = await _edited_tune_version(
+            session, storage, user_id, parent, profile, extract, body.edits
+        )
+    else:
+        if tune:
+            raise HTTPException(
+                status_code=422,
+                detail="this package is a tune of your uploaded document; patch it with `edits`",
+            )
+        assert body.resume is not None  # the schema guarantees exactly one of the two
+        version = await _edited_blocks_version(parent, profile, extract, body.resume)
+    report, docx = version.report, version.docx
 
     model = repo.package_row_to_model(
         parent,
@@ -183,7 +279,7 @@ async def patch_package(
     )
     model = model.model_copy(
         update={
-            "resume": body.resume,
+            **version.update,
             "guardrail_report": report,
             "status": "draft" if report.passed else "blocked",
             "llm_calls": 0,

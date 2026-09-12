@@ -246,10 +246,12 @@ export interface paths {
         head?: never;
         /**
          * Patch Package
-         * @description Edited resume -> re-validate with the stored selection -> re-render -> new version.
+         * @description Human edit -> re-validate -> re-render -> new version. Never bypasses guardrails.
          *
-         *     Never bypasses guardrails: the edited resume is re-run through run_guardrails with the
-         *     parent's stored selection and job's cover note before it is persisted as a new version.
+         *     Blocks-mode packages are patched with `resume` and re-run through `run_guardrails` with the
+         *     parent's stored selection; tune-mode packages are patched with `edits` and re-run through
+         *     `run_tune_guardrails` against the uploaded document. The body must match the parent's mode:
+         *     a resume has no meaning for a tuned document, and vice versa.
          */
         patch: operations["patch_package_api_v1_packages__package_id__patch"];
         trace?: never;
@@ -463,6 +465,34 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/profile/resume-document": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Resume Document */
+        get: operations["get_resume_document_api_v1_profile_resume_document_get"];
+        put?: never;
+        /**
+         * Upload Resume Document
+         * @description Accept one .docx, parse it, and keep it as the document tune mode rewrites.
+         *
+         *     The bytes go to the storage volume, never into git and never into the package row; only
+         *     the parsed paragraphs are stored in Postgres.
+         */
+        post: operations["upload_resume_document_api_v1_profile_resume_document_post"];
+        /**
+         * Delete Document
+         * @description Idempotent: deleting nothing is still a 204, and tailoring falls back to blocks mode.
+         */
+        delete: operations["delete_document_api_v1_profile_resume_document_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/profile/tracks": {
         parameters: {
             query?: never;
@@ -667,6 +697,54 @@ export interface components {
         Body_import_profile_api_v1_profile_import_post: {
             /** Files */
             files: string[];
+        };
+        /** Body_upload_resume_document_api_v1_profile_resume_document_post */
+        Body_upload_resume_document_api_v1_profile_resume_document_post: {
+            /** File */
+            file: string;
+        };
+        /** DocParagraph */
+        DocParagraph: {
+            /** Id */
+            id: string;
+            /**
+             * Role
+             * @enum {string}
+             */
+            role: "name" | "contact" | "heading" | "summary" | "competency" | "entry_title" | "entry_org" | "bullet" | "skill" | "credential" | "other";
+            /** Section */
+            section?: string | null;
+            /** Text */
+            text: string;
+        };
+        /** DocSection */
+        DocSection: {
+            /** Heading */
+            heading: string;
+            /** Paragraph Ids */
+            paragraph_ids: string[];
+        };
+        /** Edit */
+        Edit: {
+            /** After */
+            after: string;
+            /** Before */
+            before: string;
+            /** Paragraph Id */
+            paragraph_id: string;
+            /** Reason */
+            reason: string;
+        };
+        /**
+         * EditPatch
+         * @description One paragraph the human rewrote. `before` is not accepted: the stored document is the
+         *     only authority on what the paragraph said.
+         */
+        EditPatch: {
+            /** After */
+            after: string;
+            /** Paragraph Id */
+            paragraph_id: string;
         };
         /** GuardrailReport */
         GuardrailReport: {
@@ -880,6 +958,11 @@ export interface components {
              * Format: uuid
              */
             job_id: string;
+            /**
+             * Mode
+             * @enum {string}
+             */
+            mode: "blocks" | "tune";
             /** Status */
             status: string;
             /** Title */
@@ -902,6 +985,8 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
+            /** Edits */
+            edits: components["schemas"]["Edit"][];
             guardrail_report: components["schemas"]["GuardrailReport"];
             /** Has Docx */
             has_docx: boolean;
@@ -920,9 +1005,15 @@ export interface components {
             job_id: string;
             /** Llm Calls */
             llm_calls: number;
+            /**
+             * Mode
+             * @enum {string}
+             */
+            mode: "blocks" | "tune";
             /** Parent Package Id */
             parent_package_id: string | null;
             resume: components["schemas"]["ResumeDocument"];
+            source_document: components["schemas"]["SourceDocument"] | null;
             /** Status */
             status: string;
             /** Track Id */
@@ -930,9 +1021,17 @@ export interface components {
             /** Version */
             version: number;
         };
-        /** PackagePatch */
+        /**
+         * PackagePatch
+         * @description A human edit to a package: `resume` in blocks mode, `edits` in tune mode.
+         *
+         *     Each field carries the complete new state for its mode, not a delta, so a new version is
+         *     always a full replacement of the thing the mode owns.
+         */
         PackagePatch: {
-            resume: components["schemas"]["ResumeDocument"];
+            /** Edits */
+            edits?: components["schemas"]["EditPatch"][] | null;
+            resume?: components["schemas"]["ResumeDocument"] | null;
         };
         /** PackageSummary */
         PackageSummary: {
@@ -1024,6 +1123,17 @@ export interface components {
              */
             summary: components["schemas"]["ResumeBullet"][];
         };
+        /** ResumeDocumentOut */
+        ResumeDocumentOut: {
+            document: components["schemas"]["SourceDocument"];
+            /** Filename */
+            filename: string;
+            /**
+             * Uploaded At
+             * Format: date-time
+             */
+            uploaded_at: string;
+        };
         /** ResumeEntry */
         ResumeEntry: {
             /**
@@ -1070,6 +1180,15 @@ export interface components {
             /** Title */
             title: string;
         };
+        /** SourceDocument */
+        SourceDocument: {
+            /** Filename */
+            filename: string;
+            /** Paragraphs */
+            paragraphs: components["schemas"]["DocParagraph"][];
+            /** Sections */
+            sections: components["schemas"]["DocSection"][];
+        };
         /** SourceInfoOut */
         SourceInfoOut: {
             /**
@@ -1098,6 +1217,8 @@ export interface components {
         TailorBody: {
             /** Feedback */
             feedback?: string | null;
+            /** Mode */
+            mode?: ("blocks" | "tune") | null;
             /** Parent Package Id */
             parent_package_id?: string | null;
             /** Track Id */
@@ -2470,6 +2591,101 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["ImportOut"];
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_resume_document_api_v1_profile_resume_document_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResumeDocumentOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    upload_resume_document_api_v1_profile_resume_document_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_upload_resume_document_api_v1_profile_resume_document_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResumeDocumentOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_document_api_v1_profile_resume_document_delete: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {

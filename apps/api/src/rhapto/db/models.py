@@ -5,7 +5,16 @@ from datetime import datetime
 from typing import Any
 
 from pgvector.sqlalchemy import Vector
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import (
+    Boolean,
+    DateTime,
+    ForeignKey,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+    func,
+)
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -88,6 +97,25 @@ class Answers(UserScopedMixin, TimestampMixin, Base):
     answers_json: Mapped[dict[str, str]] = mapped_column(JSONB, default=dict, nullable=False)
 
 
+class ResumeDocumentRow(UserScopedMixin, TimestampMixin, Base):
+    """The one resume DOCX the user uploaded for tune mode.
+
+    Only the parsed form lives here; the bytes stay on the storage volume (`path`) because a
+    multi-megabyte upload has no business in a JSON column. One row per user: re-uploading
+    replaces it, which is why `user_id` is unique.
+    """
+
+    __tablename__ = "resume_documents"
+    __table_args__ = (UniqueConstraint("user_id"),)
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=new_uuid)
+    filename: Mapped[str] = mapped_column(String(300), nullable=False)
+    path: Mapped[str] = mapped_column(Text, nullable=False)
+    parsed_json: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    uploaded_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
 class WatchlistEntry(UserScopedMixin, TimestampMixin, Base):
     __tablename__ = "watchlist"
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=new_uuid)
@@ -148,6 +176,14 @@ class Package(UserScopedMixin, TimestampMixin, Base):
     parent_package_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("packages.id", ondelete="SET NULL")
     )
+    # Tune mode: the edits applied to the user's own document, and the document they were
+    # applied to. NULL on every package written before tune mode existed, which is why the
+    # readers default rather than assume.
+    mode: Mapped[str] = mapped_column(
+        String(10), default="blocks", server_default="blocks", nullable=False
+    )
+    edits_json: Mapped[list[dict[str, Any]] | None] = mapped_column(JSONB)
+    source_document_json: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
 
 
 class Application(UserScopedMixin, TimestampMixin, Base):

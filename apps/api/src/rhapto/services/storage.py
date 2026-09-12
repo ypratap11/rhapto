@@ -3,6 +3,7 @@ from __future__ import annotations
 import io
 import re
 import shutil
+import uuid
 import zipfile
 from pathlib import Path
 from typing import Literal
@@ -74,3 +75,27 @@ class PackageStorage:
 
     def delete(self, package_id: str) -> None:
         shutil.rmtree(self.dir_for(package_id), ignore_errors=True)
+
+    # --- the user's uploaded resume document ---------------------------------------------------
+    # Kept on the same volume as the rendered packages but under its own prefix, away from the
+    # uuid-named package directories, and keyed by the user's uuid -- never by the client's
+    # filename, which is why no path sanitising is needed here.
+
+    def document_dir(self, user_id: uuid.UUID) -> Path:
+        return self.root / "resume-document" / str(user_id)
+
+    def write_document(self, user_id: uuid.UUID, data: bytes) -> Path:
+        target = self.document_dir(user_id)
+        target.mkdir(parents=True, exist_ok=True)
+        path = target / "source.docx"
+        path.write_bytes(data)
+        return path
+
+    def read_document(self, user_id: uuid.UUID) -> bytes:
+        path = self.document_dir(user_id) / "source.docx"
+        if not path.is_file():
+            raise FileNotFoundError(f"no resume document stored for user {user_id}")
+        return path.read_bytes()
+
+    def delete_document(self, user_id: uuid.UUID) -> None:
+        shutil.rmtree(self.document_dir(user_id), ignore_errors=True)

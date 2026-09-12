@@ -312,6 +312,139 @@
         "title": "Body_import_profile_api_v1_profile_import_post",
         "type": "object"
       },
+      "Body_upload_resume_document_api_v1_profile_resume_document_post": {
+        "properties": {
+          "file": {
+            "contentMediaType": "application/octet-stream",
+            "title": "File",
+            "type": "string"
+          }
+        },
+        "required": [
+          "file"
+        ],
+        "title": "Body_upload_resume_document_api_v1_profile_resume_document_post",
+        "type": "object"
+      },
+      "DocParagraph": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "pattern": "^p[0-9]+$",
+            "title": "Id",
+            "type": "string"
+          },
+          "role": {
+            "enum": [
+              "name",
+              "contact",
+              "heading",
+              "summary",
+              "competency",
+              "entry_title",
+              "entry_org",
+              "bullet",
+              "skill",
+              "credential",
+              "other"
+            ],
+            "title": "Role",
+            "type": "string"
+          },
+          "section": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Section"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "text",
+          "role"
+        ],
+        "title": "DocParagraph",
+        "type": "object"
+      },
+      "DocSection": {
+        "additionalProperties": false,
+        "properties": {
+          "heading": {
+            "title": "Heading",
+            "type": "string"
+          },
+          "paragraph_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Paragraph Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "heading",
+          "paragraph_ids"
+        ],
+        "title": "DocSection",
+        "type": "object"
+      },
+      "Edit": {
+        "additionalProperties": false,
+        "properties": {
+          "after": {
+            "title": "After",
+            "type": "string"
+          },
+          "before": {
+            "title": "Before",
+            "type": "string"
+          },
+          "paragraph_id": {
+            "title": "Paragraph Id",
+            "type": "string"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "paragraph_id",
+          "before",
+          "after",
+          "reason"
+        ],
+        "title": "Edit",
+        "type": "object"
+      },
+      "EditPatch": {
+        "description": "One paragraph the human rewrote. `before` is not accepted: the stored document is the\nonly authority on what the paragraph said.",
+        "properties": {
+          "after": {
+            "title": "After",
+            "type": "string"
+          },
+          "paragraph_id": {
+            "title": "Paragraph Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "paragraph_id",
+          "after"
+        ],
+        "title": "EditPatch",
+        "type": "object"
+      },
       "GuardrailReport": {
         "additionalProperties": false,
         "properties": {
@@ -880,6 +1013,14 @@
             "title": "Job Id",
             "type": "string"
           },
+          "mode": {
+            "enum": [
+              "blocks",
+              "tune"
+            ],
+            "title": "Mode",
+            "type": "string"
+          },
           "status": {
             "title": "Status",
             "type": "string"
@@ -907,6 +1048,7 @@
           "title",
           "version",
           "status",
+          "mode",
           "application_status",
           "best_fit",
           "best_track_id",
@@ -937,6 +1079,13 @@
             "title": "Created At",
             "type": "string"
           },
+          "edits": {
+            "items": {
+              "$ref": "#/components/schemas/Edit"
+            },
+            "title": "Edits",
+            "type": "array"
+          },
           "guardrail_report": {
             "$ref": "#/components/schemas/GuardrailReport"
           },
@@ -965,6 +1114,14 @@
             "title": "Llm Calls",
             "type": "integer"
           },
+          "mode": {
+            "enum": [
+              "blocks",
+              "tune"
+            ],
+            "title": "Mode",
+            "type": "string"
+          },
           "parent_package_id": {
             "anyOf": [
               {
@@ -979,6 +1136,16 @@
           },
           "resume": {
             "$ref": "#/components/schemas/ResumeDocument"
+          },
+          "source_document": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SourceDocument"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "status": {
             "title": "Status",
@@ -1009,20 +1176,42 @@
           "parent_package_id",
           "has_docx",
           "has_pdf",
-          "created_at"
+          "created_at",
+          "mode",
+          "edits",
+          "source_document"
         ],
         "title": "PackageOut",
         "type": "object"
       },
       "PackagePatch": {
+        "description": "A human edit to a package: `resume` in blocks mode, `edits` in tune mode.\n\nEach field carries the complete new state for its mode, not a delta, so a new version is\nalways a full replacement of the thing the mode owns.",
         "properties": {
+          "edits": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/EditPatch"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Edits"
+          },
           "resume": {
-            "$ref": "#/components/schemas/ResumeDocument"
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ResumeDocument"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
-        "required": [
-          "resume"
-        ],
         "title": "PackagePatch",
         "type": "object"
       },
@@ -1225,6 +1414,29 @@
         "title": "ResumeDocument",
         "type": "object"
       },
+      "ResumeDocumentOut": {
+        "properties": {
+          "document": {
+            "$ref": "#/components/schemas/SourceDocument"
+          },
+          "filename": {
+            "title": "Filename",
+            "type": "string"
+          },
+          "uploaded_at": {
+            "format": "date-time",
+            "title": "Uploaded At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "filename",
+          "uploaded_at",
+          "document"
+        ],
+        "title": "ResumeDocumentOut",
+        "type": "object"
+      },
       "ResumeEntry": {
         "additionalProperties": false,
         "properties": {
@@ -1379,6 +1591,36 @@
         "title": "ResumeSection",
         "type": "object"
       },
+      "SourceDocument": {
+        "additionalProperties": false,
+        "properties": {
+          "filename": {
+            "title": "Filename",
+            "type": "string"
+          },
+          "paragraphs": {
+            "items": {
+              "$ref": "#/components/schemas/DocParagraph"
+            },
+            "title": "Paragraphs",
+            "type": "array"
+          },
+          "sections": {
+            "items": {
+              "$ref": "#/components/schemas/DocSection"
+            },
+            "title": "Sections",
+            "type": "array"
+          }
+        },
+        "required": [
+          "filename",
+          "paragraphs",
+          "sections"
+        ],
+        "title": "SourceDocument",
+        "type": "object"
+      },
       "SourceInfoOut": {
         "properties": {
           "kind": {
@@ -1442,6 +1684,21 @@
               }
             ],
             "title": "Feedback"
+          },
+          "mode": {
+            "anyOf": [
+              {
+                "enum": [
+                  "blocks",
+                  "tune"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mode"
           },
           "parent_package_id": {
             "anyOf": [
@@ -2883,7 +3140,7 @@
         ]
       },
       "patch": {
-        "description": "Edited resume -> re-validate with the stored selection -> re-render -> new version.\n\nNever bypasses guardrails: the edited resume is re-run through run_guardrails with the\nparent's stored selection and job's cover note before it is persisted as a new version.",
+        "description": "Human edit -> re-validate -> re-render -> new version. Never bypasses guardrails.\n\nBlocks-mode packages are patched with `resume` and re-run through `run_guardrails` with the\nparent's stored selection; tune-mode packages are patched with `edits` and re-run through\n`run_tune_guardrails` against the uploaded document. The body must match the parent's mode:\na resume has no meaning for a tuned document, and vice versa.",
         "operationId": "patch_package_api_v1_packages__package_id__patch",
         "parameters": [
           {
@@ -3960,6 +4217,154 @@
           }
         },
         "summary": "Import Profile",
+        "tags": [
+          "profile"
+        ]
+      }
+    },
+    "/api/v1/profile/resume-document": {
+      "delete": {
+        "description": "Idempotent: deleting nothing is still a 204, and tailoring falls back to blocks mode.",
+        "operationId": "delete_document_api_v1_profile_resume_document_delete",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Document",
+        "tags": [
+          "profile"
+        ]
+      },
+      "get": {
+        "operationId": "get_resume_document_api_v1_profile_resume_document_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResumeDocumentOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Resume Document",
+        "tags": [
+          "profile"
+        ]
+      },
+      "post": {
+        "description": "Accept one .docx, parse it, and keep it as the document tune mode rewrites.\n\nThe bytes go to the storage volume, never into git and never into the package row; only\nthe parsed paragraphs are stored in Postgres.",
+        "operationId": "upload_resume_document_api_v1_profile_resume_document_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_upload_resume_document_api_v1_profile_resume_document_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResumeDocumentOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Upload Resume Document",
         "tags": [
           "profile"
         ]

@@ -19,6 +19,7 @@ from rhapto.engine.select import block_text
 from rhapto.engine.types import TailorRequest
 from rhapto.services.discovery.http import DiscoveryHttp
 from rhapto.services.discovery.poller import poll_sources
+from rhapto.services.documents import load_source
 from rhapto.services.enqueue import TaskFn
 from rhapto.services.eventbus import EventBus, task_channel
 from rhapto.services.packaging import persist_package
@@ -81,6 +82,19 @@ async def tailor_job(ctx: dict[str, Any], task_id: str) -> None:
                     jd_text=job.jd_text,
                 )
 
+            # Tune mode rewrites the user's own document, which is too big to ride along on the
+            # task row: the request carries only the mode and the worker loads both halves here.
+            mode = request.get("mode") or "blocks"
+            source_document = None
+            source_docx = None
+            if mode == "tune":
+                source = await load_source(session, storage, user_id)
+                if source is None:
+                    raise ValueError(
+                        "no resume document stored; upload one before tailoring in tune mode"
+                    )
+                source_document, source_docx = source
+
             async def on_step(step: str) -> None:
                 task_repo.set_step(active_task, step)
                 await session.commit()
@@ -92,6 +106,9 @@ async def tailor_job(ctx: dict[str, Any], task_id: str) -> None:
                     track_id=request.get("track_id"),
                     feedback=request.get("feedback"),
                     previous_package=previous,
+                    mode=mode,
+                    source_document=source_document,
+                    source_docx=source_docx,
                 ),
                 profile,
                 ctx["llm"],
