@@ -66,6 +66,24 @@ describe("ResumeDocumentTab", () => {
     expect(screen.getByText("heading")).toBeInTheDocument();
   });
 
+  it("sends the chosen file to the upload mutation", async () => {
+    // A real change event on the file input, not a direct call to the handler: this is the only
+    // test that proves the input is wired to the mutation at all.
+    uploadMutateAsync.mockResolvedValue(undefined);
+    renderTab();
+    const user = userEvent.setup({ delay: null });
+    const file = new File(["PK"], "maya-chen-resume.docx", {
+      type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    });
+
+    await user.upload(screen.getByLabelText("Resume document"), file);
+
+    expect(uploadMutateAsync).toHaveBeenCalledTimes(1);
+    const sent = uploadMutateAsync.mock.calls[0]?.[0] as unknown;
+    expect(sent).toBeInstanceOf(File);
+    expect((sent as File).name).toBe("maya-chen-resume.docx");
+  });
+
   it("deletes the document after confirming", async () => {
     resumeDocumentData = doc;
     renderTab();
@@ -74,5 +92,22 @@ describe("ResumeDocumentTab", () => {
     expect(screen.getByText(/delete maya-chen-resume\.docx\?/i)).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: /^delete$/i }));
     expect(deleteMutateAsync).toHaveBeenCalled();
+  });
+
+  it("closes the dialog and shows the empty state once the delete resolves", async () => {
+    resumeDocumentData = doc;
+    // The component renders from `useResumeDocument()`, so the delete's effect on the UI is the
+    // query going back to null -- which is what the mutation's onSuccess invalidation produces.
+    deleteMutateAsync.mockImplementation(async () => {
+      resumeDocumentData = null;
+    });
+    renderTab();
+    const user = userEvent.setup({ delay: null });
+    await user.click(screen.getByRole("button", { name: /delete maya-chen-resume\.docx/i }));
+    await user.click(screen.getByRole("button", { name: /^delete$/i }));
+
+    expect(await screen.findByText(/upload your resume \(\.docx\)/i)).toBeInTheDocument();
+    expect(screen.queryByText(/delete maya-chen-resume\.docx\?/i)).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /delete maya-chen-resume\.docx/i })).not.toBeInTheDocument();
   });
 });

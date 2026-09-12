@@ -41,7 +41,7 @@ describe("JobActionButton", () => {
   });
 
   it("renders Review and Mark applied for a job with a package and no application", async () => {
-    const pkg = { id: "p1", version: 1, status: "draft" as const, created_at: "2026-09-09T10:00:00Z" };
+    const pkg = { id: "p1", version: 1, status: "draft" as const, mode: "blocks" as const, created_at: "2026-09-09T10:00:00Z" };
     renderButton({ latest_package: pkg });
     const link = screen.getByRole("link", { name: /review/i });
     expect(link).toHaveAttribute("href", "/jobs/j1/packages/p1");
@@ -51,7 +51,7 @@ describe("JobActionButton", () => {
   });
 
   it("renders the Applied badge for an applied job", () => {
-    const pkg = { id: "p1", version: 1, status: "draft" as const, created_at: "2026-09-09T10:00:00Z" };
+    const pkg = { id: "p1", version: 1, status: "draft" as const, mode: "blocks" as const, created_at: "2026-09-09T10:00:00Z" };
     renderButton({ latest_package: pkg, application_status: "applied" });
     expect(screen.getByText("Applied")).toBeInTheDocument();
   });

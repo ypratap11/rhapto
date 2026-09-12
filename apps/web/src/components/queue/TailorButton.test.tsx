@@ -8,11 +8,13 @@ import type { JobOut, ResumeDocumentOut } from "@/lib/api/queries";
 
 const mutateAsync = vi.fn();
 let tracksData: { id: string; name: string; min_fit: number }[] = [];
-let resumeDocumentData: ResumeDocumentOut | null = null;
+// `undefined` data with `isPending` is what useQuery reports before the request settles.
+let resumeDocumentData: ResumeDocumentOut | null | undefined = null;
+let resumeDocumentPending = false;
 vi.mock("@/lib/api/queries", () => ({
   useTracks: () => ({ data: tracksData }),
   useTailor: () => ({ mutateAsync, isPending: false }),
-  useResumeDocument: () => ({ data: resumeDocumentData }),
+  useResumeDocument: () => ({ data: resumeDocumentData, isPending: resumeDocumentPending }),
   invalidateJobs: vi.fn(),
 }));
 vi.mock("./TaskProgress", () => ({
@@ -59,6 +61,8 @@ describe("TailorButton", () => {
   beforeEach(() => {
     tracksData = [];
     resumeDocumentData = null;
+    resumeDocumentPending = false;
+    mutateAsync.mockReset();
   });
 
   it("preselects the job's best-fit track", () => {
@@ -173,6 +177,33 @@ describe("TailorButton", () => {
     await user.click(screen.getByRole("button", { name: /tailor/i }));
 
     expect(mutateAsync).toHaveBeenCalledWith(expect.objectContaining({ body: expect.objectContaining({ mode: "tune" }) }));
+  });
+
+  it("sends no mode and resolves no default while the resume document query is in flight", async () => {
+    // Guessing "blocks" here would override the API's own "tune when a document exists" default
+    // and spend three LLM calls on the wrong mode.
+    resumeDocumentData = undefined;
+    resumeDocumentPending = true;
+    mutateAsync.mockResolvedValueOnce({
+      id: "t1",
+      status: "running",
+      result_ref: null,
+      error: null,
+      created_at: "2026-09-09T10:00:00Z",
+      finished_at: null,
+      progress: {},
+      type: "tailor",
+    });
+    renderButton();
+    const modeSelect = screen.getByRole("combobox", { name: /mode/i });
+    expect(modeSelect).not.toHaveTextContent("Build from blocks");
+    expect(modeSelect).not.toHaveTextContent("Tune my resume");
+    expect(modeSelect).toHaveTextContent("Mode");
+
+    const user = userEvent.setup({ delay: null });
+    await user.click(screen.getByRole("button", { name: /tailor/i }));
+
+    expect(mutateAsync).toHaveBeenCalledWith(expect.objectContaining({ body: expect.objectContaining({ mode: null }) }));
   });
 
   it("defaults to blocks mode and disables tune mode when there is no resume document", async () => {

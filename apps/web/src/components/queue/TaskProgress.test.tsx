@@ -55,15 +55,30 @@ describe("TaskProgress", () => {
 
   it("marks the steps before the active one done and the active one active", () => {
     mockReadTaskEvents.mockImplementation((_taskId, onEvent) => {
-      onEvent({ event: "state", data: { status: "running", progress: { step: "render" } } });
+      onEvent({ event: "state", data: { status: "running", progress: { step: "render", request: { mode: "blocks" } } } });
       return new Promise<void>(() => undefined);
     });
     renderTaskProgress({ taskId: "t2", jobId: "j1", onFinished: vi.fn() });
 
-    for (const step of ["extract", "select", "compose", "tune", "validate", "repair"]) {
+    for (const step of ["extract", "select", "compose", "validate", "repair"]) {
       expect(screen.getByText(step).className).toContain("border-green-300");
     }
+    // A blocks run never tunes, so claiming a finished `tune` step would be a lie.
+    expect(screen.queryByText("tune")).not.toBeInTheDocument();
     expect(screen.getByText("render").className).toContain("border-accent");
+  });
+
+  it("shows a tune run its own pills: tune, and no select or compose", () => {
+    mockReadTaskEvents.mockImplementation((_taskId, onEvent) => {
+      onEvent({ event: "state", data: { status: "running", progress: { step: "validate", request: { mode: "tune" } } } });
+      return new Promise<void>(() => undefined);
+    });
+    renderTaskProgress({ taskId: "t2b", jobId: "j1", onFinished: vi.fn() });
+
+    expect(screen.getByText("tune").className).toContain("border-green-300");
+    expect(screen.queryByText("select")).not.toBeInTheDocument();
+    expect(screen.queryByText("compose")).not.toBeInTheDocument();
+    expect(screen.getByText("validate").className).toContain("border-accent");
   });
 
   it("resolves the real package status on a state-replay and never announces a blocked package as ready", async () => {

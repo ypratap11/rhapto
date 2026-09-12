@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { PIPELINE_STEPS, initialProgress, reduceTaskEvent } from "./task-progress";
+import { initialProgress, pipelineSteps, reduceTaskEvent } from "./task-progress";
 
 describe("reduceTaskEvent", () => {
   it("tracks steps then done", () => {
@@ -16,8 +16,6 @@ describe("reduceTaskEvent", () => {
     for (const step of ["tune", "validate", "render"]) {
       s = reduceTaskEvent(s, { event: "progress", data: { event: "progress", step } });
       expect(s).toMatchObject({ status: "running", step });
-      // Steps are resolved by name, so the skipped ones only leave a gap in the rendered list.
-      expect(PIPELINE_STEPS.indexOf(step as (typeof PIPELINE_STEPS)[number])).toBeGreaterThan(-1);
     }
     s = reduceTaskEvent(s, { event: "done", data: { event: "done", package_id: "p2", status: "draft" } });
     expect(s).toMatchObject({ status: "succeeded", packageId: "p2" });
@@ -33,6 +31,23 @@ describe("reduceTaskEvent", () => {
   it("reads the new-job count from a finished poll's state-replay result_ref", () => {
     const s = reduceTaskEvent(initialProgress, { event: "state", data: { status: "succeeded", result_ref: "new:3", progress: {} } });
     expect(s).toMatchObject({ status: "succeeded", packageId: null, newJobs: 3 });
+  });
+
+  it("reads the run's mode off the state event and keeps it across later events", () => {
+    let s = reduceTaskEvent(initialProgress, { event: "state", data: { status: "running", progress: { step: "extract", request: { mode: "tune" } } } });
+    expect(s.mode).toBe("tune");
+    s = reduceTaskEvent(s, { event: "progress", data: { event: "progress", step: "tune" } });
+    expect(s.mode).toBe("tune");
+    s = reduceTaskEvent(s, { event: "done", data: { event: "done", package_id: "p1", status: "draft" } });
+    expect(s.mode).toBe("tune");
+    // A task row with no stored mode leaves it unknown rather than guessing.
+    expect(reduceTaskEvent(initialProgress, { event: "state", data: { status: "running", progress: { step: "extract" } } }).mode).toBeNull();
+  });
+
+  it("shows each mode only the steps it runs, and the blocks pipeline when the mode is unknown", () => {
+    expect(pipelineSteps("blocks")).toEqual(["extract", "select", "compose", "validate", "repair", "render"]);
+    expect(pipelineSteps("tune")).toEqual(["extract", "tune", "validate", "repair", "render"]);
+    expect(pipelineSteps(null)).toEqual(pipelineSteps("blocks"));
   });
 
   it("maps error events", () => {

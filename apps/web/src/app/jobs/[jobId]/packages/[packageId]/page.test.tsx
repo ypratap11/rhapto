@@ -78,6 +78,41 @@ describe("PackageReviewPage", () => {
     expect(document.getElementById("change-0")).toHaveAttribute("data-violation", "true");
   });
 
+  it("scrolls to the cover note and to the Changes heading for the non-card violation paths", async () => {
+    pkg.current = {
+      ...tunePackage,
+      guardrail_report: {
+        passed: false,
+        rules_run: ["tune-scope", "no-new-numbers"],
+        violations: [
+          { rule: "no-new-numbers", severity: "error", message: "cover note invents a number", path: "cover_note", block_id: null },
+          { rule: "tune-scope", severity: "error", message: "too many bullet edits", path: "edits", block_id: null },
+        ],
+      },
+    } as unknown as PackageOut;
+    render(<PackageReviewPage />);
+    const coverNote = document.getElementById("cover-note");
+    const changes = document.getElementById("changes");
+    const scrollCoverNote = vi.fn();
+    const scrollChanges = vi.fn();
+    coverNote!.scrollIntoView = scrollCoverNote;
+    changes!.scrollIntoView = scrollChanges;
+    const user = userEvent.setup({ delay: null });
+
+    await user.click(screen.getByRole("button", { name: /cover note invents a number/i }));
+    expect(scrollCoverNote).toHaveBeenCalled();
+    expect(scrollChanges).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole("button", { name: /too many bullet edits/i }));
+    expect(scrollChanges).toHaveBeenCalled();
+  });
+
+  it("marks a violating change's After textarea aria-invalid", () => {
+    pkg.current = tunePackage;
+    render(<PackageReviewPage />);
+    expect(screen.getByLabelText("After")).toHaveAttribute("aria-invalid", "true");
+  });
+
   it("still renders the resume and source-block panes for a blocks package", () => {
     pkg.current = { ...tunePackage, mode: "blocks", edits: [], source_document: null, guardrail_report: { passed: true, rules_run: [], violations: [] } } as unknown as PackageOut;
     render(<PackageReviewPage />);

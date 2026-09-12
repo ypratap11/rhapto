@@ -19,7 +19,7 @@ const row = (over: Partial<PackageListItem>): PackageListItem => ({
 describe("flow", () => {
   it("derives the job state", () => {
     expect(jobState(base({}))).toBe("tailor");
-    const pkg = { id: "p", version: 1, status: "draft", created_at: "2026-09-01T00:00:00Z" };
+    const pkg = { id: "p", version: 1, status: "draft", mode: "tune" as const, created_at: "2026-09-01T00:00:00Z" };
     expect(jobState(base({ latest_package: pkg }))).toBe("review");
     expect(jobState(base({ latest_package: pkg, application_status: "queued" }))).toBe("review");
     expect(jobState(base({ latest_package: pkg, application_status: "applied" }))).toBe("applied");
@@ -29,7 +29,7 @@ describe("flow", () => {
     const jobs = [
       base({ id: "a", best_fit: 60 }),
       base({ id: "b", best_fit: 90 }),
-      base({ id: "c", best_fit: 95, latest_package: { id: "p", version: 1, status: "draft", created_at: "" }, application_status: "applied" }),
+      base({ id: "c", best_fit: 95, latest_package: { id: "p", version: 1, status: "draft", mode: "blocks" as const, created_at: "" }, application_status: "applied" }),
       base({ id: "d", best_fit: null }),
       base({ id: "e", best_fit: 80 }),
     ];
@@ -50,7 +50,7 @@ describe("flow", () => {
     const reviewJob = base({
       id: "y",
       best_fit: 65,
-      latest_package: { id: "p9", version: 1, status: "blocked", created_at: "" },
+      latest_package: { id: "p9", version: 1, status: "blocked", mode: "blocks" as const, created_at: "" },
     });
     expect(flowPrompt({ needsReview: 3, nextTailor: tailorJob, nextReview: reviewJob })).toEqual({
       text: "3 packages ready to review",

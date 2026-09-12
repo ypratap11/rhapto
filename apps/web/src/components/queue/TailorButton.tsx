@@ -49,8 +49,14 @@ export function TailorButton({ job }: { job: JobOut }) {
   const selectedTrackId = trackId ?? job.best_track_id ?? tracks.data?.[0]?.id;
   // Same derived-not-effect pattern as the track select: default to tune mode once a resume
   // document exists, but let an explicit user choice win from then on.
-  const hasResumeDocument = resumeDocument.data != null;
-  const selectedMode = mode ?? (hasResumeDocument ? "tune" : "blocks");
+  //
+  // Until the document query settles we know nothing, so we resolve no default at all: the
+  // mode select shows a placeholder and `start()` sends `mode: null`, which lets the API apply
+  // its own "tune when a document exists" default. Guessing "blocks" here would override that
+  // and spend three LLM calls on the wrong mode for anyone who clicks Tailor straight away.
+  const documentLoaded = !resumeDocument.isPending && resumeDocument.data !== undefined;
+  const hasResumeDocument = documentLoaded && resumeDocument.data != null;
+  const selectedMode = mode ?? (documentLoaded ? (hasResumeDocument ? "tune" : "blocks") : null);
 
   async function start() {
     try {
@@ -83,13 +89,13 @@ export function TailorButton({ job }: { job: JobOut }) {
         </Select>
         <Select value={selectedMode} onValueChange={(value: string | null) => value && setMode(value as "blocks" | "tune")}>
           <SelectTrigger className="w-44" aria-label="Mode">
-            <SelectValue>{(value: string) => MODE_LABEL[value as "tune" | "blocks"] ?? value}</SelectValue>
+            <SelectValue placeholder="Mode">{(value: string | null) => (value ? (MODE_LABEL[value as "tune" | "blocks"] ?? value) : "Mode")}</SelectValue>
           </SelectTrigger>
           <SelectContent>
             <SelectItem
               value="tune"
               disabled={!hasResumeDocument}
-              title={hasResumeDocument ? undefined : "Upload a resume document in the Profile tab to enable tune mode."}
+              title={documentLoaded && !hasResumeDocument ? "Upload a resume document in the Profile tab to enable tune mode." : undefined}
             >
               Tune my resume
             </SelectItem>

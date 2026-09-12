@@ -26,7 +26,7 @@ const job: JobOut = {
   jd_text: "lorem",
   extracted: null,
   discovered_at: "2026-09-09T10:00:00Z",
-  latest_package: { id: "p1", version: 2, status: "blocked", created_at: "2026-09-09T11:00:00Z" },
+  latest_package: { id: "p1", version: 2, status: "blocked", mode: "blocks", created_at: "2026-09-09T11:00:00Z" },
   application_status: "queued",
   best_fit: 82,
   best_track_id: "t1",

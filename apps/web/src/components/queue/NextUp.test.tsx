@@ -82,6 +82,22 @@ describe("NextUp", () => {
     expect(skipJob).toHaveBeenCalledWith("b");
   });
 
+  it("chips the mode of the package waiting for review, and nothing when there is none", () => {
+    render(
+      <NextUp
+        jobs={[
+          base({ id: "tuned", best_fit: 95, title: "Tuned job", latest_package: { id: "p1", version: 1, status: "draft", mode: "tune", created_at: "2026-09-10T00:00:00Z" } }),
+          base({ id: "built", best_fit: 94, title: "Built job", latest_package: { id: "p2", version: 1, status: "draft", mode: "blocks", created_at: "2026-09-10T00:00:00Z" } }),
+          base({ id: "untailored", best_fit: 93, title: "Untailored job" }),
+        ]}
+      />,
+    );
+    expect(screen.getByText("tune")).toBeInTheDocument();
+    expect(screen.getByText("blocks")).toBeInTheDocument();
+    // One chip per package, so the job with no package contributes none.
+    expect(screen.getAllByText(/^(tune|blocks)$/)).toHaveLength(2);
+  });
+
   it("renders an empty state when there are no jobs", () => {
     render(<NextUp jobs={[]} />);
     expect(screen.getByText(/nothing to do/i)).toBeInTheDocument();

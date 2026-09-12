@@ -48,9 +48,11 @@ function ChangesPaneBody({ pkg, violationsByPath, onSave }: { pkg: PackageOut; v
 
   return (
     <div className="space-y-4">
-      <section aria-labelledby="changes-heading" className="space-y-4 rounded-md border border-border bg-card p-4">
+      {/* The heading id is the scroll target for a guardrail violation whose path is the whole
+          `edits` list rather than one card, so it stays a stable, simple `changes`. */}
+      <section aria-labelledby="changes" className="space-y-4 rounded-md border border-border bg-card p-4">
         <div className="flex flex-wrap items-baseline justify-between gap-2">
-          <h2 id="changes-heading" className="font-sans text-sm font-medium">
+          <h2 id="changes" className="font-sans text-sm font-medium">
             Changes
           </h2>
           <p className="text-xs text-muted-foreground">
@@ -155,7 +157,7 @@ function ChangeCard({
       </div>
       <div className="space-y-1">
         <Label htmlFor={afterId}>After</Label>
-        <Textarea id={afterId} value={after} rows={3} readOnly={!editable} onChange={(e) => onChange(e.target.value)} />
+        <Textarea id={afterId} value={after} rows={3} readOnly={!editable} aria-invalid={hasViolation} onChange={(e) => onChange(e.target.value)} />
       </div>
       <p className="text-xs text-muted-foreground">{reason}</p>
     </li>

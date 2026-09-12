@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
 import { readTaskEvents } from "@/lib/api/sse";
 import { invalidateJobs } from "@/lib/api/queries";
-import { PIPELINE_STEPS, POLL_STEPS, initialProgress, reduceTaskEvent, resolvePackageStatus, type ProgressState } from "@/lib/task-progress";
+import { POLL_STEPS, initialProgress, pipelineSteps, reduceTaskEvent, resolvePackageStatus, type ProgressState } from "@/lib/task-progress";
 
 export function TaskProgress({
   taskId,
@@ -96,7 +96,7 @@ export function TaskProgress({
     };
   }, [taskId, jobId, onFinished, queryClient, kind]);
 
-  const steps: readonly string[] = kind === "poll" ? POLL_STEPS : PIPELINE_STEPS;
+  const steps: readonly string[] = kind === "poll" ? POLL_STEPS : pipelineSteps(state.mode);
   const activeIndex = state.step ? steps.indexOf(state.step) : -1;
   return (
     <div className="mt-3 space-y-2" aria-live="polite">

@@ -24,11 +24,16 @@ import { PACKAGE_STATUS_TONE } from "@/lib/status";
 
 const TUNE_VIOLATION_PATH = /^edits\[(\d+)\]$/;
 
-/** Bring a tune-mode change card into view; guardrail paths there address edits, not resume nodes. */
+/** Bring a tune-mode guardrail path into view; those paths address the package, not resume nodes.
+ *
+ * `edits[i]` is one change card, `cover_note` is the cover note, and a bare `edits` is a violation
+ * about the list as a whole (the six-edit cap), which belongs at the top of the Changes pane.
+ */
 function scrollToChange(path: string): void {
   const match = TUNE_VIOLATION_PATH.exec(path);
-  if (!match) return;
-  document.getElementById(`change-${match[1]}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+  const id = match ? `change-${match[1]}` : path === "cover_note" ? "cover-note" : path === "edits" ? "changes" : null;
+  if (!id) return;
+  document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "center" });
 }
 
 export default function PackageReviewPage() {
@@ -139,7 +144,9 @@ export default function PackageReviewPage() {
           {blocked ? null : guardrailPanel}
           {tune ? null : <SourceBlockCard block={selectedBlock} />}
           <section className="rounded-md border border-border bg-card p-4 text-sm">
-            <h3 className="mb-1 font-sans text-xs font-semibold uppercase tracking-wide text-muted-foreground">Cover note</h3>
+            <h3 id="cover-note" className="mb-1 font-sans text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              Cover note
+            </h3>
             <p className="whitespace-pre-wrap">{pkg.data.cover_note}</p>
             <h3 className="mb-1 mt-4 font-sans text-xs font-semibold uppercase tracking-wide text-muted-foreground">Change log</h3>
             <p className="whitespace-pre-wrap text-muted-foreground">{pkg.data.change_log}</p>
