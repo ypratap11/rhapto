@@ -213,6 +213,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/packages": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List All Packages */
+        get: operations["list_all_packages_api_v1_packages_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/packages/{package_id}": {
         parameters: {
             query?: never;
@@ -837,6 +854,38 @@ export interface components {
              * Format: uuid
              */
             user_id: string;
+        };
+        /** PackageListItem */
+        PackageListItem: {
+            /** Application Status */
+            application_status: string | null;
+            /** Best Fit */
+            best_fit: number | null;
+            /** Best Track Id */
+            best_track_id: string | null;
+            /** Company */
+            company: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Job Id
+             * Format: uuid
+             */
+            job_id: string;
+            /** Status */
+            status: string;
+            /** Title */
+            title: string | null;
+            /** Version */
+            version: number;
         };
         /** PackageOut */
         PackageOut: {
@@ -1719,6 +1768,40 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["MeOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_all_packages_api_v1_packages_get: {
+        parameters: {
+            query?: {
+                status?: ("draft" | "blocked") | null;
+                applied?: boolean | null;
+            };
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PackageListItem"][];
                 };
             };
             /** @description Validation Error */

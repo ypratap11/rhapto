@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import uuid
 
-from sqlalchemy import func, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from rhapto.db.models import Package
+from rhapto.db.models import Application, Job, Package
 from rhapto.models.package import ApplicationPackage
 
 
@@ -69,6 +69,41 @@ async def list_packages_for_job(
             .order_by(Package.version)
         )
     )
+
+
+async def list_packages(
+    session: AsyncSession,
+    user_id: uuid.UUID,
+    *,
+    status: str | None = None,
+    applied: bool | None = None,
+) -> list[tuple[Package, Job, Application | None]]:
+    """Latest package per job, newest first, with its job and application (if any)."""
+    latest = (
+        select(Package.job_id, func.max(Package.version).label("version"))
+        .where(Package.user_id == user_id)
+        .group_by(Package.job_id)
+        .subquery()
+    )
+    query = (
+        select(Package, Job, Application)
+        .join(latest, and_(Package.job_id == latest.c.job_id, Package.version == latest.c.version))
+        .join(Job, Job.id == Package.job_id)
+        .outerjoin(Application, Application.job_id == Package.job_id)
+        .where(Package.user_id == user_id)
+        .order_by(Package.created_at.desc(), Package.id)
+    )
+    if status:
+        query = query.where(Package.status == status)
+    if applied is True:
+        query = query.where(
+            Application.status.in_(("applied", "screen", "interview", "offer", "closed"))
+        )
+    elif applied is False:
+        query = query.where(
+            or_(Application.id.is_(None), Application.status.in_(("queued", "discovered")))
+        )
+    return [(p, j, a) for p, j, a in (await session.execute(query)).all()]
 
 
 def package_row_to_model(

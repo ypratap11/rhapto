@@ -121,6 +121,50 @@ async def test_unknown_package_404(client: httpx.AsyncClient) -> None:
 
 
 @pytest.mark.usefixtures("imported_profile")
+async def test_package_list_and_named_downloads(client: httpx.AsyncClient, fake_llm) -> None:  # type: ignore[no-untyped-def]
+    fake_llm.script(demo_extract(), good_output())
+    job = (
+        await client.post(
+            "/api/v1/jobs", json={"jd_text": JD, "company": "ExampleCo", "title": "Data PM"}
+        )
+    ).json()
+    task = (await client.post(f"/api/v1/jobs/{job['id']}/tailor", json={})).json()
+    package_id = (await client.get(f"/api/v1/tasks/{task['id']}")).json()["result_ref"]
+
+    listed = await client.get("/api/v1/packages")
+    assert listed.status_code == 200
+    rows = listed.json()
+    assert [r["id"] for r in rows] == [package_id]
+    assert (
+        rows[0]["company"] == "ExampleCo"
+        and rows[0]["application_status"] is None
+        and rows[0]["status"] == "draft"
+    )
+    assert (await client.get("/api/v1/packages", params={"status": "blocked"})).json() == []
+    assert (await client.get("/api/v1/packages", params={"applied": "true"})).json() == []
+
+    zip_response = await client.get(f"/api/v1/packages/{package_id}/download")
+    assert (
+        zip_response.headers["content-disposition"]
+        == 'attachment; filename="Maya_Chen_Package.zip"'
+    )
+    docx = await client.get(f"/api/v1/packages/{package_id}/files/resume.docx")
+    assert 'filename="Maya_Chen_Resume.docx"' in docx.headers["content-disposition"]
+
+    app_row = (
+        await client.post(
+            "/api/v1/applications", json={"job_id": job["id"], "package_id": package_id}
+        )
+    ).json()
+    await client.patch(f"/api/v1/applications/{app_row['id']}", json={"status": "applied"})
+    assert [
+        r["application_status"]
+        for r in (await client.get("/api/v1/packages", params={"applied": "true"})).json()
+    ] == ["applied"]
+    assert (await client.get("/api/v1/packages", params={"applied": "false"})).json() == []
+
+
+@pytest.mark.usefixtures("imported_profile")
 async def test_blocked_package_download_is_unmistakable(
     client: httpx.AsyncClient, fake_llm
 ) -> None:  # type: ignore[no-untyped-def]

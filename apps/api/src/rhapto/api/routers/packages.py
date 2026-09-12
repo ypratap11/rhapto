@@ -2,24 +2,26 @@ from __future__ import annotations
 
 import asyncio
 import uuid
-from typing import Annotated
+from typing import Annotated, Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from fastapi.responses import FileResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from rhapto.api.deps import current_user, get_enqueuer, get_session, get_storage
 from rhapto.api.errors import not_found
-from rhapto.api.schemas import PackageOut, PackagePatch
+from rhapto.api.schemas import PackageListItem, PackageOut, PackagePatch
 from rhapto.db.models import Package
 from rhapto.db.repositories import jobs as job_repo
 from rhapto.db.repositories import packages as repo
+from rhapto.db.repositories import profile as profile_repo
 from rhapto.engine.guardrails.registry import run_guardrails
 from rhapto.engine.render.docx import OrphanBulletError, render_docx
 from rhapto.models.guardrail_report import GuardrailReport
 from rhapto.models.jd_extract import JDExtract
 from rhapto.models.resume_document import ResumeDocument
 from rhapto.services.enqueue import Enqueuer
+from rhapto.services.naming import download_basename
 from rhapto.services.packaging import persist_package
 from rhapto.services.profile_sync import load_profile_from_db
 from rhapto.services.storage import PackageStorage
@@ -78,6 +80,36 @@ async def _get_package(session: AsyncSession, user_id: uuid.UUID, package_id: uu
     if row is None:
         raise not_found("package", package_id)
     return row
+
+
+async def _basename(session: AsyncSession, user_id: uuid.UUID) -> str:
+    answers = await profile_repo.get_answers(session, user_id)
+    return download_basename(answers.get("name"))
+
+
+@router.get("/packages", response_model=list[PackageListItem])
+async def list_all_packages(
+    user_id: UserDep,
+    session: SessionDep,
+    status: Literal["draft", "blocked"] | None = Query(default=None),
+    applied: bool | None = Query(default=None),
+) -> list[PackageListItem]:
+    rows = await repo.list_packages(session, user_id, status=status, applied=applied)
+    return [
+        PackageListItem(
+            id=p.id,
+            job_id=j.id,
+            company=j.company,
+            title=j.title,
+            version=p.version,
+            status=p.status,
+            application_status=a.status if a else None,
+            best_fit=j.best_fit,
+            best_track_id=j.best_track_id,
+            created_at=p.created_at,
+        )
+        for p, j, a in rows
+    ]
 
 
 @router.get("/jobs/{job_id}/packages", response_model=list[PackageOut])
@@ -198,7 +230,7 @@ async def download_package(
         model.model_dump_json(indent=2),
         extra_files,
     )
-    filename = f"rhapto-package-v{row.version}.zip"
+    filename = f"{await _basename(session, user_id)}_Package.zip"
     return Response(
         content=data,
         media_type="application/zip",
@@ -219,11 +251,13 @@ async def package_file(
     path = storage.path_for(str(row.id), name)  # type: ignore[arg-type]
     if path is None:
         raise not_found("file", name)
+    ext = "docx" if name == "resume.docx" else "pdf"
     media = DOCX_MEDIA if name == "resume.docx" else PDF_MEDIA
     report = GuardrailReport.model_validate(row.guardrail_report_json)
+    stem = await _basename(session, user_id)
     return FileResponse(
         path,
         media_type=media,
-        filename=name,
+        filename=f"{stem}_Resume.{ext}",
         headers={GUARDRAIL_HEADER: "passed" if report.passed else "blocked"},
     )

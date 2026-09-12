@@ -107,6 +107,19 @@ class PackagePatch(BaseModel):
     resume: ResumeDocument
 
 
+class PackageListItem(BaseModel):
+    id: uuid.UUID
+    job_id: uuid.UUID
+    company: str | None
+    title: str | None
+    version: int
+    status: str
+    application_status: str | None
+    best_fit: int | None
+    best_track_id: str | None
+    created_at: datetime
+
+
 class StatusChange(BaseModel):
     status: str
     at: datetime
