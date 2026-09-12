@@ -77,8 +77,13 @@ def build_tune_user_message(
     feedback: str | None = None,
     previous_edits: list[Edit] | None = None,
 ) -> str:
-    """The per-job half of the prompt. Header answers (email, phone, ...) are stripped: the
-    tuner never rewrites the contact line, so it has no reason to see it."""
+    """The per-job half of the prompt.
+
+    Header answers (name, email, phone, location, links) are stripped by `application_answers`
+    because they are not application questions -- the tuner has nothing to draft for them. This
+    is not a privacy measure: the document in the cached system block carries the user's real
+    contact paragraph, which the tuner needs in order to leave it alone.
+    """
     parts = [
         f"<job>\n{extract.model_dump_json(indent=1)}\n</job>",
         f"<answers>\n{json.dumps(application_answers(answers), indent=1)}\n</answers>",
@@ -143,6 +148,11 @@ def to_edits(doc: SourceDocument, output: TuneOutput) -> list[Edit]:
     runs as possible and the change log stays honest. An edit naming a paragraph that does
     not exist is kept with an empty `before` so `tune-scope` can report it instead of it
     disappearing silently.
+
+    Two proposals for one paragraph are collapsed to the last one, because that is the only one
+    `apply_edits` and `render_tuned_docx` would keep. Letting both through meant a rewrite that
+    never reaches the document could still trip a guardrail, count against the six-bullet limit,
+    and show the reviewer two conflicting versions of one line.
     """
     originals = {p.id: p.text for p in doc.paragraphs}
     edits: list[Edit] = []
@@ -159,4 +169,5 @@ def to_edits(doc: SourceDocument, output: TuneOutput) -> list[Edit]:
                 reason=proposed.reason,
             )
         )
-    return edits
+    last = {edit.paragraph_id: i for i, edit in enumerate(edits)}
+    return [edit for i, edit in enumerate(edits) if last[edit.paragraph_id] == i]

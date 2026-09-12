@@ -316,3 +316,23 @@ def test_source_docx_is_excluded_from_json_dumps() -> None:
     dumped = tune_request(doc, data).model_dump(mode="json")
     assert "source_docx" not in dumped
     assert b"PK" not in tune_request(doc, data).model_dump_json().encode()
+
+
+async def test_tune_mode_render_failure_yields_an_empty_docx_instead_of_raising(
+    profile: Profile,
+) -> None:
+    """A `source_document` that does not match `source_docx` (stale upload, cached parse) must
+    produce a package the human can read, not a failed task -- mirrors blocks mode's
+    OrphanBulletError guard."""
+    doc, _data = _source()
+    short = io.BytesIO()
+    stub = Document()
+    stub.add_paragraph("MAYA CHEN")
+    stub.save(short)
+    llm = FakeLLMProvider([demo_extract(), tune_output(CLEAN_BULLET)])
+    result = await tailor(
+        tune_request(doc, short.getvalue()), profile, llm, FakeEmbeddingProvider()
+    )
+    assert result.package.guardrail_report.passed  # p9 is a bullet in the parsed document
+    assert result.docx == b""
+    assert [e.paragraph_id for e in result.package.edits] == ["p9"]

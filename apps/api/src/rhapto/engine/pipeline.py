@@ -242,7 +242,16 @@ async def _tune_branch(
     await _notify(on_step, "render")
     # Unlike blocks mode there is no safe partial artefact: the writer edits the user's own file
     # in place, so a failing report means we write nothing and let the human read the violations.
-    docx = render_tuned_docx(source_docx, edits) if report.passed else b""
+    # The guard mirrors the blocks branch's OrphanBulletError handling: `render_tuned_docx`
+    # raises when a paragraph id is missing from the DOCX, which `tune-scope` already rules out
+    # unless `source_document` and `source_docx` disagree (a stale upload, a cached parse). That
+    # is worth a package the human can read, not a failed task.
+    docx = b""
+    if report.passed:
+        try:
+            docx = render_tuned_docx(source_docx, edits)
+        except EngineError:
+            docx = b""
     resume = to_resume_document(apply_edits(doc, edits), build_header(profile.answers))
 
     package = _build_package(

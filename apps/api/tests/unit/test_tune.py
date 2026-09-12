@@ -4,6 +4,8 @@ from helpers import demo_extract
 from helpers_docx import build_fixture_docx
 
 from rhapto.engine.document import parse_docx
+from rhapto.engine.guardrails.tune import MAX_BULLET_EDITS as guardrail_max_bullet_edits
+from rhapto.engine.prompts.tune import TUNE_RULES
 from rhapto.engine.providers.fake import FakeLLMProvider
 from rhapto.engine.tune import (
     MAX_BULLET_EDITS,
@@ -38,8 +40,11 @@ def _output() -> TuneOutput:
     )
 
 
-def test_max_bullet_edits_is_six() -> None:
+def test_max_bullet_edits_is_six_on_both_sides() -> None:
+    """The prompt promises six and the validator enforces six; they must not drift apart."""
     assert MAX_BULLET_EDITS == 6
+    assert MAX_BULLET_EDITS == guardrail_max_bullet_edits
+    assert "At most 6 bullet edits" in TUNE_RULES
 
 
 def test_system_blocks_are_one_cached_block_with_the_document() -> None:
@@ -99,6 +104,39 @@ def test_to_edits_fills_before_and_drops_no_ops() -> None:
     assert edits[0].before == original.text
     assert edits[0].after == "Led the migration."
     assert edits[0].reason == "tighter"
+
+
+def test_to_edits_dedupes_by_paragraph_id_keeping_the_last_proposal() -> None:
+    """Only the last rewrite of a paragraph reaches the document, so only it becomes an edit."""
+    doc = _doc()
+    output = TuneOutput(
+        edits=[
+            ProposedEdit(paragraph_id="p9", text="First attempt.", reason="a"),
+            ProposedEdit(paragraph_id="p3", text="Summary rewrite.", reason="b"),
+            ProposedEdit(paragraph_id="p9", text="Second attempt.", reason="c"),
+        ],
+        cover_note="note",
+        change_log="log",
+    )
+    edits = to_edits(doc, output)
+    assert [(e.paragraph_id, e.after) for e in edits] == [
+        ("p3", "Summary rewrite."),
+        ("p9", "Second attempt."),
+    ]
+    assert edits[1].reason == "c"
+
+
+def test_to_edits_keeps_an_earlier_edit_when_the_later_one_is_a_no_op() -> None:
+    doc = _doc()
+    output = TuneOutput(
+        edits=[
+            ProposedEdit(paragraph_id="p9", text="A real rewrite.", reason="a"),
+            ProposedEdit(paragraph_id="p9", text=doc.paragraphs[9].text, reason="b"),
+        ],
+        cover_note="note",
+        change_log="log",
+    )
+    assert [e.after for e in to_edits(doc, output)] == ["A real rewrite."]
 
 
 def test_to_edits_keeps_unknown_ids_so_the_scope_rule_can_flag_them() -> None:

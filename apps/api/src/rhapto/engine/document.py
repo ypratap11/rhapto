@@ -24,6 +24,14 @@ from rhapto.models.resume_document import (
 from rhapto.models.source_document import DocParagraph, DocSection, Edit, SourceDocument
 
 EDITABLE_ROLES = frozenset({"summary", "competency", "skill", "bullet"})
+# Paragraphs whose numbers are contact details rather than claims about the work.
+NON_CLAIM_ROLES = frozenset({"name", "contact"})
+DIGIT_RANGE = re.compile(r"(?<=\d)\s*[-–—]\s*(?=\d)")
+SCALE_WORD = re.compile(r"(?<=\d)\s*(thousand|million|billion|trillion)s?\b", re.I)
+SCALE_LETTERS = {"thousand": "k", "million": "m", "billion": "b", "trillion": "t"}
+NUMBER_TOKEN = re.compile(r"^(?P<currency>[$€£])?\s*(?P<digits>[\d,]*\d(?:\.\d+)?)\s*(?P<unit>.*)$")
+CURRENCY_UNITS = frozenset({"k", "m", "b", "bn", "mm", "mn", "t"})
+MULTIPLIER_UNITS = frozenset({"x", "×"})
 YEAR_RANGE = re.compile(r"(?:19|20)\d{2}\s*[-–—]\s*(?:(?:19|20)\d{2}|present|current)", re.I)
 LABEL_LINE = re.compile(r"^[A-Za-z][A-Za-z /&]{1,40}:\s+\S")
 # A run of digits long enough to plausibly be a phone number (with optional separators),
@@ -162,10 +170,69 @@ def parse_docx(data: bytes, filename: str) -> SourceDocument:
     return SourceDocument(filename=filename, paragraphs=paragraphs, sections=sections)
 
 
+def normalize_quantity_text(text: str) -> str:
+    """Rewrite the two spellings that hide a quantity from the tokenizer.
+
+    `find_numeric_tokens` refuses a digit glued to a dash (so "v2" and "iso-8601" stay quiet),
+    which also means the right half of "30-85%" is never tokenized at all -- the one character
+    an LLM is most likely to type when laundering a range. And a scale word spelled out ("12
+    million") has to compare equal to its abbreviation ("12M"), or the unit class below cannot
+    tell the two apart. Both rewrites are applied to the document pool and to the text being
+    checked, so the comparison stays symmetric.
+    """
+    spaced = DIGIT_RANGE.sub(" ", text)
+    return SCALE_WORD.sub(lambda m: SCALE_LETTERS[m.group(1).casefold()], spaced)
+
+
+def number_key(token: str) -> str:
+    """A number plus its unit class, so "12", "12%", "12x" and "$12M" are four different claims.
+
+    Comparing digits alone is how "$2M" passes off a resume that merely says "2 products": the
+    digit matches and the unit -- the entire claim -- is discarded. The class is deliberately
+    coarse (percent / multiplier / currency / plain) because the point is to stop a rewrite from
+    changing what a number measures, not to parse units.
+    """
+    match = NUMBER_TOKEN.match(token.strip())
+    if match is None:  # pragma: no cover - every find_numeric_tokens token matches
+        return f"{normalize_number(token)}:plain"
+    unit = match.group("unit").strip().casefold().rstrip(".")
+    if unit in ("%", "percent"):
+        unit_class = "percent"
+    elif unit in MULTIPLIER_UNITS:
+        unit_class = "multiplier"
+    elif match.group("currency") or unit in CURRENCY_UNITS:
+        unit_class = "currency"
+    else:
+        unit_class = "plain"
+    return f"{normalize_number(match.group('digits'))}:{unit_class}"
+
+
+def quantity_tokens(text: str) -> list[tuple[str, str]]:
+    """Every quantity in `text` as (token as written, comparison key).
+
+    One function for both sides of the comparison: the document pool is the set of keys this
+    returns over the document's own paragraphs, and a rewrite is clean when every key it
+    returns is already in that pool. Spelled quantities ("doubled", "dozens") keep their own
+    casefolded phrase as the key.
+    """
+    normalized = normalize_quantity_text(text)
+    tokens = [(t, number_key(t)) for t in find_numeric_tokens(normalized)]
+    return tokens + [(q, q.casefold()) for q in find_spelled_quantities(normalized)]
+
+
 def document_numbers(doc: SourceDocument) -> set[str]:
-    text = " ".join(p.text for p in doc.paragraphs)
-    numbers = {normalize_number(t) for t in find_numeric_tokens(text)}
-    return numbers | {q.casefold() for q in find_spelled_quantities(text)}
+    """The quantity keys the document itself claims, for `quantity_tokens` to be compared against.
+
+    `name` and `contact` paragraphs are excluded: a phone number, a zip code or a street number
+    is not an achievement, and leaving them in hands a rewrite a free "555" or "80202" to spend
+    on a metric.
+    """
+    return {
+        key
+        for p in doc.paragraphs
+        if p.role not in NON_CLAIM_ROLES
+        for _token, key in quantity_tokens(p.text)
+    }
 
 
 def document_entities(doc: SourceDocument) -> str:

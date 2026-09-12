@@ -12,20 +12,22 @@ but we will write it into the user's resume anyway", which is not a trade-off th
 from __future__ import annotations
 
 import re
+from collections.abc import Iterator
 
 from rhapto.engine.document import (
     EDITABLE_ROLES,
     document_entities,
     document_numbers,
+    quantity_tokens,
 )
+from rhapto.engine.guardrails.attribution import RULE_NAME as ATTRIBUTION
 from rhapto.engine.guardrails.base import normalize_entity, violation
 from rhapto.engine.guardrails.dates import RULE_NAME as DATES
 from rhapto.engine.guardrails.entities import RULE_NAME as ENTITIES
-from rhapto.engine.guardrails.metrics import (
-    find_numeric_tokens,
-    find_spelled_quantities,
-    normalize_number,
-)
+from rhapto.engine.guardrails.metrics import RULE_NAME as METRICS
+from rhapto.engine.guardrails.provenance import RULE_NAME as PROVENANCE
+from rhapto.engine.guardrails.registry import UnknownGuardrailError
+from rhapto.engine.guardrails.visibility import RULE_NAME as VISIBILITY
 from rhapto.models.guardrail_report import GuardrailReport, Violation
 from rhapto.models.jd_extract import JDExtract
 from rhapto.models.profile.guardrails import GuardrailRule
@@ -34,16 +36,21 @@ from rhapto.models.source_document import Edit, SourceDocument
 TUNE_SCOPE = "tune-scope"
 NO_NEW_NUMBERS = "no-new-numbers"
 MAX_BULLET_EDITS = 6
+# Rules that only mean something against the block library: there are no blocks in tune mode, so
+# the same guardrails.yaml can list them and this entry point skips them. Anything else is a typo,
+# and a typo that silently disables a validator is worse than a loud failure.
+BLOCKS_ONLY = frozenset({PROVENANCE, METRICS, ATTRIBUTION, VISIBILITY})
 
 YEAR = re.compile(r"\b(?:19|20)\d{2}\b")
 PRESENT = re.compile(r"\b(?:present|current)\b", re.IGNORECASE)
-# A word that could start a capitalised entity name. Apostrophes and internal dots stay in the
-# token so "B.S." and "Moody's" survive as one word.
+# A word that could be part of a capitalised entity name. Apostrophes and internal dots stay in
+# the token so "B.S." and "Moody's" survive as one word; a trailing sentence period is stripped
+# by `_runs` so "at Acme Analytics." is not read as a different org from "Acme Analytics".
 WORD = re.compile(r"[A-Za-z][A-Za-z.'’-]*")
 SENTENCE_END = ".!?\n"
-# Capitalised words that are ordinary English mid-sentence and never an organisation or product
-# on their own. Deliberately short: the sentence-start exemption already absorbs most prose, so
-# anything else capitalised mid-sentence is a name until the document says otherwise.
+# Ordinary English words that can legitimately sit capitalised at either end of a run ("The
+# Snowflake migration"). They are trimmed off a run rather than suppressing it, so the name in
+# the middle is still checked.
 COMMON_WORDS = frozenset(
     """
     i a an the and but or if when while for with at in on of to as by from that this these those
@@ -52,6 +59,15 @@ COMMON_WORDS = frozenset(
     more less new first next last same other they he she you your there here
     january february march april may june july august september october november december
     monday tuesday wednesday thursday friday saturday sunday
+    """.split()
+)
+# Tokens that make a lone capitalised word read as an organisation or product rather than as
+# ordinary resume prose ("Agile", "Legal", "Delivery").
+NAME_SUFFIXES = frozenset(
+    """
+    inc corp corporation co llc llp ltd plc gmbh ag sa nv bv ab oy oyj kk pte pty
+    labs lab ai io dev sdk api db sql os technologies technology systems solutions software
+    group holdings partners ventures capital university institute college academy
     """.split()
 )
 
@@ -66,31 +82,71 @@ def _is_sentence_start(text: str, index: int) -> bool:
     return True
 
 
-def capitalised_runs(text: str) -> list[str]:
-    """Maximal runs of capitalised words that are not at the start of a sentence.
+def _looks_like_a_name(word: str) -> bool:
+    """Whether a lone capitalised word carries an organisation or product signal.
 
-    A run is the unit checked against the document, so "Globex Corp" is reported whole rather
-    than as two words that happen to be unknown. A single capitalised word counts as a run of
-    one unless it is in `COMMON_WORDS`.
+    Resume prose capitalises plenty of ordinary nouns -- "Partnered with Finance and Legal on
+    the Agile rollout" -- and flagging those burns the single repair call on a phantom
+    violation, or blocks a compliant package when the repair does not "fix" it. So a word on its
+    own is only checked when it looks manufactured: a digit in it, an internal capital
+    (CamelCase or an acronym), or a corporate/product tail.
     """
-    runs: list[str] = []
+    if any(ch.isdigit() for ch in word):
+        return True
+    if any(ch.isupper() for ch in word[1:]):
+        return True
+    return re.split(r"[-.]", word.casefold())[-1] in NAME_SUFFIXES
+
+
+def _trim(words: list[str]) -> list[str]:
+    start, end = 0, len(words)
+    while start < end and words[start].casefold() in COMMON_WORDS:
+        start += 1
+    while end > start and words[end - 1].casefold() in COMMON_WORDS:
+        end -= 1
+    return words[start:end]
+
+
+def _runs(text: str) -> Iterator[tuple[list[str], bool]]:
+    """Maximal runs of adjacent capitalised words, each with whether it starts a sentence."""
     current: list[str] = []
-    end_of_previous = -1
+    at_sentence_start = False
+    previous_end = -1
     for match in WORD.finditer(text):
-        word = match.group(0)
-        capitalised = word[0].isupper()
-        contiguous = bool(current) and text[end_of_previous : match.start()].strip() == ""
-        if capitalised and contiguous:
+        word = match.group(0).rstrip(".")
+        capitalised = word[:1].isupper()
+        adjacent = bool(current) and not text[previous_end : match.start()].strip()
+        if capitalised and adjacent:
             current.append(word)
         else:
-            if len(current) > 1 or (current and current[0].casefold() not in COMMON_WORDS):
-                runs.append(" ".join(current))
-            current = []
-            if capitalised and not _is_sentence_start(text, match.start()):
+            if current:
+                yield current, at_sentence_start
+                current = []
+            if capitalised:
                 current = [word]
-        end_of_previous = match.end()
-    if len(current) > 1 or (current and current[0].casefold() not in COMMON_WORDS):
-        runs.append(" ".join(current))
+                at_sentence_start = _is_sentence_start(text, match.start())
+        previous_end = match.end()
+    if current:
+        yield current, at_sentence_start
+
+
+def capitalised_runs(text: str) -> list[str]:
+    """The capitalised names in `text` worth checking against the document.
+
+    A run is the unit checked, so "Globex Corp" is reported whole rather than as two words that
+    happen to be unknown. A run is collected even when it starts a sentence -- dropping the
+    first word there and restarting at the second would check "Globex Corp led the migration."
+    as just "Corp", which passes on any resume containing "Corporate" -- and is discarded only
+    if it turns out to be a single word, where the capital carries no information. A lone word
+    mid-sentence is checked only when `_looks_like_a_name` says so.
+    """
+    runs: list[str] = []
+    for words, at_sentence_start in _runs(text):
+        trimmed = _trim(words)
+        if len(trimmed) > 1:
+            runs.append(" ".join(trimmed))
+        elif len(trimmed) == 1 and not at_sentence_start and _looks_like_a_name(trimmed[0]):
+            runs.append(trimmed[0])
     return runs
 
 
@@ -144,9 +200,8 @@ def _check_scope(doc: SourceDocument, edits: list[Edit]) -> list[Violation]:
 
 
 def _new_numbers(text: str, known: set[str]) -> list[str]:
-    offending = [t for t in find_numeric_tokens(text) if normalize_number(t) not in known]
-    offending += [p for p in find_spelled_quantities(text) if p.casefold() not in known]
-    return offending
+    """Quantities in `text` whose unit-aware key is not already claimed by the document."""
+    return [token for token, key in quantity_tokens(text) if key not in known]
 
 
 def _check_numbers(
@@ -179,12 +234,24 @@ def _check_numbers(
     return out
 
 
+def _mentions(source: str, run: str) -> bool:
+    """Whether `source` contains `run` as whole words.
+
+    Plain containment lets a short name hide inside a longer one -- "Meta" in "Metadata", "Corp"
+    in "Corporate", "Lake" in "Lakehouse" -- which is exactly the inflation this rule exists to
+    catch. Lookarounds rather than `\\b` so a run ending in a dot ("B.S") still matches.
+    """
+    return re.search(rf"(?<!\w){re.escape(run)}(?!\w)", source) is not None
+
+
 def _check_entities(doc: SourceDocument, edits: list[Edit]) -> list[Violation]:
     source = normalize_entity(document_entities(doc))
     out: list[Violation] = []
     for i, edit in enumerate(edits):
         unknown = [
-            run for run in capitalised_runs(edit.after) if normalize_entity(run) not in source
+            run
+            for run in capitalised_runs(edit.after)
+            if not _mentions(source, normalize_entity(run))
         ]
         if unknown:
             out.append(
@@ -227,12 +294,15 @@ def run_tune_guardrails(
 
     `extract` is unused today and accepted for signature symmetry with `run_guardrails`: a
     JD-aware rule (keyword stuffing, knockout answers) belongs here, not in a second entry point.
-    Profile rules that only make sense against the block library (provenance, attribution,
-    verified metrics, visibility) are silently skipped rather than rejected -- one
-    `guardrails.yaml` configures both modes.
+    The `BLOCKS_ONLY` rules are skipped so one `guardrails.yaml` can configure both modes, but an
+    active rule that is neither known here nor blocks-only raises `UnknownGuardrailError`, as it
+    does in `run_guardrails`: a typo must not quietly switch a validator off in one mode only.
     """
     del extract
     active = {rule.rule for rule in profile_rules if rule.active}
+    unknown_rules = active - BLOCKS_ONLY - {TUNE_SCOPE, NO_NEW_NUMBERS, ENTITIES, DATES}
+    if unknown_rules:
+        raise UnknownGuardrailError(f"unknown guardrail rule: {sorted(unknown_rules)[0]}")
     rules_run = [TUNE_SCOPE, NO_NEW_NUMBERS]
     violations = _check_scope(doc, edits) + _check_numbers(doc, edits, cover_note)
     if ENTITIES in active:

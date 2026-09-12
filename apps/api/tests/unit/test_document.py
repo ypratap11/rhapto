@@ -9,7 +9,9 @@ from rhapto.engine.document import (
     classify,
     document_entities,
     document_numbers,
+    number_key,
     parse_docx,
+    quantity_tokens,
     section_kind_for,
     to_resume_document,
 )
@@ -67,8 +69,30 @@ def test_parse_assigns_roles_and_sections() -> None:
 def test_document_numbers_and_entities() -> None:
     doc = parse_docx(build_fixture_docx(), "resume.docx")
     numbers = document_numbers(doc)
-    assert {"8", "12", "30", "2019", "2025"} <= numbers
+    # Keys carry the unit class, so the document's "30%" does not license a bare "30" or a "$30M".
+    assert {"8:plain", "12:plain", "30:percent", "2019:plain", "2025:plain"} <= numbers
+    assert "30:plain" not in numbers and "12:currency" not in numbers
+    # The contact line's phone digits are not quantities the resume claims.
+    assert "555:plain" not in numbers and "0100:plain" not in numbers
     assert "Snowflake" in document_entities(doc) and "Acme Analytics" in document_entities(doc)
+
+
+def test_number_key_classifies_units_and_scales() -> None:
+    assert number_key("12") == "12:plain"
+    assert number_key("30%") == "30:percent"
+    assert number_key("30 percent") == "30:percent"
+    assert number_key("8x") == "8:multiplier"
+    assert number_key("$12M") == "12:currency"
+    assert number_key("12M") == "12:currency"
+    assert number_key("1,200") == "1200:plain"
+    assert number_key("40 days") == "40:plain"
+
+
+def test_quantity_tokens_normalises_ranges_and_spelled_scales() -> None:
+    # A digit glued to an ASCII hyphen used to hide the right-hand number entirely.
+    assert [key for _t, key in quantity_tokens("cost 30-85%")] == ["30:plain", "85:percent"]
+    assert [key for _t, key in quantity_tokens("saved 12 million")] == ["12:currency"]
+    assert [key for _t, key in quantity_tokens("doubled the team")] == ["doubled"]
 
 
 def test_apply_edits_and_mapping() -> None:

@@ -2,10 +2,12 @@
 
 from pathlib import Path
 
+import pytest
 from helpers import demo_extract
 from helpers_docx import build_fixture_docx
 
 from rhapto.engine.document import parse_docx
+from rhapto.engine.guardrails.registry import UnknownGuardrailError
 from rhapto.engine.guardrails.tune import run_tune_guardrails
 from rhapto.models.profile.guardrails import GuardrailRule
 from rhapto.models.source_document import Edit, SourceDocument
@@ -131,6 +133,151 @@ def test_inactive_rules_are_not_run(demo_profile_dir: Path) -> None:
     report = run_tune_guardrails(doc, edits, demo_extract(), rules, cover_note=None)
     assert report.rules_run == ["tune-scope", "no-new-numbers"]
     assert {v.rule for v in report.violations} == {"no-new-numbers"}  # 2014 is not in the document
+
+
+def test_unknown_rule_name_raises_but_blocks_only_rules_are_skipped(demo_profile_dir: Path) -> None:
+    doc = _doc()
+    b = _bullet(doc)
+    clean = [Edit(paragraph_id=b.id, before=b.text, after="Ran the analytics roadmap.", reason="r")]
+    blocks_only = [
+        GuardrailRule(rule="no-unverified-metrics"),
+        GuardrailRule(rule="attribution"),
+        GuardrailRule(rule="visibility-context"),
+        GuardrailRule(rule="provenance"),
+    ]
+    report = run_tune_guardrails(doc, clean, demo_extract(), blocks_only, cover_note=None)
+    assert report.rules_run == ["tune-scope", "no-new-numbers"] and report.passed
+
+    with pytest.raises(UnknownGuardrailError):
+        run_tune_guardrails(
+            doc, clean, demo_extract(), [GuardrailRule(rule="no-invented-entites")], cover_note=None
+        )
+    # Inactive typos are not validated, exactly as in `run_guardrails`.
+    run_tune_guardrails(
+        doc,
+        clean,
+        demo_extract(),
+        [GuardrailRule(rule="no-invented-entites", active=False)],
+        cover_note=None,
+    )
+
+
+def _after(doc: SourceDocument, text: str) -> list[Edit]:
+    b = _bullet(doc)
+    return [Edit(paragraph_id=b.id, before=b.text, after=text, reason="r")]
+
+
+@pytest.mark.parametrize(
+    ("after", "offending"),
+    [
+        # B1: the right half of an ASCII-hyphen range was never tokenised at all.
+        ("Led the migration for 12 teams, cutting warehouse cost 30-85%.", "85%"),
+        # B2: the document says "12 teams" and "8 years", not "$12M" and "8x".
+        ("Led the migration for 12 teams, saving $12M.", "$12M"),
+        ("Led the migration, improving throughput 8x.", "8x"),
+        ("Led the migration, saving $555K for the platform team.", "$555K"),
+        # The document's 12 is a team count, not a percentage.
+        ("Led the Snowflake migration, cutting warehouse cost 12%.", "12%"),
+    ],
+)
+def test_unit_aware_numbers_are_caught(demo_profile_dir: Path, after: str, offending: str) -> None:
+    doc = _doc()
+    report = run_tune_guardrails(
+        doc, _after(doc, after), demo_extract(), _rules(demo_profile_dir), cover_note=None
+    )
+    numbers = [v for v in report.violations if v.rule == "no-new-numbers"]
+    assert numbers, report.violations
+    assert offending in numbers[0].message
+
+
+@pytest.mark.parametrize(
+    "after",
+    [
+        "Led the Snowflake migration for 12 teams, cutting warehouse cost 30%.",
+        "Led the Snowflake migration for 12 teams, cutting warehouse cost 30 percent.",
+        "Senior Data Program Manager with 8 years of delivery.",
+    ],
+)
+def test_numbers_already_in_the_document_are_allowed(demo_profile_dir: Path, after: str) -> None:
+    doc = _doc()
+    report = run_tune_guardrails(
+        doc, _after(doc, after), demo_extract(), _rules(demo_profile_dir), cover_note=None
+    )
+    assert report.passed, report.violations
+
+
+def test_the_contact_line_is_not_a_pool_of_spare_numbers(demo_profile_dir: Path) -> None:
+    """ "555 0100" is a phone number; a rewrite must not spend it on a metric."""
+    doc = _doc()
+    report = run_tune_guardrails(
+        doc,
+        _after(doc, "Led the migration for 555 teams."),
+        demo_extract(),
+        _rules(demo_profile_dir),
+        cover_note=None,
+    )
+    assert not report.passed
+    assert any(v.rule == "no-new-numbers" and "555" in v.message for v in report.violations)
+
+
+def test_cover_note_numbers_are_unit_aware_too(demo_profile_dir: Path) -> None:
+    doc = _doc()
+    report = run_tune_guardrails(
+        doc, [], demo_extract(), _rules(demo_profile_dir), cover_note="I saved the team $12M."
+    )
+    assert any(
+        v.path == "cover_note" and "$12M" in v.message and v.rule == "no-new-numbers"
+        for v in report.violations
+    )
+
+
+def test_ordinary_capitalised_prose_does_not_trip_the_entity_rule(demo_profile_dir: Path) -> None:
+    doc = _doc()
+    report = run_tune_guardrails(
+        doc,
+        _after(doc, "Partnered with Finance and Legal on the Agile delivery of the roadmap."),
+        demo_extract(),
+        _rules(demo_profile_dir),
+        cover_note=None,
+    )
+    assert report.passed, report.violations
+
+
+def test_an_invented_org_at_a_sentence_start_is_still_caught(demo_profile_dir: Path) -> None:
+    doc = _doc()
+    report = run_tune_guardrails(
+        doc,
+        _after(doc, "Globex Corp led the program with me."),
+        demo_extract(),
+        _rules(demo_profile_dir),
+        cover_note=None,
+    )
+    entities = [v for v in report.violations if v.rule == "no-invented-entities"]
+    assert entities and "Globex Corp" in entities[0].message
+
+
+def test_entity_containment_is_word_boundary(demo_profile_dir: Path) -> None:
+    doc = _doc()
+    # "Acme Analytics" is in the document; "Acme Analytica" is a different company.
+    report = run_tune_guardrails(
+        doc,
+        _after(doc, "Ran the roadmap with Acme Analytica and the platform team."),
+        demo_extract(),
+        _rules(demo_profile_dir),
+        cover_note=None,
+    )
+    assert any(
+        v.rule == "no-invented-entities" and "Acme Analytica" in v.message
+        for v in report.violations
+    )
+    clean = run_tune_guardrails(
+        doc,
+        _after(doc, "Ran the roadmap with Acme Analytics and the platform team."),
+        demo_extract(),
+        _rules(demo_profile_dir),
+        cover_note=None,
+    )
+    assert clean.passed, clean.violations
 
 
 def test_five_bullet_edits_are_within_scope(demo_profile_dir: Path) -> None:
