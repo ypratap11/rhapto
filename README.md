@@ -110,10 +110,10 @@ Development: from `apps/web`, `pnpm install`, `pnpm dev` (http://localhost:3000)
 Already have a resume you like? Upload it once under **Profile → Resume document** and Rhapto switches to tune
 mode: instead of composing a new resume from your block library, Tailor edits your own document's wording in
 place, and defaults to tune mode automatically whenever a document is on file. The review page's Changes pane
-shows each edit as a before/after pair you can accept, tweak, or reject line by line. Downloads keep your
-document's original format and are named after you, not the job. Guardrails work the same way in tune mode — they
-check every number, name, and date the edits introduce against your uploaded document, not just the block
-library. Rhapto still never submits anything for you.
+shows each edit as a before/after pair, and you can tweak any rewrite before saving a new version. Downloads
+keep your document's original format and are named after you, not the job. Guardrails work the same way in tune
+mode — they check every number, name, and date the edits introduce against your uploaded document, not just the
+block library. Rhapto still never submits anything for you.
 
 ## Job discovery (phase 0.3)
 

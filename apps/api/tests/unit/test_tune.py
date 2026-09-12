@@ -187,3 +187,53 @@ async def test_tune_repair_reuses_the_system_blocks_and_lists_violations() -> No
     content = call.messages[0].content
     assert "45" in content and "edits[0]" in content
     assert "<previous_output>" in content and "<violations>" in content
+
+
+async def test_tune_repair_names_the_paragraph_behind_each_violation_path() -> None:
+    """Each violation line carries `block_id`, because its `edits[i]` path can be off by one.
+
+    `to_edits` drops a proposal that re-states the paragraph verbatim, so `edits[1]` below is the
+    model's third proposal, not its second -- and `<previous_output>` is the model's own list. The
+    paragraph id is the only identifier that means the same thing in both, so the repair prompt
+    has to carry it or the model "fixes" a compliant edit and the invented number survives.
+    """
+    doc = _doc()
+    bullets = [p for p in doc.paragraphs if p.role == "bullet"]
+    skill = next(p for p in doc.paragraphs if p.role == "skill")
+    output = TuneOutput(
+        edits=[
+            ProposedEdit(paragraph_id=bullets[0].id, text=bullets[0].text, reason="no change"),
+            ProposedEdit(
+                paragraph_id=bullets[1].id,
+                text="Ran the analytics roadmap with finance and engineering.",
+                reason="mirrors the JD",
+            ),
+            ProposedEdit(
+                paragraph_id=skill.id,
+                text="Platforms:  Snowflake, dbt, Airflow across 45 teams",
+                reason="mirrors the JD",
+            ),
+        ],
+        cover_note="note",
+        change_log="log",
+        answers=[],
+    )
+    # The no-op proposal is gone, so the offending paragraph is at index 1, not 2.
+    assert [e.paragraph_id for e in to_edits(doc, output)] == [bullets[1].id, skill.id]
+    report = GuardrailReport(
+        passed=False,
+        rules_run=["tune-scope", "no-new-numbers"],
+        violations=[
+            Violation(
+                rule="no-new-numbers",
+                severity="error",
+                message="number(s) not found in the document: 45",
+                path="edits[1]",
+                block_id=skill.id,
+            )
+        ],
+    )
+    llm = FakeLLMProvider([output])
+    await tune_repair(output, report, build_tune_system_blocks(doc), llm)
+    content = llm.calls[0].messages[0].content
+    assert f"edits[1] ({skill.id})" in content

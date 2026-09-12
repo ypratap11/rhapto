@@ -59,6 +59,7 @@ def job_to_out(
                 id=latest.id,
                 version=latest.version,
                 status=latest.status,
+                mode="tune" if latest.mode == "tune" else "blocks",
                 created_at=latest.created_at,
             )
             if latest

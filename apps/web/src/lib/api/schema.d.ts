@@ -1045,6 +1045,11 @@ export interface components {
              * Format: uuid
              */
             id: string;
+            /**
+             * Mode
+             * @enum {string}
+             */
+            mode: "blocks" | "tune";
             /** Status */
             status: string;
             /** Version */

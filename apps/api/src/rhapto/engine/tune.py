@@ -17,7 +17,7 @@ from pydantic import BaseModel, Field
 from rhapto.engine.compose import AnswerItem, application_answers
 from rhapto.engine.prompts.tune import TUNE_REPAIR_INSTRUCTIONS, TUNE_RULES
 from rhapto.engine.providers.llm import LLMProvider, Message, SystemBlock, TokenUsage
-from rhapto.models.guardrail_report import GuardrailReport
+from rhapto.models.guardrail_report import GuardrailReport, Violation
 from rhapto.models.jd_extract import JDExtract
 from rhapto.models.source_document import Edit, SourceDocument
 
@@ -119,6 +119,17 @@ async def tune(
     return result.value, result.usage
 
 
+def _violation_line(violation: Violation) -> str:
+    """One violation as the repair model sees it: the path *and* the paragraph it names.
+
+    `violation.path` indexes the materialised `to_edits` list, which drops no-op proposals, so the
+    same index in the model's own `<previous_output>` can be a different proposal entirely. The
+    paragraph id is the one identifier both lists agree on, so it goes in the line too.
+    """
+    where = f"{violation.path} ({violation.block_id})" if violation.block_id else violation.path
+    return f"- {where} [{violation.rule}]: {violation.message}"
+
+
 async def tune_repair(
     previous: TuneOutput,
     report: GuardrailReport,
@@ -126,7 +137,7 @@ async def tune_repair(
     llm: LLMProvider,
 ) -> tuple[TuneOutput, TokenUsage]:
     """LLM call 3 in tune mode: one retry with the violations spelled out, same cached system blocks."""
-    violations = "\n".join(f"- {v.path} [{v.rule}]: {v.message}" for v in report.violations)
+    violations = "\n".join(_violation_line(v) for v in report.violations)
     content = (
         f"{TUNE_REPAIR_INSTRUCTIONS}\n\n<previous_output>\n{previous.model_dump_json(indent=1)}\n"
         f"</previous_output>\n\n<violations>\n{violations}\n</violations>"

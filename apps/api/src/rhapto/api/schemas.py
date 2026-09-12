@@ -49,6 +49,10 @@ class PackageSummary(BaseModel):
     id: uuid.UUID
     version: int
     status: str
+    # The queue renders the mode chip from here, so "which mode produced this draft" is answerable
+    # without fetching the package. Normalised on the way out, as the package endpoints do, so an
+    # old row written before tune mode existed reads as "blocks".
+    mode: Literal["blocks", "tune"]
     created_at: datetime
 
 

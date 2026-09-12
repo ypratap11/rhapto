@@ -1227,6 +1227,14 @@
             "title": "Id",
             "type": "string"
           },
+          "mode": {
+            "enum": [
+              "blocks",
+              "tune"
+            ],
+            "title": "Mode",
+            "type": "string"
+          },
           "status": {
             "title": "Status",
             "type": "string"
@@ -1240,6 +1248,7 @@
           "id",
           "version",
           "status",
+          "mode",
           "created_at"
         ],
         "title": "PackageSummary",

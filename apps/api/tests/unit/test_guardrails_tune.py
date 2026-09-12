@@ -244,6 +244,11 @@ def test_ordinary_capitalised_prose_does_not_trip_the_entity_rule(demo_profile_d
 
 
 def test_an_invented_org_at_a_sentence_start_is_still_caught(demo_profile_dir: Path) -> None:
+    """The sentence-start fallback must not launder a new employer.
+
+    "Globex Corp led the program" is checked as "Globex Corp" and then, because the run starts
+    the sentence, as "Corp" on its own. Both are unknown to the document, so it is still reported.
+    """
     doc = _doc()
     report = run_tune_guardrails(
         doc,
@@ -254,6 +259,31 @@ def test_an_invented_org_at_a_sentence_start_is_still_caught(demo_profile_dir: P
     )
     entities = [v for v in report.violations if v.rule == "no-invented-entities"]
     assert entities and "Globex Corp" in entities[0].message
+
+
+@pytest.mark.parametrize(
+    "after",
+    [
+        "Migrated Snowflake workloads to the new warehouse with no downtime.",
+        "Scaled Airflow pipelines for the analytics roadmap.",
+        "Delivered Integrated Planning and RAID Management for the cutover.",
+    ],
+)
+def test_a_new_verb_before_a_document_noun_is_not_an_invented_name(
+    after: str, demo_profile_dir: Path
+) -> None:
+    """The ordinary bullet shape "Verb + ProperNoun" is a rewrite, not an invented employer.
+
+    A sentence-initial run swallows the leading verb, and the verb is exactly what a JD-tailoring
+    rewrite changes, so the run minus its first word has to be able to vouch for the run. The
+    document says "Snowflake", "Airflow", "Integrated Planning" and "RAID Management"; only the
+    verbs here are new.
+    """
+    doc = _doc()
+    report = run_tune_guardrails(
+        doc, _after(doc, after), demo_extract(), _rules(demo_profile_dir), cover_note=None
+    )
+    assert report.passed, report.violations
 
 
 def test_entity_containment_is_word_boundary(demo_profile_dir: Path) -> None:

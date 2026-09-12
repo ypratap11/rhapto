@@ -135,8 +135,8 @@ def _runs(text: str) -> Iterator[tuple[list[str], bool]]:
         yield current, at_sentence_start
 
 
-def capitalised_runs(text: str) -> list[str]:
-    """The capitalised names in `text` worth checking against the document.
+def runs_to_check(text: str) -> list[tuple[str, str | None]]:
+    """Each capitalised run worth checking, paired with the sub-run that can vouch for it.
 
     A run is the unit checked, so "Globex Corp" is reported whole rather than as two words that
     happen to be unknown. A run is collected even when it starts a sentence -- dropping the
@@ -144,15 +144,27 @@ def capitalised_runs(text: str) -> list[str]:
     as just "Corp", which passes on any resume containing "Corporate" -- and is discarded only
     if it turns out to be a single word, where the capital carries no information. A lone word
     mid-sentence is checked only when `_looks_like_a_name` says so.
+
+    A sentence-initial run therefore swallows the leading verb ("Migrated Snowflake workloads"),
+    and the verb is exactly the word a JD-tailoring rewrite changes. So such a run also carries a
+    fallback -- the run minus its first word -- and the caller accepts the run when the fallback is
+    known to the document: "Migrated Snowflake" is a rephrasing of a document that says
+    "Snowflake", while "Globex Corp led the program." fails on both "Globex Corp" and "Corp" and
+    is still reported.
     """
-    runs: list[str] = []
+    runs: list[tuple[str, str | None]] = []
     for words, at_sentence_start in _runs(text):
         trimmed = _trim(words)
         if len(trimmed) > 1:
-            runs.append(" ".join(trimmed))
+            runs.append((" ".join(trimmed), " ".join(trimmed[1:]) if at_sentence_start else None))
         elif len(trimmed) == 1 and not at_sentence_start and _looks_like_a_name(trimmed[0]):
-            runs.append(trimmed[0])
+            runs.append((trimmed[0], None))
     return runs
+
+
+def capitalised_runs(text: str) -> list[str]:
+    """The capitalised names in `text` worth checking, without their fallbacks."""
+    return [run for run, _fallback in runs_to_check(text)]
 
 
 def _check_scope(doc: SourceDocument, edits: list[Edit]) -> list[Violation]:
@@ -263,14 +275,19 @@ def _has_unknown_word(source: str, run: str) -> bool:
     return False
 
 
+def _is_known(source: str, run: str) -> bool:
+    """Whether `run` is something the document can vouch for: the phrase itself, or every word."""
+    return _mentions(source, normalize_entity(run)) or not _has_unknown_word(source, run)
+
+
 def _check_entities(doc: SourceDocument, edits: list[Edit]) -> list[Violation]:
     source = normalize_entity(document_entities(doc))
     out: list[Violation] = []
     for i, edit in enumerate(edits):
         unknown = [
             run
-            for run in capitalised_runs(edit.after)
-            if not _mentions(source, normalize_entity(run)) and _has_unknown_word(source, run)
+            for run, fallback in runs_to_check(edit.after)
+            if not _is_known(source, run) and (fallback is None or not _is_known(source, fallback))
         ]
         if unknown:
             out.append(
