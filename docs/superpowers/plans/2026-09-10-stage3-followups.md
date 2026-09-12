@@ -87,3 +87,11 @@ merging; each is small and scoped. The 0.3 pollers plan comes before stage 4 (de
   guardrails are unchanged because only presentation changes.
 - Fall back to the built-in ATS-safe layout when no template is set; the PDF is produced from the templated
   DOCX by the worker as today.
+
+## Stage 4 feature request (user, 2026-09-11): "tune my resume" mode
+
+- Besides rebuilding from blocks, offer a mode that takes the user's full resume document as the base, keeps every
+  section, company, and date untouched, and changes only a few designated paragraphs (summary, competency lines,
+  selected bullets, skills lines) to match the job's requirements. Guardrails still apply to the changed text
+  (numbers must trace to the original document or verified blocks). Done by hand for the Scale AI TPM role on
+  2026-09-11 with a paragraph-edit script; the edits list is the spec for the feature.
