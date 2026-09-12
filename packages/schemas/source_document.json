@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rhapto.dev/schemas/source_document.json",
+  "title": "SourceDocument",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["paragraphs", "sections", "filename"],
+  "properties": {
+    "filename": { "type": "string" },
+    "paragraphs": { "type": "array", "items": { "$ref": "#/$defs/DocParagraph" } },
+    "sections": { "type": "array", "items": { "$ref": "#/$defs/DocSection" } }
+  },
+  "$defs": {
+    "DocParagraph": {
+      "title": "DocParagraph",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "text", "role"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^p[0-9]+$" },
+        "text": { "type": "string" },
+        "role": { "type": "string", "enum": ["name", "contact", "heading", "summary", "competency", "entry_title", "entry_org", "bullet", "skill", "credential", "other"] },
+        "section": { "type": ["string", "null"], "default": null }
+      }
+    },
+    "DocSection": {
+      "title": "DocSection",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["heading", "paragraph_ids"],
+      "properties": {
+        "heading": { "type": "string" },
+        "paragraph_ids": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "Edit": {
+      "title": "Edit",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["paragraph_id", "before", "after", "reason"],
+      "properties": {
+        "paragraph_id": { "type": "string" },
+        "before": { "type": "string" },
+        "after": { "type": "string" },
+        "reason": { "type": "string" }
+      }
+    }
+  }
+}

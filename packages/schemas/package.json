@@ -18,7 +18,10 @@
     "version": { "type": "integer", "minimum": 1 },
     "status": { "type": "string", "enum": ["draft", "blocked"] },
     "llm_calls": { "type": "integer", "minimum": 0 },
-    "created_at": { "type": "string", "format": "date-time" }
+    "created_at": { "type": "string", "format": "date-time" },
+    "mode": { "type": "string", "enum": ["blocks", "tune"], "default": "blocks" },
+    "edits": { "type": "array", "items": { "$ref": "source_document.json#/$defs/Edit" }, "default": [] },
+    "source_document": { "oneOf": [{ "$ref": "source_document.json" }, { "type": "null" }], "default": null }
   },
   "$defs": {
     "JobSnapshot": {

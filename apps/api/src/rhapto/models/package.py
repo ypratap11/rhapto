@@ -10,6 +10,7 @@ from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
 from . import guardrail_report as guardrail_report_1
 from . import jd_extract as jd_extract_1
 from . import resume_document
+from . import source_document as source_document_1
 
 
 class JobSnapshot(BaseModel):
@@ -43,3 +44,6 @@ class ApplicationPackage(BaseModel):
     status: Literal['draft', 'blocked']
     llm_calls: Annotated[int, Field(ge=0)]
     created_at: AwareDatetime
+    mode: Literal['blocks', 'tune'] = 'blocks'
+    edits: Annotated[list[source_document_1.Edit], Field(validate_default=True)] = []
+    source_document: source_document_1.SourceDocument | None = None
