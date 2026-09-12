@@ -331,3 +331,58 @@ def test_db_upgrade_reports_an_unreachable_database(monkeypatch: pytest.MonkeyPa
     assert "cannot reach the database" in result.output
     assert "docker compose up -d db redis" in result.output
     assert "sup3rsecret" not in result.output and "***" in result.output
+
+
+def test_tailor_mode_blocks_with_document_ignores_it(
+    workspace: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _patch_providers(monkeypatch, [demo_extract(), _good()])
+    from helpers_docx import build_fixture_docx
+
+    doc = workspace / "resume.docx"
+    doc.write_bytes(build_fixture_docx())
+    result = runner.invoke(
+        cli.app,
+        [
+            "tailor",
+            "--jd",
+            str(workspace / "jd.txt"),
+            "--profile",
+            str(workspace / "profile"),
+            "--out",
+            str(workspace / "out"),
+            "--no-pdf",
+            "--document",
+            str(doc),
+            "--mode",
+            "blocks",
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    package = json.loads(
+        next((workspace / "out").rglob("package.json")).read_text(encoding="utf-8")
+    )
+    assert package["mode"] == "blocks" and package["edits"] == []
+
+
+def test_tailor_corrupt_document_exits_1(workspace: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _patch_providers(monkeypatch, [])
+    doc = workspace / "resume.docx"
+    doc.write_bytes(b"not a docx")
+    result = runner.invoke(
+        cli.app,
+        [
+            "tailor",
+            "--jd",
+            str(workspace / "jd.txt"),
+            "--profile",
+            str(workspace / "profile"),
+            "--out",
+            str(workspace / "out"),
+            "--no-pdf",
+            "--document",
+            str(doc),
+        ],
+    )
+    assert result.exit_code == 1
+    assert "valid .docx" in result.output

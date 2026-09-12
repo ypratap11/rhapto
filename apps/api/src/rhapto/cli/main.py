@@ -115,12 +115,17 @@ def tailor_cmd(
     if resolved_mode == "tune":
         assert document is not None  # guaranteed by the --mode/--document check above
         data = document.read_bytes()
+        try:
+            source_document = parse_docx(data, document.name)
+        except Exception as exc:  # python-docx raises several types for a corrupt file
+            typer.echo(f"error: could not read {document}: is it a valid .docx?", err=True)
+            raise typer.Exit(1) from exc
         request = TailorRequest(
             jd_text=jd_text,
             track_id=track,
             feedback=feedback,
             mode="tune",
-            source_document=parse_docx(data, document.name),
+            source_document=source_document,
             source_docx=data,
         )
     else:
