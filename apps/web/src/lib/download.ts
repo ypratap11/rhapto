@@ -23,3 +23,8 @@ export async function downloadAuthenticated(path: string, filename: string): Pro
   // handler has consumed it in some browsers; defer to the next tick instead.
   setTimeout(() => URL.revokeObjectURL(url), 0);
 }
+
+export function resumeFilename(name: string | null | undefined, kind: "pdf" | "docx" | "zip"): string {
+  const stem = (name ?? "").replace(/[^A-Za-z0-9]+/g, "_").replace(/^_+|_+$/g, "") || "Resume";
+  return kind === "zip" ? `${stem}_Package.zip` : `${stem}_Resume.${kind}`;
+}

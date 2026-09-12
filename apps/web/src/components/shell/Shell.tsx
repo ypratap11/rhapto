@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Nav } from "./Nav";
+import { StepBar } from "./StepBar";
 import { TokenGate } from "./TokenGate";
 
 export function Shell({ children }: { children: React.ReactNode }) {
@@ -14,7 +15,12 @@ export function Shell({ children }: { children: React.ReactNode }) {
         </div>
       </header>
       <main className="mx-auto max-w-6xl px-6 py-8">
-        <TokenGate>{children}</TokenGate>
+        <TokenGate>
+          <>
+            <StepBar />
+            {children}
+          </>
+        </TokenGate>
       </main>
     </div>
   );

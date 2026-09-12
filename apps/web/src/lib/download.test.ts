@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { setSettings } from "./api/client";
-import { downloadAuthenticated } from "./download";
+import { downloadAuthenticated, resumeFilename } from "./download";
 
 afterEach(() => {
   window.localStorage.clear();
@@ -59,5 +59,19 @@ describe("downloadAuthenticated", () => {
       status: 404,
       message: "no such export",
     });
+  });
+});
+
+describe("resumeFilename", () => {
+  it("builds a filename from the candidate name and kind", () => {
+    expect(resumeFilename("Maya Chen", "pdf")).toBe("Maya_Chen_Resume.pdf");
+  });
+
+  it("falls back to Resume when the name is blank", () => {
+    expect(resumeFilename("", "zip")).toBe("Resume_Package.zip");
+  });
+
+  it("strips accents and punctuation down to ASCII underscores", () => {
+    expect(resumeFilename("  Ana-María  ", "docx")).toBe("Ana_Mar_a_Resume.docx");
   });
 });

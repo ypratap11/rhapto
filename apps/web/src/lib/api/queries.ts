@@ -32,6 +32,7 @@ export const discoveryKeys = {
 export function invalidateJobs(queryClient: QueryClient): void {
   void queryClient.invalidateQueries({ queryKey: ["jobs"] });
   void queryClient.invalidateQueries({ queryKey: ["job"] });
+  invalidatePackageList(queryClient);
 }
 
 export function invalidateDiscovery(queryClient: QueryClient): void {
@@ -148,14 +149,42 @@ export const packageKeys = {
   applications: ["applications"] as const,
 };
 
+export type PackageListItem = components["schemas"]["PackageListItem"];
+export type PackageListFilter = "all" | "review" | "blocked" | "applied";
+
+export const packageListKeys = {
+  list: (filter: PackageListFilter) => ["package-list", filter] as const,
+};
+
+const PACKAGE_LIST_PARAMS: Record<PackageListFilter, { status?: "draft" | "blocked"; applied?: boolean }> = {
+  all: {},
+  review: { applied: false, status: "draft" },
+  blocked: { status: "blocked" },
+  applied: { applied: true },
+};
+
+export function usePackageList(filter: PackageListFilter) {
+  return useQuery({
+    queryKey: packageListKeys.list(filter),
+    queryFn: () => unwrap(apiClient().GET("/api/v1/packages", { params: { query: PACKAGE_LIST_PARAMS[filter] } })),
+    staleTime: 10_000,
+  });
+}
+
+export function invalidatePackageList(queryClient: QueryClient): void {
+  void queryClient.invalidateQueries({ queryKey: ["package-list"] });
+}
+
 export function invalidatePackages(queryClient: QueryClient, jobId: string): void {
   void queryClient.invalidateQueries({ queryKey: packageKeys.packages(jobId) });
   void queryClient.invalidateQueries({ queryKey: ["package"] });
+  invalidatePackageList(queryClient);
   invalidateJobs(queryClient);
 }
 
 export function invalidateApplications(queryClient: QueryClient): void {
   void queryClient.invalidateQueries({ queryKey: packageKeys.applications });
+  invalidatePackageList(queryClient);
   invalidateJobs(queryClient);
 }
 
@@ -176,7 +205,10 @@ export function usePatchPackage() {
   return useMutation({
     mutationFn: ({ id, resume }: { id: string; resume: ResumeDocument }) =>
       unwrap(apiClient().PATCH("/api/v1/packages/{package_id}", { params: { path: { package_id: id } }, body: { resume } })),
-    onSuccess: (created) => invalidatePackages(queryClient, created.job_id),
+    onSuccess: (created) => {
+      invalidatePackages(queryClient, created.job_id);
+      invalidatePackageList(queryClient);
+    },
   });
 }
 
