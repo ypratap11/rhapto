@@ -305,3 +305,11 @@ def test_five_bullet_edits_are_within_scope(demo_profile_dir: Path) -> None:
         doc, edits, demo_extract(), _rules(demo_profile_dir), cover_note=None
     )
     assert report.passed, report.violations
+
+
+def test_period_codes_are_not_entities() -> None:
+    from rhapto.engine.guardrails.tune import capitalised_runs
+
+    assert capitalised_runs("Delivered Q3 results ahead of schedule.") == []
+    assert capitalised_runs("Reduced FY24 operating costs by 12% across H1.") == []
+    assert capitalised_runs("Reduced costs with Globex Corp in Q3.") == ["Globex Corp"]

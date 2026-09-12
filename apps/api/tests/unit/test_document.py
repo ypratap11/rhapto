@@ -83,7 +83,9 @@ def test_number_key_classifies_units_and_scales() -> None:
     assert number_key("30 percent") == "30:percent"
     assert number_key("8x") == "8:multiplier"
     assert number_key("$12M") == "12:currency"
-    assert number_key("12M") == "12:currency"
+    assert number_key("12M") == "12:scale"  # bare scale is not money
+    assert number_key("50K") == "50:scale"
+    assert number_key("$50K") == "50:currency"
     assert number_key("1,200") == "1200:plain"
     assert number_key("40 days") == "40:plain"
 
@@ -91,7 +93,8 @@ def test_number_key_classifies_units_and_scales() -> None:
 def test_quantity_tokens_normalises_ranges_and_spelled_scales() -> None:
     # A digit glued to an ASCII hyphen used to hide the right-hand number entirely.
     assert [key for _t, key in quantity_tokens("cost 30-85%")] == ["30:plain", "85:percent"]
-    assert [key for _t, key in quantity_tokens("saved 12 million")] == ["12:currency"]
+    assert [key for _t, key in quantity_tokens("saved 12 million")] == ["12:scale"]
+    assert [key for _t, key in quantity_tokens("saved $12 million")] == ["12:currency"]
     assert [key for _t, key in quantity_tokens("doubled the team")] == ["doubled"]
 
 

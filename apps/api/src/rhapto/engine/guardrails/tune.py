@@ -47,6 +47,9 @@ PRESENT = re.compile(r"\b(?:present|current)\b", re.IGNORECASE)
 # the token so "B.S." and "Moody's" survive as one word; a trailing sentence period is stripped
 # by `_runs` so "at Acme Analytics." is not read as a different org from "Acme Analytics".
 WORD = re.compile(r"[A-Za-z][A-Za-z.'’-]*")
+# Period/level shorthand that is capitalised but never a name: Q3, FY24, H1, P0, L5.
+PERIOD_CODE = re.compile(r"^[A-Z]{1,2}\d{1,4}$")
+WORD_OR_CODE = re.compile(r"[A-Za-z][A-Za-z0-9.'’-]*")
 SENTENCE_END = ".!?\n"
 # Ordinary English words that can legitimately sit capitalised at either end of a run ("The
 # Snowflake migration"). They are trimmed off a run rather than suppressing it, so the name in
@@ -112,9 +115,9 @@ def _runs(text: str) -> Iterator[tuple[list[str], bool]]:
     current: list[str] = []
     at_sentence_start = False
     previous_end = -1
-    for match in WORD.finditer(text):
+    for match in WORD_OR_CODE.finditer(text):
         word = match.group(0).rstrip(".")
-        capitalised = word[:1].isupper()
+        capitalised = word[:1].isupper() and not PERIOD_CODE.match(word)
         adjacent = bool(current) and not text[previous_end : match.start()].strip()
         if capitalised and adjacent:
             current.append(word)

@@ -189,7 +189,7 @@ def number_key(token: str) -> str:
 
     Comparing digits alone is how "$2M" passes off a resume that merely says "2 products": the
     digit matches and the unit -- the entire claim -- is discarded. The class is deliberately
-    coarse (percent / multiplier / currency / plain) because the point is to stop a rewrite from
+    coarse (percent / multiplier / currency / scale / plain) because the point is to stop a rewrite from
     changing what a number measures, not to parse units.
     """
     match = NUMBER_TOKEN.match(token.strip())
@@ -200,8 +200,11 @@ def number_key(token: str) -> str:
         unit_class = "percent"
     elif unit in MULTIPLIER_UNITS:
         unit_class = "multiplier"
-    elif match.group("currency") or unit in CURRENCY_UNITS:
+    elif match.group("currency"):
         unit_class = "currency"
+    elif unit in CURRENCY_UNITS:
+        # A bare K/M/B is a scale, not money: "50K users" must not license "$50K in revenue".
+        unit_class = "scale"
     else:
         unit_class = "plain"
     return f"{normalize_number(match.group('digits'))}:{unit_class}"
