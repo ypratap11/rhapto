@@ -14,7 +14,7 @@ vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn() }) }));
 vi.mock("@/components/queue/TaskProgress", () => ({ TaskProgress: () => <div>progress</div> }));
 
 const job = { id: "j1" } as JobOut;
-const pkg = { id: "p1", track_id: "data-pm", version: 1 } as PackageOut;
+const pkg = { id: "p1", track_id: "data-pm", version: 1, mode: "blocks" } as PackageOut;
 
 describe("RegenerateDialog", () => {
   it("requires feedback and posts it with the parent package id", async () => {
@@ -27,7 +27,7 @@ describe("RegenerateDialog", () => {
     expect(screen.getByText(/at least 10 characters/i)).toBeInTheDocument();
     await user.type(screen.getByLabelText(/feedback/i), "Lean harder on the migration work.");
     await user.click(screen.getByRole("button", { name: /regenerate/i }));
-    expect(mutateAsync).toHaveBeenCalledWith({ jobId: "j1", body: { feedback: "Lean harder on the migration work.", parent_package_id: "p1", track_id: "data-pm" } });
+    expect(mutateAsync).toHaveBeenCalledWith({ jobId: "j1", body: { feedback: "Lean harder on the migration work.", parent_package_id: "p1", track_id: "data-pm", mode: "blocks" } });
     expect(await screen.findByText("progress")).toBeInTheDocument();
   });
 });

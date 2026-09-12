@@ -41,7 +41,7 @@ export function RegenerateDialog({ job, pkg, open, onOpenChange }: { job: JobOut
     }
     setError(null);
     try {
-      const task = await tailor.mutateAsync({ jobId: job.id, body: { feedback: text, parent_package_id: pkg.id, track_id: trackId } });
+      const task = await tailor.mutateAsync({ jobId: job.id, body: { feedback: text, parent_package_id: pkg.id, track_id: trackId, mode: pkg.mode } });
       if (task.status === "succeeded" && task.result_ref) {
         onOpenChange(false);
         router.push(`/jobs/${job.id}/packages/${task.result_ref}`);
