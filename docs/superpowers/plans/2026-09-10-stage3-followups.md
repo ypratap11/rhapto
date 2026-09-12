@@ -76,3 +76,14 @@ merging; each is small and scoped. The 0.3 pollers plan comes before stage 4 (de
 - The review page should offer the PDF and DOCX as direct downloads (one click each) in addition to the zip;
   the API sets the `Content-Disposition` filename accordingly on `/packages/{id}/files/*` and `/download`.
 - Keep the blocked-package marker (`X-Rhapto-Guardrails`, `GUARDRAILS-BLOCKED.md`) on every variant.
+
+## Stage 4 feature request (user, 2026-09-11): render into the user's own resume template
+
+- Let the user upload a `.docx` template (gitignored, stored with the profile) and pour every package into
+  it: copy paragraph and run formatting from exemplar paragraphs (name, contact line, section heading with
+  its bottom border, role line with right-tab date, org line, bullet with the template's numbering, skills
+  and credentials lines) exactly as the one-off `render_template.py` did for the Shield AI package.
+- Section title mapping is user-configurable (e.g. Projects -> "SELECTED PROGRAMS & PROJECTS"); provenance and
+  guardrails are unchanged because only presentation changes.
+- Fall back to the built-in ATS-safe layout when no template is set; the PDF is produced from the templated
+  DOCX by the worker as today.
