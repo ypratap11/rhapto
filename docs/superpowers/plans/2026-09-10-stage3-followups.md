@@ -67,3 +67,12 @@ merging; each is small and scoped. The 0.3 pollers plan comes before stage 4 (de
   the same source shadowing, or reposts counted differently).
 - A renamed board slug leaves the old `(source, board)` run row in the runs drawer forever; consider pruning
   runs whose entry no longer exists.
+
+## Stage 4 feature request (user, 2026-09-11): named downloads
+
+- Package downloads should be named after the candidate and role, not `rhapto-package-v1.zip`: e.g.
+  `<First>_<Last>_Resume.pdf`, `<First>_<Last>_Resume.docx`, `<First>_<Last>_Cover_Note.md`, using the
+  `name` answer from the profile (fallback `Resume`), with the company or role as an optional suffix.
+- The review page should offer the PDF and DOCX as direct downloads (one click each) in addition to the zip;
+  the API sets the `Content-Disposition` filename accordingly on `/packages/{id}/files/*` and `/download`.
+- Keep the blocked-package marker (`X-Rhapto-Guardrails`, `GUARDRAILS-BLOCKED.md`) on every variant.
