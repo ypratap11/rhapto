@@ -8,7 +8,7 @@ import uuid
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import typer
 from alembic.config import Config
@@ -19,6 +19,7 @@ from alembic import command
 from rhapto.config import Settings, get_settings
 from rhapto.db.repositories.users import get_or_create_user
 from rhapto.db.session import make_engine, make_session_factory
+from rhapto.engine.document import parse_docx
 from rhapto.engine.pipeline import LLMBudgetExceeded, TailorResult, tailor
 from rhapto.engine.providers.anthropic import AnthropicProvider
 from rhapto.engine.providers.embeddings import EmbeddingProvider, FastEmbedProvider
@@ -76,6 +77,16 @@ def tailor_cmd(
     jd: Path = typer.Option(..., "--jd", help="Job description text file"),
     profile: Path = typer.Option(Path("./profile"), "--profile", help="Profile directory"),
     track: str | None = typer.Option(None, "--track", help="Track id (default: first track)"),
+    document: Path | None = typer.Option(
+        None,
+        "--document",
+        exists=True,
+        dir_okay=False,
+        help="Your resume .docx; switches on tune mode",
+    ),
+    mode: Literal["blocks", "tune"] | None = typer.Option(
+        None, "--mode", help="blocks|tune (default: tune if --document is given, else blocks)"
+    ),
     out: Path = typer.Option(
         Path("out"), "--out", help="Output root; a <company>-<role> folder is created"
     ),
@@ -86,6 +97,9 @@ def tailor_cmd(
     if not jd.is_file():
         typer.echo(f"error: job description file not found: {jd}", err=True)
         raise typer.Exit(1)
+    if mode == "tune" and document is None:
+        raise typer.BadParameter("--mode tune requires --document")
+    resolved_mode: Literal["blocks", "tune"] = mode or ("tune" if document else "blocks")
     settings = get_settings()
     try:
         loaded = load_profile(profile)
@@ -98,6 +112,19 @@ def tailor_cmd(
         typer.echo(f"error: {exc.message}", err=True)
         raise typer.Exit(1) from exc
     jd_text = jd.read_text(encoding="utf-8")
+    if resolved_mode == "tune":
+        assert document is not None  # guaranteed by the --mode/--document check above
+        data = document.read_bytes()
+        request = TailorRequest(
+            jd_text=jd_text,
+            track_id=track,
+            feedback=feedback,
+            mode="tune",
+            source_document=parse_docx(data, document.name),
+            source_docx=data,
+        )
+    else:
+        request = TailorRequest(jd_text=jd_text, track_id=track, feedback=feedback)
 
     async def on_step(step: str) -> None:
         typer.echo(f"  {step}...")
@@ -105,7 +132,7 @@ def tailor_cmd(
     try:
         result = asyncio.run(
             tailor(
-                TailorRequest(jd_text=jd_text, track_id=track, feedback=feedback),
+                request,
                 loaded,
                 providers.llm,
                 providers.embedder,

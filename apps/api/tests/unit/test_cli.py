@@ -4,12 +4,15 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from docx import Document
 from helpers import bullet, demo_extract, demo_resume
+from helpers_docx import build_fixture_docx
 from typer.testing import CliRunner
 
 from rhapto.cli import main as cli
 from rhapto.engine.compose import AnswerItem, ComposeOutput
 from rhapto.engine.providers.fake import FakeEmbeddingProvider, FakeLLMProvider
+from rhapto.engine.tune import ProposedEdit, TuneOutput
 
 runner = CliRunner()
 JD = "ExampleCo seeks a Data Platform Program Manager to lead our Snowflake migration."
@@ -128,6 +131,63 @@ def test_tailor_with_track_and_feedback(workspace: Path, monkeypatch: pytest.Mon
     )
     assert package["track_id"] == "ai-pm"
     assert "lean on AI" in llm.calls[1].messages[0].content
+
+
+def test_tailor_document_switches_on_tune_mode(
+    workspace: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    clean_bullet = "Led the Snowflake migration for 12 teams, reducing warehouse cost 30%."
+    (workspace / "resume.docx").write_bytes(build_fixture_docx())
+    tune_output = TuneOutput(
+        edits=[ProposedEdit(paragraph_id="p9", text=clean_bullet, reason="mirrors the JD")],
+        cover_note="I have led Snowflake migrations end to end for platform teams.",
+        change_log="Emphasised the migration.",
+        answers=[AnswerItem(key="why_this_company", value="Data.")],
+    ).model_dump(mode="json")
+    _patch_providers(monkeypatch, [demo_extract(), tune_output])
+    result = runner.invoke(
+        cli.app,
+        [
+            "tailor",
+            "--jd",
+            str(workspace / "jd.txt"),
+            "--profile",
+            str(workspace / "profile"),
+            "--document",
+            str(workspace / "resume.docx"),
+            "--out",
+            str(workspace / "out"),
+            "--no-pdf",
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    target = workspace / "out" / "exampleco-data-platform-program-manager"
+    assert {p.name for p in target.iterdir()} == {"resume.docx", "cover-note.md", "package.json"}
+    texts = [p.text for p in Document(str(target / "resume.docx")).paragraphs]
+    assert clean_bullet in texts
+    package = json.loads((target / "package.json").read_text(encoding="utf-8"))
+    assert package["mode"] == "tune"
+    assert package["edits"] and package["edits"][0]["after"] == clean_bullet
+
+
+def test_tailor_mode_tune_without_document_exits_2(
+    workspace: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _patch_providers(monkeypatch, [])
+    result = runner.invoke(
+        cli.app,
+        [
+            "tailor",
+            "--jd",
+            str(workspace / "jd.txt"),
+            "--profile",
+            str(workspace / "profile"),
+            "--mode",
+            "tune",
+            "--no-pdf",
+        ],
+    )
+    assert result.exit_code == 2, result.output
 
 
 def test_tailor_bad_profile_exits_1(workspace: Path, monkeypatch: pytest.MonkeyPatch) -> None:

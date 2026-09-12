@@ -33,6 +33,11 @@ uv run rhapto tailor --jd path/to/jd.txt --profile ../../profile --out ../../out
 blocked the draft; the files are still written so you can see why. Exit code 1 is an error; 2 is a usage error from
 the command-line parser.
 
+Pass `--document your-resume.docx` to tailor your own resume instead of the block library: `tailor` then edits your
+document's paragraphs in place (tune mode) rather than composing a new one, and `package.json` carries the list of
+edits alongside the guardrail report — for example
+`uv run rhapto tailor --jd path/to/jd.txt --profile ../../profile --document your-resume.docx --out ../../out`.
+
 Without LibreOffice locally, use the container:
 
 ```bash
@@ -99,6 +104,16 @@ Rhapto never submits anything. The last click is yours.
 Development: from `apps/web`, `pnpm install`, `pnpm dev` (http://localhost:3000), `pnpm test`, `pnpm typecheck`,
 `pnpm lint`, `pnpm build`. After changing the API, run `bash scripts/codegen.sh` to refresh
 `packages/schemas/openapi.json` and the generated client types.
+
+### Tune your own resume
+
+Already have a resume you like? Upload it once under **Profile → Resume document** and Rhapto switches to tune
+mode: instead of composing a new resume from your block library, Tailor edits your own document's wording in
+place, and defaults to tune mode automatically whenever a document is on file. The review page's Changes pane
+shows each edit as a before/after pair you can accept, tweak, or reject line by line. Downloads keep your
+document's original format and are named after you, not the job. Guardrails work the same way in tune mode — they
+check every number, name, and date the edits introduce against your uploaded document, not just the block
+library. Rhapto still never submits anything for you.
 
 ## Job discovery (phase 0.3)
 
