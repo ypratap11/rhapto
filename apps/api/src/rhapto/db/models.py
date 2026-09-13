@@ -116,6 +116,22 @@ class ResumeDocumentRow(UserScopedMixin, TimestampMixin, Base):
     )
 
 
+class LlmSettingsRow(UserScopedMixin, TimestampMixin, Base):
+    """The user's chosen LLM provider, model, and encrypted API key.
+
+    One row per user (hence the unique `user_id`): the UI offers a single active provider, and a
+    second row would leave "which key do we call?" undefined. The key is stored Fernet-encrypted by
+    `services.secrets`; nothing here ever holds plaintext.
+    """
+
+    __tablename__ = "llm_settings"
+    __table_args__ = (UniqueConstraint("user_id"),)
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=new_uuid)
+    provider: Mapped[str] = mapped_column(String(20), nullable=False)
+    model: Mapped[str] = mapped_column(String(100), nullable=False)
+    api_key_encrypted: Mapped[str] = mapped_column(Text, nullable=False)
+
+
 class WatchlistEntry(UserScopedMixin, TimestampMixin, Base):
     __tablename__ = "watchlist"
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=new_uuid)

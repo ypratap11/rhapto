@@ -9,6 +9,7 @@ from rhapto.config import get_settings
 from rhapto.db.session import make_engine, make_session_factory
 from rhapto.engine.providers.anthropic import AnthropicProvider
 from rhapto.engine.providers.embeddings import FastEmbedProvider
+from rhapto.engine.providers.registry import PROVIDERS
 from rhapto.services.discovery.http import DiscoveryHttp
 from rhapto.services.eventbus import RedisEventBus
 from rhapto.services.storage import PackageStorage
@@ -36,7 +37,8 @@ async def on_startup(ctx: dict[str, Any]) -> None:
     ctx["engine"] = engine
     ctx["session_factory"] = make_session_factory(engine)
     ctx["llm"] = AnthropicProvider(
-        model=settings.rhapto_llm_model, api_key=settings.anthropic_api_key
+        model=settings.rhapto_llm_model or PROVIDERS["anthropic"].default,
+        api_key=settings.anthropic_api_key,
     )
     ctx["embedder"] = FastEmbedProvider(settings.rhapto_embedding_model)
     ctx["event_bus"] = RedisEventBus(settings.redis_url)

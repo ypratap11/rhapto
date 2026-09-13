@@ -25,6 +25,7 @@ from rhapto.engine.providers.anthropic import AnthropicProvider
 from rhapto.engine.providers.embeddings import EmbeddingProvider, FastEmbedProvider
 from rhapto.engine.providers.fake import FakeEmbeddingProvider
 from rhapto.engine.providers.llm import LLMProvider, MalformedOutputError
+from rhapto.engine.providers.registry import PROVIDERS
 from rhapto.engine.render.pdf import PdfRenderError, convert_docx_to_pdf, soffice_available
 from rhapto.engine.scoring import best_track, bucket_for, score_job, track_text
 from rhapto.engine.types import Profile, ProfileError, TailorRequest
@@ -54,7 +55,10 @@ def build_providers(settings: Settings) -> Providers:
     if not settings.anthropic_api_key:
         raise typer.BadParameter("ANTHROPIC_API_KEY is not set; put it in .env or the environment")
     return Providers(
-        llm=AnthropicProvider(model=settings.rhapto_llm_model, api_key=settings.anthropic_api_key),
+        llm=AnthropicProvider(
+            model=settings.rhapto_llm_model or PROVIDERS["anthropic"].default,
+            api_key=settings.anthropic_api_key,
+        ),
         embedder=FastEmbedProvider(settings.rhapto_embedding_model),
     )
 

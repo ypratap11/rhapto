@@ -11,8 +11,16 @@ class Settings(BaseSettings):
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
+    rhapto_llm_provider: str = "anthropic"
     anthropic_api_key: str = ""
-    rhapto_llm_model: str = "claude-sonnet-5"
+    openai_api_key: str = ""
+    gemini_api_key: str = ""
+    # Empty means "whatever the chosen provider's default model is" (see engine.providers.registry),
+    # so switching RHAPTO_LLM_PROVIDER alone is enough.
+    rhapto_llm_model: str = ""
+    # Fernet secret for stored provider keys. Empty derives one from rhapto_api_token; see
+    # services.secrets.
+    rhapto_secret_key: str = ""
     rhapto_embedding_model: str = "BAAI/bge-small-en-v1.5"
     rhapto_soffice_binary: str = "soffice"
     database_url: str = "postgresql+asyncpg://rhapto:rhapto@localhost:5432/rhapto"
