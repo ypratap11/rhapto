@@ -117,3 +117,15 @@ deferred from the whole-branch review:
   dialog tests in AddJobDialog, Board, BlocksTab, GuardrailsTab, RegenerateDialog use `userEvent.setup()` without
   `delay: null`); every file passes alone and the suite is green at `--testTimeout=90000`. Switch those tests to
   `delay: null` and consider `pool: "threads"` with a worker cap.
+
+## Multi-provider LLM follow-ups (from the whole-branch review, 2026-09-12)
+
+- Live round trips with real OpenAI and Gemini keys have not been run (none available during development); the
+  adapters are pinned against the SDKs' own schema converters and the Anthropic path is verified live. First
+  user with an OpenAI or Gemini key: run Settings → Test connection, then one tailor, and report.
+- A `source: env` configuration cannot be promoted to a stored row without retyping the key (Save stays disabled
+  when nothing changed); a "Save from .env" affordance would close that.
+- Provider cards are keyboard-operable via Tab and Enter but lack roving tabindex / arrow keys of a true radio group.
+- `openai.py` `_error_code` has a dead `body["error"]["code"]` fallback (the SDK already unwraps it).
+- Concurrent pytest processes on the shared `rhapto_test` database still race (TRUNCATE vs INSERT); a per-process
+  schema or a lock file in `tests/conftest.py` would make parallel runs safe.
