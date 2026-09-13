@@ -77,8 +77,8 @@ else the environment (`RHAPTO_LLM_PROVIDER`, default `anthropic`; `RHAPTO_LLM_MO
 default; the provider's env key), else raises `LLMNotConfiguredError("No LLM configured. Add a key in Settings.")`.
 Providers are cached per process keyed by `(provider, model, sha256(key))` so clients are not rebuilt per task.
 
-- Worker: `tailor_job`, `score_jobs`, `rescore_jobs`, and the scoring step of `poll_now`/`poll_all_sources` call
-  `resolve_llm` at task start; `ctx["llm"]` is removed. A `LLMNotConfiguredError` or `ProviderAuthError` fails the
+- Worker: `tailor_job` (the only task that calls the LLM; scoring is embedding-based) calls `resolve_llm` at
+  task start; `ctx["llm"]` is removed. A `LLMNotConfiguredError` or `ProviderAuthError` fails the
   task with that message (no traceback) and the task event carries it.
 - API: `POST /jobs/{id}/tailor` calls `resolve_llm` first and returns 409 `{"detail": "No LLM configured…",
   "code": "llm_not_configured"}` so the UI can link to Settings. `GET /me` gains `llm_configured: bool`.
