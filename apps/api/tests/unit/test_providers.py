@@ -8,6 +8,7 @@ from rhapto.engine.providers.anthropic import AnthropicProvider, parse_tool_inpu
 from rhapto.engine.providers.errors import ProviderAuthError
 from rhapto.engine.providers.fake import FakeEmbeddingProvider, FakeLLMProvider
 from rhapto.engine.providers.llm import MalformedOutputError, Message, SystemBlock, TokenUsage
+from rhapto.engine.types import EngineError
 
 
 class Answer(BaseModel):
@@ -119,6 +120,44 @@ async def test_anthropic_auth_failures_become_provider_auth_error(status: int) -
         )
     assert excinfo.value.provider == "anthropic"
     assert "invalid x-api-key" in str(excinfo.value)
+
+
+async def test_anthropic_other_sdk_failures_become_plain_engine_errors() -> None:
+    """No raw SDK exception may reach the pipeline: a 429 or a 5xx is a retryable EngineError."""
+    import anthropic
+    import httpx
+
+    error = anthropic.InternalServerError(
+        "Overloaded",
+        response=httpx.Response(529, request=httpx.Request("POST", "https://api.anthropic.com/v1")),
+        body=None,
+    )
+    provider = AnthropicProvider(
+        model="claude-sonnet-5", client=SimpleNamespace(messages=_RaisingMessages(error))
+    )
+    with pytest.raises(EngineError) as excinfo:
+        await provider.complete_structured(
+            system=[], messages=[Message(role="user", content="go")], output_schema=Answer
+        )
+    assert not isinstance(excinfo.value, ProviderAuthError | MalformedOutputError)
+    assert excinfo.value.__cause__ is error
+
+
+async def test_anthropic_response_without_a_tool_use_block_is_malformed_output() -> None:
+    class _NoToolUse:
+        async def create(self, **kwargs: Any) -> Any:
+            return SimpleNamespace(
+                content=[SimpleNamespace(type="text", text="sure thing")],
+                usage=SimpleNamespace(input_tokens=1, output_tokens=1),
+            )
+
+    provider = AnthropicProvider(
+        model="claude-sonnet-5", client=SimpleNamespace(messages=_NoToolUse())
+    )
+    with pytest.raises(MalformedOutputError, match="no tool_use block"):
+        await provider.complete_structured(
+            system=[], messages=[Message(role="user", content="go")], output_schema=Answer
+        )
 
 
 def test_parse_tool_input_unwraps_a_single_wrapper_object() -> None:

@@ -4,7 +4,7 @@ from typing import Any
 
 from pydantic import ValidationError
 
-from rhapto.engine.providers.errors import ProviderAuthError, mentions_quota
+from rhapto.engine.providers.errors import ProviderAuthError
 from rhapto.engine.providers.llm import (
     MalformedOutputError,
     Message,
@@ -13,6 +13,7 @@ from rhapto.engine.providers.llm import (
     T,
     TokenUsage,
 )
+from rhapto.engine.types import EngineError
 
 TOOL_NAME = "emit"
 
@@ -47,15 +48,18 @@ def parse_tool_input(output_schema: type[T], payload: Any) -> T:
         ) from exc
 
 
-def _auth_error(exc: BaseException) -> ProviderAuthError | None:
-    """Map the SDK's credential failures; the SDK is imported here so the module stays import-light."""
+def _mapped_error(exc: Exception) -> EngineError:
+    """Every SDK failure leaves the adapter as an EngineError; the SDK is imported here so the
+    module stays import-light.
+
+    401/403 is a credential problem the user must fix (ProviderAuthError); a 429, a timeout or a
+    5xx is a plain EngineError, retryable and not about the key.
+    """
     import anthropic
 
     if isinstance(exc, anthropic.AuthenticationError | anthropic.PermissionDeniedError):
         return ProviderAuthError(PROVIDER_ID, str(exc))
-    if isinstance(exc, anthropic.RateLimitError) and mentions_quota(str(exc)):
-        return ProviderAuthError(PROVIDER_ID, str(exc))
-    return None
+    return EngineError(str(exc))
 
 
 class AnthropicProvider:
@@ -107,15 +111,12 @@ class AnthropicProvider:
                 tool_choice={"type": "tool", "name": TOOL_NAME},
             )
         except Exception as exc:
-            auth = _auth_error(exc)
-            if auth is not None:
-                raise auth from exc
-            raise
+            raise _mapped_error(exc) from exc
         tool_use = next(
             (b for b in response.content if getattr(b, "type", None) == "tool_use"), None
         )
         if tool_use is None:
-            raise RuntimeError("Anthropic response contained no tool_use block")
+            raise MalformedOutputError("Anthropic response contained no tool_use block")
         usage = response.usage
         return StructuredResult(
             value=parse_tool_input(output_schema, tool_use.input),

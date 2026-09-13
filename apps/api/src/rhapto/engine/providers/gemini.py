@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from pydantic import BaseModel, ValidationError
+from pydantic import ValidationError
 
 from rhapto.engine.providers.errors import ProviderAuthError, mentions_quota
 from rhapto.engine.providers.llm import (
@@ -17,88 +17,43 @@ from rhapto.engine.types import EngineError
 
 PROVIDER_ID = "gemini"
 
-# Gemini's response_schema is OpenAPI 3.0-flavoured, not JSON Schema: no $ref/$defs, no
-# additionalProperties, and nullability is a `nullable` flag rather than a union with "null".
-_DROPPED_KEYS = frozenset({"title", "default", "additionalProperties", "$schema", "$defs"})
+# A bad key on the Gemini Developer API is a 400 INVALID_ARGUMENT, not a 401: the status line alone
+# cannot tell it apart from a malformed request, so the message has to be read.
+_INVALID_KEY_MARKERS = ("api key not valid", "api_key_invalid", "invalid api key")
 
 
-def schema_for_gemini(model: type[BaseModel]) -> dict[str, Any]:
-    """Translate a Pydantic JSON schema into the subset Gemini accepts as `response_schema`."""
-    schema = model.model_json_schema()
-    return _convert(schema, schema.get("$defs", {}), ())
+def _mapped_error(exc: Exception) -> EngineError:
+    """Every SDK failure leaves the adapter as an EngineError; the SDK is imported here so the
+    module stays import-light.
 
-
-def _convert(node: dict[str, Any], defs: dict[str, Any], stack: tuple[str, ...]) -> dict[str, Any]:
-    out: dict[str, Any] = {}
-    for source in _inlined(node, defs, stack):
-        out.update(source)
-    if "anyOf" in node:
-        out.update(_convert_union(node["anyOf"], defs, stack))
-    for key, value in node.items():
-        if key in _DROPPED_KEYS or key in {"$ref", "allOf", "anyOf"}:
-            continue
-        if key == "properties":
-            # The keys here are field names -- only their values are schemas.
-            out[key] = {name: _convert(sub, defs, stack) for name, sub in value.items()}
-        elif key == "items":
-            out[key] = _convert(value, defs, stack)
-        else:
-            out[key] = list(value) if isinstance(value, list) else value
-    return out
-
-
-def _inlined(
-    node: dict[str, Any], defs: dict[str, Any], stack: tuple[str, ...]
-) -> list[dict[str, Any]]:
-    """Resolve `$ref` (and the single-member `allOf` Pydantic emits beside field metadata)."""
-    refs = [node["$ref"]] if "$ref" in node else []
-    resolved: list[dict[str, Any]] = []
-    for member in node.get("allOf", []):
-        if set(member) == {"$ref"}:
-            refs.append(member["$ref"])
-        else:
-            resolved.append(_convert(member, defs, stack))
-    for ref in refs:
-        name = ref.rsplit("/", 1)[-1]
-        if name in stack:
-            raise EngineError(f"cannot inline recursive schema {name!r} for Gemini")
-        target = defs.get(name)
-        if target is None:
-            raise EngineError(f"schema reference {ref!r} has no definition")
-        resolved.append(_convert(target, defs, (*stack, name)))
-    return resolved
-
-
-def _convert_union(
-    variants: list[dict[str, Any]], defs: dict[str, Any], stack: tuple[str, ...]
-) -> dict[str, Any]:
-    real = [v for v in variants if v.get("type") != "null"]
-    out: dict[str, Any] = {"nullable": True} if len(real) < len(variants) else {}
-    if len(real) == 1:
-        out.update(_convert(real[0], defs, stack))
-    elif real:
-        out["anyOf"] = [_convert(v, defs, stack) for v in real]
-    return out
-
-
-def _auth_error(exc: BaseException) -> ProviderAuthError | None:
-    """Map the SDK's credential failures; the SDK is imported here so the module stays import-light."""
+    401/403, a 400 that names the API key, and a 429 whose message mentions quota are credential
+    problems the user must fix (Gemini has no machine-readable code for the last one). A 5xx, a
+    timeout or any other bad request is a plain EngineError: retryable, not the user's key.
+    """
     from google.genai import errors as genai_errors
 
     if not isinstance(exc, genai_errors.APIError):
-        return None
+        return EngineError(str(exc))
     code = getattr(exc, "code", None)
     message = getattr(exc, "message", None) or str(exc)
-    if code in (401, 403) or (code == 429 and mentions_quota(message)):
+    status = str(getattr(exc, "status", None) or "")
+    lowered = message.lower()
+    if code in (401, 403) or any(marker in lowered for marker in _INVALID_KEY_MARKERS):
         return ProviderAuthError(PROVIDER_ID, message)
-    return None
+    if code == 429 and (mentions_quota(message) or status.upper() == "RESOURCE_EXHAUSTED"):
+        return ProviderAuthError(PROVIDER_ID, message)
+    return EngineError(message)
 
 
 class GeminiProvider:
-    """Structured output via `response_mime_type=application/json` plus a converted response schema.
+    """Structured output via `response_mime_type=application/json` plus a `response_schema`.
 
-    Gemini has no per-block cache control (implicit caching applies to long prefixes), so the
-    system blocks are joined into one `system_instruction` and `SystemBlock.cache` is advisory.
+    The schema is the Pydantic class itself: `google-genai` converts it (inlining `$defs`, turning
+    optional unions into `nullable`, a single-value `Literal` into an `enum`) into the OpenAPI
+    dialect Gemini wants, so this adapter deliberately owns no schema translation of its own.
+
+    Gemini has no per-block cache control (implicit caching applies to long prefixes), so the system
+    blocks are joined into one `system_instruction` and `SystemBlock.cache` is advisory.
     """
 
     def __init__(self, model: str, api_key: str | None = None, client: Any | None = None) -> None:
@@ -124,21 +79,20 @@ class GeminiProvider:
             }
             for m in messages
         ]
-        config = {
-            "system_instruction": "\n\n".join(b.text for b in system),
+        config: dict[str, Any] = {
             "response_mime_type": "application/json",
-            "response_schema": schema_for_gemini(output_schema),
+            "response_schema": output_schema,
             "max_output_tokens": max_tokens,
         }
+        if system:
+            # Omitted when empty: an empty string becomes an empty system turn on the wire.
+            config["system_instruction"] = "\n\n".join(b.text for b in system)
         try:
             response = await self._client.aio.models.generate_content(
                 model=self.model, contents=contents, config=config
             )
         except Exception as exc:
-            auth = _auth_error(exc)
-            if auth is not None:
-                raise auth from exc
-            raise
+            raise _mapped_error(exc) from exc
         text = response.text
         if not text:
             raise MalformedOutputError(
@@ -157,11 +111,15 @@ class GeminiProvider:
                 f"Gemini did not return valid JSON for {output_schema.__name__}: {exc}"
             ) from exc
         usage = getattr(response, "usage_metadata", None)
+        # Thinking is on by default on 2.5 models and those tokens are billed as output.
+        output_tokens = (getattr(usage, "candidates_token_count", 0) or 0) + (
+            getattr(usage, "thoughts_token_count", 0) or 0
+        )
         return StructuredResult(
             value=value,
             usage=TokenUsage(
                 input_tokens=getattr(usage, "prompt_token_count", 0) or 0,
-                output_tokens=getattr(usage, "candidates_token_count", 0) or 0,
+                output_tokens=output_tokens,
                 cache_read_input_tokens=getattr(usage, "cached_content_token_count", 0) or 0,
             ),
         )

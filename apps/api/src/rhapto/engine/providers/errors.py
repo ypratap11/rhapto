@@ -2,16 +2,14 @@ from __future__ import annotations
 
 from rhapto.engine.types import EngineError
 
-# Words that turn a 429 into a credentials problem rather than a "slow down": a spent quota or an
-# unpaid account needs the user to act, while a plain rate limit is worth retrying.
-_QUOTA_WORDS = ("quota", "billing", "credit", "insufficient_funds", "exceeded your current")
-
 
 class ProviderAuthError(EngineError):
-    """The provider rejected the key (401/403) or the account is out of quota or unpaid.
+    """The provider rejected the key (401/403/invalid key) or the account's allowance is spent.
 
     Carries the SDK's own message: it names the real problem (wrong key, project without access,
     exhausted quota) better than anything this layer could invent, and the API surfaces it as-is.
+    Everything else an SDK raises -- timeouts, 5xx, bad requests -- is a plain `EngineError`, so
+    callers can tell "the user must fix their credentials" from "try again".
     """
 
     def __init__(self, provider: str, message: str) -> None:
@@ -20,5 +18,11 @@ class ProviderAuthError(EngineError):
 
 
 def mentions_quota(message: str) -> bool:
-    lowered = message.lower()
-    return any(word in lowered for word in _QUOTA_WORDS)
+    """True when a 429 is about a spent allowance rather than a momentary rate limit.
+
+    Only for SDKs that expose no machine-readable error code (Gemini); OpenAI's `insufficient_quota`
+    code is read directly instead. Deliberately narrow: OpenAI's ordinary rate-limit text points at
+    the billing page, so matching words like "billing" turned retryable limits into terminal
+    credential errors.
+    """
+    return "quota" in message.lower()
