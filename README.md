@@ -21,7 +21,7 @@ License: AGPL-3.0-only
 ## Quick start (CLI, phase 0.1)
 
 ```bash
-cp .env.example .env            # add your ANTHROPIC_API_KEY
+cp .env.example .env            # add your LLM provider key (see AI provider setup below)
 cp -r profile.example profile   # then replace the fictional data with yours (profile/ is gitignored)
 cd apps/api && uv sync
 uv run rhapto profile validate ../../profile
@@ -51,7 +51,7 @@ Development: `uv run pytest`, `uv run ruff check .`, `uv run mypy`, `uv run lint
 ## Backend (phase 0.2)
 
 ```bash
-cp .env.example .env          # set ANTHROPIC_API_KEY and generate RHAPTO_API_TOKEN
+cp .env.example .env          # generate RHAPTO_API_TOKEN; add your AI provider key in Settings once the web app is up, or set ANTHROPIC_API_KEY here as a fallback
 docker compose up -d          # db, redis, api (http://localhost:8000), worker
 
 # upload a profile (swap profile.example for your own gitignored profile/ when you have one)
@@ -100,6 +100,22 @@ On first visit the app asks for the API URL (`http://localhost:8000`) and the be
 Downloads are named after you, not the job.
 
 Rhapto never submits anything. The last click is yours.
+
+### AI provider setup
+
+Open **Settings → AI provider**, pick a provider card, paste your key, choose a model (or "Other"), then
+**Test connection** and **Save**. Keys are stored encrypted; the UI only ever shows the last four characters.
+The Jobs page shows "Set up your AI provider" until one is configured.
+
+| Provider | Env key | Models | Default |
+| --- | --- | --- | --- |
+| Anthropic | `ANTHROPIC_API_KEY` | claude-opus-5, claude-sonnet-5 | claude-sonnet-5 |
+| OpenAI | `OPENAI_API_KEY` | gpt-5, gpt-5-mini | gpt-5 |
+| Google Gemini | `GEMINI_API_KEY` | gemini-2.5-pro, gemini-2.5-flash | gemini-2.5-pro |
+
+`.env` still works as a fallback: set `RHAPTO_LLM_PROVIDER` (default `anthropic`) and the matching key above,
+plus `RHAPTO_LLM_MODEL` if you want a non-default model (change both together). The CLI
+(`rhapto tailor --provider openai --model gpt-5`) always reads from `.env`, since it has no Settings UI.
 
 Development: from `apps/web`, `pnpm install`, `pnpm dev` (http://localhost:3000), `pnpm test`, `pnpm typecheck`,
 `pnpm lint`, `pnpm build`. After changing the API, run `bash scripts/codegen.sh` to refresh

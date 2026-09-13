@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # End-to-end smoke against a running compose stack: health, auth, profile import, job intake, tailor, package download.
-# Requires: docker compose up -d (all services), .env with RHAPTO_API_TOKEN and ANTHROPIC_API_KEY, curl, jq.
+# Requires: docker compose up -d (all services), .env with RHAPTO_API_TOKEN and an LLM key configured
+# in Settings or in .env, curl, jq.
 # DESTRUCTIVE: the import step replaces the target instance's profile with profile.example.
 # Do not run it against an instance holding your real profile.
 set -euo pipefail
