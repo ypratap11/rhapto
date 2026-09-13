@@ -1,21 +1,34 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { act, renderHook } from "@testing-library/react";
+import { act, renderHook, waitFor } from "@testing-library/react";
 import { createElement, type ReactNode } from "react";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "./client";
-import { keys, PACKAGE_LIST_PARAMS, useMarkApplied, type JobFilters } from "./queries";
+import { keys, PACKAGE_LIST_PARAMS, useLlmSettings, useMarkApplied, type JobFilters } from "./queries";
 
 const postMock = vi.fn();
 const patchMock = vi.fn();
+const getMock = vi.fn();
 
 vi.mock("./client", async (importOriginal) => ({
   ...(await importOriginal<typeof import("./client")>()),
-  apiClient: () => ({ POST: postMock, PATCH: patchMock, GET: vi.fn(), DELETE: vi.fn(), PUT: vi.fn() }),
+  apiClient: () => ({ POST: postMock, PATCH: patchMock, GET: getMock, DELETE: vi.fn(), PUT: vi.fn() }),
 }));
 
 function wrapper({ children }: { children: ReactNode }) {
   const client = new QueryClient();
   return createElement(QueryClientProvider, { client }, children);
+}
+
+/**
+ * One client per hook under test, with retries off: a query wrapper that built a new QueryClient on
+ * every render would reset the query it is meant to observe, and the default three retries would
+ * make the rejecting cases slow.
+ */
+function queryWrapper() {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return function Wrapper({ children }: { children: ReactNode }) {
+    return createElement(QueryClientProvider, { client }, children);
+  };
 }
 
 describe("useMarkApplied", () => {
@@ -54,5 +67,64 @@ describe("PACKAGE_LIST_PARAMS", () => {
     expect(PACKAGE_LIST_PARAMS.review).toEqual({ applied: false, status: "draft" });
     expect(PACKAGE_LIST_PARAMS.blocked).toEqual({ status: "blocked" });
     expect(PACKAGE_LIST_PARAMS.applied).toEqual({ applied: true });
+  });
+});
+
+describe("useLlmSettings", () => {
+  beforeEach(() => {
+    getMock.mockReset();
+  });
+
+  /** What openapi-fetch hands `unwrap` for an RFC-7807 response, so the real ApiError is built here. */
+  function problemResponse(status: number, detail: string, code?: string) {
+    return { error: { type: "about:blank", title: "Conflict", status, detail, ...(code ? { code } : {}) }, response: { ok: false, status } };
+  }
+
+  it("folds a 409 llm_key_unreadable into the unreadable state, carrying the detail", async () => {
+    getMock.mockResolvedValue(problemResponse(409, "your stored API key could not be read; re-enter it", "llm_key_unreadable"));
+
+    const { result } = renderHook(() => useLlmSettings(), { wrapper: queryWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    expect(result.current.data).toEqual({ kind: "unreadable", detail: "your stored API key could not be read; re-enter it" });
+    expect(getMock).toHaveBeenCalledWith("/api/v1/settings/llm");
+  });
+
+  it("keeps a 409 carrying any other code a query error", async () => {
+    // Widening the catch to "any 409" would hide a real conflict behind the re-enter-your-key form.
+    getMock.mockResolvedValue(problemResponse(409, "something else entirely", "some_other_conflict"));
+
+    const { result } = renderHook(() => useLlmSettings(), { wrapper: queryWrapper() });
+    await waitFor(() => expect(result.current.isError).toBe(true));
+
+    expect(result.current.data).toBeUndefined();
+    expect(result.current.error).toBeInstanceOf(ApiError);
+    expect((result.current.error as ApiError).status).toBe(409);
+  });
+
+  it("keeps a 500 a query error", async () => {
+    getMock.mockResolvedValue({ error: { title: "Internal Server Error", status: 500, detail: "boom" }, response: { ok: false, status: 500 } });
+
+    const { result } = renderHook(() => useLlmSettings(), { wrapper: queryWrapper() });
+    await waitFor(() => expect(result.current.isError).toBe(true));
+
+    expect((result.current.error as ApiError).status).toBe(500);
+  });
+
+  it("returns the settings as the ok state on success", async () => {
+    const settings = {
+      provider: "openai",
+      model: "gpt-5",
+      key_set: true,
+      key_hint: "…1234",
+      source: "settings" as const,
+      providers: [{ id: "openai", label: "OpenAI", models: ["gpt-5"], default: "gpt-5" }],
+    };
+    getMock.mockResolvedValue({ data: settings, response: { ok: true, status: 200 } });
+
+    const { result } = renderHook(() => useLlmSettings(), { wrapper: queryWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    expect(result.current.data).toEqual({ kind: "ok", settings });
   });
 });

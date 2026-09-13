@@ -3,6 +3,15 @@
 import { useId, useState } from "react";
 import { toast } from "sonner";
 import { ApiErrorBanner } from "@/components/shell/ApiErrorBanner";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -66,6 +75,7 @@ export function LlmProviderSection() {
   const [draft, setDraft] = useState<Draft | null>(null);
   const [result, setResult] = useState<LlmTestOut | null>(null);
   const [failure, setFailure] = useState<string | null>(null);
+  const [confirmRemove, setConfirmRemove] = useState(false);
 
   if (llm.isLoading) return <Skeleton className="h-48 w-full" />;
   if (llm.error) return <ApiErrorBanner error={llm.error} />;
@@ -138,14 +148,21 @@ export function LlmProviderSection() {
       toast.success("Removed the stored AI provider");
     } catch (e) {
       setFailure(message(e, "Could not remove the AI provider"));
+    } finally {
+      // AlertDialogAction is a plain Button, so closing is ours to do — and it has to happen on
+      // failure too, or the modal would cover the alert explaining what went wrong.
+      setConfirmRemove(false);
     }
   }
 
   // One alert node for every way this section can be unhappy: an unreadable stored key, a failed
-  // request, and a probe the provider rejected.
-  const alerts = [unreadable, failure, result && !result.ok ? (result.error ?? "The provider rejected the request.") : null].filter(
-    (m): m is string => typeof m === "string" && m.length > 0,
-  );
+  // request, and a probe the provider rejected. Keyed by slot, not by text, so two identical
+  // messages cannot collide as React keys.
+  const alerts: { slot: string; message: string }[] = [
+    { slot: "unreadable", message: unreadable },
+    { slot: "failure", message: failure },
+    { slot: "probe", message: result && !result.ok ? (result.error ?? "The provider rejected the request.") : null },
+  ].filter((a): a is { slot: string; message: string } => typeof a.message === "string" && a.message.length > 0);
 
   return (
     <Card>
@@ -156,8 +173,8 @@ export function LlmProviderSection() {
         {settings ? <p className="text-sm text-muted-foreground">{statusLine(settings, providers)}</p> : null}
         {alerts.length > 0 ? (
           <div role="alert" className="space-y-1 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm">
-            {alerts.map((m) => (
-              <p key={m}>{m}</p>
+            {alerts.map((a) => (
+              <p key={a.slot}>{a.message}</p>
             ))}
           </div>
         ) : null}
@@ -230,11 +247,29 @@ export function LlmProviderSection() {
                 Test connection
               </Button>
               {settings?.source === "settings" ? (
-                <Button variant="destructive" onClick={onRemove} disabled={remove.isPending}>
+                <Button
+                  variant="destructive"
+                  aria-label="Remove the stored AI provider"
+                  onClick={() => setConfirmRemove(true)}
+                  disabled={remove.isPending}
+                >
                   Remove
                 </Button>
               ) : null}
             </div>
+            <AlertDialog open={confirmRemove} onOpenChange={(open) => !open && setConfirmRemove(false)}>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Remove the stored AI provider?</AlertDialogTitle>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  <AlertDialogAction variant="destructive" onClick={onRemove} disabled={remove.isPending}>
+                    Remove
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
           </div>
         ) : null}
       </CardContent>

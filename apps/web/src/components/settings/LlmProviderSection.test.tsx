@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { LlmProviderSection } from "./LlmProviderSection";
@@ -38,7 +38,7 @@ describe("LlmProviderSection", () => {
     queryError = null;
     save.mockReset().mockResolvedValue(none);
     testConnection.mockReset();
-    remove.mockReset();
+    remove.mockReset().mockResolvedValue(undefined);
   });
 
   it("renders the status line for a stored provider, the environment, and nothing configured", () => {
@@ -159,5 +159,49 @@ describe("LlmProviderSection", () => {
     await user.click(screen.getByRole("button", { name: "Save" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent("an API key is required for OpenAI");
+  });
+  it("confirms before removing the stored provider, and closes the dialog once it resolves", async () => {
+    state = ok({ provider: "openai", model: "gpt-5", key_set: true, key_hint: "…1234", source: "settings" });
+    render(<LlmProviderSection />);
+    const user = userEvent.setup({ delay: null });
+
+    await user.click(screen.getByRole("button", { name: "Remove the stored AI provider" }));
+    expect(await screen.findByText("Remove the stored AI provider?")).toBeInTheDocument();
+    // Opening the dialog must not be the destructive act.
+    expect(remove).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole("button", { name: "Remove" }));
+    expect(remove).toHaveBeenCalled();
+    await waitFor(() => expect(screen.queryByText("Remove the stored AI provider?")).not.toBeInTheDocument());
+  });
+
+  it("leaves the stored provider alone when the remove dialog is cancelled", async () => {
+    state = ok({ provider: "openai", model: "gpt-5", key_set: true, key_hint: "…1234", source: "settings" });
+    render(<LlmProviderSection />);
+    const user = userEvent.setup({ delay: null });
+
+    await user.click(screen.getByRole("button", { name: "Remove the stored AI provider" }));
+    await user.click(await screen.findByRole("button", { name: "Cancel" }));
+
+    await waitFor(() => expect(screen.queryByText("Remove the stored AI provider?")).not.toBeInTheDocument());
+    expect(remove).not.toHaveBeenCalled();
+  });
+
+  it("offers no Remove when the provider comes from the environment", () => {
+    state = ok({ provider: "anthropic", model: "claude-sonnet-5", key_set: true, key_hint: "…1234", source: "env" });
+    render(<LlmProviderSection />);
+    expect(screen.queryByRole("button", { name: /remove/i })).not.toBeInTheDocument();
+  });
+
+  it("surfaces a failed remove in an alert", async () => {
+    state = ok({ provider: "openai", model: "gpt-5", key_set: true, key_hint: "…1234", source: "settings" });
+    remove.mockRejectedValue(new Error("could not reach the API"));
+    render(<LlmProviderSection />);
+    const user = userEvent.setup({ delay: null });
+
+    await user.click(screen.getByRole("button", { name: "Remove the stored AI provider" }));
+    await user.click(await screen.findByRole("button", { name: "Remove" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("could not reach the API");
   });
 });
