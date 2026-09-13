@@ -16,6 +16,7 @@ from fastapi import FastAPI
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from rhapto.db.repositories.llm_settings import get_llm_settings
+from rhapto.db.repositories.users import get_or_create_user
 from rhapto.engine.providers.errors import ProviderAuthError
 from rhapto.engine.providers.fake import FakeLLMProvider
 from rhapto.engine.providers.llm import LLMProvider
@@ -23,12 +24,34 @@ from rhapto.engine.types import EngineError
 
 KEY = "sk-test-1234"
 URL = "/api/v1/settings/llm"
+EMAIL = "test@example.com"
 
 
 @pytest.fixture
 def env_llm_key(request: pytest.FixtureRequest) -> str:
     """Nothing in the environment unless a test parametrizes this indirectly."""
     return str(getattr(request, "param", ""))
+
+
+@pytest.fixture(autouse=True)
+async def api_user(app: FastAPI, session_factory: async_sessionmaker[AsyncSession]) -> uuid.UUID:
+    """The user row the app is scoped to, committed before the body runs.
+
+    The lifespan bootstraps it, but the `session_factory` fixture truncates on *teardown*, so a
+    write here must not depend on that bootstrap having outlived the previous test's cleanup: this
+    re-creates the row if it is gone and points the app at whatever id actually exists, which is
+    what stops a PUT from hitting `users` with a foreign key that is no longer there.
+    """
+    async with session_factory() as session:
+        user = await get_or_create_user(session, EMAIL)
+        await session.commit()
+        app.state.rhapto.user_id = user.id
+        return user.id
+
+
+def assert_no_key(response: httpx.Response) -> None:
+    """No response, of any status, may carry a key the client (or the database) handed us."""
+    assert "sk-test" not in response.text, response.text
 
 
 class FactorySpy:
@@ -80,7 +103,7 @@ async def test_get_falls_back_to_the_environment(client: httpx.AsyncClient) -> N
 async def test_put_stores_the_key_encrypted_and_never_echoes_it(
     client: httpx.AsyncClient,
     session_factory: async_sessionmaker[AsyncSession],
-    user_id: uuid.UUID,
+    api_user: uuid.UUID,
 ) -> None:
     response = await _put(client, provider="openai", model="gpt-5", api_key=KEY)
     assert response.status_code == 200, response.text
@@ -88,10 +111,10 @@ async def test_put_stores_the_key_encrypted_and_never_echoes_it(
     assert body["provider"] == "openai" and body["model"] == "gpt-5"
     assert body["source"] == "settings" and body["key_set"] is True
     assert body["key_hint"] == "…1234"
-    assert "sk-test" not in response.text
+    assert_no_key(response)
 
     async with session_factory() as session:
-        row = await get_llm_settings(session, user_id)
+        row = await get_llm_settings(session, api_user)
     assert row is not None and row.provider == "openai" and row.model == "gpt-5"
     assert KEY not in row.api_key_encrypted
 
@@ -122,6 +145,36 @@ async def test_put_rejects_an_unknown_provider(client: httpx.AsyncClient) -> Non
     assert response.status_code == 422 and "nope" in response.json()["detail"]
 
 
+async def test_a_validation_error_does_not_echo_the_submitted_key(
+    client: httpx.AsyncClient,
+) -> None:
+    """`model` is required, and pydantic puts the whole body in a missing-field error's `input`."""
+    response = await client.put(URL, json={"provider": "openai", "api_key": "sk-test-SECRET1234"})
+    assert response.status_code == 422
+    assert response.json()["errors"][0]["loc"] == ["body", "model"]
+    assert "input" not in response.json()["errors"][0]
+    assert_no_key(response)
+
+
+async def test_put_drops_a_model_belonging_to_another_provider(client: httpx.AsyncClient) -> None:
+    body = (await _put(client, provider="gemini", model="gpt-5", api_key=KEY)).json()
+    assert body["provider"] == "gemini" and body["model"] == "gemini-2.5-pro"
+
+
+async def test_put_passes_an_unlisted_model_id_through(client: httpx.AsyncClient) -> None:
+    """The curated lists are suggestions, not a whitelist: a model newer than this build still works."""
+    body = (await _put(client, provider="openai", model="gpt-6-preview", api_key=KEY)).json()
+    assert body["model"] == "gpt-6-preview"
+
+
+@pytest.mark.parametrize("env_llm_key", ["sk-test-env"], indirect=True)
+async def test_a_stored_row_wins_over_the_environment(client: httpx.AsyncClient) -> None:
+    await _put(client, provider="openai", model="gpt-5", api_key=KEY)
+    body = (await client.get(URL)).json()
+    assert body["source"] == "settings" and body["provider"] == "openai"
+    assert body["key_hint"] == "…1234"
+
+
 async def test_delete_removes_the_row(client: httpx.AsyncClient) -> None:
     await _put(client, provider="openai", model="gpt-5", api_key=KEY)
     assert (await client.delete(URL)).status_code == 204
@@ -146,7 +199,7 @@ async def test_post_test_pings_the_provider_through_the_injected_factory(
     assert response.json() == {"ok": True, "model": "gpt-5", "error": None}
     assert llm_factory.calls == [("openai", "gpt-5", KEY)]
     assert llm_factory.llm.calls[0].messages[0].content == "ping"
-    assert "sk-test" not in response.text
+    assert_no_key(response)
 
 
 async def test_post_test_uses_the_stored_key_when_the_body_has_none(
@@ -169,6 +222,19 @@ async def test_post_test_reports_a_rejected_key_as_not_ok(
     assert response.json() == {"ok": False, "model": None, "error": "bad key"}
 
 
+async def test_post_test_redacts_the_key_from_the_providers_message(
+    client: httpx.AsyncClient, llm_factory: FactorySpy
+) -> None:
+    """SDKs quote the submitted key back ("Incorrect API key provided: ..."); the hint is enough."""
+    llm_factory.error = ProviderAuthError("openai", "bad key sk-test-abcd1234")
+    response = await client.post(
+        f"{URL}/test",
+        json={"provider": "openai", "model": "gpt-5", "api_key": "sk-test-abcd1234"},
+    )
+    assert response.json() == {"ok": False, "model": None, "error": "bad key …1234"}
+    assert_no_key(response)
+
+
 async def test_post_test_reports_an_engine_error_as_not_ok(
     client: httpx.AsyncClient, llm_factory: FactorySpy
 ) -> None:
@@ -184,12 +250,17 @@ async def test_post_test_reports_an_engine_error_as_not_ok(
 async def test_post_test_without_any_key_is_422(client: httpx.AsyncClient) -> None:
     response = await client.post(f"{URL}/test", json={"provider": "gemini", "model": ""})
     assert response.status_code == 422 and "Google Gemini" in response.json()["detail"]
+    assert_no_key(response)
 
 
 async def test_settings_endpoints_require_the_bearer_token(anon_client: httpx.AsyncClient) -> None:
+    body = {"provider": "openai", "model": ""}
     assert (await anon_client.get(URL)).status_code == 401
-    assert (await anon_client.put(URL, json={"provider": "openai", "model": ""})).status_code == 401
+    assert (await anon_client.put(URL, json=body)).status_code == 401
     assert (await anon_client.delete(URL)).status_code == 401
+    probe = await anon_client.post(f"{URL}/test", json={**body, "api_key": KEY})
+    assert probe.status_code == 401
+    assert_no_key(probe)
 
 
 async def test_an_unreadable_stored_key_is_a_409_not_a_500(

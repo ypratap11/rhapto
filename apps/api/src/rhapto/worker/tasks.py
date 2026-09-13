@@ -25,7 +25,7 @@ from rhapto.services.discovery.poller import poll_sources
 from rhapto.services.documents import load_source
 from rhapto.services.enqueue import TaskFn
 from rhapto.services.eventbus import EventBus, task_channel
-from rhapto.services.llm import LLMNotConfiguredError, resolve_llm
+from rhapto.services.llm import LLMNotConfiguredError, provider_secrets, redact, resolve_llm
 from rhapto.services.packaging import persist_package
 from rhapto.services.profile_sync import block_row_to_model, load_profile_from_db
 from rhapto.services.scoring import rescore_user, score_and_store
@@ -61,6 +61,9 @@ async def tailor_job(ctx: dict[str, Any], task_id: str) -> None:
     bus: EventBus = ctx["event_bus"]
     storage: PackageStorage = ctx["storage"]
     channel = task_channel(task_id)
+    # Gathered before the work starts so the failure path can strip the user's keys out of whatever
+    # a provider wrote in its message without doing any lookups while handling an error.
+    secrets: tuple[str, ...] = ()
 
     async with factory() as session:
         try:
@@ -73,9 +76,11 @@ async def tailor_job(ctx: dict[str, Any], task_id: str) -> None:
             task_repo.mark_running(active_task)
             await session.commit()
             user_id = active_task.user_id
+            settings = get_settings()
+            secrets = await provider_secrets(session, settings, user_id)
             # Per task, not per worker: which provider runs this depends on whose task it is.
             resolver: LlmResolver = ctx.get("llm_resolver") or resolve_llm
-            llm = await resolver(session, get_settings(), user_id)
+            llm = await resolver(session, settings, user_id)
 
             job = await session.get(Job, uuid.UUID(request["job_id"]))
             if job is None or job.user_id != user_id:
@@ -167,17 +172,13 @@ async def tailor_job(ctx: dict[str, Any], task_id: str) -> None:
                 failed_tid: uuid.UUID | None = uuid.UUID(task_id)
             except ValueError:
                 failed_tid = None
+            detail = str(exc) if isinstance(exc, SETUP_ERRORS) else f"{type(exc).__name__}: {exc}"
             if failed_tid is not None:
                 failed_task = await session.get(Task, failed_tid)
                 if failed_task is not None:
-                    message = (
-                        str(exc)
-                        if isinstance(exc, SETUP_ERRORS)
-                        else f"{type(exc).__name__}: {exc}"
-                    )
-                    task_repo.mark_failed(failed_task, message)
+                    task_repo.mark_failed(failed_task, redact(detail, *secrets))
                     await session.commit()
-            await bus.publish(channel, {"event": "error", "message": str(exc)})
+            await bus.publish(channel, {"event": "error", "message": redact(str(exc), *secrets)})
 
 
 async def render_package_pdf(ctx: dict[str, Any], package_id: str) -> None:

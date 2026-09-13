@@ -10,18 +10,8 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from rhapto import __version__
 from rhapto.api.deps import AppState, LlmFactory
 from rhapto.api.errors import install_error_handlers
-from rhapto.api.routers import (
-    applications,
-    discovery,
-    jobs,
-    meta,
-    packages,
-    profile,
-    tailor,
-)
-from rhapto.api.routers import (
-    settings as settings_router,
-)
+from rhapto.api.routers import applications, discovery, jobs, meta, packages, profile, tailor
+from rhapto.api.routers import settings as settings_router
 from rhapto.config import Settings, get_settings
 from rhapto.db.repositories.users import get_or_create_user
 from rhapto.db.session import make_engine, make_session_factory

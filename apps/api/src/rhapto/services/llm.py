@@ -24,7 +24,7 @@ from rhapto.config import Settings
 from rhapto.db.repositories.llm_settings import get_llm_settings
 from rhapto.engine.providers.llm import LLMProvider
 from rhapto.engine.providers.registry import PROVIDERS, build_llm
-from rhapto.services.secrets import decrypt
+from rhapto.services.secrets import SecretsError, decrypt
 
 NOT_CONFIGURED_MESSAGE = "No LLM configured. Add a key in Settings."
 
@@ -34,6 +34,28 @@ class LLMNotConfiguredError(Exception):
 
     def __init__(self, message: str = NOT_CONFIGURED_MESSAGE) -> None:
         super().__init__(message)
+
+
+def key_hint(api_key: str) -> str:
+    """ "…" plus the last four characters: enough for a user to recognise which key this is.
+
+    A key of four characters or fewer gets no tail at all, because "the last four of five" is the
+    key. Real provider keys are decades longer than that; this only guards test and placeholder
+    values."""
+    return f"…{api_key[-4:]}" if len(api_key) > 4 else "…"
+
+
+def redact(message: str, *secrets: str) -> str:
+    """`message` with every occurrence of each secret replaced by its hint.
+
+    Provider SDKs quote the submitted key in their own error text ("Incorrect API key provided:
+    …"), and that text is shown to the user, stored on task rows and published on the event bus.
+    Run it through here first. A pathologically short secret can over-match ordinary words; that is
+    the safe direction, and real keys are never that short."""
+    for secret in secrets:
+        if secret:
+            message = message.replace(secret, key_hint(secret))
+    return message
 
 
 @dataclass(frozen=True)
@@ -86,6 +108,27 @@ async def resolve_llm_config(
     if config is None:
         raise LLMNotConfiguredError
     return config
+
+
+async def provider_secrets(
+    session: AsyncSession, settings: Settings, user_id: uuid.UUID
+) -> tuple[str, ...]:
+    """Every key that could appear verbatim in a provider error for this user: the stored one and
+    the environment's. For `redact`, on paths that report a provider's own message.
+
+    Never raises: a key that cannot be decrypted cannot be in an error message either, and a
+    caller in the middle of handling a failure must not be handed a second one."""
+    keys: list[str] = []
+    try:
+        stored = await stored_llm_config(session, settings, user_id)
+    except SecretsError:
+        stored = None
+    if stored is not None:
+        keys.append(stored.api_key)
+    from_env = env_llm_config(settings)
+    if from_env is not None:
+        keys.append(from_env.api_key)
+    return tuple(keys)
 
 
 # One adapter per (provider, model); the key hash decides whether the cached one is still

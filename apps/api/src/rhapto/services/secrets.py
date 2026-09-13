@@ -29,6 +29,14 @@ class SecretsError(Exception):
     """The encryption secret is missing or unusable, or a stored token cannot be read with it."""
 
 
+class KeyUnreadableError(SecretsError):
+    """A stored token does not decrypt with this deployment's secret (the secret changed).
+
+    Separate from the rest because the remedy differs: the user re-enters their key, whereas a
+    malformed `RHAPTO_SECRET_KEY` is the operator's to fix and must keep its own message.
+    """
+
+
 def derive_key(secret: str) -> bytes:
     """A Fernet key (32 urlsafe-base64 bytes) derived from an arbitrary secret string."""
     return base64.urlsafe_b64encode(hashlib.sha256(secret.encode()).digest())
@@ -56,4 +64,6 @@ def decrypt(settings: Settings, token: str) -> str:
     try:
         return fernet_for(settings).decrypt(token.encode()).decode()
     except InvalidToken as exc:
-        raise SecretsError("stored key cannot be decrypted; RHAPTO_SECRET_KEY changed") from exc
+        raise KeyUnreadableError(
+            "stored key cannot be decrypted; RHAPTO_SECRET_KEY changed"
+        ) from exc

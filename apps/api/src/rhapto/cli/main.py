@@ -65,8 +65,11 @@ def build_providers(
     api_key = str(getattr(settings, info.env_key.lower(), "") or "")
     if not api_key:
         raise typer.BadParameter(f"{info.env_key} is not set; put it in .env or the environment")
+    # RHAPTO_LLM_MODEL names a model for RHAPTO_LLM_PROVIDER; --provider somewhere else leaves it
+    # behind rather than sending "claude-sonnet-5" to OpenAI.
+    env_model = settings.rhapto_llm_model if chosen == settings.rhapto_llm_provider else ""
     return Providers(
-        llm=build_llm(info.id, model or settings.rhapto_llm_model or info.default, api_key),
+        llm=build_llm(info.id, model or env_model or info.default, api_key),
         embedder=FastEmbedProvider(settings.rhapto_embedding_model),
     )
 

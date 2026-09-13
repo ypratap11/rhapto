@@ -14,7 +14,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from rhapto.engine.types import EngineError, ProfileError
 from rhapto.services.jobtext import JobTextError
 from rhapto.services.llm import LLMNotConfiguredError
-from rhapto.services.secrets import SecretsError
+from rhapto.services.secrets import KeyUnreadableError, SecretsError
 
 PROBLEM = "application/problem+json"
 KEY_UNREADABLE_MESSAGE = (
@@ -45,14 +45,22 @@ def not_found(what: str, ident: object) -> HTTPException:
 
 
 def _json_safe_errors(errors: Sequence[Any]) -> list[dict[str, Any]]:
-    """Strip raw exception objects pydantic embeds in ``ctx.error`` so the
-    error list can be JSON-encoded (e.g. a model_validator raising ValueError)."""
+    """The validation errors, minus anything that came from the request.
+
+    ``input`` is dropped outright: pydantic sets it to the value that failed, and for a ``missing``
+    error that value is the *whole* request body — so echoing it turns "you forgot a field" into a
+    response that quotes the provider API key the client sent alongside it. ``loc`` and ``msg``
+    already say what is wrong. Raw exception objects pydantic embeds in ``ctx.error`` are
+    stringified so the list can be JSON-encoded (e.g. a model_validator raising ValueError).
+    """
     sanitized: list[dict[str, Any]] = []
-    for error in errors:
-        error = dict(error)
+    for raw in errors:
+        error = {k: v for k, v in dict(raw).items() if k != "input"}
         ctx = error.get("ctx")
-        if isinstance(ctx, dict) and isinstance(ctx.get("error"), BaseException):
-            error["ctx"] = {**ctx, "error": str(ctx["error"])}
+        if isinstance(ctx, dict):
+            error["ctx"] = {
+                k: str(v) if isinstance(v, BaseException) else v for k, v in ctx.items()
+            }
         sanitized.append(error)
     return sanitized
 
@@ -92,10 +100,13 @@ def install_error_handlers(app: FastAPI) -> None:
 
     @app.exception_handler(SecretsError)
     async def _secrets(request: Request, exc: SecretsError) -> JSONResponse:
-        # The stored key survives a secret rotation as unreadable ciphertext; that is the user's
-        # to fix by re-entering it, so it must never surface as a 500.
-        logger.warning("stored provider key is unreadable: %s", exc)
-        return problem(409, "Conflict", KEY_UNREADABLE_MESSAGE, code="llm_key_unreadable")
+        # Both halves are setup conflicts the caller can act on, never a 500: a rotated secret
+        # leaves the stored key as unreadable ciphertext (the user re-enters it), while a malformed
+        # RHAPTO_SECRET_KEY is the operator's to fix and keeps its own message, which carries the
+        # "generate one with ..." hint.
+        logger.warning("provider key secret problem: %s", exc)
+        detail = KEY_UNREADABLE_MESSAGE if isinstance(exc, KeyUnreadableError) else str(exc)
+        return problem(409, "Conflict", detail, code="llm_key_unreadable")
 
     @app.exception_handler(EngineError)
     async def _engine(request: Request, exc: EngineError) -> JSONResponse:

@@ -14,6 +14,7 @@ from rhapto.db.repositories import packages as package_repo
 from rhapto.db.repositories import tasks as task_repo
 from rhapto.db.repositories.jobs import create_job
 from rhapto.engine.compose import AnswerItem, ComposeOutput
+from rhapto.engine.providers.errors import ProviderAuthError
 from rhapto.engine.providers.fake import FakeEmbeddingProvider, FakeLLMProvider
 from rhapto.engine.tune import ProposedEdit, TuneOutput
 from rhapto.services import storage as storage_module
@@ -22,6 +23,7 @@ from rhapto.services.eventbus import InMemoryEventBus
 from rhapto.services.llm import LLMNotConfiguredError
 from rhapto.services.profile_sync import import_profile_dir
 from rhapto.services.storage import PackageStorage
+from rhapto.worker import tasks as worker_tasks
 from rhapto.worker.tasks import TASKS, embed_blocks, render_package_pdf, tailor_job
 
 JD = "ExampleCo seeks a Data Platform Program Manager to lead our Snowflake migration. " * 3
@@ -211,6 +213,36 @@ async def test_tailor_job_fails_cleanly_when_no_llm_is_configured(
         "event": "error",
         "message": "No LLM configured. Add a key in Settings.",
     }
+
+
+async def test_tailor_job_redacts_the_key_from_a_provider_failure(
+    session_factory, user: User, demo_profile_dir: Path, tmp_path: Path, monkeypatch
+) -> None:  # type: ignore[no-untyped-def]
+    """The SDK quotes the submitted key in its message; the task row and the event carry the hint.
+
+    `provider_secrets` is stubbed here (it is unit-tested against the real config path in
+    test_resolve_llm.py); what this pins is that the worker actually runs both the stored error and
+    the published one through `redact`.
+    """
+    _, task_id = await _setup(session_factory, user, demo_profile_dir)
+    bus, storage = InMemoryEventBus(), PackageStorage(tmp_path / "pkg")
+    ctx = _ctx(session_factory, FakeLLMProvider([]), bus, storage)
+
+    async def secrets(session: Any, settings: Any, user_id: uuid.UUID) -> tuple[str, ...]:
+        return ("sk-test-abcd1234",)
+
+    async def reject(session: Any, settings: Any, user_id: uuid.UUID) -> None:
+        raise ProviderAuthError("openai", "Incorrect API key provided: sk-test-abcd1234")
+
+    monkeypatch.setattr(worker_tasks, "provider_secrets", secrets)
+    ctx["llm_resolver"] = reject
+    await tailor_job(ctx, task_id=str(task_id))
+    async with session_factory() as session:
+        task = await task_repo.get_task(session, user.id, task_id)
+        assert task is not None and task.status == "failed"
+        assert task.error == "Incorrect API key provided: …1234"
+    assert bus.published[-1][1]["message"] == "Incorrect API key provided: …1234"
+    assert "sk-test" not in repr(bus.published)
 
 
 async def test_tailor_job_with_bad_task_id_publishes_error(session_factory, tmp_path: Path) -> None:  # type: ignore[no-untyped-def]

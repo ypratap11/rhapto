@@ -21,7 +21,7 @@ async def health() -> HealthOut:
     return HealthOut(status="ok")
 
 
-async def llm_configured(session: AsyncSession, settings: Settings, user_id: uuid.UUID) -> bool:
+async def is_llm_configured(session: AsyncSession, settings: Settings, user_id: uuid.UUID) -> bool:
     """Whether tailoring would have a provider to run on. An unreadable stored key counts as not
     configured: the user has to re-enter it either way."""
     try:
@@ -43,5 +43,5 @@ async def me(
     return MeOut(
         email=user.email,
         user_id=user.id,
-        llm_configured=await llm_configured(session, settings, user_id),
+        llm_configured=await is_llm_configured(session, settings, user_id),
     )

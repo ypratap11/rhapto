@@ -72,16 +72,17 @@ async def tailor_job_endpoint(
         parent = await package_repo.get_package(session, user_id, body.parent_package_id)
         if parent is None or parent.job_id != job_id:
             raise not_found("package", body.parent_package_id)
-    # Fail here rather than leaving a task row that can only fail in the worker: without a
-    # provider key there is nothing to run. LLMNotConfiguredError becomes the 409 the web app
-    # turns into "set up your LLM in Settings" (see api.errors).
-    await resolve_llm_config(session, settings, user_id)
     has_document = await documents_repo.get_document(session, user_id) is not None
     if body.mode == "tune" and not has_document:
         raise HTTPException(
             status_code=422,
             detail="upload a resume document before tailoring in tune mode",
         )
+    # Fail here rather than leaving a task row that can only fail in the worker: without a provider
+    # key there is nothing to run. LLMNotConfiguredError becomes the 409 the web app turns into
+    # "set up your LLM in Settings" (see api.errors). Last of the checks, so a request that is also
+    # malformed hears about that first.
+    await resolve_llm_config(session, settings, user_id)
     # The worker loads the document itself (the bytes never travel through the task row), so
     # all the request carries is the resolved mode.
     mode = body.mode or ("tune" if has_document else "blocks")

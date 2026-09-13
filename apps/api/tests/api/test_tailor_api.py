@@ -1,12 +1,16 @@
 import asyncio
 import json
+import uuid
 from typing import Any
 
 import httpx
 import pytest
 from helpers import demo_extract, demo_resume
 from helpers_docx import build_fixture_docx
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from rhapto.db.repositories.llm_settings import upsert_llm_settings
+from rhapto.db.repositories.users import get_or_create_user
 from rhapto.engine.compose import AnswerItem, ComposeOutput
 from rhapto.engine.tune import ProposedEdit, TuneOutput
 from rhapto.services.eventbus import InMemoryEventBus
@@ -68,6 +72,30 @@ async def test_tailor_runs_inline_and_task_succeeds(
     )
     # The worker picked its provider per task rather than reading one off the ctx.
     assert len(llm_resolver.calls) == 1
+
+
+async def test_tailor_is_409_when_the_stored_key_cannot_be_decrypted(
+    client: httpx.AsyncClient,
+    session_factory: async_sessionmaker[AsyncSession],
+    user_id: uuid.UUID,
+) -> None:
+    """A rotated server secret must not silently fall back to the environment's key: the user chose
+    a provider, and they have to re-enter the key for it."""
+    async with session_factory() as session:
+        await get_or_create_user(session, "test@example.com")
+        await upsert_llm_settings(
+            session,
+            user_id,
+            provider="openai",
+            model="gpt-5",
+            api_key_encrypted="not-a-fernet-token",
+        )
+        await session.commit()
+    job_id = await _job(client)
+    response = await client.post(f"/api/v1/jobs/{job_id}/tailor", json={})
+    assert response.status_code == 409
+    body = response.json()
+    assert body["code"] == "llm_key_unreadable" and "Settings" in body["detail"]
 
 
 @pytest.mark.parametrize("env_llm_key", [""], indirect=True)

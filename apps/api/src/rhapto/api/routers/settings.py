@@ -30,7 +30,7 @@ from rhapto.config import Settings
 from rhapto.db.repositories.llm_settings import delete_llm_settings, upsert_llm_settings
 from rhapto.engine.providers.llm import Message, SystemBlock
 from rhapto.engine.providers.registry import PROVIDERS, ProviderInfo
-from rhapto.services.llm import env_llm_config, stored_llm_config
+from rhapto.services.llm import env_llm_config, key_hint, redact, stored_llm_config
 from rhapto.services.secrets import encrypt
 
 router = APIRouter()
@@ -47,11 +47,6 @@ class Ping(BaseModel):
     ok: bool
 
 
-def key_hint(api_key: str) -> str:
-    """The last four characters, enough to recognise a key without revealing it."""
-    return f"…{api_key[-4:]}"
-
-
 def provider_list() -> list[ProviderInfoOut]:
     return [
         ProviderInfoOut(id=i.id, label=i.label, models=list(i.models), default=i.default)
@@ -64,6 +59,22 @@ def known_provider(provider: str) -> ProviderInfo:
     if info is None:
         raise HTTPException(status_code=422, detail=f"unknown provider {provider!r}")
     return info
+
+
+def model_for(info: ProviderInfo, requested: str) -> str:
+    """The model to use for this provider.
+
+    An unlisted id passes through — the registry's lists are suggestions for the picker, not a
+    whitelist, so a model released after this build still works. But an id that is in *another*
+    provider's list is the previous selection left behind by the form, and storing it would make
+    every later run fail at the provider, so it gives way to this provider's default.
+    """
+    if not requested:
+        return info.default
+    if requested in info.models:
+        return requested
+    belongs_elsewhere = any(requested in other.models for other in PROVIDERS.values())
+    return info.default if belongs_elsewhere else requested
 
 
 def env_key_for(settings: Settings, info: ProviderInfo) -> str:
@@ -131,7 +142,7 @@ async def put_llm_settings(
         session,
         user_id,
         provider=info.id,
-        model=body.model or info.default,
+        model=model_for(info, body.model),
         api_key_encrypted=encrypt(settings, api_key),
     )
     await session.commit()
@@ -143,7 +154,8 @@ async def delete_llm_settings_endpoint(user_id: UserDep, session: SessionDep) ->
     await delete_llm_settings(session, user_id)
     await session.commit()
     # 204 whether or not a row was there: the caller asked for "no stored provider", and that is
-    # the state they get.
+    # the state they get. The adapter cache is deliberately left alone: each entry carries the hash
+    # of the key that built it, so a stale adapter can never be handed out for a different key.
     return Response(status_code=204)
 
 
@@ -158,7 +170,7 @@ async def test_llm_settings(
     """Ask the provider for one tiny structured answer. Nothing is stored either way."""
     info = known_provider(body.provider)
     api_key = await _key_for_write(session, settings, user_id, info, body.api_key)
-    model = body.model or info.default
+    model = model_for(info, body.model)
     try:
         llm = llm_factory(info.id, model, api_key)
         await llm.complete_structured(
@@ -172,5 +184,5 @@ async def test_llm_settings(
         # (ProviderAuthError), an unreachable provider (EngineError) and anything an SDK raises
         # that the adapter does not map all come back as ok=false with the message, truncated so a
         # provider's wall of text cannot flood the UI.
-        return LlmTestOut(ok=False, error=str(exc)[:300])
+        return LlmTestOut(ok=False, error=redact(str(exc), api_key)[:300])
     return LlmTestOut(ok=True, model=model)

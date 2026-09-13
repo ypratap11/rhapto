@@ -19,10 +19,14 @@ from rhapto.services.llm import (
     LLMNotConfiguredError,
     clear_llm_cache,
     env_llm_config,
+    key_hint,
     llm_for,
+    provider_secrets,
+    redact,
     resolve_llm,
     resolve_llm_config,
 )
+from rhapto.services.secrets import SecretsError
 
 SECRET = base64.urlsafe_b64encode(b"s" * 32).decode()
 USER_ID = uuid.UUID("11111111-1111-1111-1111-111111111111")
@@ -199,3 +203,52 @@ def test_rotating_the_key_replaces_the_cached_adapter() -> None:
         llm_for(LlmConfig(provider="openai", model="gpt-5", api_key="sk-test-a", source="env"))
         is not first
     )
+
+
+def test_key_hint_keeps_only_the_last_four_characters() -> None:
+    assert key_hint("sk-test-abcd1234") == "…1234"
+    # Four characters or fewer: "the last four" would be the whole key.
+    assert key_hint("test") == "…" and key_hint("") == "…"
+
+
+def test_redact_swaps_every_secret_for_its_hint() -> None:
+    message = "Incorrect API key provided: sk-test-abcd1234. Check your key."
+    assert redact(message, "sk-test-abcd1234") == (
+        "Incorrect API key provided: …1234. Check your key."
+    )
+    assert redact(
+        "two: sk-test-aaaa1111 sk-test-bbbb2222", "sk-test-aaaa1111", "sk-test-bbbb2222"
+    ) == ("two: …1111 …2222")
+    # An empty secret must not turn every gap in the message into a hint.
+    assert redact("nothing to hide", "") == "nothing to hide"
+
+
+async def test_provider_secrets_collects_the_stored_and_environment_keys(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def fake_stored(
+        session: AsyncSession, settings: Settings, user_id: uuid.UUID
+    ) -> LlmConfig:
+        return LlmConfig(
+            provider="openai", model="gpt-5", api_key="sk-test-stored", source="settings"
+        )
+
+    monkeypatch.setattr(llm_service, "stored_llm_config", fake_stored)
+    settings = _settings(rhapto_llm_provider="anthropic", anthropic_api_key="sk-test-env")
+    assert await provider_secrets(_session(), settings, USER_ID) == (
+        "sk-test-stored",
+        "sk-test-env",
+    )
+
+
+async def test_provider_secrets_survives_an_unreadable_stored_key(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Called while reporting a failure: a second exception there would lose the first one."""
+
+    async def boom(session: AsyncSession, settings: Settings, user_id: uuid.UUID) -> LlmConfig:
+        raise SecretsError("stored key cannot be decrypted")
+
+    monkeypatch.setattr(llm_service, "stored_llm_config", boom)
+    settings = _settings(rhapto_llm_provider="anthropic", anthropic_api_key="sk-test-env")
+    assert await provider_secrets(_session(), settings, USER_ID) == ("sk-test-env",)

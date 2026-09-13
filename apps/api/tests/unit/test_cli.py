@@ -338,6 +338,23 @@ def test_build_providers_honours_the_provider_and_model_flags() -> None:
     assert cli.build_providers(settings, "openai", None).llm.model == "gpt-5"
 
 
+def test_build_providers_ignores_the_env_model_for_another_provider() -> None:
+    """RHAPTO_LLM_MODEL names a model for RHAPTO_LLM_PROVIDER; --provider elsewhere leaves it."""
+    from rhapto.config import Settings
+
+    settings = Settings(
+        _env_file=None,
+        rhapto_llm_provider="anthropic",
+        rhapto_llm_model="claude-sonnet-5",
+        anthropic_api_key="sk-test-a",
+        openai_api_key="sk-test-o",
+    )
+    assert cli.build_providers(settings, "openai", None).llm.model == "gpt-5"
+    assert cli.build_providers(settings, None, None).llm.model == "claude-sonnet-5"
+    # An explicit --model still wins for the provider it was given with.
+    assert cli.build_providers(settings, "openai", "gpt-5-mini").llm.model == "gpt-5-mini"
+
+
 def test_build_providers_rejects_an_unknown_provider() -> None:
     from rhapto.config import Settings
 
