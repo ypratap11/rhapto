@@ -31,18 +31,6 @@ import {
 /** Sentinel for the "Other" model radio: the model id then comes from the free-text field. */
 const OTHER = "__other__";
 
-/**
- * The provider list normally comes from `GET /settings/llm`. That call answers 409
- * `llm_key_unreadable` when the stored key cannot be decrypted, and in exactly that state the
- * section still has to offer a form so the user can re-enter a key — with no list to render it
- * from. This mirrors apps/api's provider registry for that one case; a successful GET always wins.
- */
-const FALLBACK_PROVIDERS: ProviderInfoOut[] = [
-  { id: "anthropic", label: "Anthropic", models: ["claude-opus-5", "claude-sonnet-5"], default: "claude-sonnet-5" },
-  { id: "openai", label: "OpenAI", models: ["gpt-5", "gpt-5-mini"], default: "gpt-5" },
-  { id: "gemini", label: "Google Gemini", models: ["gemini-2.5-pro", "gemini-2.5-flash"], default: "gemini-2.5-pro" },
-];
-
 /** The form's unsaved state. `model === OTHER` means the id is in `other`. `apiKey` starts empty, always. */
 type Draft = { provider: string; model: string; other: string; apiKey: string };
 
@@ -83,7 +71,10 @@ export function LlmProviderSection() {
   const state = llm.data;
   const settings = state?.kind === "ok" ? state.settings : null;
   const unreadable = state?.kind === "unreadable" ? state.detail : null;
-  const providers = settings && settings.providers.length > 0 ? settings.providers : FALLBACK_PROVIDERS;
+  // The 200 carries the registry; so does the 409 that replaces it when the stored key cannot be
+  // decrypted — the state in which this form matters most. Nothing is mirrored here: an API that
+  // sends neither leaves the picker empty, with the alert still explaining what went wrong.
+  const providers = settings?.providers ?? (state?.kind === "unreadable" ? state.providers : []);
 
   // Unsaved edits win; otherwise the form mirrors whatever the server says is configured. Derived
   // on render rather than synced into state by an effect.

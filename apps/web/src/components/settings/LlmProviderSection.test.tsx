@@ -137,8 +137,9 @@ describe("LlmProviderSection", () => {
     expect(save).toHaveBeenCalledWith({ provider: "openai", model: "gpt-5-mini" });
   });
 
-  it("still renders the form, with the problem detail in an alert, when the stored key is unreadable", async () => {
-    state = { kind: "unreadable", detail: "your stored API key could not be read; re-enter it" };
+  it("renders the form from the 409's own provider list, with the detail in an alert, when the stored key is unreadable", async () => {
+    // The list comes off the problem body, not from a copy of the registry kept here.
+    state = { kind: "unreadable", detail: "your stored API key could not be read; re-enter it", providers };
     render(<LlmProviderSection />);
     expect(screen.getByRole("alert")).toHaveTextContent("could not be read");
     expect(screen.getAllByRole("radio", { name: /anthropic|openai|google gemini/i })).toHaveLength(3);
@@ -149,6 +150,15 @@ describe("LlmProviderSection", () => {
     await user.click(screen.getByRole("button", { name: "Save" }));
 
     expect(save).toHaveBeenCalledWith({ provider: "anthropic", model: "claude-sonnet-5", api_key: "sk-test" });
+  });
+
+  it("shows the alert with no picker when an unreadable-key 409 carries no provider list", async () => {
+    // An older API, or one that changed the body: better an empty picker than a stale mirror of
+    // the registry that offers providers the server may no longer support.
+    state = { kind: "unreadable", detail: "your stored API key could not be read; re-enter it", providers: [] };
+    render(<LlmProviderSection />);
+    expect(screen.getByRole("alert")).toHaveTextContent("could not be read");
+    expect(screen.queryAllByRole("radio")).toHaveLength(0);
   });
 
   it("surfaces a failed save in an alert", async () => {

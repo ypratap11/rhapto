@@ -441,8 +441,20 @@ export const settingsKeys = {
  * decrypted, e.g. after the server secret rotated) is a state the user can fix by re-entering a
  * key, so it is data here rather than a query error: the Settings section still has to render its
  * form. Every other failure stays a real query error.
+ *
+ * That 409 carries `providers` for exactly this reason — it replaces the 200 that normally holds
+ * the list, and without it the web app would need its own copy of the API's provider registry to
+ * render the picker on the one screen that needs it most.
  */
-export type LlmSettingsState = { kind: "ok"; settings: LlmSettingsOut } | { kind: "unreadable"; detail: string };
+export type LlmSettingsState =
+  | { kind: "ok"; settings: LlmSettingsOut }
+  | { kind: "unreadable"; detail: string; providers: ProviderInfoOut[] };
+
+/** The `providers` array off a problem body, or [] when an older API did not send one. */
+function problemProviders(problem: Problem | null): ProviderInfoOut[] {
+  const providers = problem?.providers;
+  return Array.isArray(providers) ? (providers as ProviderInfoOut[]) : [];
+}
 
 function invalidateLlmSettings(queryClient: QueryClient): void {
   void queryClient.invalidateQueries({ queryKey: settingsKeys.llm });
@@ -458,7 +470,7 @@ export function useLlmSettings() {
         return { kind: "ok", settings: await unwrap(apiClient().GET("/api/v1/settings/llm")) };
       } catch (e) {
         if (e instanceof ApiError && e.status === 409 && e.problem?.code === "llm_key_unreadable") {
-          return { kind: "unreadable", detail: e.message };
+          return { kind: "unreadable", detail: e.message, providers: problemProviders(e.problem) };
         }
         throw e;
       }

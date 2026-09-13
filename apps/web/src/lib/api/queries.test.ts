@@ -76,8 +76,8 @@ describe("useLlmSettings", () => {
   });
 
   /** What openapi-fetch hands `unwrap` for an RFC-7807 response, so the real ApiError is built here. */
-  function problemResponse(status: number, detail: string, code?: string) {
-    return { error: { type: "about:blank", title: "Conflict", status, detail, ...(code ? { code } : {}) }, response: { ok: false, status } };
+  function problemResponse(status: number, detail: string, code?: string, extra: Record<string, unknown> = {}) {
+    return { error: { type: "about:blank", title: "Conflict", status, detail, ...(code ? { code } : {}), ...extra }, response: { ok: false, status } };
   }
 
   it("folds a 409 llm_key_unreadable into the unreadable state, carrying the detail", async () => {
@@ -86,8 +86,24 @@ describe("useLlmSettings", () => {
     const { result } = renderHook(() => useLlmSettings(), { wrapper: queryWrapper() });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
-    expect(result.current.data).toEqual({ kind: "unreadable", detail: "your stored API key could not be read; re-enter it" });
+    expect(result.current.data).toEqual({
+      kind: "unreadable",
+      detail: "your stored API key could not be read; re-enter it",
+      providers: [],
+    });
     expect(getMock).toHaveBeenCalledWith("/api/v1/settings/llm");
+  });
+
+  it("carries the 409's provider list into the unreadable state", async () => {
+    // This 409 replaces the 200 that normally holds `providers`, and the Settings picker has to be
+    // rendered from it rather than from a copy of the registry in the web app.
+    const providers = [{ id: "openai", label: "OpenAI", models: ["gpt-5", "gpt-5-mini"], default: "gpt-5" }];
+    getMock.mockResolvedValue(problemResponse(409, "re-enter it", "llm_key_unreadable", { providers }));
+
+    const { result } = renderHook(() => useLlmSettings(), { wrapper: queryWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    expect(result.current.data).toEqual({ kind: "unreadable", detail: "re-enter it", providers });
   });
 
   it("keeps a 409 carrying any other code a query error", async () => {
