@@ -173,3 +173,29 @@ def test_clear_llm_cache_drops_built_adapters() -> None:
     first = llm_for(config)
     clear_llm_cache()
     assert llm_for(config) is not first
+
+
+def test_llm_config_repr_never_shows_the_key() -> None:
+    from rhapto.services.llm import LlmConfig
+
+    config = LlmConfig(
+        provider="openai", model="gpt-5", api_key="sk-test-secret-9999", source="env"
+    )
+    assert "sk-test" not in repr(config) and "sk-test" not in str(config)
+
+
+def test_rotating_the_key_replaces_the_cached_adapter() -> None:
+    from rhapto.services.llm import LlmConfig, clear_llm_cache, llm_for
+
+    clear_llm_cache()
+    first = llm_for(LlmConfig(provider="openai", model="gpt-5", api_key="sk-test-a", source="env"))
+    again = llm_for(LlmConfig(provider="openai", model="gpt-5", api_key="sk-test-a", source="env"))
+    rotated = llm_for(
+        LlmConfig(provider="openai", model="gpt-5", api_key="sk-test-b", source="env")
+    )
+    assert first is again and rotated is not first
+    # The old adapter is no longer reachable from the cache: asking with the old key rebuilds.
+    assert (
+        llm_for(LlmConfig(provider="openai", model="gpt-5", api_key="sk-test-a", source="env"))
+        is not first
+    )

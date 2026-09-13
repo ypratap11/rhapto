@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import hashlib
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Literal
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -42,8 +42,8 @@ class LlmConfig:
 
     provider: str
     model: str
-    api_key: str
-    source: Literal["settings", "env"]
+    api_key: str = field(repr=False)  # never in tracebacks or logs
+    source: Literal["settings", "env"] = "env"
 
 
 def env_llm_config(settings: Settings) -> LlmConfig | None:
@@ -88,15 +88,25 @@ async def resolve_llm_config(
     return config
 
 
-_CACHE: dict[tuple[str, str, str], LLMProvider] = {}
+# One adapter per (provider, model); the key hash decides whether the cached one is still
+# current. A rotated key therefore replaces the old adapter instead of leaving it (and the old
+# plaintext key inside it) alive for the life of the process, and the cache is bounded by the
+# number of distinct provider/model pairs in use.
+_CACHE: dict[tuple[str, str], tuple[str, LLMProvider]] = {}
+
+
+def _key_hash(api_key: str) -> str:
+    return hashlib.sha256(api_key.encode()).hexdigest()
 
 
 def llm_for(config: LlmConfig) -> LLMProvider:
-    key = (config.provider, config.model, hashlib.sha256(config.api_key.encode()).hexdigest())
-    provider = _CACHE.get(key)
-    if provider is None:
-        provider = build_llm(config.provider, config.model, config.api_key)
-        _CACHE[key] = provider
+    slot = (config.provider, config.model)
+    digest = _key_hash(config.api_key)
+    cached = _CACHE.get(slot)
+    if cached is not None and cached[0] == digest:
+        return cached[1]
+    provider = build_llm(config.provider, config.model, config.api_key)
+    _CACHE[slot] = (digest, provider)
     return provider
 
 
