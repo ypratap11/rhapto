@@ -2,21 +2,28 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, renderHook, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { toast } from "sonner";
 import { TailorButton } from "./TailorButton";
+import { ApiError } from "@/lib/api/client";
 import { useTailoringCount } from "@/lib/tailoring";
-import type { JobOut, ResumeDocumentOut } from "@/lib/api/queries";
+import type { JobOut, MeOut, ResumeDocumentOut } from "@/lib/api/queries";
 
 const mutateAsync = vi.fn();
 let tracksData: { id: string; name: string; min_fit: number }[] = [];
 // `undefined` data with `isPending` is what useQuery reports before the request settles.
 let resumeDocumentData: ResumeDocumentOut | null | undefined = null;
 let resumeDocumentPending = false;
+let meData: MeOut | undefined;
 vi.mock("@/lib/api/queries", () => ({
   useTracks: () => ({ data: tracksData }),
   useTailor: () => ({ mutateAsync, isPending: false }),
   useResumeDocument: () => ({ data: resumeDocumentData, isPending: resumeDocumentPending }),
+  useMe: () => ({ data: meData }),
   invalidateJobs: vi.fn(),
 }));
+const push = vi.fn();
+vi.mock("next/navigation", () => ({ useRouter: () => ({ push }) }));
+vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 vi.mock("./TaskProgress", () => ({
   TaskProgress: ({ taskId, onFinished }: { taskId: string; onFinished: () => void }) => (
     <div>
@@ -62,7 +69,10 @@ describe("TailorButton", () => {
     tracksData = [];
     resumeDocumentData = null;
     resumeDocumentPending = false;
+    meData = { user_id: "u1", email: "dev@example.com", llm_configured: true };
     mutateAsync.mockReset();
+    push.mockReset();
+    vi.mocked(toast.error).mockReset();
   });
 
   it("preselects the job's best-fit track", () => {
@@ -230,5 +240,42 @@ describe("TailorButton", () => {
 
     await user.click(screen.getByRole("button", { name: /tailor/i }));
     expect(mutateAsync).toHaveBeenCalledWith(expect.objectContaining({ body: expect.objectContaining({ mode: "blocks" }) }));
+  });
+  it("links to Settings instead of offering Tailor when /me reports no AI provider", async () => {
+    meData = { user_id: "u1", email: "dev@example.com", llm_configured: false };
+    renderButton();
+
+    expect(screen.getByRole("link", { name: "Set up your AI provider" })).toHaveAttribute("href", "/settings");
+    expect(screen.queryByRole("button", { name: /tailor/i })).not.toBeInTheDocument();
+    expect(mutateAsync).not.toHaveBeenCalled();
+  });
+
+  it("toasts a 409 llm_not_configured from tailor with an Open settings action", async () => {
+    mutateAsync.mockRejectedValueOnce(
+      new ApiError(409, { title: "Conflict", status: 409, detail: "no AI provider is configured", code: "llm_not_configured" }, "HTTP 409"),
+    );
+    renderButton();
+    const user = userEvent.setup({ delay: null });
+    await user.click(screen.getByRole("button", { name: /tailor/i }));
+
+    expect(toast.error).toHaveBeenCalledWith("no AI provider is configured", {
+      action: { label: "Open settings", onClick: expect.any(Function) },
+    });
+    const options = vi.mocked(toast.error).mock.calls[0]?.[1] as unknown as { action: { onClick: () => void } };
+    options.action.onClick();
+    expect(push).toHaveBeenCalledWith("/settings");
+  });
+
+  it("toasts a 409 llm_key_unreadable from tailor the same way", async () => {
+    mutateAsync.mockRejectedValueOnce(
+      new ApiError(409, { title: "Conflict", status: 409, detail: "your stored key could not be read", code: "llm_key_unreadable" }, "HTTP 409"),
+    );
+    renderButton();
+    const user = userEvent.setup({ delay: null });
+    await user.click(screen.getByRole("button", { name: /tailor/i }));
+
+    expect(toast.error).toHaveBeenCalledWith("your stored key could not be read", {
+      action: { label: "Open settings", onClick: expect.any(Function) },
+    });
   });
 });

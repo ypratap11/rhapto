@@ -425,3 +425,63 @@ export function useDeleteResumeDocument() {
     },
   });
 }
+
+export type LlmSettingsIn = Schemas["LlmSettingsIn"];
+export type LlmSettingsOut = Schemas["LlmSettingsOut"];
+export type LlmTestIn = Schemas["LlmTestIn"];
+export type LlmTestOut = Schemas["LlmTestOut"];
+export type ProviderInfoOut = Schemas["ProviderInfoOut"];
+
+export const settingsKeys = {
+  llm: ["settings", "llm"] as const,
+};
+
+/**
+ * What `GET /settings/llm` told us. A 409 `llm_key_unreadable` (the stored key cannot be
+ * decrypted, e.g. after the server secret rotated) is a state the user can fix by re-entering a
+ * key, so it is data here rather than a query error: the Settings section still has to render its
+ * form. Every other failure stays a real query error.
+ */
+export type LlmSettingsState = { kind: "ok"; settings: LlmSettingsOut } | { kind: "unreadable"; detail: string };
+
+function invalidateLlmSettings(queryClient: QueryClient): void {
+  void queryClient.invalidateQueries({ queryKey: settingsKeys.llm });
+  // The Tailor buttons gate on /me's llm_configured, so it has to follow a save or a clear.
+  void queryClient.invalidateQueries({ queryKey: keys.me });
+}
+
+export function useLlmSettings() {
+  return useQuery({
+    queryKey: settingsKeys.llm,
+    queryFn: async (): Promise<LlmSettingsState> => {
+      try {
+        return { kind: "ok", settings: await unwrap(apiClient().GET("/api/v1/settings/llm")) };
+      } catch (e) {
+        if (e instanceof ApiError && e.status === 409 && e.problem?.code === "llm_key_unreadable") {
+          return { kind: "unreadable", detail: e.message };
+        }
+        throw e;
+      }
+    },
+  });
+}
+
+export function useSaveLlmSettings() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: LlmSettingsIn) => unwrap(apiClient().PUT("/api/v1/settings/llm", { body })),
+    onSuccess: () => invalidateLlmSettings(queryClient),
+  });
+}
+
+export function useTestLlm() {
+  return useMutation({ mutationFn: (body: LlmTestIn) => unwrap(apiClient().POST("/api/v1/settings/llm/test", { body })) });
+}
+
+export function useDeleteLlmSettings() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => unwrap(apiClient().DELETE("/api/v1/settings/llm")),
+    onSuccess: () => invalidateLlmSettings(queryClient),
+  });
+}

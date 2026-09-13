@@ -1,20 +1,35 @@
 "use client";
 
 import { useQueryClient } from "@tanstack/react-query";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ApiError } from "@/lib/api/client";
-import { invalidateJobs, useResumeDocument, useTailor, useTracks, type JobOut } from "@/lib/api/queries";
+import { invalidateJobs, useMe, useResumeDocument, useTailor, useTracks, type JobOut } from "@/lib/api/queries";
 import { startTailoring, stopTailoring } from "@/lib/tailoring";
 import { TaskProgress } from "./TaskProgress";
 
 const MODE_LABEL: Record<"tune" | "blocks", string> = { tune: "Tune my resume", blocks: "Build from blocks" };
 
+/** The tailor endpoint's two "your LLM is not usable" conflicts, both fixed on the Settings page. */
+const LLM_SETUP_CODES = new Set(["llm_not_configured", "llm_key_unreadable"]);
+
+export function SetUpProviderLink() {
+  return (
+    <Link href="/settings" className="text-sm underline">
+      Set up your AI provider
+    </Link>
+  );
+}
+
 export function TailorButton({ job }: { job: JobOut }) {
   const tracks = useTracks();
   const tailor = useTailor();
+  const me = useMe();
+  const router = useRouter();
   const resumeDocument = useResumeDocument();
   const queryClient = useQueryClient();
   const [trackId, setTrackId] = useState<string | undefined>(undefined);
@@ -68,9 +83,20 @@ export function TailorButton({ job }: { job: JobOut }) {
       started.current = true;
       startTailoring(job.id);
     } catch (error) {
+      // A missing or unreadable key is fixable, and only on the Settings page: say so and go there.
+      if (error instanceof ApiError && error.status === 409 && LLM_SETUP_CODES.has(String(error.problem?.code))) {
+        toast.error(error.problem?.detail ?? error.message, {
+          action: { label: "Open settings", onClick: () => router.push("/settings") },
+        });
+        return;
+      }
       toast.error(error instanceof ApiError ? error.message : "Could not start tailoring");
     }
   }
+
+  // Starting a task without a provider can only fail, so send the user to Settings instead of
+  // offering the button. `undefined` (still loading) is not "not configured": leave the button.
+  if (me.data?.llm_configured === false) return <SetUpProviderLink />;
 
   return (
     <div>

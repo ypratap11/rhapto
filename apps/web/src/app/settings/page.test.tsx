@@ -9,6 +9,16 @@ import { getSettings, setSettings } from "@/lib/api/client";
 
 vi.mock("next/navigation", () => ({ usePathname: () => "/" }));
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
+// The AI provider section sits above the API connection card and has its own Save and Test
+// connection buttons. Holding its query in the loading state keeps those button names unambiguous
+// here; the section itself is covered by components/settings/LlmProviderSection.test.tsx.
+vi.mock("@/lib/api/queries", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/api/queries")>()),
+  useLlmSettings: () => ({ data: undefined, isLoading: true, error: null }),
+  useSaveLlmSettings: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useTestLlm: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useDeleteLlmSettings: () => ({ mutateAsync: vi.fn(), isPending: false }),
+}));
 
 afterEach(() => {
   window.localStorage.clear();

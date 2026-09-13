@@ -2,7 +2,7 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { NextUp } from "./NextUp";
-import type { JobOut } from "@/lib/api/queries";
+import type { JobOut, MeOut } from "@/lib/api/queries";
 
 vi.mock("./JobActionButton", () => ({ JobActionButton: ({ job }: { job: JobOut }) => <div>action:{job.id}</div> }));
 
@@ -15,9 +15,11 @@ vi.mock("@/lib/skipped", () => ({
   unskipAll: () => unskipAll(),
 }));
 
+let meData: MeOut | undefined;
 vi.mock("@/lib/api/queries", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/api/queries")>()),
   useTracks: () => ({ data: [{ id: "t1", name: "Data PM", min_fit: 60 }] }),
+  useMe: () => ({ data: meData }),
 }));
 
 const base = (over: Partial<JobOut>): JobOut => ({
@@ -51,6 +53,7 @@ const jobs = [
 describe("NextUp", () => {
   beforeEach(() => {
     skippedData = [];
+    meData = { user_id: "u1", email: "dev@example.com", llm_configured: true };
     skipJob.mockClear();
     unskipAll.mockClear();
   });
@@ -109,5 +112,25 @@ describe("NextUp", () => {
     const user = userEvent.setup({ delay: null });
     await user.click(screen.getByRole("button", { name: /show skipped/i }));
     expect(unskipAll).toHaveBeenCalled();
+  });
+  it("offers a Settings link instead of the row action when /me reports no AI provider", () => {
+    meData = { user_id: "u1", email: "dev@example.com", llm_configured: false };
+    render(<NextUp jobs={[base({ id: "a", best_fit: 90, title: "Job A" })]} />);
+
+    const link = screen.getByRole("link", { name: "Set up your AI provider" });
+    expect(link).toHaveAttribute("href", "/settings");
+    expect(screen.queryByText("action:a")).not.toBeInTheDocument();
+  });
+
+  it("keeps the row action for a job already waiting for review, provider or not", () => {
+    meData = { user_id: "u1", email: "dev@example.com", llm_configured: false };
+    render(
+      <NextUp
+        jobs={[base({ id: "done", best_fit: 90, title: "Job done", latest_package: { id: "p1", version: 1, status: "draft", mode: "tune", created_at: "2026-09-10T00:00:00Z" } })]}
+      />,
+    );
+
+    expect(screen.getByText("action:done")).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Set up your AI provider" })).not.toBeInTheDocument();
   });
 });

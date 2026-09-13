@@ -3,6 +3,7 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
+import { LlmProviderSection } from "@/components/settings/LlmProviderSection";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -78,6 +79,7 @@ export default function SettingsPage() {
   return (
     <div className="mx-auto max-w-xl space-y-6">
       <h1 className="text-2xl">Settings</h1>
+      <LlmProviderSection />
       <Card>
         <CardHeader>
           <CardTitle>API connection</CardTitle>

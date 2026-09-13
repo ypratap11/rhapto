@@ -3,16 +3,21 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/ui/StatusBadge";
-import { useTracks, type JobOut } from "@/lib/api/queries";
-import { nextUp } from "@/lib/flow";
+import { useMe, useTracks, type JobOut } from "@/lib/api/queries";
+import { jobState, nextUp } from "@/lib/flow";
 import { skipJob, unskipAll, useSkipped } from "@/lib/skipped";
 import { FitBadge } from "./FitBadge";
 import { JobActionButton } from "./JobActionButton";
+import { SetUpProviderLink } from "./TailorButton";
 
 export function NextUp({ jobs }: { jobs: JobOut[] }) {
   const skipped = useSkipped();
   const tracks = useTracks();
+  const me = useMe();
   const ranked = nextUp(jobs, skipped, 5);
+  // Only the rows whose action would start a tailoring task need a provider; a draft waiting for
+  // review still wants its Review / Mark applied buttons.
+  const needsProvider = me.data?.llm_configured === false;
 
   const trackName = (job: JobOut) => (job.best_track_id ? (tracks.data ?? []).find((t) => t.id === job.best_track_id)?.name ?? null : null);
 
@@ -44,7 +49,7 @@ export function NextUp({ jobs }: { jobs: JobOut[] }) {
                   <p className="truncate text-sm text-muted-foreground">{job.title ?? "Untitled role"}</p>
                 </div>
                 <div className="flex shrink-0 items-center gap-2">
-                  <JobActionButton job={job} size="sm" />
+                  {needsProvider && jobState(job) === "tailor" ? <SetUpProviderLink /> : <JobActionButton job={job} size="sm" />}
                   <Button
                     type="button"
                     variant="ghost"

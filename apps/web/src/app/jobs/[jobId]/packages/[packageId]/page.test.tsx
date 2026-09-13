@@ -53,6 +53,7 @@ vi.mock("@/lib/api/queries", () => ({
   useMarkApplied: () => ({ markApplied: vi.fn(), isPending: false }),
   useTailor: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useTracks: () => ({ data: [] }),
+  useResumeDocument: () => ({ data: null, isPending: false }),
 }));
 
 import PackageReviewPage from "./page";
