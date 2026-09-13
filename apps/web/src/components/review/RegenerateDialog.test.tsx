@@ -5,9 +5,11 @@ import { RegenerateDialog } from "./RegenerateDialog";
 import type { JobOut, PackageOut } from "@/lib/api/queries";
 
 const mutateAsync = vi.fn();
+let resumeDocument: { filename: string } | null = null;
 vi.mock("@/lib/api/queries", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/api/queries")>()),
   useTailor: () => ({ mutateAsync, isPending: false }),
+  useResumeDocument: () => ({ data: resumeDocument, isPending: false }),
   useTracks: () => ({ data: [{ id: "data-pm", name: "Data PM", resume_base: "data-pm", keywords: [], min_fit: 60, description: null }] }),
 }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn() }) }));
@@ -29,5 +31,17 @@ describe("RegenerateDialog", () => {
     await user.click(screen.getByRole("button", { name: /regenerate/i }));
     expect(mutateAsync).toHaveBeenCalledWith({ jobId: "j1", body: { feedback: "Lean harder on the migration work.", parent_package_id: "p1", track_id: "data-pm", mode: "blocks" } });
     expect(await screen.findByText("progress")).toBeInTheDocument();
+  });
+
+  it("defaults to tune mode when a resume document exists, even for a blocks parent", async () => {
+    resumeDocument = { filename: "Maya_Chen_Resume.docx" };
+    mutateAsync.mockResolvedValueOnce({ id: "t2", status: "running" });
+    render(<RegenerateDialog job={job} pkg={pkg} open onOpenChange={() => undefined} />);
+    const user = userEvent.setup({ delay: null });
+    expect(screen.getByRole("combobox", { name: "Mode" })).toHaveTextContent("Tune my resume");
+    await user.type(screen.getByLabelText(/feedback/i), "Lean harder on the migration work.");
+    await user.click(screen.getByRole("button", { name: /regenerate/i }));
+    expect(mutateAsync).toHaveBeenCalledWith({ jobId: "j1", body: { feedback: "Lean harder on the migration work.", parent_package_id: "p1", track_id: "data-pm", mode: "tune" } });
+    resumeDocument = null;
   });
 });
