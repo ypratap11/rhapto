@@ -56,8 +56,8 @@ config/profile/db/services/worker/api/cli.
 Table `llm_settings` (migration 0004): `user_id` (unique FK, cascade), `provider` String(20), `model` String(100),
 `api_key_encrypted` Text, timestamps. Keys are encrypted with Fernet (`cryptography`) using `RHAPTO_SECRET_KEY`
 from `.env`; `services/secrets.py` exposes `encrypt(text) -> str` / `decrypt(token) -> str` and raises a clear
-error when the secret is missing or changed. `docker compose` and `smoke-api.sh` generate a secret on first start
-the same way the API token is generated today (`.env.example` documents it).
+error when the secret is missing or changed. When `RHAPTO_SECRET_KEY` is empty the key is derived from
+`RHAPTO_API_TOKEN` (sha256, urlsafe base64) so existing setups need no new step; `.env.example` documents both.
 
 API (`/api/v1/settings/llm`):
 - `GET` → `{provider, model, key_set: bool, key_hint: str | null, source: "settings" | "env" | "none",
