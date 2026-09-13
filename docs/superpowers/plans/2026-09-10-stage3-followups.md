@@ -129,3 +129,8 @@ deferred from the whole-branch review:
 - `openai.py` `_error_code` has a dead `body["error"]["code"]` fallback (the SDK already unwraps it).
 - Concurrent pytest processes on the shared `rhapto_test` database still race (TRUNCATE vs INSERT); a per-process
   schema or a lock file in `tests/conftest.py` would make parallel runs safe.
+- `rhapto tailor --model` is silently replaced by the provider's default when the id belongs to another provider's
+  curated list (same guard that protects the env fallback); an explicit flag should probably error instead.
+- The web reads `providers` from the 409 `llm_key_unreadable` problem body with only an `Array.isArray` check; the
+  field is not in the OpenAPI contract (exception handlers are not reflected), so add a runtime shape check or
+  expose the recovery data through a typed endpoint.
