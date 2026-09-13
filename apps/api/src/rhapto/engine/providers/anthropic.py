@@ -4,6 +4,7 @@ from typing import Any
 
 from pydantic import ValidationError
 
+from rhapto.engine.providers.errors import ProviderAuthError, mentions_quota
 from rhapto.engine.providers.llm import (
     MalformedOutputError,
     Message,
@@ -14,6 +15,8 @@ from rhapto.engine.providers.llm import (
 )
 
 TOOL_NAME = "emit"
+
+PROVIDER_ID = "anthropic"
 
 # Strict tool mode (``"strict": True``) was tried and rejected: with the forced-tool prompts here the
 # model split its output across two tool_use blocks and returned empty sections. Malformed inputs are
@@ -42,6 +45,17 @@ def parse_tool_input(output_schema: type[T], payload: Any) -> T:
             f"{output_schema.__name__} tool input did not match the schema (keys: {keys}): "
             f"{exc.error_count()} validation error(s)"
         ) from exc
+
+
+def _auth_error(exc: BaseException) -> ProviderAuthError | None:
+    """Map the SDK's credential failures; the SDK is imported here so the module stays import-light."""
+    import anthropic
+
+    if isinstance(exc, anthropic.AuthenticationError | anthropic.PermissionDeniedError):
+        return ProviderAuthError(PROVIDER_ID, str(exc))
+    if isinstance(exc, anthropic.RateLimitError) and mentions_quota(str(exc)):
+        return ProviderAuthError(PROVIDER_ID, str(exc))
+    return None
 
 
 class AnthropicProvider:
@@ -83,14 +97,20 @@ class AnthropicProvider:
             ),
             "input_schema": schema,
         }
-        response = await self._client.messages.create(
-            model=self.model,
-            max_tokens=max_tokens,
-            system=self._system_payload(system),
-            messages=[{"role": m.role, "content": m.content} for m in messages],
-            tools=[tool],
-            tool_choice={"type": "tool", "name": TOOL_NAME},
-        )
+        try:
+            response = await self._client.messages.create(
+                model=self.model,
+                max_tokens=max_tokens,
+                system=self._system_payload(system),
+                messages=[{"role": m.role, "content": m.content} for m in messages],
+                tools=[tool],
+                tool_choice={"type": "tool", "name": TOOL_NAME},
+            )
+        except Exception as exc:
+            auth = _auth_error(exc)
+            if auth is not None:
+                raise auth from exc
+            raise
         tool_use = next(
             (b for b in response.content if getattr(b, "type", None) == "tool_use"), None
         )

@@ -5,6 +5,7 @@ import pytest
 from pydantic import BaseModel
 
 from rhapto.engine.providers.anthropic import AnthropicProvider, parse_tool_input
+from rhapto.engine.providers.errors import ProviderAuthError
 from rhapto.engine.providers.fake import FakeEmbeddingProvider, FakeLLMProvider
 from rhapto.engine.providers.llm import MalformedOutputError, Message, SystemBlock, TokenUsage
 
@@ -91,6 +92,33 @@ async def test_anthropic_provider_builds_forced_tool_call_with_cache_control() -
     assert kw["tools"][0]["input_schema"]["properties"]["score"]["type"] == "integer"
     assert "text, score" in kw["tools"][0]["description"]
     assert kw["messages"] == [{"role": "user", "content": "go"}]
+
+
+class _RaisingMessages:
+    def __init__(self, error: Exception) -> None:
+        self._error = error
+
+    async def create(self, **kwargs: Any) -> Any:
+        raise self._error
+
+
+@pytest.mark.parametrize("status", [401, 403])
+async def test_anthropic_auth_failures_become_provider_auth_error(status: int) -> None:
+    import anthropic
+    import httpx
+
+    response = httpx.Response(status, request=httpx.Request("POST", "https://api.anthropic.com/v1"))
+    cls = anthropic.AuthenticationError if status == 401 else anthropic.PermissionDeniedError
+    error = cls("invalid x-api-key", response=response, body=None)
+    provider = AnthropicProvider(
+        model="claude-sonnet-5", client=SimpleNamespace(messages=_RaisingMessages(error))
+    )
+    with pytest.raises(ProviderAuthError) as excinfo:
+        await provider.complete_structured(
+            system=[], messages=[Message(role="user", content="go")], output_schema=Answer
+        )
+    assert excinfo.value.provider == "anthropic"
+    assert "invalid x-api-key" in str(excinfo.value)
 
 
 def test_parse_tool_input_unwraps_a_single_wrapper_object() -> None:
