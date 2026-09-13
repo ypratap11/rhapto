@@ -15,10 +15,12 @@ from rhapto.api.deps import (
     get_enqueuer,
     get_event_bus,
     get_session,
+    get_settings_dep,
     get_state,
 )
 from rhapto.api.errors import not_found
 from rhapto.api.schemas import TailorBody, TaskOut
+from rhapto.config import Settings
 from rhapto.db.models import Task
 from rhapto.db.repositories import documents as documents_repo
 from rhapto.db.repositories import jobs as job_repo
@@ -27,6 +29,7 @@ from rhapto.db.repositories import tasks as task_repo
 from rhapto.db.repositories.profile import get_track
 from rhapto.services.enqueue import Enqueuer
 from rhapto.services.eventbus import EventBus, task_channel
+from rhapto.services.llm import resolve_llm_config
 
 router = APIRouter()
 FINISHED = {"succeeded", "failed"}
@@ -34,6 +37,7 @@ FINISHED = {"succeeded", "failed"}
 UserDep = Annotated[uuid.UUID, Depends(current_user)]
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
 EnqueuerDep = Annotated[Enqueuer, Depends(get_enqueuer)]
+SettingsDep = Annotated[Settings, Depends(get_settings_dep)]
 EventBusDep = Annotated[EventBus, Depends(get_event_bus)]
 StateDep = Annotated[AppState, Depends(get_state)]
 
@@ -58,6 +62,7 @@ async def tailor_job_endpoint(
     user_id: UserDep,
     session: SessionDep,
     enqueuer: EnqueuerDep,
+    settings: SettingsDep,
 ) -> TaskOut:
     if await job_repo.get_job(session, user_id, job_id) is None:
         raise not_found("job", job_id)
@@ -67,6 +72,10 @@ async def tailor_job_endpoint(
         parent = await package_repo.get_package(session, user_id, body.parent_package_id)
         if parent is None or parent.job_id != job_id:
             raise not_found("package", body.parent_package_id)
+    # Fail here rather than leaving a task row that can only fail in the worker: without a
+    # provider key there is nothing to run. LLMNotConfiguredError becomes the 409 the web app
+    # turns into "set up your LLM in Settings" (see api.errors).
+    await resolve_llm_config(session, settings, user_id)
     has_document = await documents_repo.get_document(session, user_id) is not None
     if body.mode == "tune" and not has_document:
         raise HTTPException(

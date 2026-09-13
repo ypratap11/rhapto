@@ -8,6 +8,7 @@ from helpers import bullet, demo_extract, demo_resume
 from helpers_docx import build_fixture_docx
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from rhapto.config import Settings
 from rhapto.db.models import Job, User
 from rhapto.db.repositories import packages as package_repo
 from rhapto.db.repositories import tasks as task_repo
@@ -18,6 +19,7 @@ from rhapto.engine.tune import ProposedEdit, TuneOutput
 from rhapto.services import storage as storage_module
 from rhapto.services.documents import store_resume_document
 from rhapto.services.eventbus import InMemoryEventBus
+from rhapto.services.llm import LLMNotConfiguredError
 from rhapto.services.profile_sync import import_profile_dir
 from rhapto.services.storage import PackageStorage
 from rhapto.worker.tasks import TASKS, embed_blocks, render_package_pdf, tailor_job
@@ -78,9 +80,14 @@ def _ctx(
     bus: InMemoryEventBus,
     storage: PackageStorage,
 ) -> dict[str, Any]:
+    async def resolver(
+        session: AsyncSession, settings: Settings, user_id: uuid.UUID
+    ) -> FakeLLMProvider:
+        return llm
+
     return {
         "session_factory": session_factory,
-        "llm": llm,
+        "llm_resolver": resolver,
         "embedder": FakeEmbeddingProvider(),
         "event_bus": bus,
         "storage": storage,
@@ -180,6 +187,30 @@ async def test_tailor_job_failure_marks_task_failed(
             and "no scripted response" in (task.error or "")
         )
     assert bus.published[-1][1]["event"] == "error"
+
+
+async def test_tailor_job_fails_cleanly_when_no_llm_is_configured(
+    session_factory, user: User, demo_profile_dir: Path, tmp_path: Path
+) -> None:  # type: ignore[no-untyped-def]
+    """A user with no provider key is a setup problem: the task fails with that message alone, no
+    exception class prefix and no pipeline work."""
+    _, task_id = await _setup(session_factory, user, demo_profile_dir)
+    bus, storage = InMemoryEventBus(), PackageStorage(tmp_path / "pkg")
+    ctx = _ctx(session_factory, FakeLLMProvider([]), bus, storage)
+
+    async def refuse(session: Any, settings: Any, user_id: uuid.UUID) -> None:
+        raise LLMNotConfiguredError
+
+    ctx["llm_resolver"] = refuse
+    await tailor_job(ctx, task_id=str(task_id))
+    async with session_factory() as session:
+        task = await task_repo.get_task(session, user.id, task_id)
+        assert task is not None and task.status == "failed"
+        assert task.error == "No LLM configured. Add a key in Settings."
+    assert bus.published[-1][1] == {
+        "event": "error",
+        "message": "No LLM configured. Add a key in Settings.",
+    }
 
 
 async def test_tailor_job_with_bad_task_id_publishes_error(session_factory, tmp_path: Path) -> None:  # type: ignore[no-untyped-def]

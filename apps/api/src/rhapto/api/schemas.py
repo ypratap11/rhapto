@@ -20,6 +20,49 @@ class HealthOut(BaseModel):
 class MeOut(BaseModel):
     email: str
     user_id: uuid.UUID
+    # False when neither Settings nor the environment yields a usable provider key: the web app
+    # uses it to point the user at Settings before they try to tailor anything.
+    llm_configured: bool
+
+
+class ProviderInfoOut(BaseModel):
+    """One supported provider, for the Settings picker."""
+
+    id: str
+    label: str
+    models: list[str]
+    default: str
+
+
+class LlmSettingsOut(BaseModel):
+    """What the user's LLM is right now. The key itself never leaves the server: only whether one
+    is set, and its last four characters so the user can tell which key it is."""
+
+    provider: str | None
+    model: str | None
+    key_set: bool
+    key_hint: str | None
+    source: Literal["settings", "env", "none"]
+    providers: list[ProviderInfoOut]
+
+
+class LlmSettingsIn(BaseModel):
+    provider: str
+    model: str
+    # Omitted means "keep the key I already have" (or the environment's, for this provider).
+    api_key: str | None = None
+
+
+class LlmTestIn(BaseModel):
+    provider: str
+    model: str
+    api_key: str | None = None
+
+
+class LlmTestOut(BaseModel):
+    ok: bool
+    model: str | None = None
+    error: str | None = None
 
 
 class ImportOut(BaseModel):

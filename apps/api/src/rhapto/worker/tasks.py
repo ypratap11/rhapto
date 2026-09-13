@@ -3,10 +3,12 @@ from __future__ import annotations
 import asyncio
 import logging
 import uuid
-from typing import Any, TypedDict
+from collections.abc import Awaitable, Callable
+from typing import Any, NotRequired, TypedDict
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from rhapto.config import Settings, get_settings
 from rhapto.db.models import EMBEDDING_DIMENSIONS, Job, Package, Task
 from rhapto.db.repositories import packages as package_repo
 from rhapto.db.repositories import tasks as task_repo
@@ -14,6 +16,7 @@ from rhapto.db.repositories.profile import get_block
 from rhapto.db.repositories.users import list_user_ids
 from rhapto.engine.pipeline import tailor
 from rhapto.engine.providers.embeddings import EmbeddingProvider
+from rhapto.engine.providers.errors import ProviderAuthError
 from rhapto.engine.providers.llm import LLMProvider
 from rhapto.engine.select import block_text
 from rhapto.engine.types import TailorRequest
@@ -22,19 +25,29 @@ from rhapto.services.discovery.poller import poll_sources
 from rhapto.services.documents import load_source
 from rhapto.services.enqueue import TaskFn
 from rhapto.services.eventbus import EventBus, task_channel
+from rhapto.services.llm import LLMNotConfiguredError, resolve_llm
 from rhapto.services.packaging import persist_package
 from rhapto.services.profile_sync import block_row_to_model, load_profile_from_db
 from rhapto.services.scoring import rescore_user, score_and_store
+from rhapto.services.secrets import SecretsError
 from rhapto.services.storage import PackageStorage
 
 logger = logging.getLogger("rhapto.worker")
+
+
+LlmResolver = Callable[[AsyncSession, Settings, uuid.UUID], Awaitable[LLMProvider]]
+
+# A provider key the user has to fix: the task fails with the message alone, because the exception
+# class name tells them nothing they can act on.
+SETUP_ERRORS = (LLMNotConfiguredError, SecretsError, ProviderAuthError)
 
 
 class WorkerContext(TypedDict):
     """Keys present in the arq `ctx` dict this worker's tasks rely on."""
 
     session_factory: async_sessionmaker[AsyncSession]
-    llm: LLMProvider
+    # Absent in the real worker (it resolves per task and per user); tests inject a double.
+    llm_resolver: NotRequired[LlmResolver]
     embedder: EmbeddingProvider
     event_bus: EventBus
     storage: PackageStorage
@@ -60,6 +73,9 @@ async def tailor_job(ctx: dict[str, Any], task_id: str) -> None:
             task_repo.mark_running(active_task)
             await session.commit()
             user_id = active_task.user_id
+            # Per task, not per worker: which provider runs this depends on whose task it is.
+            resolver: LlmResolver = ctx.get("llm_resolver") or resolve_llm
+            llm = await resolver(session, get_settings(), user_id)
 
             job = await session.get(Job, uuid.UUID(request["job_id"]))
             if job is None or job.user_id != user_id:
@@ -111,7 +127,7 @@ async def tailor_job(ctx: dict[str, Any], task_id: str) -> None:
                     source_docx=source_docx,
                 ),
                 profile,
-                ctx["llm"],
+                llm,
                 ctx["embedder"],
                 on_step=on_step,
             )
@@ -154,7 +170,12 @@ async def tailor_job(ctx: dict[str, Any], task_id: str) -> None:
             if failed_tid is not None:
                 failed_task = await session.get(Task, failed_tid)
                 if failed_task is not None:
-                    task_repo.mark_failed(failed_task, f"{type(exc).__name__}: {exc}")
+                    message = (
+                        str(exc)
+                        if isinstance(exc, SETUP_ERRORS)
+                        else f"{type(exc).__name__}: {exc}"
+                    )
+                    task_repo.mark_failed(failed_task, message)
                     await session.commit()
             await bus.publish(channel, {"event": "error", "message": str(exc)})
 

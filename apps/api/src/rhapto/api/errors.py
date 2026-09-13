@@ -13,8 +13,14 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from rhapto.engine.types import EngineError, ProfileError
 from rhapto.services.jobtext import JobTextError
+from rhapto.services.llm import LLMNotConfiguredError
+from rhapto.services.secrets import SecretsError
 
 PROBLEM = "application/problem+json"
+KEY_UNREADABLE_MESSAGE = (
+    "Your stored API key can no longer be decrypted (the server secret changed). "
+    "Re-enter it in Settings."
+)
 logger = logging.getLogger("rhapto.api")
 
 
@@ -77,6 +83,19 @@ def install_error_handlers(app: FastAPI) -> None:
     @app.exception_handler(JobTextError)
     async def _jobtext(request: Request, exc: JobTextError) -> JSONResponse:
         return problem(422, "Unprocessable Entity", str(exc))
+
+    @app.exception_handler(LLMNotConfiguredError)
+    async def _llm_not_configured(request: Request, exc: LLMNotConfiguredError) -> JSONResponse:
+        # 409, not 422: the request was fine, the account is not set up yet. `code` lets the web
+        # app route the user to Settings instead of showing a bare message.
+        return problem(409, "Conflict", str(exc), code="llm_not_configured")
+
+    @app.exception_handler(SecretsError)
+    async def _secrets(request: Request, exc: SecretsError) -> JSONResponse:
+        # The stored key survives a secret rotation as unreadable ciphertext; that is the user's
+        # to fix by re-entering it, so it must never surface as a 500.
+        logger.warning("stored provider key is unreadable: %s", exc)
+        return problem(409, "Conflict", KEY_UNREADABLE_MESSAGE, code="llm_key_unreadable")
 
     @app.exception_handler(EngineError)
     async def _engine(request: Request, exc: EngineError) -> JSONResponse:

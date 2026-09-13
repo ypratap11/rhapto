@@ -49,7 +49,8 @@ def _patch_providers(monkeypatch: pytest.MonkeyPatch, responses: list[Any]) -> F
     monkeypatch.setattr(
         cli,
         "build_providers",
-        lambda settings: cli.Providers(llm=llm, embedder=FakeEmbeddingProvider()),
+        # The command passes the --provider/--model flags through; the fake ignores them.
+        lambda settings, *args: cli.Providers(llm=llm, embedder=FakeEmbeddingProvider()),
     )
     return llm
 
@@ -298,6 +299,50 @@ def test_build_providers_requires_api_key() -> None:
 
     with pytest.raises(cli.typer.BadParameter, match="ANTHROPIC_API_KEY"):
         cli.build_providers(Settings(_env_file=None, anthropic_api_key=""))
+
+
+def test_tailor_provider_flag_needs_that_providers_key(
+    workspace: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from rhapto.config import Settings
+
+    monkeypatch.setattr(
+        cli,
+        "get_settings",
+        lambda: Settings(_env_file=None, anthropic_api_key="sk-test-a", openai_api_key=""),
+    )
+    result = runner.invoke(
+        cli.app,
+        [
+            "tailor",
+            "--jd",
+            str(workspace / "jd.txt"),
+            "--profile",
+            str(workspace / "profile"),
+            "--no-pdf",
+            "--provider",
+            "openai",
+        ],
+    )
+    assert result.exit_code == 1 and "OPENAI_API_KEY" in result.output
+
+
+def test_build_providers_honours_the_provider_and_model_flags() -> None:
+    from rhapto.config import Settings
+    from rhapto.engine.providers.openai import OpenAIProvider
+
+    settings = Settings(_env_file=None, openai_api_key="sk-test-o", rhapto_llm_model="")
+    providers = cli.build_providers(settings, "openai", "gpt-5-mini")
+    assert isinstance(providers.llm, OpenAIProvider) and providers.llm.model == "gpt-5-mini"
+    # No --model: the provider's own default, not the other provider's.
+    assert cli.build_providers(settings, "openai", None).llm.model == "gpt-5"
+
+
+def test_build_providers_rejects_an_unknown_provider() -> None:
+    from rhapto.config import Settings
+
+    with pytest.raises(cli.typer.BadParameter, match="nope"):
+        cli.build_providers(Settings(_env_file=None, anthropic_api_key="sk-test-a"), "nope", None)
 
 
 def test_profile_validate(workspace: Path, demo_profile_dir: Path) -> None:

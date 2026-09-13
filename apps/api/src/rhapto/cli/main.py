@@ -21,11 +21,10 @@ from rhapto.db.repositories.users import get_or_create_user
 from rhapto.db.session import make_engine, make_session_factory
 from rhapto.engine.document import parse_docx
 from rhapto.engine.pipeline import LLMBudgetExceeded, TailorResult, tailor
-from rhapto.engine.providers.anthropic import AnthropicProvider
 from rhapto.engine.providers.embeddings import EmbeddingProvider, FastEmbedProvider
 from rhapto.engine.providers.fake import FakeEmbeddingProvider
 from rhapto.engine.providers.llm import LLMProvider, MalformedOutputError
-from rhapto.engine.providers.registry import PROVIDERS
+from rhapto.engine.providers.registry import PROVIDERS, build_llm, provider_ids
 from rhapto.engine.render.pdf import PdfRenderError, convert_docx_to_pdf, soffice_available
 from rhapto.engine.scoring import best_track, bucket_for, score_job, track_text
 from rhapto.engine.types import Profile, ProfileError, TailorRequest
@@ -51,14 +50,23 @@ class Providers:
     embedder: EmbeddingProvider
 
 
-def build_providers(settings: Settings) -> Providers:
-    if not settings.anthropic_api_key:
-        raise typer.BadParameter("ANTHROPIC_API_KEY is not set; put it in .env or the environment")
+def build_providers(
+    settings: Settings, provider: str | None = None, model: str | None = None
+) -> Providers:
+    """The adapters for one CLI run. The CLI never reads the database: the key always comes from
+    the environment, for whichever provider the flags (or RHAPTO_LLM_PROVIDER) name."""
+    chosen = provider or settings.rhapto_llm_provider
+    info = PROVIDERS.get(chosen)
+    if info is None:
+        raise typer.BadParameter(
+            f"unknown provider {chosen!r}; choose from {', '.join(provider_ids())}"
+        )
+    # Settings field names are the env var names lowercased (ANTHROPIC_API_KEY → anthropic_api_key).
+    api_key = str(getattr(settings, info.env_key.lower(), "") or "")
+    if not api_key:
+        raise typer.BadParameter(f"{info.env_key} is not set; put it in .env or the environment")
     return Providers(
-        llm=AnthropicProvider(
-            model=settings.rhapto_llm_model or PROVIDERS["anthropic"].default,
-            api_key=settings.anthropic_api_key,
-        ),
+        llm=build_llm(info.id, model or settings.rhapto_llm_model or info.default, api_key),
         embedder=FastEmbedProvider(settings.rhapto_embedding_model),
     )
 
@@ -96,6 +104,12 @@ def tailor_cmd(
     ),
     no_pdf: bool = typer.Option(False, "--no-pdf", help="Skip PDF conversion"),
     feedback: str | None = typer.Option(None, "--feedback", help="Regeneration feedback"),
+    provider: str | None = typer.Option(
+        None, "--provider", help="LLM provider (default: RHAPTO_LLM_PROVIDER)"
+    ),
+    model: str | None = typer.Option(
+        None, "--model", help="Model id (default: the provider's default)"
+    ),
 ) -> None:
     """Tailor a resume package for one job description."""
     if not jd.is_file():
@@ -111,7 +125,7 @@ def tailor_cmd(
         typer.echo(f"profile error: {exc}", err=True)
         raise typer.Exit(1) from exc
     try:
-        providers = build_providers(settings)
+        providers = build_providers(settings, provider, model)
     except typer.BadParameter as exc:
         typer.echo(f"error: {exc.message}", err=True)
         raise typer.Exit(1) from exc

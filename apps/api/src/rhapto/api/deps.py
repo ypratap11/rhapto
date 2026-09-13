@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import secrets
 import uuid
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass
 from typing import Annotated
 
@@ -10,10 +10,16 @@ from fastapi import Header, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from rhapto.config import Settings
+from rhapto.engine.providers.llm import LLMProvider
+from rhapto.engine.providers.registry import build_llm
 from rhapto.services.enqueue import Enqueuer
 from rhapto.services.eventbus import EventBus
 from rhapto.services.jobtext import FetchText
 from rhapto.services.storage import PackageStorage
+
+# (provider, model, api_key) -> adapter. Injectable so the "test this key" endpoint can be
+# exercised without an SDK client or a real key.
+LlmFactory = Callable[[str, str, str], LLMProvider]
 
 
 @dataclass
@@ -24,6 +30,7 @@ class AppState:
     event_bus: EventBus
     storage: PackageStorage
     fetch_text: FetchText
+    llm_factory: LlmFactory = build_llm
     user_id: uuid.UUID | None = None
     engine: AsyncEngine | None = None
 
@@ -56,6 +63,10 @@ def get_storage(request: Request) -> PackageStorage:
 
 def get_fetch_text(request: Request) -> FetchText:
     return get_state(request).fetch_text
+
+
+def get_llm_factory(request: Request) -> LlmFactory:
+    return get_state(request).llm_factory
 
 
 async def current_user(

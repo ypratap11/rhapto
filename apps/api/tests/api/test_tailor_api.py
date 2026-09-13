@@ -46,7 +46,9 @@ def _events(raw: str) -> list[tuple[str, dict[str, Any]]]:
 
 
 @pytest.mark.usefixtures("imported_profile")
-async def test_tailor_runs_inline_and_task_succeeds(client: httpx.AsyncClient, fake_llm) -> None:  # type: ignore[no-untyped-def]
+async def test_tailor_runs_inline_and_task_succeeds(
+    client: httpx.AsyncClient, fake_llm, llm_resolver
+) -> None:  # type: ignore[no-untyped-def]
     fake_llm.script(demo_extract(), good_output())
     job_id = await _job(client)
     accepted = await client.post(f"/api/v1/jobs/{job_id}/tailor", json={})
@@ -64,6 +66,18 @@ async def test_tailor_runs_inline_and_task_succeeds(client: httpx.AsyncClient, f
         job["company"] == "ExampleCo"
         and job["extracted"]["title"] == "Data Platform Program Manager"
     )
+    # The worker picked its provider per task rather than reading one off the ctx.
+    assert len(llm_resolver.calls) == 1
+
+
+@pytest.mark.parametrize("env_llm_key", [""], indirect=True)
+async def test_tailor_is_409_when_no_llm_is_configured(client: httpx.AsyncClient) -> None:
+    job_id = await _job(client)
+    response = await client.post(f"/api/v1/jobs/{job_id}/tailor", json={})
+    assert response.status_code == 409
+    assert response.headers["content-type"].startswith("application/problem+json")
+    body = response.json()
+    assert body["code"] == "llm_not_configured" and "Settings" in body["detail"]
 
 
 @pytest.mark.usefixtures("imported_profile")

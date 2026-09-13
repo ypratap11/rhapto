@@ -933,11 +933,176 @@
         "title": "JobScoreOut",
         "type": "object"
       },
+      "LlmSettingsIn": {
+        "properties": {
+          "api_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Api Key"
+          },
+          "model": {
+            "title": "Model",
+            "type": "string"
+          },
+          "provider": {
+            "title": "Provider",
+            "type": "string"
+          }
+        },
+        "required": [
+          "provider",
+          "model"
+        ],
+        "title": "LlmSettingsIn",
+        "type": "object"
+      },
+      "LlmSettingsOut": {
+        "description": "What the user's LLM is right now. The key itself never leaves the server: only whether one\nis set, and its last four characters so the user can tell which key it is.",
+        "properties": {
+          "key_hint": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Key Hint"
+          },
+          "key_set": {
+            "title": "Key Set",
+            "type": "boolean"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "provider": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider"
+          },
+          "providers": {
+            "items": {
+              "$ref": "#/components/schemas/ProviderInfoOut"
+            },
+            "title": "Providers",
+            "type": "array"
+          },
+          "source": {
+            "enum": [
+              "settings",
+              "env",
+              "none"
+            ],
+            "title": "Source",
+            "type": "string"
+          }
+        },
+        "required": [
+          "provider",
+          "model",
+          "key_set",
+          "key_hint",
+          "source",
+          "providers"
+        ],
+        "title": "LlmSettingsOut",
+        "type": "object"
+      },
+      "LlmTestIn": {
+        "properties": {
+          "api_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Api Key"
+          },
+          "model": {
+            "title": "Model",
+            "type": "string"
+          },
+          "provider": {
+            "title": "Provider",
+            "type": "string"
+          }
+        },
+        "required": [
+          "provider",
+          "model"
+        ],
+        "title": "LlmTestIn",
+        "type": "object"
+      },
+      "LlmTestOut": {
+        "properties": {
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ok"
+        ],
+        "title": "LlmTestOut",
+        "type": "object"
+      },
       "MeOut": {
         "properties": {
           "email": {
             "title": "Email",
             "type": "string"
+          },
+          "llm_configured": {
+            "title": "Llm Configured",
+            "type": "boolean"
           },
           "user_id": {
             "format": "uuid",
@@ -947,7 +1112,8 @@
         },
         "required": [
           "email",
-          "user_id"
+          "user_id",
+          "llm_configured"
         ],
         "title": "MeOut",
         "type": "object"
@@ -1324,6 +1490,38 @@
           "error"
         ],
         "title": "PollRunOut",
+        "type": "object"
+      },
+      "ProviderInfoOut": {
+        "description": "One supported provider, for the Settings picker.",
+        "properties": {
+          "default": {
+            "title": "Default",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "models": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Models",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "models",
+          "default"
+        ],
+        "title": "ProviderInfoOut",
         "type": "object"
       },
       "ResumeBase": {
@@ -4674,6 +4872,212 @@
         "summary": "Put Watchlist",
         "tags": [
           "profile"
+        ]
+      }
+    },
+    "/api/v1/settings/llm": {
+      "delete": {
+        "operationId": "delete_llm_settings_endpoint_api_v1_settings_llm_delete",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Llm Settings Endpoint",
+        "tags": [
+          "settings"
+        ]
+      },
+      "get": {
+        "operationId": "get_llm_settings_endpoint_api_v1_settings_llm_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LlmSettingsOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Llm Settings Endpoint",
+        "tags": [
+          "settings"
+        ]
+      },
+      "put": {
+        "operationId": "put_llm_settings_api_v1_settings_llm_put",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LlmSettingsIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LlmSettingsOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Put Llm Settings",
+        "tags": [
+          "settings"
+        ]
+      }
+    },
+    "/api/v1/settings/llm/test": {
+      "post": {
+        "description": "Ask the provider for one tiny structured answer. Nothing is stored either way.",
+        "operationId": "test_llm_settings_api_v1_settings_llm_test_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LlmTestIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LlmTestOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Test Llm Settings",
+        "tags": [
+          "settings"
         ]
       }
     },

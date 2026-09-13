@@ -546,6 +546,45 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/settings/llm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Llm Settings Endpoint */
+        get: operations["get_llm_settings_endpoint_api_v1_settings_llm_get"];
+        /** Put Llm Settings */
+        put: operations["put_llm_settings_api_v1_settings_llm_put"];
+        post?: never;
+        /** Delete Llm Settings Endpoint */
+        delete: operations["delete_llm_settings_endpoint_api_v1_settings_llm_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/settings/llm/test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Test Llm Settings
+         * @description Ask the provider for one tiny structured answer. Nothing is stored either way.
+         */
+        post: operations["test_llm_settings_api_v1_settings_llm_test_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/tasks/{task_id}": {
         parameters: {
             query?: never;
@@ -923,10 +962,61 @@ export interface components {
             /** Track Id */
             track_id: string;
         };
+        /** LlmSettingsIn */
+        LlmSettingsIn: {
+            /** Api Key */
+            api_key?: string | null;
+            /** Model */
+            model: string;
+            /** Provider */
+            provider: string;
+        };
+        /**
+         * LlmSettingsOut
+         * @description What the user's LLM is right now. The key itself never leaves the server: only whether one
+         *     is set, and its last four characters so the user can tell which key it is.
+         */
+        LlmSettingsOut: {
+            /** Key Hint */
+            key_hint: string | null;
+            /** Key Set */
+            key_set: boolean;
+            /** Model */
+            model: string | null;
+            /** Provider */
+            provider: string | null;
+            /** Providers */
+            providers: components["schemas"]["ProviderInfoOut"][];
+            /**
+             * Source
+             * @enum {string}
+             */
+            source: "settings" | "env" | "none";
+        };
+        /** LlmTestIn */
+        LlmTestIn: {
+            /** Api Key */
+            api_key?: string | null;
+            /** Model */
+            model: string;
+            /** Provider */
+            provider: string;
+        };
+        /** LlmTestOut */
+        LlmTestOut: {
+            /** Error */
+            error?: string | null;
+            /** Model */
+            model?: string | null;
+            /** Ok */
+            ok: boolean;
+        };
         /** MeOut */
         MeOut: {
             /** Email */
             email: string;
+            /** Llm Configured */
+            llm_configured: boolean;
             /**
              * User Id
              * Format: uuid
@@ -1079,6 +1169,20 @@ export interface components {
              * Format: date-time
              */
             started_at: string;
+        };
+        /**
+         * ProviderInfoOut
+         * @description One supported provider, for the Settings picker.
+         */
+        ProviderInfoOut: {
+            /** Default */
+            default: string;
+            /** Id */
+            id: string;
+            /** Label */
+            label: string;
+            /** Models */
+            models: string[];
         };
         /** ResumeBase */
         ResumeBase: {
@@ -2864,6 +2968,136 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["WatchlistEntry"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_llm_settings_endpoint_api_v1_settings_llm_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LlmSettingsOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    put_llm_settings_api_v1_settings_llm_put: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LlmSettingsIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LlmSettingsOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_llm_settings_endpoint_api_v1_settings_llm_delete: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    test_llm_settings_api_v1_settings_llm_test_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LlmTestIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LlmTestOut"];
                 };
             };
             /** @description Validation Error */
