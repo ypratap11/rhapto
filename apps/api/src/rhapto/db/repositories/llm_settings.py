@@ -49,8 +49,13 @@ async def upsert_llm_settings(
         )
     )
     await session.execute(statement)
-    session.expire_all()
-    row = await get_llm_settings(session, user_id)
+    # Refresh only this row from the database: the identity map may hold a stale instance from an
+    # earlier read, and expiring the whole session would detach unrelated loaded objects.
+    row: LlmSettingsRow | None = await session.scalar(
+        select(LlmSettingsRow)
+        .where(LlmSettingsRow.user_id == user_id)
+        .execution_options(populate_existing=True)
+    )
     assert row is not None  # the upsert just wrote it
     return row
 
