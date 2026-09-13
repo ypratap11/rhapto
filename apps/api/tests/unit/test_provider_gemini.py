@@ -2,6 +2,7 @@ from types import SimpleNamespace
 from typing import Any
 
 import pytest
+from google import genai
 from google.genai import _transformers, errors, types
 from pydantic import BaseModel
 
@@ -90,7 +91,10 @@ async def test_gemini_omits_system_instruction_when_there_are_no_blocks() -> Non
 @pytest.mark.parametrize("schema", [JDExtract, ComposeOutput, TuneOutput])
 def test_the_sdk_converts_every_engine_schema_without_complaint(schema: type[BaseModel]) -> None:
     """Pins the SDK-owned conversion: `$defs` inlined, optional unions nullable, no forbidden keys."""
-    converted = _transformers.t_schema(None, schema)
+    # A real Developer-API client (no network: only its `vertexai` flag is read) so the SDK's
+    # unsupported-property check runs, exactly as it does on a live call.
+    client = genai.Client(api_key="sk-test")
+    converted = _transformers.t_schema(client._api_client, schema)
     assert isinstance(converted, types.Schema)
     assert converted.type == types.Type.OBJECT
     dumped = converted.model_dump(exclude_none=True, mode="json")
