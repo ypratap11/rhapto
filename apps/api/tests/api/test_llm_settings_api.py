@@ -248,13 +248,15 @@ async def test_post_test_reports_an_engine_error_as_not_ok(
 
 
 async def test_post_test_without_any_key_is_422(client: httpx.AsyncClient) -> None:
-    response = await client.post(f"{URL}/test", json={"provider": "gemini", "model": ""})
+    response = await client.post(
+        f"{URL}/test", json={"provider": "gemini", "model": "gemini-2.5-pro"}
+    )
     assert response.status_code == 422 and "Google Gemini" in response.json()["detail"]
     assert_no_key(response)
 
 
 async def test_settings_endpoints_require_the_bearer_token(anon_client: httpx.AsyncClient) -> None:
-    body = {"provider": "openai", "model": ""}
+    body = {"provider": "openai", "model": "gpt-5"}
     assert (await anon_client.get(URL)).status_code == 401
     assert (await anon_client.put(URL, json=body)).status_code == 401
     assert (await anon_client.delete(URL)).status_code == 401
@@ -276,3 +278,51 @@ async def test_an_unreadable_stored_key_is_a_409_not_a_500(
     assert response.json()["code"] == "llm_key_unreadable"
     assert "Settings" in response.json()["detail"]
     assert (await client.get("/api/v1/me")).json()["llm_configured"] is False
+
+
+@pytest.mark.parametrize("path", ["", "/test"])
+async def test_an_over_long_model_id_is_a_422_not_a_500(
+    client: httpx.AsyncClient, path: str
+) -> None:
+    """`llm_settings.model` is String(100). Without a bound on the schema the INSERT raises a
+    DBAPIError (varchar truncation), which is not an IntegrityError and so falls through to the
+    last-resort handler: the user gets "unexpected server error" for a typo in the free-text model
+    field, which the web app leaves unbounded."""
+    body = {"provider": "openai", "model": "g" * 101, "api_key": KEY}
+    response = await (
+        client.put(URL, json=body) if path == "" else client.post(f"{URL}{path}", json=body)
+    )
+    assert response.status_code == 422, response.text
+    assert ["model"] == [e["loc"][-1] for e in response.json()["errors"]]
+    assert_no_key(response)
+
+
+async def test_a_model_id_at_the_limit_is_accepted(client: httpx.AsyncClient) -> None:
+    """100 characters is what the column holds, so it must not be rejected."""
+    response = await _put(client, provider="openai", model="g" * 100, api_key=KEY)
+    assert response.status_code == 200 and response.json()["model"] == "g" * 100
+
+
+async def test_an_empty_model_id_is_a_422(client: httpx.AsyncClient) -> None:
+    response = await _put(client, provider="openai", model="", api_key=KEY)
+    assert response.status_code == 422
+    assert_no_key(response)
+
+
+async def test_the_unreadable_key_409_carries_the_provider_list(
+    app: FastAPI, client: httpx.AsyncClient
+) -> None:
+    """This 409 replaces the 200 that normally carries `providers`, and it is the one response the
+    Settings page gets on the screen where the user has to re-pick a provider — so it has to carry
+    the list itself rather than leave the web app mirroring the registry."""
+    await _put(client, provider="openai", model="gpt-5", api_key=KEY)
+    app.state.rhapto.settings.rhapto_secret_key = base64.urlsafe_b64encode(b"x" * 32).decode()
+    body = (await client.get(URL)).json()
+    assert body["code"] == "llm_key_unreadable"
+    assert [p["id"] for p in body["providers"]] == ["anthropic", "openai", "gemini"]
+    assert body["providers"][1] == {
+        "id": "openai",
+        "label": "OpenAI",
+        "models": ["gpt-5", "gpt-5-mini"],
+        "default": "gpt-5",
+    }

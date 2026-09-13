@@ -19,17 +19,12 @@ from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from rhapto.api.deps import LlmFactory, current_user, get_llm_factory, get_session, get_settings_dep
-from rhapto.api.schemas import (
-    LlmSettingsIn,
-    LlmSettingsOut,
-    LlmTestIn,
-    LlmTestOut,
-    ProviderInfoOut,
-)
+from rhapto.api.providers import provider_list
+from rhapto.api.schemas import LlmSettingsIn, LlmSettingsOut, LlmTestIn, LlmTestOut
 from rhapto.config import Settings
 from rhapto.db.repositories.llm_settings import delete_llm_settings, upsert_llm_settings
 from rhapto.engine.providers.llm import Message, SystemBlock
-from rhapto.engine.providers.registry import PROVIDERS, ProviderInfo
+from rhapto.engine.providers.registry import PROVIDERS, ProviderInfo, model_for
 from rhapto.services.llm import env_llm_config, key_hint, redact, stored_llm_config
 from rhapto.services.secrets import encrypt
 
@@ -47,34 +42,11 @@ class Ping(BaseModel):
     ok: bool
 
 
-def provider_list() -> list[ProviderInfoOut]:
-    return [
-        ProviderInfoOut(id=i.id, label=i.label, models=list(i.models), default=i.default)
-        for i in PROVIDERS.values()
-    ]
-
-
 def known_provider(provider: str) -> ProviderInfo:
     info = PROVIDERS.get(provider)
     if info is None:
         raise HTTPException(status_code=422, detail=f"unknown provider {provider!r}")
     return info
-
-
-def model_for(info: ProviderInfo, requested: str) -> str:
-    """The model to use for this provider.
-
-    An unlisted id passes through — the registry's lists are suggestions for the picker, not a
-    whitelist, so a model released after this build still works. But an id that is in *another*
-    provider's list is the previous selection left behind by the form, and storing it would make
-    every later run fail at the provider, so it gives way to this provider's default.
-    """
-    if not requested:
-        return info.default
-    if requested in info.models:
-        return requested
-    belongs_elsewhere = any(requested in other.models for other in PROVIDERS.values())
-    return info.default if belongs_elsewhere else requested
 
 
 def env_key_for(settings: Settings, info: ProviderInfo) -> str:
@@ -142,7 +114,7 @@ async def put_llm_settings(
         session,
         user_id,
         provider=info.id,
-        model=model_for(info, body.model),
+        model=model_for(info.id, body.model),
         api_key_encrypted=encrypt(settings, api_key),
     )
     await session.commit()
@@ -170,7 +142,7 @@ async def test_llm_settings(
     """Ask the provider for one tiny structured answer. Nothing is stored either way."""
     info = known_provider(body.provider)
     api_key = await _key_for_write(session, settings, user_id, info, body.api_key)
-    model = model_for(info, body.model)
+    model = model_for(info.id, body.model)
     try:
         llm = llm_factory(info.id, model, api_key)
         await llm.complete_structured(

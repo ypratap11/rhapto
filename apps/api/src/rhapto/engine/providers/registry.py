@@ -45,8 +45,35 @@ PROVIDERS: dict[str, ProviderInfo] = {
 }
 
 
+# {model id: the provider that curates it}. Precomputed once so `model_for` is a dict lookup
+# rather than a scan of every provider's list on each write.
+_MODEL_OWNER: dict[str, str] = {
+    model: info.id for info in PROVIDERS.values() for model in info.models
+}
+
+
 def provider_ids() -> list[str]:
     return list(PROVIDERS)
+
+
+def model_for(provider: str, model: str) -> str:
+    """The model id to actually use for `provider`.
+
+    Empty means "whatever this provider's default is". An unlisted id passes through — the curated
+    lists are suggestions for the picker and the env, not a whitelist, so a model released after
+    this build still works. But an id that belongs to a *different* provider's list is a leftover
+    (a form that kept its previous selection, or RHAPTO_LLM_MODEL left over from another
+    RHAPTO_LLM_PROVIDER), and sending it would make every run fail at the provider: it gives way to
+    this provider's default. An unknown provider has no opinion to offer, so the id is returned
+    unchanged; callers validate the provider first.
+    """
+    info = PROVIDERS.get(provider)
+    if info is None:
+        return model
+    if not model:
+        return info.default
+    owner = _MODEL_OWNER.get(model)
+    return info.default if owner is not None and owner != provider else model
 
 
 def build_llm(provider: str, model: str, api_key: str) -> LLMProvider:

@@ -48,6 +48,28 @@ def _reset_root_logging_handlers() -> Iterator[None]:
         root.setLevel(level)
 
 
+# Every variable the LLM settings read. `Settings(_env_file=None)` only disables the dotenv file;
+# pydantic-settings still reads os.environ, so a contributor with their own provider key exported
+# would otherwise have it decide what these tests see — and a failing assertion would print it into
+# the pytest report, the terminal, any saved log and any CI job where it is an injected secret.
+# Cleared for every test so the suite starts from a known-empty environment; tests that want a value
+# set it themselves.
+PROVIDER_ENV_VARS = (
+    "ANTHROPIC_API_KEY",
+    "OPENAI_API_KEY",
+    "GEMINI_API_KEY",
+    "RHAPTO_LLM_PROVIDER",
+    "RHAPTO_LLM_MODEL",
+    "RHAPTO_SECRET_KEY",
+)
+
+
+@pytest.fixture(autouse=True)
+def _no_provider_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    for name in PROVIDER_ENV_VARS:
+        monkeypatch.delenv(name, raising=False)
+
+
 @pytest.fixture
 def repo_root() -> Path:
     return REPO_ROOT

@@ -3,7 +3,7 @@ import pytest
 from rhapto.engine.providers.anthropic import AnthropicProvider
 from rhapto.engine.providers.gemini import GeminiProvider
 from rhapto.engine.providers.openai import OpenAIProvider
-from rhapto.engine.providers.registry import PROVIDERS, build_llm, provider_ids
+from rhapto.engine.providers.registry import PROVIDERS, build_llm, model_for, provider_ids
 from rhapto.engine.types import EngineError
 
 
@@ -49,3 +49,27 @@ def test_build_llm_passes_unlisted_model_ids_through_unchanged() -> None:
 def test_build_llm_rejects_an_unknown_provider() -> None:
     with pytest.raises(EngineError, match="unknown provider 'nope'"):
         build_llm("nope", "gpt-5", "sk-test-1234")
+
+
+@pytest.mark.parametrize(
+    ("provider_id", "requested", "expected"),
+    [
+        # Empty means "this provider's default".
+        ("openai", "", "gpt-5"),
+        ("anthropic", "", "claude-sonnet-5"),
+        # Its own curated ids survive untouched.
+        ("openai", "gpt-5-mini", "gpt-5-mini"),
+        # An id nobody curates is a newer model, not a mistake: pass it through.
+        ("openai", "gpt-5-pro-2026-01-01", "gpt-5-pro-2026-01-01"),
+        # An id another provider curates is a leftover selection: use this provider's default.
+        ("openai", "claude-sonnet-5", "gpt-5"),
+        ("anthropic", "gemini-2.5-flash", "claude-sonnet-5"),
+        ("gemini", "gpt-5", "gemini-2.5-pro"),
+        # Unknown providers have no opinion to offer; callers validate the id first.
+        ("nope", "claude-sonnet-5", "claude-sonnet-5"),
+    ],
+)
+def test_model_for_only_replaces_a_model_that_belongs_to_another_provider(
+    provider_id: str, requested: str, expected: str
+) -> None:
+    assert model_for(provider_id, requested) == expected

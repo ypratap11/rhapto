@@ -25,11 +25,17 @@ from rhapto.services.discovery.poller import poll_sources
 from rhapto.services.documents import load_source
 from rhapto.services.enqueue import TaskFn
 from rhapto.services.eventbus import EventBus, task_channel
-from rhapto.services.llm import LLMNotConfiguredError, provider_secrets, redact, resolve_llm
+from rhapto.services.llm import (
+    KEY_UNREADABLE_MESSAGE,
+    LLMNotConfiguredError,
+    provider_secrets,
+    redact,
+    resolve_llm,
+)
 from rhapto.services.packaging import persist_package
 from rhapto.services.profile_sync import block_row_to_model, load_profile_from_db
 from rhapto.services.scoring import rescore_user, score_and_store
-from rhapto.services.secrets import SecretsError
+from rhapto.services.secrets import KeyUnreadableError, SecretsError
 from rhapto.services.storage import PackageStorage
 
 logger = logging.getLogger("rhapto.worker")
@@ -172,13 +178,18 @@ async def tailor_job(ctx: dict[str, Any], task_id: str) -> None:
                 failed_tid: uuid.UUID | None = uuid.UUID(task_id)
             except ValueError:
                 failed_tid = None
-            detail = str(exc) if isinstance(exc, SETUP_ERRORS) else f"{type(exc).__name__}: {exc}"
+            # `KeyUnreadableError` carries the operator's sentence ("RHAPTO_SECRET_KEY changed"),
+            # which names an env var the end user cannot act on; the Jobs page gets the same
+            # re-enter-your-key wording the API sends. Every other SecretsError is the operator's
+            # to fix and keeps its own message, exactly as `api/errors.py` decides it.
+            reportable = KEY_UNREADABLE_MESSAGE if isinstance(exc, KeyUnreadableError) else str(exc)
+            detail = reportable if isinstance(exc, SETUP_ERRORS) else f"{type(exc).__name__}: {exc}"
             if failed_tid is not None:
                 failed_task = await session.get(Task, failed_tid)
                 if failed_task is not None:
                     task_repo.mark_failed(failed_task, redact(detail, *secrets))
                     await session.commit()
-            await bus.publish(channel, {"event": "error", "message": redact(str(exc), *secrets)})
+            await bus.publish(channel, {"event": "error", "message": redact(reportable, *secrets)})
 
 
 async def render_package_pdf(ctx: dict[str, Any], package_id: str) -> None:

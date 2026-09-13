@@ -252,3 +252,35 @@ async def test_provider_secrets_survives_an_unreadable_stored_key(
     monkeypatch.setattr(llm_service, "stored_llm_config", boom)
     settings = _settings(rhapto_llm_provider="anthropic", anthropic_api_key="sk-test-env")
     assert await provider_secrets(_session(), settings, USER_ID) == ("sk-test-env",)
+
+
+def test_env_llm_config_drops_a_model_that_belongs_to_another_provider() -> None:
+    """Copying .env.example and flipping RHAPTO_LLM_PROVIDER must not send Anthropic's model id to
+    OpenAI: every run would fail at the provider while /me still reported llm_configured."""
+    config = env_llm_config(
+        _settings(
+            rhapto_llm_provider="openai",
+            openai_api_key="sk-test-o",
+            rhapto_llm_model="claude-sonnet-5",
+        )
+    )
+    assert config is not None and config.model == "gpt-5"
+
+
+def test_env_llm_config_still_honours_an_uncurated_model_id() -> None:
+    """A model released after this build is not a mistake; only another provider's id is."""
+    config = env_llm_config(
+        _settings(
+            rhapto_llm_provider="openai",
+            openai_api_key="sk-test-o",
+            rhapto_llm_model="gpt-5-pro-2026-01-01",
+        )
+    )
+    assert config is not None and config.model == "gpt-5-pro-2026-01-01"
+
+
+def test_redact_leaves_a_short_secret_alone() -> None:
+    """A one-character "key" occurs inside ordinary words, so substituting it would garble every
+    provider message the user is shown without protecting anything."""
+    assert redact("Rate limit reached for gpt-5", "a") == "Rate limit reached for gpt-5"
+    assert redact("quota for sk-short", "sk-short") == "quota for …hort"

@@ -23,10 +23,20 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from rhapto.config import Settings
 from rhapto.db.repositories.llm_settings import get_llm_settings
 from rhapto.engine.providers.llm import LLMProvider
-from rhapto.engine.providers.registry import PROVIDERS, build_llm
+from rhapto.engine.providers.registry import PROVIDERS, build_llm, model_for
 from rhapto.services.secrets import SecretsError, decrypt
 
 NOT_CONFIGURED_MESSAGE = "No LLM configured. Add a key in Settings."
+# What the *user* is told when their stored key no longer decrypts. Lives here, not in the API, so
+# the worker can report the same sentence on a task row without reaching into `rhapto.api`. The
+# operator-facing text (which names RHAPTO_SECRET_KEY) stays on the exception.
+KEY_UNREADABLE_MESSAGE = (
+    "Your stored API key can no longer be decrypted (the server secret changed). "
+    "Re-enter it in Settings."
+)
+# Below this, a "secret" is short enough to occur inside ordinary words, so redacting it would
+# garble the message it is meant to protect. Real provider keys are decades longer.
+MIN_REDACTABLE_SECRET = 8
 
 
 class LLMNotConfiguredError(Exception):
@@ -50,10 +60,11 @@ def redact(message: str, *secrets: str) -> str:
 
     Provider SDKs quote the submitted key in their own error text ("Incorrect API key provided:
     …"), and that text is shown to the user, stored on task rows and published on the event bus.
-    Run it through here first. A pathologically short secret can over-match ordinary words; that is
-    the safe direction, and real keys are never that short."""
+    Run it through here first. Secrets shorter than `MIN_REDACTABLE_SECRET` are left alone: nothing
+    stops a user saving a one-character key, and substituting it would turn every later provider
+    error for them into unreadable confetti rather than protecting anything worth protecting."""
     for secret in secrets:
-        if secret:
+        if len(secret) >= MIN_REDACTABLE_SECRET:
             message = message.replace(secret, key_hint(secret))
     return message
 
@@ -78,9 +89,12 @@ def env_llm_config(settings: Settings) -> LlmConfig | None:
     api_key = str(getattr(settings, info.env_key.lower(), "") or "")
     if not api_key:
         return None
+    # RHAPTO_LLM_MODEL pairs with RHAPTO_LLM_PROVIDER. Someone who flips the provider and leaves
+    # the model behind would otherwise send e.g. claude-sonnet-5 to OpenAI and have every run fail
+    # at the provider, so a model belonging to another provider gives way to this one's default.
     return LlmConfig(
         provider=info.id,
-        model=settings.rhapto_llm_model or info.default,
+        model=model_for(info.id, settings.rhapto_llm_model),
         api_key=api_key,
         source="env",
     )

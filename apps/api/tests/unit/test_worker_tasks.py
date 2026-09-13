@@ -20,8 +20,9 @@ from rhapto.engine.tune import ProposedEdit, TuneOutput
 from rhapto.services import storage as storage_module
 from rhapto.services.documents import store_resume_document
 from rhapto.services.eventbus import InMemoryEventBus
-from rhapto.services.llm import LLMNotConfiguredError
+from rhapto.services.llm import KEY_UNREADABLE_MESSAGE, LLMNotConfiguredError
 from rhapto.services.profile_sync import import_profile_dir
+from rhapto.services.secrets import KeyUnreadableError, SecretsError
 from rhapto.services.storage import PackageStorage
 from rhapto.worker import tasks as worker_tasks
 from rhapto.worker.tasks import TASKS, embed_blocks, render_package_pdf, tailor_job
@@ -243,6 +244,49 @@ async def test_tailor_job_redacts_the_key_from_a_provider_failure(
         assert task.error == "Incorrect API key provided: …1234"
     assert bus.published[-1][1]["message"] == "Incorrect API key provided: …1234"
     assert "sk-test" not in repr(bus.published)
+
+
+async def test_tailor_job_reports_the_user_facing_message_for_an_unreadable_key(
+    session_factory, user: User, demo_profile_dir: Path, tmp_path: Path
+) -> None:  # type: ignore[no-untyped-def]
+    """A task enqueued before the server secret rotated fails here, and the Jobs page is where the
+    user reads why. `KeyUnreadableError` carries the operator's sentence, which names
+    RHAPTO_SECRET_KEY and tells the user nothing they can do; both sinks get the API's wording."""
+    _, task_id = await _setup(session_factory, user, demo_profile_dir)
+    bus, storage = InMemoryEventBus(), PackageStorage(tmp_path / "pkg")
+    ctx = _ctx(session_factory, FakeLLMProvider([]), bus, storage)
+
+    async def rotated(session: Any, settings: Any, user_id: uuid.UUID) -> None:
+        raise KeyUnreadableError("stored key cannot be decrypted; RHAPTO_SECRET_KEY changed")
+
+    ctx["llm_resolver"] = rotated
+    await tailor_job(ctx, task_id=str(task_id))
+    async with session_factory() as session:
+        task = await task_repo.get_task(session, user.id, task_id)
+        assert task is not None and task.status == "failed"
+        assert task.error == KEY_UNREADABLE_MESSAGE
+    assert bus.published[-1][1] == {"event": "error", "message": KEY_UNREADABLE_MESSAGE}
+    assert "RHAPTO_SECRET_KEY" not in repr(bus.published)
+
+
+async def test_tailor_job_keeps_the_operator_message_for_a_misconfigured_secret(
+    session_factory, user: User, demo_profile_dir: Path, tmp_path: Path
+) -> None:  # type: ignore[no-untyped-def]
+    """The other half of SecretsError is the operator's to fix and keeps its own hint, exactly as
+    `api/errors.py` decides it."""
+    _, task_id = await _setup(session_factory, user, demo_profile_dir)
+    bus, storage = InMemoryEventBus(), PackageStorage(tmp_path / "pkg")
+    ctx = _ctx(session_factory, FakeLLMProvider([]), bus, storage)
+
+    async def misconfigured(session: Any, settings: Any, user_id: uuid.UUID) -> None:
+        raise SecretsError("RHAPTO_SECRET_KEY is not a valid Fernet key; generate one with: ...")
+
+    ctx["llm_resolver"] = misconfigured
+    await tailor_job(ctx, task_id=str(task_id))
+    async with session_factory() as session:
+        task = await task_repo.get_task(session, user.id, task_id)
+        assert task is not None and task.error is not None
+        assert "not a valid Fernet key" in task.error
 
 
 async def test_tailor_job_with_bad_task_id_publishes_error(session_factory, tmp_path: Path) -> None:  # type: ignore[no-untyped-def]

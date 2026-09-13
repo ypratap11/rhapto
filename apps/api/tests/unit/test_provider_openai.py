@@ -4,14 +4,13 @@ from typing import Any
 import httpx2
 import openai
 import pytest
-from openai.lib._parsing._completions import type_to_response_format_param
 from openai.types.chat import ChatCompletion
 from pydantic import BaseModel
 
 from rhapto.engine.compose import ComposeOutput
 from rhapto.engine.providers.errors import ProviderAuthError
 from rhapto.engine.providers.llm import MalformedOutputError, Message, SystemBlock
-from rhapto.engine.providers.openai import OpenAIProvider
+from rhapto.engine.providers.openai import OpenAIProvider, _strict_schema
 from rhapto.engine.tune import TuneOutput
 from rhapto.engine.types import EngineError
 from rhapto.models.jd_extract import JDExtract
@@ -37,28 +36,36 @@ def _status_error(cls: type[openai.APIStatusError], status: int, message: str, *
 
 
 class _FakeCompletions:
-    """Stands in for ``client.chat.completions``; records the kwargs the adapter sent."""
+    """Stands in for ``client.chat.completions``; records the kwargs the adapter sent.
+
+    ``create``, not ``parse``: the adapter builds the strict ``json_schema`` response format itself
+    and parses the JSON back, so the fake returns raw content the way the API does."""
 
     def __init__(
         self,
         *,
-        parsed: Any = EXTRACT,
+        content: str | None = None,
         refusal: str | None = None,
         error: Exception | None = None,
         usage: Any = None,
+        finish_reason: str | None = "stop",
     ) -> None:
-        self._parsed = parsed
+        self._content = EXTRACT.model_dump_json() if content is None else content
         self._refusal = refusal
         self._error = error
         self._usage = usage
+        self._finish_reason = finish_reason
         self.kwargs: dict[str, Any] = {}
 
-    async def parse(self, **kwargs: Any) -> Any:
+    async def create(self, **kwargs: Any) -> Any:
         self.kwargs = kwargs
         if self._error is not None:
             raise self._error
-        message = SimpleNamespace(parsed=self._parsed, refusal=self._refusal)
-        return SimpleNamespace(choices=[SimpleNamespace(message=message)], usage=self._usage)
+        message = SimpleNamespace(content=self._content, refusal=self._refusal)
+        return SimpleNamespace(
+            choices=[SimpleNamespace(message=message, finish_reason=self._finish_reason)],
+            usage=self._usage,
+        )
 
 
 def _provider(completions: _FakeCompletions, model: str = "gpt-5") -> OpenAIProvider:
@@ -79,7 +86,10 @@ async def test_openai_returns_the_parsed_value_and_usage() -> None:
     assert result.usage.cache_read_input_tokens == 64
     kw = completions.kwargs
     assert kw["model"] == "gpt-5"
-    assert kw["response_format"] is JDExtract
+    response_format = kw["response_format"]
+    assert response_format["type"] == "json_schema"
+    assert response_format["json_schema"]["name"] == "JDExtract"
+    assert response_format["json_schema"]["strict"] is True
     assert kw["messages"] == [
         {"role": "system", "content": "rules\n\nblocks"},
         {"role": "user", "content": "go"},
@@ -116,16 +126,52 @@ async def test_openai_reports_zero_usage_when_the_response_has_none() -> None:
 
 
 async def test_openai_refusal_is_malformed_output() -> None:
-    provider = _provider(_FakeCompletions(parsed=None, refusal="I cannot help with that"))
+    provider = _provider(_FakeCompletions(content="", refusal="I cannot help with that"))
     with pytest.raises(MalformedOutputError, match="cannot help"):
         await provider.complete_structured(
             system=[], messages=[Message(role="user", content="go")], output_schema=JDExtract
         )
 
 
-async def test_openai_missing_parsed_value_is_malformed_output() -> None:
-    provider = _provider(_FakeCompletions(parsed=None))
-    with pytest.raises(MalformedOutputError, match="JDExtract"):
+async def test_openai_empty_content_is_malformed_output() -> None:
+    provider = _provider(_FakeCompletions(content=""))
+    with pytest.raises(MalformedOutputError, match="no content for JDExtract"):
+        await provider.complete_structured(
+            system=[], messages=[Message(role="user", content="go")], output_schema=JDExtract
+        )
+
+
+@pytest.mark.parametrize("content", ["not json at all", "{}", '{"company": 4}', "[]"])
+async def test_openai_content_that_is_not_the_schema_is_malformed_output(content: str) -> None:
+    """Strict mode should make this impossible; the pipeline still gets a retryable error if not."""
+    provider = _provider(_FakeCompletions(content=content))
+    with pytest.raises(MalformedOutputError, match="not a valid JDExtract"):
+        await provider.complete_structured(
+            system=[], messages=[Message(role="user", content="go")], output_schema=JDExtract
+        )
+
+
+async def test_openai_parses_a_tune_output_the_model_returned() -> None:
+    """A full pipeline schema, not just the small one: nested lists and all."""
+    expected = TuneOutput(edits=[], cover_note="hello", change_log="nothing", answers=[])
+    completions = _FakeCompletions(content=expected.model_dump_json())
+    result = await _provider(completions).complete_structured(
+        system=[], messages=[Message(role="user", content="go")], output_schema=TuneOutput
+    )
+    assert result.value == expected
+    assert completions.kwargs["response_format"]["json_schema"]["name"] == "TuneOutput"
+
+
+@pytest.mark.parametrize(
+    ("finish_reason", "expected"),
+    [("length", "token cap"), ("content_filter", "content filter")],
+)
+async def test_openai_finish_reasons_are_retryable_malformed_output(
+    finish_reason: str, expected: str
+) -> None:
+    """`create` reports these on the choice rather than raising, so the adapter maps them itself."""
+    provider = _provider(_FakeCompletions(finish_reason=finish_reason))
+    with pytest.raises(MalformedOutputError, match=expected):
         await provider.complete_structured(
             system=[], messages=[Message(role="user", content="go")], output_schema=JDExtract
         )
@@ -204,13 +250,67 @@ async def test_openai_other_sdk_failures_become_plain_engine_errors(error: Excep
     assert excinfo.value.__cause__ is error
 
 
+_NAME_MAPS = {"properties", "$defs", "definitions"}
+
+
+def _objects(node: Any) -> list[dict[str, Any]]:
+    """Every JSON Schema object node in `node`, including the root."""
+    found: list[dict[str, Any]] = []
+    if isinstance(node, list):
+        for item in node:
+            found.extend(_objects(item))
+        return found
+    if not isinstance(node, dict):
+        return found
+    if node.get("type") == "object":
+        found.append(node)
+    for key, value in node.items():
+        if key in _NAME_MAPS and isinstance(value, dict):
+            for sub in value.values():
+                found.extend(_objects(sub))
+        else:
+            found.extend(_objects(value))
+    return found
+
+
+def _keywords(node: Any) -> set[str]:
+    """Every *schema keyword* in `node` — the keys under `properties`/`$defs` are names, not
+    keywords, so they are skipped (JDExtract has a field called `title`)."""
+    if isinstance(node, list):
+        return {k for item in node for k in _keywords(item)}
+    if not isinstance(node, dict):
+        return set()
+    found = set(node)
+    for key, value in node.items():
+        if key in _NAME_MAPS and isinstance(value, dict):
+            for sub in value.values():
+                found |= _keywords(sub)
+        else:
+            found |= _keywords(value)
+    return found
+
+
 @pytest.mark.parametrize("schema", [JDExtract, ComposeOutput, TuneOutput])
 def test_engine_schemas_convert_to_a_strict_openai_response_format(schema: type[BaseModel]) -> None:
-    """The SDK rewrites `required` to every property and forbids extras; defaulted fields are fine."""
-    param = type_to_response_format_param(schema)
-    assert isinstance(param, dict)
-    json_schema = param["json_schema"]
-    assert json_schema["strict"] is True
-    body = json_schema["schema"]
-    assert body["additionalProperties"] is False
-    assert set(body["required"]) == set(body["properties"])
+    """Every property required, no extras at any depth, and no `default` anywhere.
+
+    `default` is the keyword the SDK's converter leaves behind and OpenAI's strict validator does
+    not document; the engine's schemas are full of defaulted fields, so a rejection would land on a
+    user's first real tailoring run rather than here."""
+    body = _strict_schema(schema)
+    keywords = _keywords(body)
+    assert "default" not in keywords
+    assert "title" not in keywords
+    nodes = _objects(body)
+    assert len(nodes) >= 1
+    for node in nodes:
+        assert node["additionalProperties"] is False, node
+        assert set(node["required"]) == set(node["properties"]), node
+
+
+def test_the_strict_schema_keeps_a_property_named_like_a_dropped_keyword() -> None:
+    """`title` is both a schema keyword and a JDExtract field; only the keyword may go."""
+    body = _strict_schema(JDExtract)
+    assert "title" in body["properties"]
+    assert "title" not in body
+    assert "title" not in body["properties"]["title"]

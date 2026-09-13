@@ -11,16 +11,13 @@ from fastapi.responses import JSONResponse
 from sqlalchemy.exc import IntegrityError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
+from rhapto.api.providers import provider_list
 from rhapto.engine.types import EngineError, ProfileError
 from rhapto.services.jobtext import JobTextError
-from rhapto.services.llm import LLMNotConfiguredError
+from rhapto.services.llm import KEY_UNREADABLE_MESSAGE, LLMNotConfiguredError
 from rhapto.services.secrets import KeyUnreadableError, SecretsError
 
 PROBLEM = "application/problem+json"
-KEY_UNREADABLE_MESSAGE = (
-    "Your stored API key can no longer be decrypted (the server secret changed). "
-    "Re-enter it in Settings."
-)
 logger = logging.getLogger("rhapto.api")
 
 
@@ -106,7 +103,17 @@ def install_error_handlers(app: FastAPI) -> None:
         # "generate one with ..." hint.
         logger.warning("provider key secret problem: %s", exc)
         detail = KEY_UNREADABLE_MESSAGE if isinstance(exc, KeyUnreadableError) else str(exc)
-        return problem(409, "Conflict", detail, code="llm_key_unreadable")
+        # `providers` rides along because this 409 is what `GET /settings/llm` answers instead of
+        # the 200 that normally carries the list, and the Settings page still has to render its
+        # picker so the user can re-enter a key. Without it the web app needs its own copy of the
+        # registry for exactly this screen.
+        return problem(
+            409,
+            "Conflict",
+            detail,
+            code="llm_key_unreadable",
+            providers=[p.model_dump() for p in provider_list()],
+        )
 
     @app.exception_handler(EngineError)
     async def _engine(request: Request, exc: EngineError) -> JSONResponse:

@@ -947,10 +947,13 @@
             "title": "Api Key"
           },
           "model": {
+            "maxLength": 100,
+            "minLength": 1,
             "title": "Model",
             "type": "string"
           },
           "provider": {
+            "maxLength": 20,
             "title": "Provider",
             "type": "string"
           }
@@ -1044,10 +1047,13 @@
             "title": "Api Key"
           },
           "model": {
+            "maxLength": 100,
+            "minLength": 1,
             "title": "Model",
             "type": "string"
           },
           "provider": {
+            "maxLength": 20,
             "title": "Provider",
             "type": "string"
           }

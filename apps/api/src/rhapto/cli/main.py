@@ -24,7 +24,7 @@ from rhapto.engine.pipeline import LLMBudgetExceeded, TailorResult, tailor
 from rhapto.engine.providers.embeddings import EmbeddingProvider, FastEmbedProvider
 from rhapto.engine.providers.fake import FakeEmbeddingProvider
 from rhapto.engine.providers.llm import LLMProvider, MalformedOutputError
-from rhapto.engine.providers.registry import PROVIDERS, build_llm, provider_ids
+from rhapto.engine.providers.registry import PROVIDERS, build_llm, model_for, provider_ids
 from rhapto.engine.render.pdf import PdfRenderError, convert_docx_to_pdf, soffice_available
 from rhapto.engine.scoring import best_track, bucket_for, score_job, track_text
 from rhapto.engine.types import Profile, ProfileError, TailorRequest
@@ -65,11 +65,11 @@ def build_providers(
     api_key = str(getattr(settings, info.env_key.lower(), "") or "")
     if not api_key:
         raise typer.BadParameter(f"{info.env_key} is not set; put it in .env or the environment")
-    # RHAPTO_LLM_MODEL names a model for RHAPTO_LLM_PROVIDER; --provider somewhere else leaves it
-    # behind rather than sending "claude-sonnet-5" to OpenAI.
-    env_model = settings.rhapto_llm_model if chosen == settings.rhapto_llm_provider else ""
+    # RHAPTO_LLM_MODEL names a model for RHAPTO_LLM_PROVIDER; `model_for` leaves it behind when
+    # --provider points somewhere else rather than sending "claude-sonnet-5" to OpenAI, and fills in
+    # the provider's default when neither the flag nor the env names one.
     return Providers(
-        llm=build_llm(info.id, model or env_model or info.default, api_key),
+        llm=build_llm(info.id, model_for(info.id, model or settings.rhapto_llm_model), api_key),
         embedder=FastEmbedProvider(settings.rhapto_embedding_model),
     )
 

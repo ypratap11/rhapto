@@ -448,3 +448,26 @@ def test_tailor_corrupt_document_exits_1(workspace: Path, monkeypatch: pytest.Mo
     )
     assert result.exit_code == 1
     assert "valid .docx" in result.output
+
+
+def test_build_providers_drops_an_env_model_belonging_to_the_chosen_providers_rival() -> None:
+    """The .env-only case the old `chosen == rhapto_llm_provider` guard missed: RHAPTO_LLM_PROVIDER
+    and RHAPTO_LLM_MODEL disagree, so the model must give way to the chosen provider's default
+    rather than reaching OpenAI as "claude-sonnet-5"."""
+    from rhapto.config import Settings
+
+    settings = Settings(
+        _env_file=None,
+        rhapto_llm_provider="openai",
+        rhapto_llm_model="claude-sonnet-5",
+        openai_api_key="sk-test-o",
+    )
+    assert cli.build_providers(settings).llm.model == "gpt-5"
+    # An id no provider curates is a newer model, not a leftover: it still passes through.
+    newer = Settings(
+        _env_file=None,
+        rhapto_llm_provider="openai",
+        rhapto_llm_model="gpt-5-pro-2026-01-01",
+        openai_api_key="sk-test-o",
+    )
+    assert cli.build_providers(newer).llm.model == "gpt-5-pro-2026-01-01"

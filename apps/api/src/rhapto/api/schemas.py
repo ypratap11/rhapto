@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, field_validator, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from rhapto.db.models import APPLICATION_STATUSES
 from rhapto.models.guardrail_report import GuardrailReport
@@ -46,16 +46,24 @@ class LlmSettingsOut(BaseModel):
     providers: list[ProviderInfoOut]
 
 
+# `llm_settings.model` is String(100) and `provider` is a registry id, so anything longer is a
+# typo or a probe. Bounding it here makes it a 422 naming the field; without the bound an over-long
+# model id reaches the INSERT and comes back as an opaque 500 (varchar truncation is a DBAPIError,
+# not an IntegrityError, so nothing but the last-resort handler catches it).
+ModelIdIn = Field(min_length=1, max_length=100)
+ProviderIdIn = Field(max_length=20)
+
+
 class LlmSettingsIn(BaseModel):
-    provider: str
-    model: str
+    provider: str = ProviderIdIn
+    model: str = ModelIdIn
     # Omitted means "keep the key I already have" (or the environment's, for this provider).
     api_key: str | None = None
 
 
 class LlmTestIn(BaseModel):
-    provider: str
-    model: str
+    provider: str = ProviderIdIn
+    model: str = ModelIdIn
     api_key: str | None = None
 
 
