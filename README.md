@@ -117,6 +117,10 @@ The Jobs page shows "Set up your AI provider" until one is configured.
 plus `RHAPTO_LLM_MODEL` if you want a non-default model (change both together). The CLI
 (`rhapto tailor --provider openai --model gpt-5`) always reads from `.env`, since it has no Settings UI.
 
+Prompt caching: Rhapto marks the static prompt (rules and your document) for caching. Anthropic honours that
+mark explicitly; OpenAI and Gemini cache prompt prefixes automatically, so their cache-creation token counts
+always read 0 while cache reads still show up.
+
 Development: from `apps/web`, `pnpm install`, `pnpm dev` (http://localhost:3000), `pnpm test`, `pnpm typecheck`,
 `pnpm lint`, `pnpm build`. After changing the API, run `bash scripts/codegen.sh` to refresh
 `packages/schemas/openapi.json` and the generated client types.
