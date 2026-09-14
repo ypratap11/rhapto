@@ -111,7 +111,7 @@ async def test_one_search_per_keyword_and_dedupe_across_keywords() -> None:
     )
     postings = await get_source("workday").fetch(http, board=BOARD, keywords=["data", "ETL"])
     assert http.searches == [("data", 0), ("ETL", 0)]
-    assert [p.external_id for p in postings] == ["JR0001", "JR0002"]
+    assert [p.external_id for p in postings] == ["exampleco:JR0001", "exampleco:JR0002"]
     # the shared posting's detail is fetched once, not once per keyword
     assert http.calls.count(f"{SEARCH_URL[: -len('/jobs')]}{shared['externalPath']}") == 1
 
@@ -140,7 +140,7 @@ async def test_keywords_match_title_first_then_description() -> None:
         },
     )
     postings = await get_source("workday").fetch(http, board=BOARD, keywords=["GenAI"])
-    assert [p.external_id for p in postings] == ["JR0001", "JR0002"]
+    assert [p.external_id for p in postings] == ["exampleco:JR0001", "exampleco:JR0002"]
 
 
 async def test_detail_fetches_are_capped_per_poll() -> None:
@@ -154,7 +154,7 @@ async def test_maps_ids_company_url_location_and_posted_at() -> None:
     item = summary("JR1234567")
     http = WorkdayFake({"": [item]}, {item["externalPath"]: detail("JR1234567")})
     (posting,) = await get_source("workday").fetch(http, board=BOARD, keywords=[])
-    assert posting.external_id == "JR1234567"
+    assert posting.external_id == "exampleco:JR1234567"
     assert posting.company == "exampleco"  # tenant stands in until the poller overrides it
     assert posting.title == "Data Program Manager" and posting.location == "Denver, CO"
     assert posting.url == (
@@ -170,7 +170,7 @@ async def test_falls_back_to_path_tail_public_url_and_summary_location() -> None
     thin = {"jobPostingInfo": {"title": "Data Program Manager", "jobDescription": "<p>Body</p>"}}
     http = WorkdayFake({"": [item]}, {item["externalPath"]: thin})
     (posting,) = await get_source("workday").fetch(http, board=BOARD, keywords=[])
-    assert posting.external_id == "Data-Program-Manager_JR7"
+    assert posting.external_id == "exampleco:JR7"  # bulletFields req id beats the path tail
     assert posting.location == "Remote - US"
     assert posting.url == (
         "https://exampleco.wd5.myworkdayjobs.com/ExampleCoCareers"
@@ -189,7 +189,7 @@ async def test_malformed_postings_are_skipped_not_fatal() -> None:
         },
     )
     postings = await get_source("workday").fetch(http, board=BOARD, keywords=[])
-    assert [p.external_id for p in postings] == ["JR0002"]
+    assert [p.external_id for p in postings] == ["exampleco:JR0002"]
 
 
 async def test_bad_board_raises_source_error_before_any_request() -> None:
@@ -210,4 +210,34 @@ async def test_a_vanished_posting_detail_does_not_fail_the_board() -> None:
         },
     )
     postings = await get_source("workday").fetch(http, board=BOARD, keywords=[])
-    assert [p.external_id for p in postings] == ["JR0002"]
+    assert [p.external_id for p in postings] == ["exampleco:JR0002"]
+
+
+class NoTotalFake(WorkdayFake):
+    """A tenant whose search response omits `total` (seen on some Workday versions)."""
+
+    async def post_json(self, url: str, body: dict[str, Any]) -> Any:
+        page = await super().post_json(url, body)
+        return {"jobPostings": page["jobPostings"]}
+
+
+async def test_missing_total_keeps_paging_until_a_short_page() -> None:
+    items = [summary(f"JR{i:04d}") for i in range(45)]
+    http = NoTotalFake(
+        {"": items}, {i["externalPath"]: detail(i["bulletFields"][0]) for i in items}
+    )
+    postings = await get_source("workday").fetch(http, board=BOARD, keywords=[])
+    assert [offset for _, offset in http.searches] == [0, 20, 40]
+    assert len(postings) == 45
+
+
+async def test_detail_budget_is_shared_across_keywords() -> None:
+    broad = [summary(f"JR{i:04d}", title=f"Data Program Manager {i}") for i in range(100)]
+    narrow = [summary("JR9999", title="ETL Program Manager")]
+    details = {
+        i["externalPath"]: detail(i["bulletFields"][0], title=i["title"]) for i in broad + narrow
+    }
+    http = WorkdayFake({"data": broad, "ETL": narrow}, details)
+    postings = await get_source("workday").fetch(http, board=BOARD, keywords=["data", "ETL"])
+    assert len(postings) == MAX_DETAIL_FETCHES
+    assert any(p.external_id.endswith("JR9999") for p in postings), "second keyword starved"

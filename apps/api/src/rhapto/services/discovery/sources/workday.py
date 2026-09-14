@@ -7,6 +7,7 @@ search (`searchText`) rather than filtered client-side, and detail fetches are c
 
 from __future__ import annotations
 
+import logging
 import re
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any, ClassVar
@@ -25,6 +26,7 @@ PAGE_LIMIT = 20
 MAX_POSTINGS_PER_SEARCH = 200
 #: One detail GET per posting is the expensive half of a poll; postings past the cap are
 #: skipped (not an error) and picked up by a later poll as the board turns over.
+logger = logging.getLogger(__name__)
 MAX_DETAIL_FETCHES = 60
 
 _PART = re.compile(r"^[A-Za-z0-9._-]+$")
@@ -60,6 +62,41 @@ def parse_start_date(value: Any) -> datetime | None:
     return parsed if parsed.tzinfo is not None else parsed.replace(tzinfo=UTC)
 
 
+def _interleave(groups: list[dict[str, Any]]) -> list[tuple[str, Any]]:
+    """Round-robin over the per-keyword hit lists, deduped by path, so one broad keyword cannot
+    consume the whole detail budget before the others get a turn."""
+    seen: set[str] = set()
+    out: list[tuple[str, Any]] = []
+    iters = [iter(g.items()) for g in groups]
+    while iters:
+        for it in list(iters):
+            try:
+                path, item = next(it)
+            except StopIteration:
+                iters.remove(it)
+                continue
+            if path not in seen:
+                seen.add(path)
+                out.append((path, item))
+    return out
+
+
+def _req_id(info: dict[str, Any], item: Any, path: str) -> str:
+    if info.get("jobReqId"):
+        return str(info["jobReqId"])
+    bullets = item.get("bulletFields") if isinstance(item, dict) else None
+    if isinstance(bullets, list) and bullets and isinstance(bullets[0], str) and bullets[0]:
+        return bullets[0]
+    return path.rsplit("/", 1)[-1]
+
+
+def _org_name(info: dict[str, Any]) -> str | None:
+    org = info.get("hiringOrganization")
+    if isinstance(org, dict) and isinstance(org.get("name"), str):
+        return org["name"] or None
+    return None
+
+
 @register
 class WorkdaySource:
     info: ClassVar[SourceInfo] = SourceInfo("workday", "board", "Workday", True)
@@ -71,22 +108,28 @@ class WorkdaySource:
         base = f"https://{host_prefix}.myworkdayjobs.com/wday/cxs/{tenant}/{site}"
         # Insertion order keeps the first keyword's hits first; the dict dedupes the overlap
         # between keywords so a posting is only ever detail-fetched once per poll.
-        summaries: dict[str, Any] = {}
+        per_term: list[dict[str, Any]] = []
         for term in keywords or [""]:
-            await self._search(http, f"{base}/jobs", term, summaries)
+            found: dict[str, Any] = {}
+            await self._search(http, f"{base}/jobs", term, found)
+            per_term.append(found)
 
         out: list[Posting] = []
-        for path, item in list(summaries.items())[:MAX_DETAIL_FETCHES]:
+        skipped = 0
+        for path, item in _interleave(per_term)[:MAX_DETAIL_FETCHES]:
             try:
                 out.extend(
                     await self._posting(
                         http, (host_prefix, tenant, site), path, item, keywords=keywords
                     )
                 )
-            except (KeyError, TypeError, ValueError, AttributeError, SourceError):
+            except (KeyError, TypeError, ValueError, AttributeError, SourceError) as exc:
                 # One bad or vanished posting (a req closed between the search and the detail
                 # fetch answers 404) never fails the board; the search-level errors above do.
-                continue
+                skipped += 1
+                logger.info("workday %s/%s: skipped %s (%s)", tenant, site, path, exc)
+        if skipped:
+            logger.warning("workday %s/%s: skipped %d posting(s) this poll", tenant, site, skipped)
         return out
 
     async def _search(
@@ -111,7 +154,7 @@ class WorkdaySource:
             seen += len(page)
             offset += PAGE_LIMIT
             total = data.get("total")
-            if len(page) < PAGE_LIMIT or not isinstance(total, int) or offset >= total:
+            if len(page) < PAGE_LIMIT or (isinstance(total, int) and offset >= total):
                 return
 
     async def _posting(
@@ -138,10 +181,10 @@ class WorkdaySource:
             return []
         return [
             Posting(
-                external_id=str(info.get("jobReqId") or path.rsplit("/", 1)[-1]),
-                # Workday postings carry no company name; the tenant stands in until the
-                # poller overrides it with the watchlist row's company.
-                company=tenant,
+                # Req ids are unique within a tenant only, and jobs dedupe on
+                # (user, source, external_id) without the board, so the tenant is part of the id.
+                external_id=f"{tenant}:{_req_id(info, item, path)}",
+                company=str(_org_name(info) or tenant),
                 title=title,
                 location=str(info.get("location") or item.get("locationsText") or "") or None,
                 url=str(

@@ -293,7 +293,7 @@ async def test_poll_ingests_a_workday_watchlist_row(session: AsyncSession, user:
     assert [(r.source, r.board, r.found, r.new, r.error) for r in summary.results] == [
         ("workday", "exampleco.wd5/ExampleCoCareers", 1, 1, None)
     ]
-    job = await session.scalar(select(Job).where(Job.external_id == "JR4001"))
+    job = await session.scalar(select(Job).where(Job.external_id == "exampleco:JR4001"))
     assert job is not None and job.company == "ExampleCo" and job.source == "workday"
     assert job.best_fit is not None and "<" not in job.jd_text
     # one paged search POST plus one detail GET, and nothing else
