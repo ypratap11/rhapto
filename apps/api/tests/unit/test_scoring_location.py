@@ -31,6 +31,20 @@ def test_preference_parsing_splits_and_trims() -> None:
     assert pref.remote_ok is True
 
 
+def test_preference_parsing_keeps_a_city_state_pair_together() -> None:
+    pref = location_preference_from_answers(
+        {"location_preferred": "Denver, CO, Boulder, CO, Front Range, Aurora, co"}
+    )
+    assert pref.preferred == ("Denver, CO", "Boulder, CO", "Front Range", "Aurora, CO")
+    # Both halves are required, in either spelling, so the namesakes elsewhere stay out.
+    assert location_tier("Denver, CO", pref) == "preferred"
+    assert location_tier("Denver, Colorado", pref) == "preferred"
+    assert location_tier("Denver, PA", pref) == "country"
+    assert location_tier("Aurora, IL", pref) == "country"
+    assert location_tier("Littleton, MA", pref) == "country"
+    assert location_tier("Front Range", pref) == "preferred"
+
+
 def test_preference_parsing_without_any_location_keys() -> None:
     pref = location_preference_from_answers({"name": "Maya Chen"})
     assert pref == LocationPreference(home=None, preferred=(), remote_ok=True)
@@ -64,6 +78,45 @@ def test_tier_reads_remote_only_when_the_user_accepts_remote() -> None:
     # remote_ok "no": a remote posting is worth no more to this user than one abroad, and the
     # multiplier is the same 0.60 (asserted through score_job below).
     assert location_tier("Remote", NO_REMOTE) == "abroad"
+
+
+def test_tier_keeps_a_multi_office_posting_that_names_somewhere_in_the_us() -> None:
+    # Boards list several offices in one field. One of them being abroad must not cost the user
+    # the one down the road, so a US signal anywhere in the string vetoes the country read.
+    assert location_tier("San Francisco, CA; London, UK", PREF) == "preferred"
+    assert location_tier("New York, NY and Toronto, Canada", PREF) == "country"
+    # Peru, Indiana and Mexico, Missouri are US towns that happen to be spelled like countries.
+    assert location_tier("Peru, IN", PREF) == "country"
+    assert location_tier("Mexico, MO", PREF) == "country"
+
+
+def test_tier_reads_a_two_letter_code_as_a_country_when_its_city_says_so() -> None:
+    # Half the ISO country codes collide with a US state code. A foreign city named alongside
+    # its own code settles it, before the preferred list can claim the bare code.
+    assert location_tier("Berlin, DE", PREF) == "abroad"  # not Delaware
+    assert location_tier("Chennai, IN", PREF) == "abroad"  # not Indiana
+    assert location_tier("Tel Aviv, IL", PREF) == "abroad"  # not Illinois
+    assert location_tier("Toronto, CA", PREF) == "abroad"  # not California, and not preferred
+    denver = location_preference_from_answers({"location_preferred": "Denver, CO, Boulder, CO"})
+    assert location_tier("Bogota, CO", denver) == "abroad"  # not Colorado, and not preferred
+    assert location_tier("Denver, CO", denver) == "preferred"
+    # The veto is the pair, not the code: Vancouver's code is CA, so "Vancouver, WA" is still US.
+    assert location_tier("Vancouver, WA", PREF) == "country"
+
+
+def test_tier_respects_word_boundaries_on_two_letter_terms() -> None:
+    assert location_tier("CApital One HQ, VA", PREF) == "country"
+    assert location_tier("Portland, OR", PREF) == "country"
+    assert location_tier("Indianapolis, IN", PREF) == "country"
+
+
+def test_home_answer_stands_in_for_an_unset_preferred_list() -> None:
+    home_only = location_preference_from_answers({"location_home": "Boulder, CO"})
+    assert home_only.terms == ("Boulder, CO",)
+    assert location_tier("Boulder, CO", home_only) == "preferred"
+    assert location_tier("Denver, CO", home_only) == "country"
+    # An explicit list wins; home is only the fallback.
+    assert PREF.terms == PREF.preferred
 
 
 def test_tier_falls_back_to_country_then_unknown() -> None:

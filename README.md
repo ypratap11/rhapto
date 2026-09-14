@@ -151,15 +151,31 @@ there any time, and the queue is re-scored as soon as you save) drive it:
 
 | answer | example | what it does |
 | --- | --- | --- |
-| `location_home` | `Denver, CO` | Where you are. Recorded for your applications; not matched against postings. |
-| `location_preferred` | `Denver, Boulder, Golden, Front Range, CO` | Comma-separated towns and regions you want. A whole-word match on the posting's location field puts the job in your preferred tier. |
+| `location_home` | `Denver, CO` | Where you are. Used only as the default preferred area when `location_preferred` is empty — never sent to the LLM, and never written into an application. |
+| `location_preferred` | `Denver, CO, Boulder, CO, Aurora, CO` | Comma-separated towns and regions you want. A whole-word match on the posting's location field puts the job in your preferred tier. |
 | `remote_ok` | `yes` | `no`, `false` or `0` means a remote-only posting is worth no more to you than one abroad. Anything else (including a blank) means yes. |
+
+**Qualify each entry with its state.** A bare `Denver` matches Denver, PA and Denver, NC too, and a bare
+`Aurora` matches Aurora, IL — every Front Range namesake in the country would tier preferred. Write
+`Denver, CO` instead: a trailing two-letter state code binds to the town before it, so `Denver, CO,
+Boulder, CO` is two entries and not four, and a qualified entry needs both halves present in the posting
+(in either spelling, so it matches `Denver, CO` and `Denver, Colorado` but not `Denver, PA`). An entry
+that is not a `City, ST` pair — `Bay Area`, `Front Range`, `Colorado` — is matched whole-word as written.
 
 Every posting lands in one tier, and its fit is multiplied accordingly: **preferred** ×1.0, **remote**
 ×0.95, **US** ×0.85, **abroad** ×0.60, **unknown** ×0.90. Only the posting's location field is read —
-job descriptions name offices on three continents in their boilerplate — and a named country settles it,
-so "Dublin, Ireland" is abroad even when your preferred list names Dublin, CA. The queue's **Region**
-filter (Preferred area / US and remote / Anywhere) and the chip on each job row show the result.
+job descriptions name offices on three continents in their boilerplate. A named country settles it, so
+"Dublin, Ireland" is abroad even when your preferred list names Dublin, CA — unless the same field also
+names somewhere in the US, because boards list several offices at once and "San Francisco, CA; London,
+UK" is still a job in San Francisco. A foreign city named next to its own country code wins over a
+US state code that happens to be spelled the same: "Berlin, DE" is Germany, not Delaware. The queue's
+**Region** filter (Preferred area / US and remote / Anywhere) and the chip on each job row show the result.
+
+Two things to know. The tiering is **US-centric**: the country tier means the United States, so a user
+based outside it gets `abroad` for their own city and should leave the Region filter on Anywhere until
+the home country is derived from `location_home`. And a job with no location at all — anything you paste
+by hand, and `rhapto score --jd` — tiers `unknown` and scores ×0.90, so a borderline one can land in
+the Low fit bucket; rescue it from there, or fill in its location.
 
 **Workday** boards use `<host prefix>/<site>` instead of a slug, and you can read both off the careers URL:
 `https://nvidia.wd5.myworkdayjobs.com/en-US/NVIDIAExternalCareerSite/...` becomes `nvidia.wd5/NVIDIAExternalCareerSite`

@@ -4,9 +4,10 @@ answers:
   phone: "+1 555 0100"
   location: "Denver, CO"
   # Location priority: scoring multiplies a job's fit by how well its posted location matches
-  # these. `location_preferred` is a comma-separated list of the towns/regions you want.
+  # these. `location_preferred` is a comma-separated list of the towns/regions you want; qualify
+  # each town with its state, or "Aurora" also matches Aurora, IL and "Denver" matches Denver, PA.
   location_home: "Denver, CO"
-  location_preferred: "Denver, Boulder, Lakewood, Aurora, Littleton, Golden, Broomfield, Front Range, CO"
+  location_preferred: "Denver, CO, Boulder, CO, Lakewood, CO, Aurora, CO, Littleton, CO, Golden, CO, Broomfield, CO, Front Range"
   remote_ok: "yes"
   links: "github.com/mayachen-example"
   work_authorization: "US citizen"

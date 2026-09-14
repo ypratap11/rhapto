@@ -18,6 +18,7 @@ from rhapto.api.schemas import ImportOut, ResumeDocumentOut
 from rhapto.db.models import ResumeDocumentRow
 from rhapto.db.repositories import documents as documents_repo
 from rhapto.db.repositories import profile as repo
+from rhapto.engine.scoring import SCORING_KEYS
 from rhapto.models.profile.bases import ResumeBase
 from rhapto.models.profile.blocks import Block
 from rhapto.models.profile.guardrails import GuardrailRule
@@ -55,17 +56,6 @@ UserDep = Annotated[uuid.UUID, Depends(current_user)]
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
 EnqueuerDep = Annotated[Enqueuer, Depends(get_enqueuer)]
 StorageDep = Annotated[PackageStorage, Depends(get_storage)]
-
-
-def _location_keys(*answer_maps: dict[str, str]) -> set[str]:
-    """The answers that feed `engine.scoring.location_preference_from_answers`, across both the
-    old and the new map so a removed key still counts as a change."""
-    return {
-        key
-        for answers in answer_maps
-        for key in answers
-        if key.startswith("location_") or key == "remote_ok"
-    }
 
 
 def _check_id(path_id: str, body_id: str) -> None:
@@ -232,7 +222,9 @@ async def put_answers(
     previous = await repo.get_answers(session, user_id)
     await repo.set_answers(session, user_id, body)
     await session.commit()
-    if any(previous.get(key) != body.get(key) for key in _location_keys(previous, body)):
+    # Compared key by key over the canonical set, so a scoring answer that was *dropped*
+    # re-scores too, and an unrelated edit (a new notice period) does not.
+    if any(previous.get(key) != body.get(key) for key in SCORING_KEYS):
         try:
             await enqueuer.enqueue("rescore_jobs", user_id=str(user_id))
         except Exception:  # the row is committed; a queue outage must not fail the request

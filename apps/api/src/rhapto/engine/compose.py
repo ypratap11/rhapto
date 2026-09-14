@@ -6,6 +6,7 @@ from pydantic import BaseModel, Field
 
 from rhapto.engine.prompts.compose import COMPOSE_RULES
 from rhapto.engine.providers.llm import LLMProvider, Message, SystemBlock, TokenUsage
+from rhapto.engine.scoring import SCORING_KEYS
 from rhapto.engine.select import Selection
 from rhapto.engine.types import Profile
 from rhapto.models.jd_extract import JDExtract
@@ -13,10 +14,6 @@ from rhapto.models.profile.tracks import Track
 from rhapto.models.resume_document import ResumeBullet, ResumeDocument, ResumeHeader, ResumeSection
 
 HEADER_KEYS = frozenset({"name", "email", "phone", "location", "links"})
-# Answers the scorer reads (see `engine.scoring.location_preference_from_answers`). They are
-# settings, not things an employer ever asks, and `location_home` is contact detail besides —
-# so they are stripped from the prompt alongside the header keys.
-SCORING_KEYS = frozenset({"location_home", "location_preferred", "remote_ok"})
 
 
 class AnswerItem(BaseModel):
@@ -52,6 +49,9 @@ def build_header(answers: dict[str, str]) -> ResumeHeader:
 
 
 def application_answers(answers: dict[str, str]) -> dict[str, str]:
+    """Only the answers an employer might actually ask: the resume header fields go through
+    `build_header`, and the scoring keys never leave the scorer (`location_home` is contact
+    detail besides)."""
     return {k: v for k, v in answers.items() if k not in HEADER_KEYS and k not in SCORING_KEYS}
 
 

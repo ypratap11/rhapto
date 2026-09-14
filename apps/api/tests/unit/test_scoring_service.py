@@ -6,7 +6,13 @@ from rhapto.db.repositories import jobs as jobs_repo
 from rhapto.db.repositories import profile as profile_repo
 from rhapto.engine.providers.fake import FakeEmbeddingProvider
 from rhapto.models.profile.tracks import Track
-from rhapto.services.scoring import ensure_track_embeddings, rescore_user, score_and_store
+from rhapto.services.scoring import (
+    SCORE_CHUNK,
+    ensure_track_embeddings,
+    rescore_user,
+    score_and_store,
+    users_needing_location_backfill,
+)
 
 DATA = Track(
     id="data-pm",
@@ -93,3 +99,92 @@ async def test_rescore_user_picks_up_a_changed_location_preference(
     assert await rescore_user(session, user.id, embedder) == 1
     assert job.location_tier == "preferred"
     assert job.best_fit is not None and before is not None and job.best_fit > before
+
+
+class RecordingEmbedder(FakeEmbeddingProvider):
+    """FakeEmbeddingProvider that remembers how many texts each call was handed."""
+
+    def __init__(self) -> None:
+        super().__init__(dimensions=384)
+        self.sizes: list[int] = []
+
+    async def embed(self, texts: list[str]) -> list[list[float]]:
+        self.sizes.append(len(texts))
+        return await super().embed(texts)
+
+
+async def test_score_and_store_embeds_in_chunks_and_tiers_every_row(
+    session: AsyncSession, user: User
+) -> None:
+    await profile_repo.upsert_track(session, user.id, DATA)
+    jobs = [
+        await jobs_repo.create_job(
+            session,
+            user.id,
+            jd_text=f"Job {i}: own the data platform and ETL roadmap for analytics. " * 4,
+            title=f"Data PM {i}",
+            location="Denver, CO" if i % 2 else "Dublin, Ireland",
+        )
+        for i in range(120)
+    ]
+    embedder = RecordingEmbedder()
+    await score_and_store(session, user.id, jobs, embedder)
+
+    # One call for the single track, then the jobs in chunks of SCORE_CHUNK.
+    assert embedder.sizes == [1, SCORE_CHUNK, SCORE_CHUNK, 120 - 2 * SCORE_CHUNK]
+    assert all(size <= SCORE_CHUNK for size in embedder.sizes)
+    assert [j.location_tier for j in jobs].count("country") == 60
+    assert [j.location_tier for j in jobs].count("abroad") == 60
+    assert all(j.best_fit is not None for j in jobs)
+
+
+async def test_a_failing_chunk_leaves_the_other_chunks_and_every_tier_intact(
+    session: AsyncSession, user: User
+) -> None:
+    class SecondChunkFails(RecordingEmbedder):
+        async def embed(self, texts: list[str]) -> list[list[float]]:
+            if len(self.sizes) == 2:  # track call, first job chunk, then this one
+                self.sizes.append(len(texts))
+                raise RuntimeError("embedding provider is down")
+            return await super().embed(texts)
+
+    await profile_repo.upsert_track(session, user.id, DATA)
+    jobs = [
+        await jobs_repo.create_job(
+            session,
+            user.id,
+            jd_text=f"Job {i}: own the data platform and ETL roadmap for analytics. " * 4,
+            title=f"Data PM {i}",
+            location="Denver, CO",
+        )
+        for i in range(60)
+    ]
+    await score_and_store(session, user.id, jobs, SecondChunkFails())
+
+    assert all(j.location_tier == "country" for j in jobs)  # tiers never needed the embedding
+    assert all(j.best_fit is not None for j in jobs[:SCORE_CHUNK])
+    assert all(j.best_fit is None for j in jobs[SCORE_CHUNK:])
+
+
+async def test_backfill_selects_only_users_with_untiered_jobs(
+    session: AsyncSession, user: User
+) -> None:
+    from rhapto.db.repositories.users import get_or_create_user
+
+    assert await users_needing_location_backfill(session) == []
+    job = await jobs_repo.create_job(session, user.id, jd_text="A job. " * 10)
+    assert job.location_tier is None
+    assert await users_needing_location_backfill(session) == [user.id]
+
+    other = await get_or_create_user(session, "other@example.com")
+    await jobs_repo.create_job(session, other.id, jd_text="Another job. " * 10)
+    assert set(await users_needing_location_backfill(session)) == {user.id, other.id}
+
+    # One row per user, however many untiered jobs they hold.
+    third = await jobs_repo.create_job(session, user.id, jd_text="A third job. " * 10)
+    assert len(await users_needing_location_backfill(session)) == 2
+
+    await profile_repo.upsert_track(session, user.id, DATA)
+    await score_and_store(session, user.id, [job, third], FakeEmbeddingProvider(dimensions=384))
+    # Scoring tiers the rows, so that user drops out; the other user is still waiting.
+    assert await users_needing_location_backfill(session) == [other.id]

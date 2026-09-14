@@ -10,12 +10,14 @@ from test_discovery_sources import fake_http_for
 from rhapto.db.models import Job, JobScore, Task, User
 from rhapto.db.repositories import profile as profile_repo
 from rhapto.db.repositories import tasks as task_repo
+from rhapto.db.repositories.jobs import create_job
 from rhapto.db.repositories.users import get_or_create_user
 from rhapto.engine.providers.fake import FakeEmbeddingProvider
 from rhapto.models.profile.tracks import Track
 from rhapto.models.profile.watchlist import WatchlistEntry
 from rhapto.services.discovery.poller import PollSummary
 from rhapto.services.eventbus import InMemoryEventBus, task_channel
+from rhapto.worker import main as worker_main
 from rhapto.worker import tasks as worker_tasks
 from rhapto.worker.main import cron_hours
 from rhapto.worker.tasks import TASKS, poll_all_sources, poll_now, rescore_jobs, score_jobs
@@ -173,3 +175,35 @@ def test_cron_hours_from_interval() -> None:
     assert cron_hours(24) == {0}
     assert cron_hours(5) == {0, 5, 10, 15, 20}
     assert cron_hours(0) == set()
+
+
+class RecordingRedis:
+    """Stands in for the arq pool `on_startup` finds at `ctx["redis"]`."""
+
+    def __init__(self) -> None:
+        self.jobs: list[tuple[str, dict[str, Any]]] = []
+
+    async def enqueue_job(self, task: str, **kwargs: Any) -> None:
+        self.jobs.append((task, dict(kwargs)))
+
+
+async def test_startup_backfills_users_whose_jobs_predate_location_priority(
+    session_factory: async_sessionmaker[AsyncSession], user: User, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(worker_main, "_location_backfill_done", False)
+    async with session_factory() as session:
+        await create_job(session, user.id, jd_text="A job from before the migration. " * 5)
+        await session.commit()
+    redis = RecordingRedis()
+    ctx: dict[str, Any] = {"session_factory": session_factory, "redis": redis}
+
+    assert await worker_main.enqueue_location_backfill(ctx) == 1
+    assert redis.jobs == [("rescore_jobs", {"user_id": str(user.id)})]
+    # Guarded: a second call in the same process queues nothing more.
+    assert await worker_main.enqueue_location_backfill(ctx) == 0
+    assert len(redis.jobs) == 1
+
+
+async def test_startup_backfill_never_fails_the_worker(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(worker_main, "_location_backfill_done", False)
+    assert await worker_main.enqueue_location_backfill({}) == 0  # no session_factory, no crash
