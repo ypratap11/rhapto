@@ -123,8 +123,14 @@ async def score_and_store(
         try:
             await _score_chunk(session, user_id, chunk, tracks, track_vectors, embedder)
         except Exception:
-            # One bad chunk costs its own scores, not the whole rescore. The rows keep the tier
-            # written above and whatever scores they already had.
+            if not commit_each_chunk:
+                # All-or-nothing callers (the poller, score_jobs) own the transaction: let the
+                # failure propagate so nothing half-scored is committed by accident.
+                raise
+            # Incremental mode: one bad chunk costs its own scores, not the whole rescore. Roll
+            # back the partial in-memory updates so they cannot ride along with the next chunk's
+            # commit; the tiers were committed above and survive.
+            await session.rollback()
             logger.exception(
                 "scoring chunk %d failed for user %s; %d job(s) keep their previous scores",
                 index,

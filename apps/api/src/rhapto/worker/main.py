@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import Any
 
@@ -55,7 +56,10 @@ async def enqueue_location_backfill(ctx: dict[str, Any]) -> int:
         async with factory() as session:
             user_ids = await users_needing_location_backfill(session)
         for user_id in user_ids:
-            await ctx["redis"].enqueue_job("rescore_jobs", user_id=str(user_id))
+            # A slow or unreachable queue must not hold the worker's startup hostage.
+            await asyncio.wait_for(
+                ctx["redis"].enqueue_job("rescore_jobs", user_id=str(user_id)), timeout=10
+            )
         if user_ids:
             logger.info("location backfill: queued a rescore for %d user(s)", len(user_ids))
         return len(user_ids)

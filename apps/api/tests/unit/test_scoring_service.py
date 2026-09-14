@@ -1,3 +1,4 @@
+import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from rhapto.db.models import User
@@ -159,11 +160,32 @@ async def test_a_failing_chunk_leaves_the_other_chunks_and_every_tier_intact(
         )
         for i in range(60)
     ]
-    await score_and_store(session, user.id, jobs, SecondChunkFails())
+    await score_and_store(session, user.id, jobs, SecondChunkFails(), commit_each_chunk=True)
 
+    for job in jobs:
+        await session.refresh(job)
     assert all(j.location_tier == "country" for j in jobs)  # tiers never needed the embedding
     assert all(j.best_fit is not None for j in jobs[:SCORE_CHUNK])
     assert all(j.best_fit is None for j in jobs[SCORE_CHUNK:])
+
+
+async def test_all_or_nothing_mode_propagates_a_chunk_failure(
+    session: AsyncSession, user: User
+) -> None:
+    class AlwaysFails(RecordingEmbedder):
+        async def embed(self, texts: list[str]) -> list[list[float]]:
+            if self.sizes:  # let the track embedding through, fail the first job chunk
+                raise RuntimeError("embedding provider is down")
+            return await super().embed(texts)
+
+    await profile_repo.upsert_track(session, user.id, DATA)
+    jobs = [
+        await jobs_repo.create_job(
+            session, user.id, jd_text="Own the ETL roadmap. " * 8, title="Data PM"
+        )
+    ]
+    with pytest.raises(RuntimeError):
+        await score_and_store(session, user.id, jobs, AlwaysFails())
 
 
 async def test_backfill_selects_only_users_with_untiered_jobs(
