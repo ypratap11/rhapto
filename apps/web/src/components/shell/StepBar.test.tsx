@@ -8,6 +8,7 @@ const jobsData: unknown[] = [];
 const reviewData: unknown[] = [{ id: "p1" }, { id: "p2" }];
 
 vi.mock("@/lib/api/queries", () => ({
+  DEFAULT_REGION: "us",
   useJobs: () => ({ data: jobsData }),
   usePackageList: () => ({ data: reviewData }),
 }));

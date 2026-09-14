@@ -101,6 +101,21 @@ describe("NextUp", () => {
     expect(screen.getAllByText(/^(tune|blocks)$/)).toHaveLength(2);
   });
 
+  it("chips the location tier of each row, and nothing for an unknown one", () => {
+    render(
+      <NextUp
+        jobs={[
+          base({ id: "near", best_fit: 95, title: "Near job", location_tier: "preferred" }),
+          base({ id: "far", best_fit: 94, title: "Far job", location_tier: "abroad" }),
+          base({ id: "who", best_fit: 93, title: "Unplaced job", location_tier: "unknown" }),
+        ]}
+      />,
+    );
+    expect(screen.getByText("Preferred area")).toBeInTheDocument();
+    expect(screen.getByText("Abroad")).toBeInTheDocument();
+    expect(screen.getAllByText(/^(Preferred area|Remote|US|Abroad)$/)).toHaveLength(2);
+  });
+
   it("renders an empty state when there are no jobs", () => {
     render(<NextUp jobs={[]} />);
     expect(screen.getByText(/nothing to do/i)).toBeInTheDocument();

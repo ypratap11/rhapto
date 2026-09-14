@@ -56,7 +56,10 @@ function AnswersBody({ initial }: { initial: Record<string, string> }) {
     <div className="space-y-3">
       <p className="text-sm text-muted-foreground">
         <code className="font-mono text-xs">name</code>, <code className="font-mono text-xs">email</code>, <code className="font-mono text-xs">phone</code>, <code className="font-mono text-xs">location</code>, and{" "}
-        <code className="font-mono text-xs">links</code> feed the resume header. Other keys answer application-form questions verbatim.
+        <code className="font-mono text-xs">links</code> feed the resume header.{" "}
+        <code className="font-mono text-xs">location_home</code>, <code className="font-mono text-xs">location_preferred</code> (comma-separated towns
+        and regions you want), and <code className="font-mono text-xs">remote_ok</code> set location priority and re-score the queue when you save. Other
+        keys answer application-form questions verbatim.
       </p>
       <Table>
         <TableHeader>

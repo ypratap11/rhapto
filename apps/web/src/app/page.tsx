@@ -11,13 +11,15 @@ import { PollNowButton } from "@/components/queue/PollNowButton";
 import { RunsDrawer } from "@/components/queue/RunsDrawer";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { invalidateDiscovery, useDiscoveryRuns, useJobs, useTracks, type JobFilters } from "@/lib/api/queries";
+import { DEFAULT_REGION, invalidateDiscovery, useDiscoveryRuns, useJobs, useTracks, type JobFilters } from "@/lib/api/queries";
 import { formatRelative } from "@/lib/format";
 
 export default function QueuePage() {
   const [query, setQuery] = useState("");
-  const [filters, setFilters] = useState<JobFilters>({ search: "", track: null, tab: "new", sort: "fit" });
-  const allFit = useJobs({ search: "", track: null, tab: "new", sort: "fit" });
+  const [filters, setFilters] = useState<JobFilters>({ search: "", track: null, tab: "new", region: DEFAULT_REGION, sort: "fit" });
+  // "Apply to these first" follows the Region choice too: a shortlist that leads with jobs you
+  // have filtered out of the list below would send you somewhere you already said no to.
+  const allFit = useJobs({ search: "", track: null, tab: "new", region: filters.region, sort: "fit" });
   const [open, setOpen] = useState(false);
   const [runsOpen, setRunsOpen] = useState(false);
   const queryClient = useQueryClient();

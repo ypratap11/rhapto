@@ -50,7 +50,7 @@ describe("useMarkApplied", () => {
 });
 
 describe("keys.jobs", () => {
-  const filters = (over: Partial<JobFilters>): JobFilters => ({ search: "", track: null, tab: "new", sort: "fit", ...over });
+  const filters = (over: Partial<JobFilters>): JobFilters => ({ search: "", track: null, tab: "new", region: "us", sort: "fit", ...over });
 
   it("shares one cache entry between New and Tailored so switching tabs doesn't refetch", () => {
     expect(keys.jobs(filters({ tab: "new" }))).toEqual(keys.jobs(filters({ tab: "tailored" })));
@@ -58,6 +58,11 @@ describe("keys.jobs", () => {
 
   it("keys Low fit separately", () => {
     expect(keys.jobs(filters({ tab: "new" }))).not.toEqual(keys.jobs(filters({ tab: "low" })));
+  });
+
+  it("keys each region separately, because the server filters on it", () => {
+    expect(keys.jobs(filters({ region: "us" }))).not.toEqual(keys.jobs(filters({ region: "any" })));
+    expect(keys.jobs(filters({ region: "us" }))).not.toEqual(keys.jobs(filters({ region: "preferred" })));
   });
 });
 

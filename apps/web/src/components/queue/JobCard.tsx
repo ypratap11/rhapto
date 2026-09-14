@@ -7,7 +7,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { ApiError } from "@/lib/api/client";
 import { useRescueJob, type JobOut } from "@/lib/api/queries";
-import { SOURCE_LABEL } from "@/lib/fit";
+import { locationTierLabel, SOURCE_LABEL } from "@/lib/fit";
 import { formatRelative, truncate } from "@/lib/format";
 import { PACKAGE_STATUS_TONE, STATUS_LABEL, statusTone, type ApplicationStatus } from "@/lib/status";
 import { FitBadge } from "./FitBadge";
@@ -36,6 +36,7 @@ export function JobCard({ job, onDelete, tracks }: { job: JobOut; onDelete: (job
           <div className="flex flex-wrap items-center gap-2">
             <FitBadge fit={job.best_fit ?? null} trackName={track?.name ?? null} minFit={track?.min_fit ?? null} />
             <StatusBadge tone="zinc">{SOURCE_LABEL[job.source] ?? job.source}</StatusBadge>
+            {locationTierLabel(job.location_tier) ? <StatusBadge tone="zinc">{locationTierLabel(job.location_tier)}</StatusBadge> : null}
             {job.repost_of ? <StatusBadge tone="zinc">Re-post</StatusBadge> : null}
             <span className="font-medium">{job.company ?? "Unknown company"}</span>
             {pkg ? <StatusBadge tone={PACKAGE_STATUS_TONE[pkg.status] ?? "slate"}>{`v${pkg.version} · ${pkg.status}`}</StatusBadge> : null}

@@ -918,6 +918,8 @@ export interface components {
             latest_package: components["schemas"]["PackageSummary"] | null;
             /** Location */
             location: string | null;
+            /** Location Tier */
+            location_tier?: ("preferred" | "remote" | "country" | "abroad" | "unknown") | null;
             /** Posted At */
             posted_at?: string | null;
             /** Repost Of */
@@ -1739,6 +1741,7 @@ export interface operations {
                 search?: string | null;
                 track?: string | null;
                 bucket?: ("fit" | "low") | null;
+                region?: "preferred" | "us" | "any";
                 sort?: "fit" | "newest";
             };
             header?: {

@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { JobFilters } from "@/lib/api/queries";
+import { REGION_LABEL } from "@/lib/fit";
 
 const ALL_TRACKS = "__all__";
 
@@ -39,6 +40,18 @@ export function FilterBar({
               {t.name}
             </SelectItem>
           ))}
+        </SelectContent>
+      </Select>
+      <Select value={filters.region} onValueChange={(value: string | null) => value && onChange({ ...filters, region: value as JobFilters["region"] })}>
+        <SelectTrigger className="w-40" aria-label="Region">
+          {/* Spelled out rather than left to SelectValue's default: until the popup has been
+              opened once it has no item labels to look up and falls back to the raw value. */}
+          <SelectValue>{(value: string) => REGION_LABEL[value as JobFilters["region"]]}</SelectValue>
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="preferred">{REGION_LABEL.preferred}</SelectItem>
+          <SelectItem value="us">{REGION_LABEL.us}</SelectItem>
+          <SelectItem value="any">{REGION_LABEL.any}</SelectItem>
         </SelectContent>
       </Select>
       <Tabs value={filters.tab} onValueChange={(v) => v && onChange({ ...filters, tab: v as JobFilters["tab"] })}>

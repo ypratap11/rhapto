@@ -3,13 +3,13 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { FLOW_STEPS, flowPrompt, jobState, nextUp, stepForPath } from "@/lib/flow";
-import { useJobs, usePackageList } from "@/lib/api/queries";
+import { DEFAULT_REGION, useJobs, usePackageList } from "@/lib/api/queries";
 import { useSkipped } from "@/lib/skipped";
 import { useTailoringCount } from "@/lib/tailoring";
 
 export function StepBar() {
   const pathname = usePathname();
-  const jobs = useJobs({ search: "", track: null, tab: "new", sort: "fit" });
+  const jobs = useJobs({ search: "", track: null, tab: "new", region: DEFAULT_REGION, sort: "fit" });
   const review = usePackageList("review");
   const skipped = useSkipped();
   const tailoring = useTailoringCount() > 0;

@@ -31,6 +31,7 @@ const job: JobOut = {
   best_fit: 82,
   best_track_id: "t1",
   bucket: "fit",
+  location_tier: null,
   rescued: false,
   repost_of: null,
   posted_at: null,
@@ -65,6 +66,24 @@ describe("JobCard", () => {
     expect(screen.getByText("Data PM")).toBeInTheDocument();
     expect(screen.getByText("Greenhouse")).toBeInTheDocument();
     expect(screen.getByText("Re-post")).toBeInTheDocument();
+  });
+
+  it.each([
+    ["preferred", "Preferred area"],
+    ["remote", "Remote"],
+    ["country", "US"],
+    ["abroad", "Abroad"],
+  ] as const)("chips a %s location as %s", (tier, label) => {
+    renderCard({ location_tier: tier });
+    expect(screen.getByText(label)).toBeInTheDocument();
+  });
+
+  it("chips nothing when the location tier is unknown or missing", () => {
+    const { unmount } = renderCard({ location_tier: "unknown" });
+    expect(screen.queryByText(/preferred area|abroad/i)).not.toBeInTheDocument();
+    unmount();
+    renderCard({ location_tier: null });
+    expect(screen.queryByText(/preferred area|abroad/i)).not.toBeInTheDocument();
   });
 
   it("offers Rescue only for low-bucket jobs and moves them to the fit list", async () => {
