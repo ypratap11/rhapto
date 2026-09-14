@@ -19,6 +19,17 @@ import { AggregatorsSection } from "./AggregatorsSection";
  * but polling them does nothing until an adapter ships. */
 const NO_ADAPTER_SOURCES = ["smartrecruiters", "workable"] as const;
 
+/** What to type in the Board column, per source. Workday is the odd one out: it is addressed by
+ * the careers host prefix plus the site name, not a single slug. */
+const BOARD_HINTS: Record<string, string> = {
+  workday: "Host prefix and site, e.g. nvidia.wd5/NVIDIAExternalCareerSite",
+};
+const DEFAULT_BOARD_HINT = "Board slug from the careers URL";
+
+function boardHint(source: string) {
+  return BOARD_HINTS[source] ?? DEFAULT_BOARD_HINT;
+}
+
 /** Editable row: keywords stay a raw comma-separated string while typing (see BlockForm.tags in
  * profile-forms.ts) and are only split into the array `WatchlistEntry` wants on save — parsing
  * on every keystroke and redisplaying `keywords.join(", ")` fights the user's cursor and eats
@@ -114,7 +125,16 @@ function WatchlistBody({ initial, boardOptions }: { initial: WatchlistEntry[]; b
                 <Label htmlFor={`watch-board-${i}`} className="sr-only">
                   Board {i + 1}
                 </Label>
-                <Input id={`watch-board-${i}`} value={row.board} onChange={(e) => setRow(i, { board: e.target.value })} placeholder="board slug" />
+                <Input
+                  id={`watch-board-${i}`}
+                  value={row.board}
+                  onChange={(e) => setRow(i, { board: e.target.value })}
+                  placeholder={row.source === "workday" ? "company.wd5/SiteName" : "board slug"}
+                  aria-describedby={`watch-board-hint-${i}`}
+                />
+                <p id={`watch-board-hint-${i}`} className="mt-1 text-xs text-muted-foreground">
+                  {boardHint(row.source)}
+                </p>
               </TableCell>
               <TableCell>
                 <Input aria-label={`Keywords ${i + 1}`} value={row.keywords} onChange={(e) => setRow(i, { keywords: e.target.value })} placeholder="keyword, keyword" />

@@ -1,5 +1,9 @@
 watchlist:
   - { company: ExampleCo, source: greenhouse, board: exampleco, keywords: ["program manager"] }
+  # Workday boards are addressed as <host prefix>/<site>, both read off the careers URL
+  # (https://exampleco.wd5.myworkdayjobs.com/en-US/ExampleCoCareers/...). Keywords are
+  # strongly recommended: they become the Workday search text, and these boards are big.
+  # - { company: ExampleCo, source: workday, board: exampleco.wd5/ExampleCoCareers, keywords: ["program manager"] }
 aggregators:
   - { source: remoteok, enabled: true, keywords: ["data program manager", "AI product manager"] }
   - { source: hn-hiring, enabled: false }

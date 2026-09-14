@@ -21,6 +21,7 @@ vi.mock("@/lib/api/queries", async (importOriginal) => ({
       { name: "greenhouse", kind: "board", label: "Greenhouse", needs_board: true },
       { name: "lever", kind: "board", label: "Lever", needs_board: true },
       { name: "ashby", kind: "board", label: "Ashby", needs_board: true },
+      { name: "workday", kind: "board", label: "Workday", needs_board: true },
       { name: "remoteok", kind: "aggregator", label: "RemoteOK", needs_board: false },
       { name: "hn-hiring", kind: "aggregator", label: "Hacker News Who's Hiring", needs_board: false },
     ],
@@ -40,6 +41,16 @@ describe("WatchlistTab", () => {
     await user.type(keywordsInput, ", pm");
     await user.click(screen.getByRole("button", { name: "Save" }));
     expect(putWatchlist).toHaveBeenCalledWith([expect.objectContaining({ company: "Acme", keywords: ["etl", "pm"] })]);
+  });
+
+  it("swaps the board hint when the source becomes Workday", async () => {
+    render(<WatchlistTab />);
+    const user = userEvent.setup({ delay: null });
+    expect(screen.getByText("Board slug from the careers URL")).toBeInTheDocument();
+    await user.click(screen.getByRole("combobox", { name: "Source 1" }));
+    await user.click(await screen.findByRole("option", { name: "Workday" }));
+    expect(await screen.findByText(/nvidia\.wd5\/NVIDIAExternalCareerSite/)).toBeInTheDocument();
+    expect(screen.queryByText("Board slug from the careers URL")).not.toBeInTheDocument();
   });
 
   it("lists no-adapter board sources with a suffix", async () => {

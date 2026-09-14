@@ -143,6 +143,11 @@ the aggregators you want (RemoteOK, Hacker News Who's Hiring). The worker polls 
 locally, and scored 0–100 against each of your tracks; the queue sorts by fit, low-fit jobs sit in their own
 bucket you can rescue from, and re-posts are flagged, not re-queued. Scoring never calls the LLM.
 
+**Workday** boards use `<host prefix>/<site>` instead of a slug, and you can read both off the careers URL:
+`https://nvidia.wd5.myworkdayjobs.com/en-US/NVIDIAExternalCareerSite/...` becomes `nvidia.wd5/NVIDIAExternalCareerSite`
+(keep the `wd5`-style data-centre suffix — it differs per tenant). Set keywords on Workday rows: they are pushed
+into Workday's own search, and without them a poll walks a board with thousands of postings.
+
 ```bash
 rhapto discover --profile ./profile          # one poll from the terminal, nothing stored
 rhapto score --jd job.txt --profile ./profile # per-track breakdown for one description
