@@ -1,3 +1,5 @@
+import json
+
 import httpx
 import pytest
 
@@ -162,3 +164,48 @@ async def test_discovery_http_handles_gzip_responses() -> None:
         user_agent="t", client=httpx.AsyncClient(transport=httpx.MockTransport(handler))
     )
     assert await http.get_json("https://example.com/api") == {"jobs": [1, 2]}
+
+
+async def test_post_json_sends_body_and_returns_json() -> None:
+    seen: list[tuple[str, bytes, str]] = []
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        seen.append((request.method, request.content, request.headers["user-agent"]))
+        return httpx.Response(200, json={"total": 1, "jobPostings": []})
+
+    http = DiscoveryHttp(
+        user_agent="rhapto-test/1", client=httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    )
+    body = {"appliedFacets": {}, "limit": 20, "offset": 0, "searchText": "ETL"}
+    assert await http.post_json("https://example.com/wday/cxs/t/s/jobs", body) == {
+        "total": 1,
+        "jobPostings": [],
+    }
+    assert seen[0][0] == "POST" and seen[0][2] == "rhapto-test/1"
+    assert json.loads(seen[0][1]) == body
+
+
+async def test_post_json_raises_on_4xx_redirect_and_private_hosts() -> None:
+    async def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/moved":
+            return httpx.Response(302, headers={"location": "https://example.com/elsewhere"})
+        return httpx.Response(404)
+
+    http = DiscoveryHttp(
+        user_agent="t", client=httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    )
+    with pytest.raises(SourceError, match="HTTP 404"):
+        await http.post_json("https://example.com/jobs", {})
+    with pytest.raises(SourceError, match="redirected"):
+        await http.post_json("https://example.com/moved", {})
+
+    guarded = DiscoveryHttp(user_agent="t")
+    with pytest.raises(SourceError, match="refusing to fetch"):
+        await guarded.post_json("http://127.0.0.1/jobs", {})
+
+
+async def test_fake_http_records_posts_separately_from_gets() -> None:
+    fake = FakeDiscoveryHttp({"/jobs": {"total": 0, "jobPostings": []}})
+    await fake.post_json("https://x.myworkdayjobs.com/wday/cxs/t/s/jobs", {"offset": 0})
+    assert fake.posts == [("POST", "https://x.myworkdayjobs.com/wday/cxs/t/s/jobs", {"offset": 0})]
+    assert fake.calls == []

@@ -1433,7 +1433,7 @@ export interface components {
              * Source
              * @enum {string}
              */
-            source: "greenhouse" | "lever" | "ashby" | "smartrecruiters" | "workable";
+            source: "greenhouse" | "lever" | "ashby" | "workday" | "smartrecruiters" | "workable";
         };
     };
     responses: never;

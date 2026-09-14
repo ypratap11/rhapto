@@ -35,4 +35,5 @@ from rhapto.services.discovery.sources import (  # noqa: E402,F401,I001  (regist
     hn_hiring,
     lever,
     remoteok,
+    workday,
 )

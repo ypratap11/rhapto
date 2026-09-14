@@ -17,6 +17,8 @@ from rhapto.services.discovery.sources import (
 )
 
 FIXTURES = Path(__file__).parent.parent / "fixtures" / "discovery"
+#: Sources whose board string is not a bare slug (Workday needs a host prefix and a site).
+BOARDS = {"workday": "exampleco.wd5/ExampleCoCareers"}
 
 
 def fake_http_for(name: str) -> FakeDiscoveryHttp:
@@ -27,7 +29,7 @@ def fake_http_for(name: str) -> FakeDiscoveryHttp:
 @pytest.mark.parametrize("name", sorted(SOURCES))
 async def test_source_contract(name: str) -> None:
     source = get_source(name)
-    board = "exampleco" if source.info.needs_board else None
+    board = BOARDS.get(name, "exampleco") if source.info.needs_board else None
     postings = await source.fetch(fake_http_for(name), board=board, keywords=[])
     assert postings, f"{name} fixture produced no postings"
     for p in postings:

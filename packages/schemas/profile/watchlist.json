@@ -17,7 +17,7 @@
       "required": ["company", "source", "board"],
       "properties": {
         "company": { "type": "string" },
-        "source": { "type": "string", "enum": ["greenhouse", "lever", "ashby", "smartrecruiters", "workable"] },
+        "source": { "type": "string", "enum": ["greenhouse", "lever", "ashby", "workday", "smartrecruiters", "workable"] },
         "board": { "type": "string" },
         "keywords": { "type": "array", "items": { "type": "string" }, "default": [] }
       }

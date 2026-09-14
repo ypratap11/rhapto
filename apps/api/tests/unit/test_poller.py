@@ -264,3 +264,38 @@ async def test_resaving_the_entry_grants_three_fresh_attempts(
         assert next(r for r in summary.results if r.source == "greenhouse").error == "HTTP 500"
     summary = await poll_sources(session, user.id, http=http, embedder=embedder)
     assert next(r for r in summary.results if r.source == "greenhouse").error == PAUSED_MESSAGE
+
+
+async def test_poll_ingests_a_workday_watchlist_row(session: AsyncSession, user: User) -> None:
+    """Workday boards are addressed by `<host prefix>/<site>`, and the watchlist row's company
+    still wins over the tenant name the adapter falls back to."""
+    for track in TRACKS:
+        await profile_repo.upsert_track(session, user.id, track)
+    await profile_repo.replace_watchlist(
+        session,
+        user.id,
+        [
+            WatchlistModel(
+                company="ExampleCo",
+                source="workday",
+                board="exampleco.wd5/ExampleCoCareers",
+                keywords=[],
+            )
+        ],
+    )
+    await profile_repo.replace_aggregators(session, user.id, [])
+    await session.flush()
+
+    http = fake_http_for("workday")
+    summary = await poll_sources(
+        session, user.id, http=http, embedder=FakeEmbeddingProvider(dimensions=384)
+    )
+    assert [(r.source, r.board, r.found, r.new, r.error) for r in summary.results] == [
+        ("workday", "exampleco.wd5/ExampleCoCareers", 1, 1, None)
+    ]
+    job = await session.scalar(select(Job).where(Job.external_id == "JR4001"))
+    assert job is not None and job.company == "ExampleCo" and job.source == "workday"
+    assert job.best_fit is not None and "<" not in job.jd_text
+    # one paged search POST plus one detail GET, and nothing else
+    assert [body["offset"] for _, _, body in http.posts] == [0]
+    assert len(http.calls) == 1

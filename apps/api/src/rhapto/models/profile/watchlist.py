@@ -13,7 +13,9 @@ class WatchlistEntry(BaseModel):
         extra='forbid',
     )
     company: str
-    source: Literal['greenhouse', 'lever', 'ashby', 'smartrecruiters', 'workable']
+    source: Literal[
+        'greenhouse', 'lever', 'ashby', 'workday', 'smartrecruiters', 'workable'
+    ]
     board: str
     keywords: list[str] = []
 

@@ -1,0 +1,26 @@
+{
+  "/wday/cxs/exampleco/ExampleCoCareers/jobs": {
+    "total": 1,
+    "jobPostings": [
+      {
+        "title": "Data Program Manager",
+        "externalPath": "/job/Denver-CO/Data-Program-Manager_JR4001",
+        "locationsText": "Denver, CO",
+        "postedOn": "Posted 3 Days Ago",
+        "bulletFields": ["JR4001"]
+      }
+    ]
+  },
+  "/ExampleCoCareers/job/Denver-CO/Data-Program-Manager_JR4001": {
+    "jobPostingInfo": {
+      "title": "Data Program Manager",
+      "jobDescription": "<p>Lead the <b>data platform</b> program: ETL consolidation and analytics enablement.</p><ul><li>Denver or remote</li></ul>",
+      "jobReqId": "JR4001",
+      "startDate": "2026-08-20",
+      "location": "Denver, CO",
+      "externalUrl": "https://exampleco.wd5.myworkdayjobs.com/en-US/ExampleCoCareers/job/Denver-CO/Data-Program-Manager_JR4001",
+      "postedOn": "Posted 3 Days Ago",
+      "timeType": "Full time"
+    }
+  }
+}
