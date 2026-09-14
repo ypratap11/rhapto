@@ -13,6 +13,10 @@ from rhapto.models.profile.tracks import Track
 from rhapto.models.resume_document import ResumeBullet, ResumeDocument, ResumeHeader, ResumeSection
 
 HEADER_KEYS = frozenset({"name", "email", "phone", "location", "links"})
+# Answers the scorer reads (see `engine.scoring.location_preference_from_answers`). They are
+# settings, not things an employer ever asks, and `location_home` is contact detail besides —
+# so they are stripped from the prompt alongside the header keys.
+SCORING_KEYS = frozenset({"location_home", "location_preferred", "remote_ok"})
 
 
 class AnswerItem(BaseModel):
@@ -48,7 +52,7 @@ def build_header(answers: dict[str, str]) -> ResumeHeader:
 
 
 def application_answers(answers: dict[str, str]) -> dict[str, str]:
-    return {k: v for k, v in answers.items() if k not in HEADER_KEYS}
+    return {k: v for k, v in answers.items() if k not in HEADER_KEYS and k not in SCORING_KEYS}
 
 
 def build_system_blocks(profile: Profile, track: Track) -> list[SystemBlock]:

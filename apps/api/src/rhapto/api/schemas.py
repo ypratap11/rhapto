@@ -7,6 +7,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 from rhapto.db.models import APPLICATION_STATUSES
+from rhapto.engine.scoring import LocationTier
 from rhapto.models.guardrail_report import GuardrailReport
 from rhapto.models.jd_extract import JDExtract
 from rhapto.models.resume_document import ResumeDocument
@@ -128,6 +129,7 @@ class JobOut(BaseModel):
     best_track_id: str | None = None
     best_fit: int | None = None
     bucket: Literal["fit", "low"] | None = None
+    location_tier: LocationTier | None = None
     rescued: bool = False
     repost_of: uuid.UUID | None = None
     posted_at: datetime | None = None

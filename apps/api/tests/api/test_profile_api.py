@@ -73,6 +73,26 @@ async def test_answers_and_watchlist(client: httpx.AsyncClient) -> None:
     assert (await client.get("/api/v1/profile/watchlist")).json() == expected
 
 
+async def test_answers_rescore_only_when_a_location_answer_changes(
+    client: httpx.AsyncClient, enqueuer
+) -> None:  # type: ignore[no-untyped-def]
+    body = {"name": "Maya Chen", "location_preferred": "Denver, Boulder", "remote_ok": "yes"}
+    await client.put("/api/v1/profile/answers", json=body)
+    assert [c[0] for c in enqueuer.calls] == ["rescore_jobs"]  # first write introduces them
+
+    await client.put("/api/v1/profile/answers", json={**body, "name": "M. Chen"})
+    assert [c[0] for c in enqueuer.calls] == ["rescore_jobs"]  # unrelated answer, no rescore
+
+    await client.put(
+        "/api/v1/profile/answers", json={**body, "location_preferred": "Santa Clara, San Jose"}
+    )
+    assert [c[0] for c in enqueuer.calls] == ["rescore_jobs", "rescore_jobs"]
+    assert enqueuer.calls[-1][1].keys() == {"user_id"}
+
+    await client.put("/api/v1/profile/answers", json={"name": "Maya Chen"})  # dropped entirely
+    assert [c[0] for c in enqueuer.calls] == ["rescore_jobs"] * 3
+
+
 async def test_aggregators_put_and_get(client: httpx.AsyncClient) -> None:
     body = [
         {"source": "remoteok", "enabled": True, "keywords": ["pm"]},

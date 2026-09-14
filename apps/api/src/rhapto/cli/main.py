@@ -26,7 +26,14 @@ from rhapto.engine.providers.fake import FakeEmbeddingProvider
 from rhapto.engine.providers.llm import LLMProvider, MalformedOutputError
 from rhapto.engine.providers.registry import PROVIDERS, build_llm, model_for, provider_ids
 from rhapto.engine.render.pdf import PdfRenderError, convert_docx_to_pdf, soffice_available
-from rhapto.engine.scoring import best_track, bucket_for, score_job, track_text
+from rhapto.engine.scoring import (
+    best_track,
+    bucket_for,
+    location_preference_from_answers,
+    location_tier,
+    score_job,
+    track_text,
+)
 from rhapto.engine.types import Profile, ProfileError, TailorRequest
 from rhapto.profile.loader import load_profile
 from rhapto.services.discovery.http import DiscoveryHttp
@@ -331,9 +338,11 @@ async def _score_postings(
         [track_text(t) for t in tracks] + [f"{p.title}\n{p.jd_text}" for _, p in postings]
     )
     track_vectors = {t.id: v for t, v in zip(tracks, vectors[: len(tracks)], strict=True)}
+    preference = location_preference_from_answers(profile.answers)
     rows: list[dict[str, Any]] = []
     for (source, posting), vector in zip(postings, vectors[len(tracks) :], strict=True):
-        scores = score_job(posting.title, posting.jd_text, vector, tracks, track_vectors)
+        tier = location_tier(posting.location, preference)
+        scores = score_job(posting.title, posting.jd_text, vector, tracks, track_vectors, tier)
         best = best_track(scores, tracks)
         rows.append(
             {
@@ -341,6 +350,7 @@ async def _score_postings(
                 "company": posting.company,
                 "title": posting.title,
                 "location": posting.location,
+                "location_tier": tier,
                 "url": posting.url,
                 "fit": best.fit_score if best else 0,
                 "track": best.track_id if best else None,

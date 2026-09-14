@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 import uuid
-from typing import Annotated, Any, Literal
+from typing import Annotated, Any, Literal, cast
 
 from fastapi import APIRouter, Depends, Query, Response
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -14,6 +14,7 @@ from rhapto.db.models import Application, Job, JobScore, Package
 from rhapto.db.repositories import jobs as repo
 from rhapto.db.repositories import profile as profile_repo
 from rhapto.db.repositories.discovery import scores_for_jobs
+from rhapto.engine.scoring import LocationTier
 from rhapto.models.jd_extract import JDExtract
 from rhapto.services.enqueue import Enqueuer
 from rhapto.services.jobtext import FetchText
@@ -69,6 +70,7 @@ def job_to_out(
         best_track_id=job.best_track_id,
         best_fit=job.best_fit,
         bucket=bucket,
+        location_tier=cast("LocationTier | None", job.location_tier),
         rescued=job.rescued,
         repost_of=job.repost_of,
         posted_at=job.posted_at,
@@ -175,10 +177,11 @@ async def list_jobs(
     search: str | None = Query(default=None),
     track: str | None = Query(default=None),
     bucket: Literal["fit", "low"] | None = Query(default=None),
+    region: Literal["preferred", "us", "any"] = Query(default="any"),
     sort: Literal["fit", "newest"] = Query(default="fit"),
 ) -> list[JobOut]:
     jobs = await repo.list_jobs(
-        session, user_id, search=search, track=track, bucket=bucket, sort=sort
+        session, user_id, search=search, track=track, bucket=bucket, region=region, sort=sort
     )
     return await _outs(session, user_id, jobs)
 

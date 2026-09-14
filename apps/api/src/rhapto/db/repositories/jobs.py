@@ -56,6 +56,7 @@ async def list_jobs(
     search: str | None = None,
     track: str | None = None,
     bucket: str | None = None,
+    region: str = "any",
     sort: str = "fit",
 ) -> list[Job]:
     tracks = select(Track.track_id, Track.min_fit).where(Track.user_id == user_id).subquery()
@@ -77,6 +78,14 @@ async def list_jobs(
         )
     if track:
         query = query.where(Job.best_track_id == track)
+    # `location_tier` is NULL on rows scored before location priority shipped and on rows the
+    # scorer has not reached; those read as "unknown", so they stay visible under "us" and
+    # only the deliberately narrow "preferred" filter hides them.
+    tier = func.coalesce(Job.location_tier, "unknown")
+    if region == "preferred":
+        query = query.where(tier == "preferred")
+    elif region == "us":
+        query = query.where(tier.in_(("preferred", "remote", "country", "unknown")))
     # `best_track_id` has no FK, so a scored job whose track was deleted or renamed
     # outer-joins to a NULL min_fit. Coalesce to a value above any real min_fit (0-100)
     # so the comparison is always a definite boolean rather than NULL: an orphaned

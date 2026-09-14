@@ -57,6 +57,17 @@ EnqueuerDep = Annotated[Enqueuer, Depends(get_enqueuer)]
 StorageDep = Annotated[PackageStorage, Depends(get_storage)]
 
 
+def _location_keys(*answer_maps: dict[str, str]) -> set[str]:
+    """The answers that feed `engine.scoring.location_preference_from_answers`, across both the
+    old and the new map so a removed key still counts as a change."""
+    return {
+        key
+        for answers in answer_maps
+        for key in answers
+        if key.startswith("location_") or key == "remote_ok"
+    }
+
+
 def _check_id(path_id: str, body_id: str) -> None:
     if path_id != body_id:
         raise HTTPException(
@@ -216,10 +227,18 @@ async def get_answers(user_id: UserDep, session: SessionDep) -> dict[str, str]:
 
 @router.put("/answers", response_model=dict[str, str])
 async def put_answers(
-    body: dict[str, str], user_id: UserDep, session: SessionDep
+    body: dict[str, str], user_id: UserDep, session: SessionDep, enqueuer: EnqueuerDep
 ) -> dict[str, str]:
+    previous = await repo.get_answers(session, user_id)
     await repo.set_answers(session, user_id, body)
     await session.commit()
+    if any(previous.get(key) != body.get(key) for key in _location_keys(previous, body)):
+        try:
+            await enqueuer.enqueue("rescore_jobs", user_id=str(user_id))
+        except Exception:  # the row is committed; a queue outage must not fail the request
+            logger.exception(
+                "could not enqueue %s; the record is saved but not (re)scored", "rescore_jobs"
+            )
     return body
 
 

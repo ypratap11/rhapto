@@ -3,6 +3,11 @@ answers:
   email: "maya.chen@example.com"
   phone: "+1 555 0100"
   location: "Denver, CO"
+  # Location priority: scoring multiplies a job's fit by how well its posted location matches
+  # these. `location_preferred` is a comma-separated list of the towns/regions you want.
+  location_home: "Denver, CO"
+  location_preferred: "Denver, Boulder, Lakewood, Aurora, Littleton, Golden, Broomfield, Front Range, CO"
+  remote_ok: "yes"
   links: "github.com/mayachen-example"
   work_authorization: "US citizen"
   onsite_preference: "Remote or hybrid"

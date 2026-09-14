@@ -26,6 +26,9 @@ async def test_classification_case(case: dict[str, object], demo_profile_dir: Pa
         vectors[0],
         tracks,
         {t.id: v for t, v in zip(tracks, vectors[1:], strict=True)},
+        # These cases are about the track, not the commute: hold the location multiplier at 1.0
+        # so the expected buckets keep measuring the semantic/keyword blend alone.
+        location_tier="preferred",
     )
     best = best_track(scores, tracks)
     bucket = bucket_for(best, tracks, rescued=False)

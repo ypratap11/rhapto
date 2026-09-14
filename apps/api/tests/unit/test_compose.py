@@ -47,8 +47,17 @@ def test_build_header_from_answers() -> None:
     assert build_header({}).name == "Candidate"
 
 
-def test_application_answers_excludes_header_keys() -> None:
-    answers = application_answers({"name": "x", "email": "e", "notice_period": "2 weeks"})
+def test_application_answers_excludes_header_and_scoring_keys() -> None:
+    answers = application_answers(
+        {
+            "name": "x",
+            "email": "e",
+            "location_home": "Denver, CO",
+            "location_preferred": "Denver, Boulder",
+            "remote_ok": "yes",
+            "notice_period": "2 weeks",
+        }
+    )
     assert answers == {"notice_period": "2 weeks"}
 
 

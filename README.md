@@ -143,6 +143,24 @@ the aggregators you want (RemoteOK, Hacker News Who's Hiring). The worker polls 
 locally, and scored 0–100 against each of your tracks; the queue sorts by fit, low-fit jobs sit in their own
 bucket you can rescue from, and re-posts are flagged, not re-queued. Scoring never calls the LLM.
 
+### Location priority
+
+Fit is scaled by where the job is, so a great role on the wrong continent cannot outrank a good one
+down the road. Three answers in `profile/answers.yaml` (**Profile → Answers** in the web app — edit them
+there any time, and the queue is re-scored as soon as you save) drive it:
+
+| answer | example | what it does |
+| --- | --- | --- |
+| `location_home` | `Denver, CO` | Where you are. Recorded for your applications; not matched against postings. |
+| `location_preferred` | `Denver, Boulder, Golden, Front Range, CO` | Comma-separated towns and regions you want. A whole-word match on the posting's location field puts the job in your preferred tier. |
+| `remote_ok` | `yes` | `no`, `false` or `0` means a remote-only posting is worth no more to you than one abroad. Anything else (including a blank) means yes. |
+
+Every posting lands in one tier, and its fit is multiplied accordingly: **preferred** ×1.0, **remote**
+×0.95, **US** ×0.85, **abroad** ×0.60, **unknown** ×0.90. Only the posting's location field is read —
+job descriptions name offices on three continents in their boilerplate — and a named country settles it,
+so "Dublin, Ireland" is abroad even when your preferred list names Dublin, CA. The queue's **Region**
+filter (Preferred area / US and remote / Anywhere) and the chip on each job row show the result.
+
 **Workday** boards use `<host prefix>/<site>` instead of a slug, and you can read both off the careers URL:
 `https://nvidia.wd5.myworkdayjobs.com/en-US/NVIDIAExternalCareerSite/...` becomes `nvidia.wd5/NVIDIAExternalCareerSite`
 (keep the `wd5`-style data-centre suffix — it differs per tenant). Set keywords on Workday rows: they are pushed

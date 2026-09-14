@@ -160,6 +160,10 @@ class Job(UserScopedMixin, TimestampMixin, Base):
     posted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     best_track_id: Mapped[str | None] = mapped_column(String(100))
     best_fit: Mapped[int | None] = mapped_column(Integer)
+    # How this posting's location read against the user's answers.yaml preference when it was
+    # last scored: one of preferred/remote/country/abroad/unknown. NULL on rows written before
+    # location priority existed, and on rows the scorer has not reached yet.
+    location_tier: Mapped[str | None] = mapped_column(String(12))
     repost_of: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("jobs.id", ondelete="SET NULL"))
     rescued: Mapped[bool] = mapped_column(
         Boolean, default=False, server_default="false", nullable=False

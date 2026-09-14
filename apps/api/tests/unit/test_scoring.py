@@ -1,6 +1,7 @@
 from rhapto.engine.providers.fake import FakeEmbeddingProvider
 from rhapto.engine.scoring import (
     KEYWORD_WEIGHT,
+    LOCATION_MULTIPLIER,
     SEMANTIC_WEIGHT,
     TrackScore,
     best_track,
@@ -62,11 +63,18 @@ async def test_score_job_blends_and_orders_by_track() -> None:
         vectors[0],
         [DATA, AI],
         {"data-pm": vectors[1], "ai-pm": vectors[2]},
+        location_tier="preferred",
     )
     assert [s.track_id for s in scores] == ["data-pm", "ai-pm"]
     data = scores[0]
     assert data.fit_score == round(SEMANTIC_WEIGHT * data.semantic + KEYWORD_WEIGHT * data.keywords)
     assert data.fit_score > scores[1].fit_score
+    # No location known is not the same as a location the user wants: the default tier costs 10%.
+    unknown = score_job(
+        "Data Program Manager", jd, vectors[0], [DATA, AI], {"data-pm": vectors[1]}
+    )[0]
+    assert unknown.location_tier == "unknown"
+    assert unknown.fit_score == round(data.fit_score * LOCATION_MULTIPLIER["unknown"])
 
 
 def test_best_track_ties_resolve_by_track_order_and_bucket_uses_min_fit() -> None:

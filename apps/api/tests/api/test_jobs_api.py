@@ -162,3 +162,38 @@ async def test_search_does_not_treat_percent_as_a_wildcard(client: httpx.AsyncCl
     assert [j["company"] for j in literal] == ["PercentCo"]
     both = (await client.get("/api/v1/jobs", params={"search": "100"})).json()
     assert {j["company"] for j in both} == {"PercentCo", "PlainCo"}
+
+
+async def test_region_filter_and_location_tier_in_job_out(client: httpx.AsyncClient) -> None:
+    await client.put(
+        "/api/v1/profile/answers", json={"location_preferred": "Santa Clara, Sunnyvale"}
+    )
+    for company, location in (
+        ("NearCo", "Santa Clara, CA"),
+        ("UsCo", "Denver, CO"),
+        ("FarCo", "Dublin, Ireland"),
+    ):
+        created = await client.post(
+            "/api/v1/jobs",
+            json={
+                "jd_text": f"{company} needs a program manager. " * 5,
+                "company": company,
+                "location": location,
+            },
+        )
+        assert created.status_code == 201, created.text
+
+    listed = (await client.get("/api/v1/jobs")).json()
+    assert {j["company"]: j["location_tier"] for j in listed} == {
+        "NearCo": "preferred",
+        "UsCo": "country",
+        "FarCo": "abroad",
+    }
+
+    preferred = (await client.get("/api/v1/jobs", params={"region": "preferred"})).json()
+    assert {j["company"] for j in preferred} == {"NearCo"}
+    us = (await client.get("/api/v1/jobs", params={"region": "us"})).json()
+    assert {j["company"] for j in us} == {"NearCo", "UsCo"}
+    any_region = (await client.get("/api/v1/jobs", params={"region": "any"})).json()
+    assert {j["company"] for j in any_region} == {"NearCo", "UsCo", "FarCo"}
+    assert (await client.get("/api/v1/jobs", params={"region": "moon"})).status_code == 422

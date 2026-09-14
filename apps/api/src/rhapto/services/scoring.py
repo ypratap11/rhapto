@@ -11,7 +11,14 @@ from rhapto.db.models import Track as TrackRow
 from rhapto.db.repositories import discovery as disc_repo
 from rhapto.db.repositories import profile as profile_repo
 from rhapto.engine.providers.embeddings import EmbeddingProvider
-from rhapto.engine.scoring import best_track, rationale, score_job, track_text
+from rhapto.engine.scoring import (
+    best_track,
+    location_preference_from_answers,
+    location_tier,
+    rationale,
+    score_job,
+    track_text,
+)
 from rhapto.models.profile.tracks import Track
 from rhapto.services.profile_sync import track_row_to_model
 
@@ -52,16 +59,23 @@ async def score_and_store(
     if not jobs:
         return
     tracks, track_vectors = await ensure_track_embeddings(session, user_id, embedder)
+    # One read of answers.yaml for the whole batch; `rescore_jobs` runs this again whenever the
+    # user edits a location answer, so the stored tiers follow the preference.
+    preference = location_preference_from_answers(await profile_repo.get_answers(session, user_id))
     unembedded = [j for j in jobs if j.jd_embedding is None]
     if unembedded:
         vectors = await embedder.embed([f"{j.title or ''}\n{j.jd_text}" for j in unembedded])
         for job, vector in zip(unembedded, vectors, strict=True):
             job.jd_embedding = _fit_dimensions(vector)
     for job in jobs:
+        tier = location_tier(job.location, preference)
+        job.location_tier = tier
         if job.jd_embedding is None or not tracks:
             job.best_track_id, job.best_fit = None, None
             continue
-        scores = score_job(job.title, job.jd_text, list(job.jd_embedding), tracks, track_vectors)
+        scores = score_job(
+            job.title, job.jd_text, list(job.jd_embedding), tracks, track_vectors, tier
+        )
         best = best_track(scores, tracks)
         job.best_track_id = best.track_id if best else None
         job.best_fit = best.fit_score if best else None

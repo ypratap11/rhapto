@@ -791,6 +791,24 @@
             ],
             "title": "Location"
           },
+          "location_tier": {
+            "anyOf": [
+              {
+                "enum": [
+                  "preferred",
+                  "remote",
+                  "country",
+                  "abroad",
+                  "unknown"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Location Tier"
+          },
           "posted_at": {
             "anyOf": [
               {
@@ -2729,6 +2747,21 @@
                 }
               ],
               "title": "Bucket"
+            }
+          },
+          {
+            "in": "query",
+            "name": "region",
+            "required": false,
+            "schema": {
+              "default": "any",
+              "enum": [
+                "preferred",
+                "us",
+                "any"
+              ],
+              "title": "Region",
+              "type": "string"
             }
           },
           {
