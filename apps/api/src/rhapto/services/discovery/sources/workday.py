@@ -83,8 +83,10 @@ class WorkdaySource:
                         http, (host_prefix, tenant, site), path, item, keywords=keywords
                     )
                 )
-            except (KeyError, TypeError, ValueError, AttributeError):
-                continue  # one bad posting never fails the board
+            except (KeyError, TypeError, ValueError, AttributeError, SourceError):
+                # One bad or vanished posting (a req closed between the search and the detail
+                # fetch answers 404) never fails the board; the search-level errors above do.
+                continue
         return out
 
     async def _search(

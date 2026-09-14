@@ -197,3 +197,17 @@ async def test_bad_board_raises_source_error_before_any_request() -> None:
     with pytest.raises(SourceError, match="workday board must look like"):
         await get_source("workday").fetch(http, board="exampleco", keywords=[])
     assert http.posts == [] and http.calls == []
+
+
+async def test_a_vanished_posting_detail_does_not_fail_the_board() -> None:
+    gone = summary("JR0001", title="Data Program Manager")
+    kept = summary("JR0002", title="Data Program Manager II")
+    http = WorkdayFake(
+        {"": [gone, kept]},
+        {
+            gone["externalPath"]: SourceError("404 Not Found"),
+            kept["externalPath"]: detail("JR0002", title="Data Program Manager II"),
+        },
+    )
+    postings = await get_source("workday").fetch(http, board=BOARD, keywords=[])
+    assert [p.external_id for p in postings] == ["JR0002"]
