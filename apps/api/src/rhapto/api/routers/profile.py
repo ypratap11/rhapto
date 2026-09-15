@@ -39,6 +39,7 @@ from rhapto.services.profile_sync import (
     watchlist_row_to_model,
 )
 from rhapto.services.storage import PackageStorage
+from rhapto.services.taxonomy import validate_track_taxonomy
 
 logger = logging.getLogger(__name__)
 
@@ -157,6 +158,7 @@ async def put_track(
     enqueuer: EnqueuerDep,
 ) -> Track:
     _check_id(track_id, body.id)
+    validate_track_taxonomy(body)
     existed = await repo.get_track(session, user_id, track_id) is not None
     row = await repo.upsert_track(session, user_id, body)
     await session.commit()

@@ -15,6 +15,7 @@ from rhapto.models.profile.guardrails import GuardrailRule
 from rhapto.models.profile.tracks import Track
 from rhapto.models.profile.watchlist import AggregatorEntry, WatchlistEntry
 from rhapto.profile.loader import default_guardrails, dump_profile, load_profile, synthesize_bases
+from rhapto.services.taxonomy import validate_track_taxonomy
 
 
 def block_row_to_model(row: db.ResumeBlock) -> Block:
@@ -124,6 +125,8 @@ async def replace_profile_in_db(
 
 async def import_profile_dir(session: AsyncSession, user_id: uuid.UUID, path: Path) -> Profile:
     profile = load_profile(path)
+    for track in profile.tracks:
+        validate_track_taxonomy(track)
     await replace_profile_in_db(session, user_id, profile)
     return profile
 

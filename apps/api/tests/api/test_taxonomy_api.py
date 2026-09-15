@@ -88,3 +88,61 @@ async def test_a_track_without_a_field_still_round_trips(client: httpx.AsyncClie
     )
     assert created.status_code == 201
     assert created.json()["field"] is None and created.json()["role"] is None
+
+
+async def test_a_track_with_an_unknown_field_is_rejected(client: httpx.AsyncClient) -> None:
+    response = await client.put(
+        "/api/v1/profile/tracks/bogus",
+        json={
+            "id": "bogus",
+            "name": "Bogus",
+            "resume_base": "default",
+            "field": "not-a-real-field",
+        },
+    )
+    assert response.status_code == 422
+
+
+async def test_a_track_whose_role_belongs_to_a_different_field_is_rejected(
+    client: httpx.AsyncClient,
+) -> None:
+    response = await client.put(
+        "/api/v1/profile/tracks/mismatched",
+        json={
+            "id": "mismatched",
+            "name": "Mismatched",
+            "resume_base": "default",
+            # technical-program-manager belongs to program-project-management, not engineering.
+            "field": "engineering",
+            "role": "technical-program-manager",
+        },
+    )
+    assert response.status_code == 422
+
+
+async def test_a_track_with_a_role_but_no_field_is_rejected(client: httpx.AsyncClient) -> None:
+    response = await client.put(
+        "/api/v1/profile/tracks/rootless",
+        json={
+            "id": "rootless",
+            "name": "Rootless",
+            "resume_base": "default",
+            "role": "technical-program-manager",
+        },
+    )
+    assert response.status_code == 422
+
+
+async def test_a_track_with_a_field_and_no_role_is_accepted(client: httpx.AsyncClient) -> None:
+    response = await client.put(
+        "/api/v1/profile/tracks/fielded",
+        json={
+            "id": "fielded",
+            "name": "Fielded",
+            "resume_base": "default",
+            "field": "engineering",
+        },
+    )
+    assert response.status_code == 201
+    body = response.json()
+    assert body["field"] == "engineering" and body["role"] is None

@@ -67,6 +67,22 @@ async def test_load_without_blocks_raises(session: AsyncSession, user: User) -> 
         await load_profile_from_db(session, user.id)
 
 
+async def test_import_with_unknown_taxonomy_field_raises(
+    session: AsyncSession, user: User, tmp_path: Path
+) -> None:
+    (tmp_path / "blocks.yaml").write_text(
+        "blocks:\n  - id: a\n    type: role\n    content: one\n", encoding="utf-8"
+    )
+    (tmp_path / "tracks.yaml").write_text(
+        "tracks:\n  - id: t1\n    name: T\n    resume_base: b\n    field: not-a-real-field\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(ProfileError, match="not-a-real-field"):
+        await import_profile_dir(session, user.id, tmp_path)
+    # a failed import must not have written anything
+    assert await repo.list_blocks(session, user.id) == []
+
+
 async def test_upsert_block_updates_in_place(session: AsyncSession, user: User) -> None:
     await repo.upsert_block(session, user.id, Block(id="a", type="role", content="one"))
     await repo.upsert_block(

@@ -16,6 +16,8 @@ from pathlib import Path
 import yaml
 from pydantic import ValidationError
 
+from rhapto.engine.types import ProfileError
+from rhapto.models.profile.tracks import Track
 from rhapto.models.taxonomy import TaxonomyField, TaxonomyFile, TaxonomyRole
 
 #: Where the Docker image puts the file (see apps/api/Dockerfile).
@@ -88,3 +90,21 @@ def roles_by_name() -> dict[str, tuple[TaxonomyField, TaxonomyRole]]:
 def normalise(text: str) -> str:
     """Lower-cased, punctuation-free, single-spaced: the form both sides of a match use."""
     return _PUNCT.sub(" ", text.lower()).strip()
+
+
+def validate_track_taxonomy(track: Track) -> None:
+    """Every write path for a Track goes through here so `field`/`role` never drift from the
+    taxonomy they claim to come from.
+
+    Rules: neither set is fine (a hand-written track); `field` alone must be a real field id;
+    `role` always requires `field` and the two must resolve together (a role id that exists
+    under a *different* field is still rejected -- it is not "this track's" role).
+    """
+    if track.role is not None:
+        if track.field is None or find_role(track.field, track.role) is None:
+            raise ProfileError(
+                f"track {track.id}: role {track.role!r} does not belong to "
+                f"field {track.field!r} in the taxonomy"
+            )
+    elif track.field is not None and find_field(track.field) is None:
+        raise ProfileError(f"track {track.id}: unknown taxonomy field {track.field!r}")
