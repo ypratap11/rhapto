@@ -26,7 +26,12 @@ def fake_http_for(name: str) -> FakeDiscoveryHttp:
     return FakeDiscoveryHttp(routes)
 
 
-@pytest.mark.parametrize("name", sorted(SOURCES))
+#: SearchSpec-driven aggregators (themuse, remotive, adzuna, jooble, jsearch) only implement
+#: `fetch_search`; their contract is covered by test_discovery_search_sources.py instead.
+FETCH_SOURCES = sorted(name for name, cls in SOURCES.items() if hasattr(cls, "fetch"))
+
+
+@pytest.mark.parametrize("name", FETCH_SOURCES)
 async def test_source_contract(name: str) -> None:
     source = get_source(name)
     board = BOARDS.get(name, "exampleco") if source.info.needs_board else None
@@ -43,5 +48,8 @@ def test_registry_matches_profile_schema_enums() -> None:
     board_enum = set(WatchlistEntry.model_fields["source"].annotation.__args__)  # type: ignore[union-attr]
     aggregator_enum = set(AggregatorEntry.model_fields["source"].annotation.__args__)  # type: ignore[union-attr]
     assert {i.name for i in board_sources()} <= board_enum
-    assert {i.name for i in aggregator_sources()} == aggregator_enum
+    # The profile watchlist schema only lists the key-free legacy aggregators (remoteok,
+    # hn-hiring); SearchSpec-driven aggregators (themuse, remotive, adzuna, jooble, jsearch)
+    # are driven by saved searches, not watchlist.yaml, so the registry is a superset here.
+    assert aggregator_enum <= {i.name for i in aggregator_sources()}
     assert {i.name for i in all_sources()} == set(SOURCES)

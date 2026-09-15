@@ -10,6 +10,7 @@ from rhapto.services.jobtext import html_to_text
 
 if TYPE_CHECKING:
     from rhapto.services.discovery.http import DiscoveryHttp
+    from rhapto.services.discovery.search import SearchSpec
 
 
 @register
@@ -44,3 +45,8 @@ class RemoteOkSource:
             except (KeyError, TypeError, ValueError):
                 continue
         return out
+
+    async def fetch_search(
+        self, http: DiscoveryHttp, spec: SearchSpec, credentials: dict[str, str]
+    ) -> list[Posting]:
+        return await self.fetch(http, board=None, keywords=list(spec.keywords))

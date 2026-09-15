@@ -1,18 +1,29 @@
 from __future__ import annotations
 
-from rhapto.services.discovery.sources.base import Source, SourceError, SourceInfo
+from typing import cast
 
-SOURCES: dict[str, type[Source]] = {}
+from rhapto.services.discovery.sources.base import (
+    AggregatorSource,
+    Source,
+    SourceError,
+    SourceInfo,
+)
+
+#: Board/keyword sources implement `Source` (`.fetch`); SearchSpec-driven aggregators implement
+#: `AggregatorSource` (`.fetch_search`) instead — some (hn-hiring, remoteok) implement both.
+SourceClass = type[Source] | type[AggregatorSource]
+
+SOURCES: dict[str, SourceClass] = {}
 
 
-def register(cls: type[Source]) -> type[Source]:
-    SOURCES[cls.info.name] = cls
+def register[T: (Source | AggregatorSource)](cls: type[T]) -> type[T]:
+    SOURCES[cls.info.name] = cast("SourceClass", cls)
     return cls
 
 
 def get_source(name: str) -> Source:
     try:
-        return SOURCES[name]()
+        return cast("Source", SOURCES[name]())
     except KeyError as exc:
         raise SourceError(f"unknown source {name!r}") from exc
 
@@ -29,6 +40,16 @@ def aggregator_sources() -> list[SourceInfo]:
     return [i for i in all_sources() if i.kind == "aggregator"]
 
 
+def get_aggregator(name: str) -> AggregatorSource:
+    """The aggregator registered under `name`; a board source is a programming error here."""
+    cls = SOURCES.get(name)
+    if cls is None:
+        raise SourceError(f"unknown source {name!r}")
+    if cls.info.kind != "aggregator":
+        raise SourceError(f"{name!r} is a board source, not an aggregator")
+    return cast("AggregatorSource", cls())
+
+
 from rhapto.services.discovery.sources import (  # noqa: E402,F401,I001  (registration)
     ashby,
     greenhouse,
@@ -36,4 +57,9 @@ from rhapto.services.discovery.sources import (  # noqa: E402,F401,I001  (regist
     lever,
     remoteok,
     workday,
+    themuse,
+    remotive,
+    adzuna,
+    jooble,
+    jsearch,
 )

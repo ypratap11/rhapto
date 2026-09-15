@@ -122,14 +122,15 @@ class DiscoveryHttp:
                     continue
                 raise SourceError(f"{url}: {exc}") from exc
 
-    async def _get(self, url: str) -> httpx.Response:
+    async def _get(self, url: str, headers: dict[str, str] | None = None) -> httpx.Response:
         current_url = self._rewrite(url)
         await self._assert_public(current_url)
-        headers = {"User-Agent": self.user_agent, "Accept": "application/json, text/html;q=0.8"}
+        merged = {"User-Agent": self.user_agent, "Accept": "application/json, text/html;q=0.8"}
+        merged.update(headers or {})
         for _ in range(MAX_REDIRECTS + 1):
             # _send_once already raises SourceError for any >= 400 status, so a response that
             # comes back here is either a success (< 400) or a redirect (3xx, also < 400).
-            response = await self._send_once("GET", current_url, headers)
+            response = await self._send_once("GET", current_url, merged)
             if response.status_code not in _REDIRECT_STATUS_CODES:
                 return response
             location = response.headers.get("location")
@@ -139,8 +140,8 @@ class DiscoveryHttp:
             await self._assert_public(current_url)
         raise SourceError(f"{url}: too many redirects")
 
-    async def get_json(self, url: str) -> Any:
-        response = await self._get(url)
+    async def get_json(self, url: str, *, headers: dict[str, str] | None = None) -> Any:
+        response = await self._get(url, headers)
         try:
             return response.json()
         except ValueError as exc:
@@ -177,6 +178,7 @@ class FakeDiscoveryHttp:
         self.routes = routes
         self.calls: list[str] = []
         self.posts: list[tuple[str, str, dict[str, Any]]] = []
+        self.headers: list[dict[str, str]] = []
 
     def _match(self, url: str) -> Any:
         for key, value in self.routes.items():
@@ -190,7 +192,8 @@ class FakeDiscoveryHttp:
         self.calls.append(url)
         return self._match(url)
 
-    async def get_json(self, url: str) -> Any:
+    async def get_json(self, url: str, *, headers: dict[str, str] | None = None) -> Any:
+        self.headers.append(dict(headers or {}))
         return self._route(url)
 
     async def post_json(self, url: str, body: dict[str, Any]) -> Any:

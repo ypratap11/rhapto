@@ -13,6 +13,8 @@ class Posting(BaseModel):
     url: str
     jd_text: str
     posted_at: datetime | None = None
+    #: What the source said about pay, verbatim. None when it said nothing; never computed.
+    salary_text: str | None = None
 
     @field_validator("external_id", "company", "title", "jd_text")
     @classmethod
