@@ -1,0 +1,218 @@
+# The field -> role taxonomy behind the Tracks picker (spec 2026-09-14-portal-design.md, §5).
+# Picking a role creates a track named after it, with these keywords and min_fit 60.
+# `themuse_category` and `adzuna_category` are the category names those two APIs use for the
+# field; keyword-only sources get the track's keywords instead.
+fields:
+  - id: engineering
+    name: Engineering
+    themuse_category: Engineering
+    adzuna_category: IT Jobs
+    roles:
+      - id: backend
+        name: Backend
+        keywords: [backend engineer, backend developer, API design, microservices, distributed systems, server side, databases]
+      - id: frontend
+        name: Frontend
+        keywords: [frontend engineer, frontend developer, React, TypeScript, web UI, accessibility, design systems]
+      - id: full-stack
+        name: Full stack
+        keywords: [full stack engineer, full stack developer, web application, REST API, React, Node, end to end]
+      - id: mobile
+        name: Mobile
+        keywords: [mobile engineer, iOS engineer, Android engineer, Swift, Kotlin, React Native, mobile application]
+      - id: ml-engineering
+        name: ML Engineering
+        keywords: [machine learning engineer, ML infrastructure, model serving, feature store, MLOps, PyTorch, inference]
+      - id: devops-sre
+        name: DevOps and SRE
+        keywords: [site reliability engineer, DevOps engineer, Kubernetes, Terraform, CI CD, observability, incident response]
+      - id: security
+        name: Security
+        keywords: [security engineer, application security, threat modeling, incident response, penetration testing, identity and access, compliance]
+      - id: qa
+        name: QA
+        keywords: [QA engineer, test automation, quality engineering, end to end testing, regression testing, test strategy, defect triage]
+  - id: data-science
+    name: Data Science
+    themuse_category: Data Science
+    adzuna_category: Scientific & QA Jobs
+    roles:
+      - id: data-scientist
+        name: Data Scientist
+        keywords: [data scientist, statistical modeling, experimentation, A/B testing, Python, causal inference, predictive models]
+      - id: data-analyst
+        name: Data Analyst
+        keywords: [data analyst, SQL, dashboards, business intelligence, reporting, Tableau, metrics]
+      - id: data-engineer
+        name: Data Engineer
+        keywords: [data engineer, data pipelines, ETL, Spark, Airflow, data warehouse, streaming]
+      - id: analytics-engineer
+        name: Analytics Engineer
+        keywords: [analytics engineer, dbt, data modeling, semantic layer, SQL, data quality, warehouse]
+      - id: ml-research
+        name: ML Research
+        keywords: [machine learning researcher, research scientist, deep learning, publications, model architecture, benchmarks, PyTorch]
+  - id: product
+    name: Product
+    themuse_category: Product Management
+    adzuna_category: IT Jobs
+    roles:
+      - id: product-manager
+        name: Product Manager
+        keywords: [product manager, product roadmap, user research, requirements, prioritisation, stakeholder management, product strategy]
+      - id: technical-product-manager
+        name: Technical Product Manager
+        keywords: [technical product manager, platform product, API product, developer experience, technical roadmap, architecture, integrations]
+      - id: group-product-manager
+        name: Group Product Manager
+        keywords: [group product manager, principal product manager, product leadership, portfolio, mentoring, product strategy, org alignment]
+      - id: product-operations
+        name: Product Operations
+        keywords: [product operations, product ops, release process, tooling, product analytics, launch readiness, cross functional]
+  - id: program-project-management
+    name: Program and Project Management
+    themuse_category: Project Management
+    adzuna_category: Consultancy Jobs
+    roles:
+      - id: technical-program-manager
+        name: Technical Program Manager
+        keywords: [technical program manager, TPM, cross functional programs, technical roadmap, dependency management, risk management, engineering delivery]
+      - id: program-manager
+        name: Program Manager
+        keywords: [program manager, program governance, portfolio management, stakeholder management, roadmap, status reporting, OKRs]
+      - id: project-manager
+        name: Project Manager
+        keywords: [project manager, project plan, schedule management, budget tracking, scope management, RAID log, PMP]
+      - id: delivery-lead
+        name: Delivery Lead
+        keywords: [delivery lead, delivery manager, release management, agile delivery, throughput, team health, escalation]
+      - id: scrum-master
+        name: Scrum Master
+        keywords: [scrum master, agile coach, sprint planning, retrospectives, backlog refinement, velocity, impediment removal]
+  - id: design
+    name: Design
+    themuse_category: Design and UX
+    adzuna_category: Creative & Design Jobs
+    roles:
+      - id: product-designer
+        name: Product Designer
+        keywords: [product designer, UX design, interaction design, wireframes, prototyping, Figma, design systems]
+      - id: ux-researcher
+        name: UX Researcher
+        keywords: [UX researcher, user research, usability testing, interviews, research synthesis, personas, qualitative research]
+      - id: ux-writer
+        name: UX Writer
+        keywords: [UX writer, content design, microcopy, content strategy, voice and tone, information architecture, localisation]
+      - id: brand-designer
+        name: Brand Designer
+        keywords: [brand designer, visual design, identity system, typography, marketing design, illustration, art direction]
+  - id: marketing
+    name: Marketing
+    themuse_category: Marketing
+    adzuna_category: PR, Advertising & Marketing Jobs
+    roles:
+      - id: product-marketing-manager
+        name: Product Marketing Manager
+        keywords: [product marketing manager, positioning, messaging, go to market, launch, competitive analysis, sales enablement]
+      - id: growth-marketing
+        name: Growth Marketing
+        keywords: [growth marketing, performance marketing, paid acquisition, conversion rate, funnel, lifecycle marketing, experimentation]
+      - id: content-marketing
+        name: Content Marketing
+        keywords: [content marketing, editorial calendar, SEO, blog, thought leadership, copywriting, content strategy]
+      - id: demand-generation
+        name: Demand Generation
+        keywords: [demand generation, pipeline generation, campaign management, marketing automation, Marketo, lead scoring, ABM]
+  - id: sales
+    name: Sales
+    themuse_category: Sales
+    adzuna_category: Sales Jobs
+    roles:
+      - id: account-executive
+        name: Account Executive
+        keywords: [account executive, quota, pipeline, enterprise sales, closing, negotiation, Salesforce]
+      - id: sales-development
+        name: Sales Development
+        keywords: [sales development representative, SDR, outbound prospecting, lead qualification, cold outreach, cadences, discovery calls]
+      - id: solutions-engineer
+        name: Solutions Engineer
+        keywords: [solutions engineer, sales engineer, technical demo, proof of concept, RFP, pre sales, solution design]
+      - id: sales-manager
+        name: Sales Manager
+        keywords: [sales manager, team quota, forecasting, coaching, territory planning, pipeline review, sales process]
+  - id: finance
+    name: Finance
+    themuse_category: Accounting and Finance
+    adzuna_category: Accounting & Finance Jobs
+    roles:
+      - id: financial-analyst
+        name: Financial Analyst
+        keywords: [financial analyst, financial modeling, variance analysis, forecasting, budgeting, Excel, reporting]
+      - id: fp-and-a
+        name: FP and A
+        keywords: [FP&A, financial planning and analysis, annual plan, headcount planning, scenario modeling, board reporting, KPIs]
+      - id: accountant
+        name: Accountant
+        keywords: [accountant, general ledger, month end close, reconciliations, GAAP, accounts payable, audit support]
+      - id: controller
+        name: Controller
+        keywords: [controller, financial controls, close process, technical accounting, audit, SOX, policy]
+  - id: operations
+    name: Operations
+    themuse_category: Business Operations
+    adzuna_category: Logistics & Warehouse Jobs
+    roles:
+      - id: business-operations
+        name: Business Operations
+        keywords: [business operations, process improvement, operating cadence, analytics, cross functional, planning, efficiency]
+      - id: supply-chain
+        name: Supply Chain
+        keywords: [supply chain, logistics, inventory management, procurement, demand planning, vendor management, fulfilment]
+      - id: technical-operations
+        name: Technical Operations
+        keywords: [technical operations, service operations, runbooks, capacity planning, vendor management, uptime, escalation]
+      - id: strategy-operations
+        name: Strategy and Operations
+        keywords: [strategy and operations, strategic planning, market analysis, business case, executive reporting, OKRs, special projects]
+  - id: people
+    name: People
+    themuse_category: HR
+    adzuna_category: HR & Recruitment Jobs
+    roles:
+      - id: recruiter
+        name: Recruiter
+        keywords: [recruiter, technical recruiting, sourcing, candidate pipeline, interview process, offer negotiation, applicant tracking]
+      - id: people-partner
+        name: People Partner
+        keywords: [people partner, HR business partner, employee relations, performance management, coaching, organisational design, retention]
+      - id: people-operations
+        name: People Operations
+        keywords: [people operations, HR operations, onboarding, HRIS, benefits administration, compliance, policy]
+      - id: learning-and-development
+        name: Learning and Development
+        keywords: [learning and development, training programs, enablement, curriculum design, facilitation, career development, coaching]
+  - id: customer-success
+    name: Customer Success
+    themuse_category: Customer Service
+    adzuna_category: Customer Services Jobs
+    roles:
+      - id: customer-success-manager
+        name: Customer Success Manager
+        keywords: [customer success manager, renewals, retention, onboarding, QBR, adoption, account health]
+      - id: solutions-architect
+        name: Solutions Architect
+        keywords: [solutions architect, technical account manager, integration design, reference architecture, customer workshops, implementation, escalation]
+      - id: support-engineer
+        name: Support Engineer
+        keywords: [support engineer, technical support, troubleshooting, ticket queue, SLA, root cause analysis, knowledge base]
+      - id: implementation-manager
+        name: Implementation Manager
+        keywords: [implementation manager, onboarding projects, deployment, configuration, migration, go live, customer training]
+  - id: other
+    name: Other
+    themuse_category: Other
+    adzuna_category: Other/General Jobs
+    roles:
+      - id: generalist
+        name: Generalist
+        keywords: [generalist, cross functional, operations, analysis, project delivery, stakeholder management, communication]

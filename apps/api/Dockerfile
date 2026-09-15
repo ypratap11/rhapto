@@ -8,6 +8,9 @@ RUN uv sync --frozen --no-dev --no-install-project
 COPY apps/api/src ./src
 COPY apps/api/alembic.ini ./alembic.ini
 COPY apps/api/alembic ./alembic
+# The taxonomy is data the API serves, not source: it lives in packages/schemas (not on the
+# runtime path), so it is copied to the fixed location services/taxonomy.py looks for.
+COPY packages/schemas/taxonomy.yaml /app/schemas/taxonomy.yaml
 RUN uv sync --frozen --no-dev
 ENV PATH="/app/.venv/bin:$PATH"
 

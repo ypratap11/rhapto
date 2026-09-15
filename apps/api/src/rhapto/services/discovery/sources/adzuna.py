@@ -14,6 +14,7 @@ from rhapto.services.discovery.sources.base import (
 )
 from rhapto.services.discovery.sources.greenhouse import parse_iso
 from rhapto.services.jobtext import html_to_text
+from rhapto.services.taxonomy import find_field
 
 if TYPE_CHECKING:
     from rhapto.services.discovery.http import DiscoveryHttp
@@ -57,6 +58,9 @@ class AdzunaSource:
                 }
                 if spec.location:
                     query["where"] = spec.location
+                field = find_field(spec.field)
+                if field is not None:
+                    query["category"] = field.adzuna_category
                 url = f"https://api.adzuna.com/v1/api/jobs/us/search/{page}?{urlencode(query)}"
                 # Adzuna authenticates via app_id/app_key in the query string, so every error
                 # raised from here is rewritten: the raw message (http.py embeds the full URL)

@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rhapto.dev/schemas/taxonomy.json",
+  "title": "TaxonomyFile",
+  "description": "taxonomy.yaml: career fields, the roles inside them, the keywords a track starts from, and the category name each aggregator uses for the field.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["fields"],
+  "properties": {
+    "fields": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/TaxonomyField" } }
+  },
+  "$defs": {
+    "TaxonomyField": {
+      "title": "TaxonomyField",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "themuse_category", "adzuna_category", "roles"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$" },
+        "name": { "type": "string" },
+        "themuse_category": { "type": "string" },
+        "adzuna_category": { "type": "string" },
+        "roles": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/TaxonomyRole" } }
+      }
+    },
+    "TaxonomyRole": {
+      "title": "TaxonomyRole",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "keywords"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$" },
+        "name": { "type": "string" },
+        "keywords": {
+          "type": "array",
+          "minItems": 6,
+          "maxItems": 10,
+          "items": { "type": "string", "minLength": 2, "maxLength": 60 }
+        }
+      }
+    }
+  }
+}

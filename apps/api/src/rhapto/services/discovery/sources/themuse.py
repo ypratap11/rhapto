@@ -9,6 +9,7 @@ from rhapto.services.discovery.sources import register
 from rhapto.services.discovery.sources.base import SourceError, SourceInfo, matches_keywords
 from rhapto.services.discovery.sources.greenhouse import parse_iso
 from rhapto.services.jobtext import html_to_text
+from rhapto.services.taxonomy import find_field
 
 if TYPE_CHECKING:
     from rhapto.services.discovery.http import DiscoveryHttp
@@ -24,6 +25,9 @@ class TheMuseSource:
         url = f"https://www.themuse.com/api/public/jobs?page={page}"
         if spec.location:
             url += f"&location={quote(spec.location, safe='')}"
+        field = find_field(spec.field)
+        if field is not None:
+            url += f"&category={quote(field.themuse_category, safe='')}"
         return url
 
     async def fetch_search(
