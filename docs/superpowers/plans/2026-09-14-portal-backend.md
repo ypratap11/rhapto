@@ -57,7 +57,8 @@ apps/api/src/rhapto/db/repositories/searches.py               NEW saved-search C
 apps/api/src/rhapto/db/repositories/source_credentials.py     NEW Fernet-encrypted credential rows
 apps/api/src/rhapto/db/repositories/dashboard.py              NEW one aggregate query per dashboard number
 apps/api/src/rhapto/db/repositories/jobs.py                   list_jobs filters, hide/unhide, reconcile_listing
-apps/api/src/rhapto/db/repositories/packages.py               archive, archived filter
+apps/api/src/rhapto/db/repositories/packages.py               archive, archived filter, set_status
+packages/schemas/package.json                                 status enum gains "ready"
 apps/api/alembic/versions/0006_searches.py                    searches, source_credentials, jobs.search_id, watchlist.discovered, poll_runs.search_id
 apps/api/alembic/versions/0007_track_taxonomy.py              tracks.field, tracks.role
 apps/api/alembic/versions/0008_flow_fields.py                 hidden_at, unlisted_at, salary_text, miss_count, archived_at, closed_reason, follow_up_at, last_viewed_at
@@ -67,7 +68,7 @@ apps/api/src/rhapto/api/routers/taxonomy.py                   NEW GET /taxonomy,
 apps/api/src/rhapto/api/routers/dashboard.py                  NEW GET /dashboard
 apps/api/src/rhapto/api/routers/settings.py                   /settings/sources GET/PUT/test
 apps/api/src/rhapto/api/routers/jobs.py                       new filters, hide/unhide
-apps/api/src/rhapto/api/routers/packages.py                   archive, ?archived=
+apps/api/src/rhapto/api/routers/packages.py                   archive, ?archived=, Mark ready
 apps/api/src/rhapto/api/routers/applications.py               closed_reason, follow_up_at
 apps/api/src/rhapto/api/schemas.py                            SearchIn/Out, SourceSetting*, JobOut fields, Checklist/Dashboard, LiveSearch*
 apps/api/src/rhapto/api/app.py                                mounts searches, search, taxonomy, dashboard
@@ -6555,6 +6556,360 @@ EOF
 
 ---
 
+### Task 18: the package "Ready" state
+
+**Files:**
+- Create: `apps/api/tests/api/test_package_ready_api.py`
+- Modify: `packages/schemas/package.json` (line 19, the `status` enum), `apps/api/src/rhapto/db/models.py` (`PACKAGE_STATUSES`, line 27), `apps/api/src/rhapto/db/repositories/packages.py` (append `set_status`), `apps/api/src/rhapto/api/schemas.py` (`PackagePatch`), `apps/api/src/rhapto/api/routers/packages.py` (`list_all_packages` line 108, `patch_package` lines 230–318), `apps/api/src/rhapto/db/repositories/dashboard.py` (`needs_review_count` — comment only, see Step 3)
+- Generated (never hand-edited): `apps/api/src/rhapto/models/package.py`, `packages/schemas/openapi.json`, `apps/web/src/lib/api/schema.d.ts`
+- Test: `apps/api/tests/api/test_package_ready_api.py`
+
+**Interfaces:**
+
+Consumes: `Package.status` and `PACKAGE_STATUSES` (existing); `packages_repo.list_packages(..., status=..., archived=...)` (Task 10); `jobs_repo.latest_package(session, user_id, job_id)` (existing); `dashboard.needs_review_count` (Task 16); the `tailored_package` fixture (Task 10).
+
+Produces:
+- `PACKAGE_STATUSES = ("draft", "ready", "blocked")` and the same three values in `packages/schemas/package.json`, so the generated `ApplicationPackage.status` becomes `Literal['draft', 'ready', 'blocked']`.
+- `packages_repo.set_status(package: Package, status: str) -> None`.
+- `PackagePatch` accepts exactly one of `resume`, `edits` or `status: Literal["ready", "draft"] | None`.
+- `PATCH /api/v1/packages/{package_id}` with `{"status": ...}` returns **200** and the same package (no new version); with `resume`/`edits` it keeps returning **201** and a new version, exactly as before.
+- `GET /api/v1/packages?status=ready` — the existing `status` query parameter, widened. No new parameter and **no `?status=applied` alias**: `PackageListItem.application_status` is already on every row, so the Resumes page's Applied tab is a client-side partition of one response rather than a fifth round trip. See the Self-review.
+
+- [ ] **Step 1: Write the failing test** — create `apps/api/tests/api/test_package_ready_api.py`:
+
+```python
+from __future__ import annotations
+
+from typing import Any
+
+import httpx
+import pytest
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+
+from rhapto.db.models import APPLIED_STATUSES, Package
+
+
+async def _mark_ready(client: httpx.AsyncClient, package_id: str) -> httpx.Response:
+    return await client.patch(f"/api/v1/packages/{package_id}", json={"status": "ready"})
+
+
+async def test_marking_ready_does_not_make_a_new_version(
+    client: httpx.AsyncClient, tailored_package: dict[str, Any]
+) -> None:
+    package_id, job_id = tailored_package["id"], tailored_package["job_id"]
+    response = await _mark_ready(client, package_id)
+    # 200, not 201: nothing was written, so there is no new resource to point at.
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["id"] == package_id
+    assert body["status"] == "ready"
+    assert body["version"] == tailored_package["version"]
+    versions = (await client.get(f"/api/v1/jobs/{job_id}/packages")).json()
+    assert len(versions) == 1
+
+
+async def test_ready_is_reversible(
+    client: httpx.AsyncClient, tailored_package: dict[str, Any]
+) -> None:
+    package_id = tailored_package["id"]
+    await _mark_ready(client, package_id)
+    back = await client.patch(f"/api/v1/packages/{package_id}", json={"status": "draft"})
+    assert back.status_code == 200 and back.json()["status"] == "draft"
+
+
+async def test_marking_ready_changes_nothing_else(
+    client: httpx.AsyncClient, tailored_package: dict[str, Any]
+) -> None:
+    before = (await client.get(f"/api/v1/packages/{tailored_package['id']}")).json()
+    after = (await _mark_ready(client, tailored_package["id"])).json()
+    assert {k: v for k, v in after.items() if k != "status"} == {
+        k: v for k, v in before.items() if k != "status"
+    }
+
+
+async def test_the_status_filter_partitions_the_list(
+    client: httpx.AsyncClient, tailored_package: dict[str, Any]
+) -> None:
+    package_id = tailored_package["id"]
+    assert [p["id"] for p in (await client.get("/api/v1/packages?status=draft")).json()] == [
+        package_id
+    ]
+    assert (await client.get("/api/v1/packages?status=ready")).json() == []
+    await _mark_ready(client, package_id)
+    assert (await client.get("/api/v1/packages?status=draft")).json() == []
+    ready = (await client.get("/api/v1/packages?status=ready")).json()
+    assert [p["id"] for p in ready] == [package_id]
+    assert ready[0]["status"] == "ready"
+    # Unfiltered still returns it; "Ready" is a tab, not a disappearance.
+    assert [p["id"] for p in (await client.get("/api/v1/packages")).json()] == [package_id]
+
+
+async def test_a_blocked_package_cannot_be_marked_ready(
+    client: httpx.AsyncClient,
+    tailored_package: dict[str, Any],
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    package_id = tailored_package["id"]
+    async with session_factory() as session:
+        row = await session.get(Package, __import__("uuid").UUID(package_id))
+        assert row is not None
+        row.status = "blocked"
+        row.guardrail_report_json = {
+            "passed": False,
+            "violations": [
+                {
+                    "rule": "verified-metrics",
+                    "severity": "error",
+                    "path": "sections[0].entries[0].bullets[0]",
+                    "message": "42% does not trace to a verified block",
+                },
+                {
+                    "rule": "provenance",
+                    "severity": "error",
+                    "path": "sections[0].entries[1]",
+                    "message": "source block 'nope' does not exist",
+                },
+            ],
+        }
+        await session.commit()
+    response = await _mark_ready(client, package_id)
+    assert response.status_code == 409
+    # The message has to name the count: "Mark ready" is the last gate before a human sends this.
+    assert "2" in response.json()["detail"]
+    assert "guardrail" in response.json()["detail"].lower()
+    assert (await client.get(f"/api/v1/packages/{package_id}")).json()["status"] == "blocked"
+
+
+async def test_only_the_latest_version_may_be_marked_ready(
+    client: httpx.AsyncClient, tailored_package: dict[str, Any]
+) -> None:
+    first = tailored_package
+    resume = (await client.get(f"/api/v1/packages/{first['id']}")).json()["resume"]
+    second = await client.patch(
+        f"/api/v1/packages/{first['id']}", json={"resume": resume}
+    )
+    assert second.status_code == 201, second.text
+    stale = await _mark_ready(client, first["id"])
+    assert stale.status_code == 409
+    assert "latest" in stale.json()["detail"].lower()
+    assert (await _mark_ready(client, second.json()["id"])).status_code == 200
+
+
+async def test_an_editing_patch_still_creates_a_version(
+    client: httpx.AsyncClient, tailored_package: dict[str, Any]
+) -> None:
+    resume = (await client.get(f"/api/v1/packages/{tailored_package['id']}")).json()["resume"]
+    response = await client.patch(
+        f"/api/v1/packages/{tailored_package['id']}", json={"resume": resume}
+    )
+    assert response.status_code == 201
+    assert response.headers["Location"].endswith(response.json()["id"])
+    assert response.json()["version"] == tailored_package["version"] + 1
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        {},
+        {"status": "applied"},
+        {"status": "blocked"},
+        {"status": "ready", "resume": {}},
+    ],
+)
+async def test_patch_body_validation(
+    client: httpx.AsyncClient, tailored_package: dict[str, Any], body: dict[str, Any]
+) -> None:
+    response = await client.patch(f"/api/v1/packages/{tailored_package['id']}", json=body)
+    assert response.status_code == 422, response.text
+
+
+async def test_a_ready_package_leaves_the_needs_review_count(
+    client: httpx.AsyncClient, tailored_package: dict[str, Any]
+) -> None:
+    assert (await client.get("/api/v1/dashboard")).json()["needs_review_count"] == 1
+    await _mark_ready(client, tailored_package["id"])
+    # Ready means a human already reviewed it; the hero band must not keep asking.
+    assert (await client.get("/api/v1/dashboard")).json()["needs_review_count"] == 0
+
+
+async def test_the_applied_tab_is_derivable_from_the_list_response(
+    client: httpx.AsyncClient, tailored_package: dict[str, Any]
+) -> None:
+    """The Resumes page partitions one response; it never asks for ?status=applied."""
+    await _mark_ready(client, tailored_package["id"])
+    await client.post("/api/v1/applications", json={"job_id": tailored_package["job_id"]})
+    application = (
+        await client.get("/api/v1/applications")
+    ).json()["columns"]
+    application_id = next(
+        a["id"] for column in application.values() for a in column
+    )
+    await client.patch(f"/api/v1/applications/{application_id}", json={"status": "applied"})
+    rows = (await client.get("/api/v1/packages")).json()
+    assert [r["application_status"] for r in rows] == ["applied"]
+    assert [r for r in rows if r["application_status"] in APPLIED_STATUSES]
+```
+
+- [ ] **Step 2: Run test to verify it fails** — `cd apps/api && uv run pytest -q -p no:cacheprovider tests/api/test_package_ready_api.py`. Expected: `assert 422 == 200` on the first test — `PackagePatch` rejects a body with neither `resume` nor `edits`.
+
+- [ ] **Step 3: Write minimal implementation** —
+
+`packages/schemas/package.json` — line 19:
+
+```json
+    "status": { "type": "string", "enum": ["draft", "ready", "blocked"] },
+```
+
+`db/models.py` — line 27:
+
+```python
+# draft: written, not yet reviewed. ready: a human reviewed it and it may be applied with.
+# blocked: guardrails refused it. A package is never written as "ready" -- only promoted.
+PACKAGE_STATUSES = ("draft", "ready", "blocked")
+```
+
+`db/repositories/packages.py` — append:
+
+```python
+def set_status(package: Package, status: str) -> None:
+    """Promote or demote a package between draft and ready. Nothing else on the row changes."""
+    package.status = status
+```
+
+`api/schemas.py` — `PackagePatch` becomes three-way:
+
+```python
+class PackagePatch(BaseModel):
+    """A human action on a package: `resume` in blocks mode, `edits` in tune mode, or `status`.
+
+    Each field carries the complete new state for its mode, not a delta, so a new version is
+    always a full replacement of the thing the mode owns. `status` is the odd one out: it changes
+    the existing row in place and creates no version, because "I have read this and it is ready"
+    is a fact about the draft that already exists, not a new draft.
+
+    `blocked` is not settable: it is the guardrail validator's verdict, not a human's.
+    """
+
+    resume: ResumeDocument | None = None
+    edits: list[EditPatch] | None = None
+    status: Literal["ready", "draft"] | None = None
+
+    @model_validator(mode="after")
+    def _exactly_one(self) -> PackagePatch:
+        given = [f for f in (self.resume, self.edits, self.status) if f is not None]
+        if len(given) != 1:
+            raise ValueError("provide exactly one of resume, edits or status")
+        return self
+```
+
+`api/routers/packages.py` — `list_all_packages`' filter widens to the new value (same parameter name, so no client changes):
+
+```python
+    status: Literal["draft", "ready", "blocked"] | None = Query(default=None),
+```
+
+and `PackageListItem` already carries `status` and `application_status`, so nothing else changes there.
+
+`patch_package` gains the status branch at the top, before any of the re-validate/re-render work:
+
+```python
+async def _mark_status(
+    session: AsyncSession,
+    user_id: uuid.UUID,
+    parent: Package,
+    status: str,
+    response: Response,
+) -> PackageOut:
+    """Promote a draft to ready (or back). In place, no new version, nothing else touched."""
+    if status == "ready":
+        report = GuardrailReport.model_validate(parent.guardrail_report_json)
+        if parent.status == "blocked" or not report.passed:
+            # The last gate before a human sends this to an employer. Naming the count is what
+            # makes the 409 actionable: the Review page lists the violations themselves.
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    f"this package is blocked by {len(report.violations)} guardrail violation(s); "
+                    "fix them and regenerate before marking it ready"
+                ),
+            )
+        latest = await job_repo.latest_package(session, user_id, parent.job_id)
+        if latest is not None and latest.id != parent.id:
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    f"version {parent.version} is not the latest for this job "
+                    f"(v{latest.version} is); mark that one ready instead"
+                ),
+            )
+    repo.set_status(parent, status)
+    await session.commit()
+    await session.refresh(parent)
+    response.status_code = 200
+    return package_to_out(parent)
+```
+
+and the handler dispatches to it first:
+
+```python
+    parent = await _get_package(session, user_id, package_id)
+    if body.status is not None:
+        return await _mark_status(session, user_id, parent, body.status, response)
+    job = await job_repo.get_job(session, user_id, parent.job_id)
+    ...  # the rest of the function is unchanged
+```
+
+The route keeps `status_code=201` as its declared default (the editing path is the common one and still sets `Location`); `_mark_status` overrides it to 200. Extend the route's `responses=` block so the OpenAPI document says both:
+
+```python
+    responses={
+        200: {"description": "The package's status was changed in place"},
+        201: {
+            "description": "A new package version was created",
+            "headers": {
+                "Location": {
+                    "description": "URL of the newly created package version",
+                    "schema": {"type": "string", "format": "uri"},
+                }
+            },
+        },
+        409: {
+            "description": "Blocked by guardrails, or not the latest version",
+            "content": {"application/problem+json": {}},
+        },
+    },
+```
+
+`db/repositories/dashboard.py` — `needs_review_count` already filters `Package.status == "draft"`, so a promoted package drops out with no code change. Make that load-bearing rather than incidental by saying so at the filter:
+
+```python
+        .where(
+            Package.user_id == user_id,
+            # Exactly "draft": a ready package has been reviewed (the human pressed Mark ready)
+            # and a blocked one cannot be reviewed into shape without a regenerate.
+            Package.status == "draft",
+            Package.archived_at.is_(None),
+            ...
+```
+
+Then from the repo root: `bash scripts/codegen.sh` (this regenerates `models/package.py` with the widened `Literal`, `packages/schemas/openapi.json`, and `apps/web/src/lib/api/schema.d.ts`).
+
+- [ ] **Step 4: Run tests to verify they pass** — `cd apps/api && uv run pytest -q -p no:cacheprovider tests/api/test_package_ready_api.py tests/api/test_packages_api.py tests/api/test_dashboard_api.py tests/api/test_flow_api.py tests/unit/test_models.py tests/golden`, then `uv run ruff check src tests`, `uv run ruff format src tests`, `uv run mypy src`, `uv run lint-imports`, `uv run pytest -q -p no:cacheprovider tests/unit tests/golden tests/guardrails --deselect tests/unit/test_enqueue_arq.py`, `uv run pytest -q -p no:cacheprovider tests/api tests/db`. Confirm `git diff --stat packages/schemas/openapi.json apps/web/src/lib/api/schema.d.ts apps/api/src/rhapto/models/package.py` shows all three regenerated files changed, and that `apps/api/src/rhapto/models/package.py` now reads `status: Literal['draft', 'ready', 'blocked']`.
+
+- [ ] **Step 5: Commit** —
+
+```bash
+git add -A && git commit -m "$(cat <<'EOF'
+feat(api): Mark ready, the human gate between Review and Apply
+
+Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_018nj9MER4aGXPAfYzbAo6oP
+EOF
+)"
+```
+
+---
+
 ## Self-review
 
 ### Spec coverage
@@ -6563,6 +6918,7 @@ EOF
 |---|---|---|
 | portal §4 (states) | `hidden_at`, `unlisted_at`, `archived_at`, `closed_reason`, `follow_up_at` | T9 (columns), T10 (endpoints) |
 | portal §4 (Job: Tailor / Not interested) | `POST /jobs/{id}/hide`, `/unhide`, `hidden` filter for "Show hidden" | T10, T11 |
+| portal §4 (Resume: Review → **Mark ready** → Apply), §3.4 (Resumes tabs Needs review · Ready · Blocked · Applied) | `ready` package status, `PATCH /packages/{id}` `{status}`, `?status=ready`; the Applied tab is derived from `application_status` | T18 |
 | portal §4 (Resume: Skip archives and hides) | `POST /packages/{id}/archive`, `GET /packages?archived=` | T10 |
 | portal §4 (Pipeline: Closed with reason, Follow-up) | `PATCH /applications/{id}` + DB check constraint | T9, T10 |
 | portal §4 (closed postings, two polls) | `jobs.miss_count`, `reconcile_listing`, `UNLISTED_AFTER = 2` | T9, T12 |
@@ -6615,4 +6971,6 @@ EOF
 9. **The dashboard's ≤ 8 SELECT guard** counts every statement the request issues, including the user lookup FastAPI's dependency does. If a legitimate addition pushes it to nine, raise the number in one place and say why in the commit — do not delete the assertion.
 10. **The fake provider is registered outside `PROVIDERS`.** Putting it in the main dict would have shown it in the Settings picker and let a user save it, so it lives in `ENV_ONLY_PROVIDERS` and `env_key` points at `RHAPTO_LLM_PROVIDER` itself — asking for the fake is the credential. If a future provider also needs to be env-only, that dict is the place; do not merge the two.
 11. **The fake skips unverified blocks whose content contains a digit.** That is stricter than the verified-metrics guardrail needs (a digit is not always a metric), and it means a `profile.example` edit that adds a number to an unverified block silently shrinks the e2e resume. `test_the_composed_resume_passes_every_guardrail` is what catches the alternative — a fake that produces blocked packages — so keep it strict.
-12. **`default_tailor_script()`** is assumed to exist in the tailor tests. If the LLM response sequence there is inline rather than a helper, lift it verbatim into `tests/helpers.py` as part of Task 10 Step 1; changing what it returns would break the golden tests.
+13. **No `?status=applied` alias.** Three of the Resumes tabs are `?status=` values; the fourth (Applied) is not a package status at all but a fact about the job's application, and `PackageListItem.application_status` is already on every row. Adding a fourth alias would mean a `status` parameter whose values come from two different enums, and a fourth request for a page that can partition one response. The portal-ui plan already derives it; if that changes, add `applied: bool | None` as its own parameter rather than overloading `status`.
+14. **Marking ready is 200 on a PATCH that otherwise returns 201.** Same route, two outcomes, because the body says which: `resume`/`edits` replace what a mode owns and therefore make a version; `status` records a human's verdict on the draft that already exists. Splitting it into `POST /packages/{id}/ready` would have matched the hide/archive endpoints — reconsider if a third in-place field ever appears.
+15. **`default_tailor_script()`** is assumed to exist in the tailor tests. If the LLM response sequence there is inline rather than a helper, lift it verbatim into `tests/helpers.py` as part of Task 10 Step 1; changing what it returns would break the golden tests.
