@@ -277,6 +277,9 @@ class PollRunOut(BaseModel):
     found: int
     new: int
     error: str | None
+    # Which saved search drove this run, for a keyless aggregator fanned out across several
+    # searches (see services.discovery.poller). None for a board run.
+    search_id: uuid.UUID | None = None
 
 
 class SourceInfoOut(BaseModel):

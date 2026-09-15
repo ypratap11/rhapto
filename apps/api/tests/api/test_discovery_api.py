@@ -1,9 +1,13 @@
+import uuid
 from typing import Any
 
 import httpx
 import pytest
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from test_discovery_sources import fake_http_for
 
+from rhapto.db.repositories import discovery as disc_repo
+from rhapto.db.repositories import searches as searches_repo
 from rhapto.services.discovery.http import FakeDiscoveryHttp
 
 
@@ -22,6 +26,42 @@ async def test_sources_lists_registry(client: httpx.AsyncClient) -> None:
     names = {s["name"]: s for s in response.json()}
     assert names["greenhouse"]["kind"] == "board" and names["greenhouse"]["needs_board"] is True
     assert names["hn-hiring"]["kind"] == "aggregator"
+
+
+async def test_runs_reports_distinct_search_ids_for_one_keyless_aggregator(
+    client: httpx.AsyncClient,
+    session_factory: async_sessionmaker[AsyncSession],
+    user_id: uuid.UUID,
+) -> None:
+    """A keyless aggregator fanned out across several saved searches now produces one PollRun
+    per (source, board, search_id) (see services.discovery.poller / db.repositories.discovery),
+    so /discovery/runs must surface each one with its own search_id rather than collapsing them
+    -- and a board run (which never has a search) must still report search_id: null."""
+    async with session_factory() as session:
+        search_a = await searches_repo.create_search(
+            session, user_id, name="A", keywords=["alpha"], location=None, remote="include"
+        )
+        search_b = await searches_repo.create_search(
+            session, user_id, name="B", keywords=["beta"], location=None, remote="include"
+        )
+        run_a = await disc_repo.start_run(session, user_id, "remoteok", None)
+        run_a.search_id = search_a.id
+        disc_repo.finish_run(run_a, found=1, new=1, error=None)
+        run_b = await disc_repo.start_run(session, user_id, "remoteok", None)
+        run_b.search_id = search_b.id
+        disc_repo.finish_run(run_b, found=2, new=0, error=None)
+        board_run = await disc_repo.start_run(session, user_id, "greenhouse", "exampleco")
+        disc_repo.finish_run(board_run, found=0, new=0, error=None)
+        await session.commit()
+
+    response = await client.get("/api/v1/discovery/runs")
+    assert response.status_code == 200
+    rows = response.json()
+    remoteok_rows = [r for r in rows if r["source"] == "remoteok"]
+    assert len(remoteok_rows) == 2
+    assert {r["search_id"] for r in remoteok_rows} == {str(search_a.id), str(search_b.id)}
+    board_rows = [r for r in rows if r["source"] == "greenhouse"]
+    assert board_rows and all(r["search_id"] is None for r in board_rows)
 
 
 async def test_poll_creates_jobs_runs_and_scored_queue(

@@ -1498,6 +1498,18 @@
             "title": "New",
             "type": "integer"
           },
+          "search_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Search Id"
+          },
           "source": {
             "title": "Source",
             "type": "string"

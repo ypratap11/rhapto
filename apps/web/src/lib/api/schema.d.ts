@@ -1164,6 +1164,8 @@ export interface components {
             id: string;
             /** New */
             new: number;
+            /** Search Id */
+            search_id?: string | null;
             /** Source */
             source: string;
             /**
