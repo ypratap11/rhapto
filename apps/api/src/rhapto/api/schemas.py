@@ -134,6 +134,12 @@ class JobOut(BaseModel):
     repost_of: uuid.UUID | None = None
     posted_at: datetime | None = None
     scores: list[JobScoreOut] = []
+    # The saved search that discovered this job, for display; None for manually-added jobs and
+    # for board runs that carry no search. Left-joined in `jobs.list_jobs`.
+    search_name: str | None = None
+    # Not populated until Task 9 adds the column; declared now so the generated TypeScript
+    # settles once.
+    salary_text: str | None = None
 
 
 class TailorBody(BaseModel):
@@ -287,3 +293,54 @@ class SourceInfoOut(BaseModel):
     kind: Literal["board", "aggregator"]
     label: str
     needs_board: bool
+
+
+RemoteValue = Literal["include", "only", "exclude"]
+
+
+class SearchIn(BaseModel):
+    name: str = Field(min_length=1, max_length=100)
+    keywords: list[str] = Field(min_length=1, max_length=10)
+    location: str | None = Field(default=None, max_length=200)
+    remote: RemoteValue = "include"
+    active: bool = True
+
+    @field_validator("keywords")
+    @classmethod
+    def _non_empty(cls, value: list[str]) -> list[str]:
+        cleaned = [k.strip() for k in value if k.strip()]
+        if not cleaned or any(len(k) > 60 for k in cleaned):
+            raise ValueError("each keyword must be 1-60 characters")
+        return cleaned
+
+
+class SearchOut(BaseModel):
+    id: uuid.UUID
+    name: str
+    keywords: list[str]
+    location: str | None
+    remote: RemoteValue
+    active: bool
+    derived_from_track_id: str | None
+    created_at: datetime
+
+
+class SourceSettingOut(BaseModel):
+    id: str
+    label: str
+    needs_key: bool
+    fields: list[str]
+    enabled: bool
+    key_set: bool
+
+
+class SourceSettingIn(BaseModel):
+    enabled: bool
+    #: Omitted fields keep whatever is stored; the values never come back out.
+    credentials: dict[str, str] | None = None
+
+
+class SourceTestOut(BaseModel):
+    ok: bool
+    found: int | None = None
+    error: str | None = None

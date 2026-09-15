@@ -546,6 +546,59 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/searches": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Searches */
+        get: operations["list_searches_api_v1_searches_get"];
+        put?: never;
+        /** Create Search */
+        post: operations["create_search_api_v1_searches_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/searches/derive": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Derive */
+        post: operations["derive_api_v1_searches_derive_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/searches/{search_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Update Search */
+        put: operations["update_search_api_v1_searches__search_id__put"];
+        post?: never;
+        /** Delete Search */
+        delete: operations["delete_search_api_v1_searches__search_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/settings/llm": {
         parameters: {
             query?: never;
@@ -579,6 +632,60 @@ export interface paths {
          * @description Ask the provider for one tiny structured answer. Nothing is stored either way.
          */
         post: operations["test_llm_settings_api_v1_settings_llm_test_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/settings/sources": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Source Settings */
+        get: operations["list_source_settings_api_v1_settings_sources_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/settings/sources/{source}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Put Source Setting */
+        put: operations["put_source_setting_api_v1_settings_sources__source__put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/settings/sources/{source}/test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Test Source
+         * @description One tiny search against the source. Never a 500: a failure is this endpoint's answer.
+         */
+        post: operations["test_source_api_v1_settings_sources__source__test_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -929,11 +1036,15 @@ export interface components {
              * @default false
              */
             rescued: boolean;
+            /** Salary Text */
+            salary_text?: string | null;
             /**
              * Scores
              * @default []
              */
             scores: components["schemas"]["JobScoreOut"][];
+            /** Search Name */
+            search_name?: string | null;
             /** Source */
             source: string;
             /** Title */
@@ -1293,6 +1404,54 @@ export interface components {
             /** Title */
             title: string;
         };
+        /** SearchIn */
+        SearchIn: {
+            /**
+             * Active
+             * @default true
+             */
+            active: boolean;
+            /** Keywords */
+            keywords: string[];
+            /** Location */
+            location?: string | null;
+            /** Name */
+            name: string;
+            /**
+             * Remote
+             * @default include
+             * @enum {string}
+             */
+            remote: "include" | "only" | "exclude";
+        };
+        /** SearchOut */
+        SearchOut: {
+            /** Active */
+            active: boolean;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Derived From Track Id */
+            derived_from_track_id: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Keywords */
+            keywords: string[];
+            /** Location */
+            location: string | null;
+            /** Name */
+            name: string;
+            /**
+             * Remote
+             * @enum {string}
+             */
+            remote: "include" | "only" | "exclude";
+        };
         /** SourceDocument */
         SourceDocument: {
             /** Filename */
@@ -1315,6 +1474,39 @@ export interface components {
             name: string;
             /** Needs Board */
             needs_board: boolean;
+        };
+        /** SourceSettingIn */
+        SourceSettingIn: {
+            /** Credentials */
+            credentials?: {
+                [key: string]: string;
+            } | null;
+            /** Enabled */
+            enabled: boolean;
+        };
+        /** SourceSettingOut */
+        SourceSettingOut: {
+            /** Enabled */
+            enabled: boolean;
+            /** Fields */
+            fields: string[];
+            /** Id */
+            id: string;
+            /** Key Set */
+            key_set: boolean;
+            /** Label */
+            label: string;
+            /** Needs Key */
+            needs_key: boolean;
+        };
+        /** SourceTestOut */
+        SourceTestOut: {
+            /** Error */
+            error?: string | null;
+            /** Found */
+            found?: number | null;
+            /** Ok */
+            ok: boolean;
         };
         /** StatusChange */
         StatusChange: {
@@ -2991,6 +3183,171 @@ export interface operations {
             };
         };
     };
+    list_searches_api_v1_searches_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SearchOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_search_api_v1_searches_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SearchIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SearchOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    derive_api_v1_searches_derive_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SearchOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_search_api_v1_searches__search_id__put: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                search_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SearchIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SearchOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_search_api_v1_searches__search_id__delete: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                search_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_llm_settings_endpoint_api_v1_settings_llm_get: {
         parameters: {
             query?: never;
@@ -3108,6 +3465,107 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["LlmTestOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_source_settings_api_v1_settings_sources_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SourceSettingOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    put_source_setting_api_v1_settings_sources__source__put: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                source: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SourceSettingIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SourceSettingOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    test_source_api_v1_settings_sources__source__test_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                source: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SourceTestOut"];
                 };
             };
             /** @description Validation Error */

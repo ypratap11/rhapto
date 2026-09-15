@@ -82,14 +82,16 @@ async def test_list_jobs_filters_and_sort(session: AsyncSession, user: User) -> 
     other.best_track_id, other.best_fit = "ai-pm", 55
     await session.flush()
     fit = await jobs_repo.list_jobs(session, user.id, bucket="fit")
-    assert [j.id for j in fit] == [high.id, other.id]
-    assert [j.id for j in await jobs_repo.list_jobs(session, user.id, bucket="low")] == [low.id]
-    assert [j.id for j in await jobs_repo.list_jobs(session, user.id, track="ai-pm")] == [other.id]
+    assert [j.id for j, _ in fit] == [high.id, other.id]
+    assert [j.id for j, _ in await jobs_repo.list_jobs(session, user.id, bucket="low")] == [low.id]
+    assert [j.id for j, _ in await jobs_repo.list_jobs(session, user.id, track="ai-pm")] == [
+        other.id
+    ]
     jobs_repo.set_rescued(low, True)
     await session.flush()
-    assert low.id in [j.id for j in await jobs_repo.list_jobs(session, user.id, bucket="fit")]
+    assert low.id in [j.id for j, _ in await jobs_repo.list_jobs(session, user.id, bucket="fit")]
     newest = await jobs_repo.list_jobs(session, user.id, sort="newest")
-    assert newest[0].id == other.id
+    assert newest[0][0].id == other.id
 
 
 async def test_list_jobs_bucket_covers_unscored_rescued_and_orphaned_track(
@@ -107,8 +109,8 @@ async def test_list_jobs_bucket_covers_unscored_rescued_and_orphaned_track(
     orphaned.best_track_id, orphaned.best_fit = "ghost-track", 90
     await session.flush()
 
-    fit_ids = {j.id for j in await jobs_repo.list_jobs(session, user.id, bucket="fit")}
-    low_ids = {j.id for j in await jobs_repo.list_jobs(session, user.id, bucket="low")}
+    fit_ids = {j.id for j, _ in await jobs_repo.list_jobs(session, user.id, bucket="fit")}
+    low_ids = {j.id for j, _ in await jobs_repo.list_jobs(session, user.id, bucket="low")}
 
     # (1) rescued job stays in fit despite a low score.
     assert rescued.id in fit_ids and rescued.id not in low_ids

@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 from rhapto.config import Settings
 from rhapto.engine.providers.llm import LLMProvider
 from rhapto.engine.providers.registry import build_llm
+from rhapto.services.discovery.http import DiscoveryHttp
 from rhapto.services.enqueue import Enqueuer
 from rhapto.services.eventbus import EventBus
 from rhapto.services.jobtext import FetchText
@@ -30,6 +31,7 @@ class AppState:
     event_bus: EventBus
     storage: PackageStorage
     fetch_text: FetchText
+    discovery_http: DiscoveryHttp
     llm_factory: LlmFactory = build_llm
     user_id: uuid.UUID | None = None
     engine: AsyncEngine | None = None

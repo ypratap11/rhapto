@@ -8,7 +8,7 @@ from sqlalchemy import CursorResult, and_, delete, func, not_, nulls_last, or_, 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from rhapto.db.hashing import dedupe_hash
-from rhapto.db.models import Application, Job, Package, Track
+from rhapto.db.models import Application, Job, Package, SearchRow, Track
 
 compute_dedupe_hash = dedupe_hash
 
@@ -58,11 +58,12 @@ async def list_jobs(
     bucket: str | None = None,
     region: str = "any",
     sort: str = "fit",
-) -> list[Job]:
+) -> list[tuple[Job, str | None]]:
     tracks = select(Track.track_id, Track.min_fit).where(Track.user_id == user_id).subquery()
     query = (
-        select(Job)
+        select(Job, SearchRow.name)
         .outerjoin(tracks, tracks.c.track_id == Job.best_track_id)
+        .outerjoin(SearchRow, SearchRow.id == Job.search_id)
         .where(Job.user_id == user_id)
     )
     if search:
@@ -105,7 +106,18 @@ async def list_jobs(
         query = query.order_by(Job.discovered_at.desc(), Job.created_at.desc(), Job.id)
     else:
         query = query.order_by(nulls_last(Job.best_fit.desc()), Job.discovered_at.desc(), Job.id)
-    return list(await session.scalars(query))
+    return [(job, name) for job, name in (await session.execute(query)).all()]
+
+
+async def search_name_for(
+    session: AsyncSession, user_id: uuid.UUID, search_id: uuid.UUID | None
+) -> str | None:
+    if search_id is None:
+        return None
+    result: str | None = await session.scalar(
+        select(SearchRow.name).where(SearchRow.user_id == user_id, SearchRow.id == search_id)
+    )
+    return result
 
 
 async def find_by_external_id(

@@ -157,6 +157,7 @@ async def app(
         storage=storage,
         fetch_text=fake_fetch,
         llm_factory=llm_factory,
+        discovery_http=FakeDiscoveryHttp({}),
     )
     async with LifespanManager(application):
         yield application

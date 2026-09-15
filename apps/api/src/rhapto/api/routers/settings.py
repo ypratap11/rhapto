@@ -12,21 +12,42 @@ choice without pasting one.
 from __future__ import annotations
 
 import uuid
+from datetime import UTC, datetime
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Response
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from rhapto.api.deps import LlmFactory, current_user, get_llm_factory, get_session, get_settings_dep
+from rhapto.api.deps import (
+    LlmFactory,
+    current_user,
+    get_llm_factory,
+    get_session,
+    get_settings_dep,
+    get_state,
+)
 from rhapto.api.providers import provider_list
-from rhapto.api.schemas import LlmSettingsIn, LlmSettingsOut, LlmTestIn, LlmTestOut
+from rhapto.api.schemas import (
+    LlmSettingsIn,
+    LlmSettingsOut,
+    LlmTestIn,
+    LlmTestOut,
+    SourceSettingIn,
+    SourceSettingOut,
+    SourceTestOut,
+)
 from rhapto.config import Settings
+from rhapto.db.models import Aggregator
+from rhapto.db.repositories import profile as profile_repo
+from rhapto.db.repositories import source_credentials as creds_repo
 from rhapto.db.repositories.llm_settings import delete_llm_settings, upsert_llm_settings
 from rhapto.engine.providers.llm import Message, SystemBlock
 from rhapto.engine.providers.registry import PROVIDERS, ProviderInfo, model_for
+from rhapto.services.discovery.search import SearchSpec
+from rhapto.services.discovery.sources import aggregator_sources, get_aggregator
 from rhapto.services.llm import env_llm_config, key_hint, redact, stored_llm_config
-from rhapto.services.secrets import encrypt
+from rhapto.services.secrets import encrypt, fernet_for
 
 router = APIRouter()
 
@@ -158,3 +179,91 @@ async def test_llm_settings(
         # provider's wall of text cannot flood the UI.
         return LlmTestOut(ok=False, error=redact(str(exc), api_key)[:300])
     return LlmTestOut(ok=True, model=model)
+
+
+#: A keyless source works out of the box, so it defaults to enabled; a keyed one needs the user
+#: to add credentials first, so it defaults to disabled until they do.
+KEYLESS_DEFAULT_ENABLED = True
+
+
+async def _source_rows(session: AsyncSession, user_id: uuid.UUID) -> dict[str, Aggregator]:
+    return {row.source: row for row in await profile_repo.list_aggregators(session, user_id)}
+
+
+@router.get("/settings/sources", response_model=list[SourceSettingOut])
+async def list_source_settings(user_id: UserDep, session: SessionDep) -> list[SourceSettingOut]:
+    rows = await _source_rows(session, user_id)
+    stored = await creds_repo.credentialled_sources(session, user_id)
+    out: list[SourceSettingOut] = []
+    for info in aggregator_sources():
+        row = rows.get(info.name)
+        enabled = (
+            row.enabled if row is not None else (KEYLESS_DEFAULT_ENABLED and not info.needs_key)
+        )
+        out.append(
+            SourceSettingOut(
+                id=info.name,
+                label=info.label,
+                needs_key=info.needs_key,
+                fields=list(info.fields),
+                enabled=enabled,
+                key_set=info.name in stored,
+            )
+        )
+    return out
+
+
+@router.put("/settings/sources/{source}", response_model=SourceSettingOut)
+async def put_source_setting(
+    source: str, body: SourceSettingIn, user_id: UserDep, session: SessionDep, settings: SettingsDep
+) -> SourceSettingOut:
+    info = next((i for i in aggregator_sources() if i.name == source), None)
+    if info is None:
+        raise HTTPException(status_code=404, detail=f"unknown source {source!r}")
+    fernet = fernet_for(settings)
+    if body.credentials:
+        await creds_repo.put_credentials(session, fernet, user_id, source, body.credentials)
+    if body.enabled and info.needs_key:
+        stored = await creds_repo.get_credentials(session, fernet, user_id, source)
+        missing = [f for f in info.fields if not stored.get(f)]
+        if missing:
+            # Enabling a source we cannot call would show up later as a failed poll run with no
+            # explanation; say which field is missing while the user is looking at the form.
+            raise HTTPException(status_code=422, detail=f"{info.label} needs {', '.join(missing)}")
+    rows = await _source_rows(session, user_id)
+    row = rows.get(source)
+    if row is None:
+        row = Aggregator(user_id=user_id, source=source, enabled=body.enabled, keywords=[])
+        session.add(row)
+    else:
+        row.enabled = body.enabled
+    row.updated_at = datetime.now(UTC)
+    await session.commit()
+    stored_sources = await creds_repo.credentialled_sources(session, user_id)
+    return SourceSettingOut(
+        id=info.name,
+        label=info.label,
+        needs_key=info.needs_key,
+        fields=list(info.fields),
+        enabled=body.enabled,
+        key_set=info.name in stored_sources,
+    )
+
+
+@router.post("/settings/sources/{source}/test", response_model=SourceTestOut)
+async def test_source(
+    source: str, user_id: UserDep, session: SessionDep, settings: SettingsDep, request: Request
+) -> SourceTestOut:
+    """One tiny search against the source. Never a 500: a failure is this endpoint's answer."""
+    info = next((i for i in aggregator_sources() if i.name == source), None)
+    if info is None:
+        raise HTTPException(status_code=404, detail=f"unknown source {source!r}")
+    credentials = await creds_repo.get_credentials(session, fernet_for(settings), user_id, source)
+    http = get_state(request).discovery_http
+    try:
+        postings = await get_aggregator(source).fetch_search(
+            http, SearchSpec(keywords=("program manager",)), credentials
+        )
+    except Exception as exc:
+        return SourceTestOut(ok=False, error=redact(str(exc), *credentials.values())[:300])
+    return SourceTestOut(ok=True, found=len(postings))

@@ -37,6 +37,7 @@ def job_to_out(
     application: Application | None,
     scores: list[JobScore],
     min_fit: int | None,
+    search_name: str | None = None,
 ) -> JobOut:
     bucket: Literal["fit", "low"] | None
     if job.best_fit is None:
@@ -78,6 +79,7 @@ def job_to_out(
             JobScoreOut(track_id=s.track_id, fit_score=s.fit_score, rationale=s.rationale_json)
             for s in scores
         ],
+        search_name=search_name,
     )
 
 
@@ -93,20 +95,24 @@ async def _min_fit_for(
 async def _out(session: AsyncSession, user_id: uuid.UUID, job: Job) -> JobOut:
     scores = (await scores_for_jobs(session, user_id, [job.id])).get(job.id, [])
     min_fit = await _min_fit_for(session, user_id, job.best_track_id)
+    search_name = await repo.search_name_for(session, user_id, job.search_id)
     return job_to_out(
         job,
         await repo.latest_package(session, user_id, job.id),
         await repo.application_for_job(session, user_id, job.id),
         scores,
         min_fit,
+        search_name,
     )
 
 
-async def _outs(session: AsyncSession, user_id: uuid.UUID, jobs: list[Job]) -> list[JobOut]:
-    scores_by_job = await scores_for_jobs(session, user_id, [j.id for j in jobs])
+async def _outs(
+    session: AsyncSession, user_id: uuid.UUID, jobs: list[tuple[Job, str | None]]
+) -> list[JobOut]:
+    scores_by_job = await scores_for_jobs(session, user_id, [j.id for j, _ in jobs])
     tracks = {t.track_id: t.min_fit for t in await profile_repo.list_tracks(session, user_id)}
     out = []
-    for job in jobs:
+    for job, search_name in jobs:
         out.append(
             job_to_out(
                 job,
@@ -114,6 +120,7 @@ async def _outs(session: AsyncSession, user_id: uuid.UUID, jobs: list[Job]) -> l
                 await repo.application_for_job(session, user_id, job.id),
                 scores_by_job.get(job.id, []),
                 tracks.get(job.best_track_id) if job.best_track_id else None,
+                search_name,
             )
         )
     return out
