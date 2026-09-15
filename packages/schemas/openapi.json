@@ -1050,6 +1050,105 @@
         "title": "JobScoreOut",
         "type": "object"
       },
+      "LiveSearchIn": {
+        "description": "The search form: one free-text query plus the filter chips.",
+        "properties": {
+          "field": {
+            "anyOf": [
+              {
+                "maxLength": 50,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Field"
+          },
+          "location": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Location"
+          },
+          "posted_within": {
+            "default": "any",
+            "enum": [
+              "24h",
+              "7d",
+              "30d",
+              "any"
+            ],
+            "title": "Posted Within",
+            "type": "string"
+          },
+          "query": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Query",
+            "type": "string"
+          },
+          "remote": {
+            "default": "include",
+            "enum": [
+              "include",
+              "only",
+              "exclude"
+            ],
+            "title": "Remote",
+            "type": "string"
+          },
+          "sources": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sources"
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "title": "LiveSearchIn",
+        "type": "object"
+      },
+      "LiveSearchOut": {
+        "properties": {
+          "jobs": {
+            "items": {
+              "$ref": "#/components/schemas/JobOut"
+            },
+            "title": "Jobs",
+            "type": "array"
+          },
+          "per_source": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/PerSourceOut"
+            },
+            "title": "Per Source",
+            "type": "object"
+          }
+        },
+        "required": [
+          "jobs",
+          "per_source"
+        ],
+        "title": "LiveSearchOut",
+        "type": "object"
+      },
       "LlmSettingsIn": {
         "properties": {
           "api_key": {
@@ -1553,6 +1652,35 @@
           "created_at"
         ],
         "title": "PackageSummary",
+        "type": "object"
+      },
+      "PerSourceOut": {
+        "properties": {
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "found": {
+            "title": "Found",
+            "type": "integer"
+          },
+          "new": {
+            "title": "New",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "found",
+          "new"
+        ],
+        "title": "PerSourceOut",
         "type": "object"
       },
       "PollRunOut": {
@@ -5712,6 +5840,65 @@
         "summary": "Put Watchlist",
         "tags": [
           "profile"
+        ]
+      }
+    },
+    "/api/v1/search": {
+      "post": {
+        "operationId": "live_api_v1_search_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LiveSearchIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LiveSearchOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Live",
+        "tags": [
+          "search"
         ]
       }
     },

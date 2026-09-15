@@ -17,6 +17,7 @@ from rhapto.api.routers import (
     meta,
     packages,
     profile,
+    search,
     searches,
     tailor,
     taxonomy,
@@ -111,6 +112,7 @@ def create_app(
     app.include_router(settings_router.router, prefix=API_PREFIX, tags=["settings"])
     app.include_router(searches.router, prefix=API_PREFIX, tags=["searches"])
     app.include_router(taxonomy.router, prefix=API_PREFIX, tags=["taxonomy"])
+    app.include_router(search.router, prefix=API_PREFIX, tags=["search"])
     return app
 
 

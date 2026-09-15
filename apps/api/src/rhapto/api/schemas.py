@@ -366,6 +366,30 @@ class SourceTestOut(BaseModel):
     error: str | None = None
 
 
+class LiveSearchIn(BaseModel):
+    """The search form: one free-text query plus the filter chips."""
+
+    query: str = Field(min_length=1, max_length=200)
+    location: str | None = Field(default=None, max_length=200)
+    remote: RemoteValue = "include"
+    field: str | None = Field(default=None, max_length=50)
+    posted_within: Literal["24h", "7d", "30d", "any"] = "any"
+    #: None means every enabled source; a list narrows the fan-out to those source ids.
+    sources: list[str] | None = None
+
+
+class PerSourceOut(BaseModel):
+    found: int
+    new: int
+    error: str | None = None
+
+
+class LiveSearchOut(BaseModel):
+    jobs: list[JobOut]
+    #: Keyed by source id, so the UI can say which vendor was slow or needs a key.
+    per_source: dict[str, PerSourceOut]
+
+
 class TaxonomySuggestionOut(BaseModel):
     """One role the uploaded resume's entry titles point at, for the picker's chip row."""
 

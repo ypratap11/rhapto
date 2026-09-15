@@ -609,6 +609,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Live */
+        post: operations["live_api_v1_search_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/searches": {
         parameters: {
             query?: never;
@@ -1198,6 +1215,41 @@ export interface components {
             /** Track Id */
             track_id: string;
         };
+        /**
+         * LiveSearchIn
+         * @description The search form: one free-text query plus the filter chips.
+         */
+        LiveSearchIn: {
+            /** Field */
+            field?: string | null;
+            /** Location */
+            location?: string | null;
+            /**
+             * Posted Within
+             * @default any
+             * @enum {string}
+             */
+            posted_within: "24h" | "7d" | "30d" | "any";
+            /** Query */
+            query: string;
+            /**
+             * Remote
+             * @default include
+             * @enum {string}
+             */
+            remote: "include" | "only" | "exclude";
+            /** Sources */
+            sources?: string[] | null;
+        };
+        /** LiveSearchOut */
+        LiveSearchOut: {
+            /** Jobs */
+            jobs: components["schemas"]["JobOut"][];
+            /** Per Source */
+            per_source: {
+                [key: string]: components["schemas"]["PerSourceOut"];
+            };
+        };
         /** LlmSettingsIn */
         LlmSettingsIn: {
             /** Api Key */
@@ -1382,6 +1434,15 @@ export interface components {
             status: string;
             /** Version */
             version: number;
+        };
+        /** PerSourceOut */
+        PerSourceOut: {
+            /** Error */
+            error?: string | null;
+            /** Found */
+            found: number;
+            /** New */
+            new: number;
         };
         /** PollRunOut */
         PollRunOut: {
@@ -3457,6 +3518,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["WatchlistEntry"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    live_api_v1_search_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LiveSearchIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LiveSearchOut"];
                 };
             };
             /** @description Validation Error */
