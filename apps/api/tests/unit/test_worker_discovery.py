@@ -158,6 +158,7 @@ async def test_poll_all_sources_never_raises_and_continues_after_failure(
         embedder: Any,
         specs: Any = None,
         on_step: Any = None,
+        fernet: Any = None,
     ) -> PollSummary:
         calls.append(user_id)
         if user_id == user.id:

@@ -1,13 +1,17 @@
+from collections.abc import Iterator
+
 import pytest
+from cryptography.fernet import Fernet
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from test_discovery_sources import fake_http_for
 
-from rhapto.db.models import Job, User
+from rhapto.db.models import Aggregator, Job, User, WatchlistEntry
 from rhapto.db.repositories import discovery as disc_repo
 from rhapto.db.repositories import jobs as jobs_repo
 from rhapto.db.repositories import profile as profile_repo
+from rhapto.db.repositories import searches as searches_repo
 from rhapto.engine.providers.fake import FakeEmbeddingProvider
 from rhapto.models.profile.tracks import Track
 from rhapto.models.profile.watchlist import AggregatorEntry
@@ -15,8 +19,10 @@ from rhapto.models.profile.watchlist import WatchlistEntry as WatchlistModel
 from rhapto.services.discovery import poller as poller_module
 from rhapto.services.discovery.http import FakeDiscoveryHttp
 from rhapto.services.discovery.poller import PAUSED_MESSAGE, SourceSpec, build_specs, poll_sources
-from rhapto.services.discovery.sources import get_source
-from rhapto.services.discovery.sources.base import SourceError
+from rhapto.services.discovery.posting import Posting
+from rhapto.services.discovery.search import SearchSpec
+from rhapto.services.discovery.sources import SOURCES, get_source
+from rhapto.services.discovery.sources.base import SourceError, SourceInfo
 
 TRACKS = [
     Track(
@@ -57,16 +63,25 @@ async def seed(session: AsyncSession, user: User) -> None:
     await session.flush()
 
 
-async def test_build_specs_uses_track_keywords_for_aggregators(
+async def test_build_specs_fans_a_derived_search_per_track_across_enabled_aggregators(
     session: AsyncSession, user: User
 ) -> None:
+    """With tracks and an enabled aggregator but no saved searches yet, build_specs derives one
+    search per track (see derive_searches) and fans it out across every enabled aggregator --
+    superseding the old one-spec-with-all-track-keywords behaviour."""
     await seed(session, user)
     specs = await build_specs(session, user.id)
     assert [(s.source, s.board, s.company) for s in specs] == [
         ("greenhouse", "exampleco", "ExampleCo"),
         ("remoteok", None, None),
+        ("remoteok", None, None),
     ]
-    assert set(specs[1].keywords) == {"data platform", "ETL", "program manager", "LLM", "GenAI"}
+    aggregator_specs = specs[1:]
+    assert [s.keywords for s in aggregator_specs] == [
+        ["data platform", "ETL", "program manager"],
+        ["LLM", "GenAI"],
+    ]
+    assert all(s.search is not None and s.search_id is not None for s in aggregator_specs)
 
 
 async def test_poll_inserts_scores_and_records_runs(session: AsyncSession, user: User) -> None:
@@ -89,15 +104,23 @@ async def test_poll_inserts_scores_and_records_runs(session: AsyncSession, user:
         for j in greenhouse
     )
     runs = await disc_repo.latest_runs(session, user.id)
-    assert {(r.source, r.found, r.new, r.error) for r in runs} == {
-        ("greenhouse", 2, 2, None),
-        ("remoteok", 1, 1, None),
-    }
+    greenhouse_run = next(r for r in runs if r.source == "greenhouse")
+    assert (greenhouse_run.found, greenhouse_run.new, greenhouse_run.error) == (2, 2, None)
+    # remoteok is driven once per derived search (one per track): only the Data track's
+    # keywords match the fixture job, so its run finds 1 while the AI track's finds 0.
+    # latest_runs collapses same (source, board) runs to the newest, so check both directly.
+    remoteok_runs = {(r.found, r.new, r.error) for r in summary.results if r.source == "remoteok"}
+    assert remoteok_runs == {(1, 1, None), (0, 0, None)}
 
     again = await poll_sources(
         session, user.id, http=http, embedder=FakeEmbeddingProvider(dimensions=384)
     )
-    assert again.new_jobs == 0 and [r.found for r in again.results] == [2, 1]
+    assert again.new_jobs == 0
+    assert {(r.source, r.found) for r in again.results} == {
+        ("greenhouse", 2),
+        ("remoteok", 1),
+        ("remoteok", 0),
+    }
 
 
 async def test_repost_is_flagged_not_requeued(session: AsyncSession, user: User) -> None:
@@ -299,3 +322,108 @@ async def test_poll_ingests_a_workday_watchlist_row(session: AsyncSession, user:
     # one paged search POST plus one detail GET, and nothing else
     assert [body["offset"] for _, _, body in http.posts] == [0]
     assert len(http.calls) == 1
+
+
+class FakeAggregator:
+    """Registered under a throwaway id so a poll can be driven without any HTTP at all."""
+
+    info = SourceInfo("fake-agg", "aggregator", "Fake", False)
+    seen: list[SearchSpec] = []
+    postings: list[Posting] = []
+
+    async def fetch_search(self, http, spec, credentials):  # type: ignore[no-untyped-def]
+        type(self).seen.append(spec)
+        return list(type(self).postings)
+
+
+class KeyedAggregator(FakeAggregator):
+    info = SourceInfo(
+        "fake-keyed", "aggregator", "Fake keyed", False, needs_key=True, fields=("api_key",)
+    )
+
+
+@pytest.fixture
+def fake_aggregators() -> Iterator[None]:
+    FakeAggregator.seen = []
+    FakeAggregator.postings = []
+    SOURCES["fake-agg"] = FakeAggregator  # type: ignore[assignment]
+    SOURCES["fake-keyed"] = KeyedAggregator  # type: ignore[assignment]
+    yield
+    SOURCES.pop("fake-agg", None)
+    SOURCES.pop("fake-keyed", None)
+
+
+async def test_every_active_search_runs_against_every_enabled_aggregator(
+    session: AsyncSession, user: User, fake_aggregators: None
+) -> None:
+    await searches_repo.create_search(
+        session, user.id, name="A", keywords=["alpha"], location="Denver, CO", remote="include"
+    )
+    await searches_repo.create_search(
+        session, user.id, name="B", keywords=["beta"], location=None, remote="only"
+    )
+    # The pydantic AggregatorEntry model restricts `source` to the real, registered aggregator
+    # ids, so a throwaway test id is inserted straight through the ORM row instead.
+    session.add_all(
+        [
+            Aggregator(user_id=user.id, source="fake-agg", enabled=True, keywords=[]),
+            Aggregator(user_id=user.id, source="fake-keyed", enabled=True, keywords=[]),
+        ]
+    )
+    await session.flush()
+    summary = await poll_sources(
+        session,
+        user.id,
+        http=FakeDiscoveryHttp({}),
+        embedder=FakeEmbeddingProvider(dimensions=384),
+        fernet=Fernet(Fernet.generate_key()),
+    )
+    assert [(s.name, s.keywords[0]) for s in FakeAggregator.seen] == [("A", "alpha"), ("B", "beta")]
+    skipped = [r for r in summary.results if r.source == "fake-keyed"]
+    assert len(skipped) == 2 and all(r.error == "no API key" for r in skipped)
+
+
+async def test_a_result_on_a_lever_board_joins_the_watchlist_once(
+    session: AsyncSession, user: User, fake_aggregators: None
+) -> None:
+    search = await searches_repo.create_search(
+        session, user.id, name="A", keywords=["alpha"], location=None, remote="include"
+    )
+    session.add(Aggregator(user_id=user.id, source="fake-agg", enabled=True, keywords=[]))
+    await session.flush()
+    FakeAggregator.postings = [
+        Posting(
+            external_id="1",
+            company="ExampleCo",
+            title="Alpha Engineer",
+            location="Denver, CO",
+            url="https://jobs.lever.co/exampleco/abc",
+            jd_text="alpha " * 20,
+        )
+    ]
+    await session.flush()
+    fernet = Fernet(Fernet.generate_key())
+    await poll_sources(
+        session,
+        user.id,
+        http=FakeDiscoveryHttp({}),
+        embedder=FakeEmbeddingProvider(dimensions=384),
+        fernet=fernet,
+    )
+    rows = list(
+        await session.scalars(select(WatchlistEntry).where(WatchlistEntry.user_id == user.id))
+    )
+    assert [(r.source, r.board, r.discovered) for r in rows] == [("lever", "exampleco", True)]
+    jobs = list(await session.scalars(select(Job).where(Job.user_id == user.id)))
+    assert [j.search_id for j in jobs] == [search.id]
+    await poll_sources(
+        session,
+        user.id,
+        http=FakeDiscoveryHttp({}),
+        embedder=FakeEmbeddingProvider(dimensions=384),
+        fernet=fernet,
+    )
+    rows = list(
+        await session.scalars(select(WatchlistEntry).where(WatchlistEntry.user_id == user.id))
+    )
+    assert len(rows) == 1

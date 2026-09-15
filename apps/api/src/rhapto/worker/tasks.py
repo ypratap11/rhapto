@@ -6,6 +6,7 @@ import uuid
 from collections.abc import Awaitable, Callable
 from typing import Any, NotRequired, TypedDict
 
+from cryptography.fernet import Fernet
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from rhapto.config import Settings, get_settings
@@ -35,7 +36,7 @@ from rhapto.services.llm import (
 from rhapto.services.packaging import persist_package
 from rhapto.services.profile_sync import block_row_to_model, load_profile_from_db
 from rhapto.services.scoring import rescore_user, score_and_store
-from rhapto.services.secrets import KeyUnreadableError, SecretsError
+from rhapto.services.secrets import KeyUnreadableError, SecretsError, fernet_for
 from rhapto.services.storage import PackageStorage
 
 logger = logging.getLogger("rhapto.worker")
@@ -259,6 +260,15 @@ async def embed_blocks(ctx: dict[str, Any], user_id: str, block_ids: list[str]) 
 DISCOVERY_CHANNEL = "discovery"
 
 
+def _poll_fernet() -> Fernet | None:
+    """The deployment's Fernet for keyed aggregators, or None so a deployment with no secret
+    configured still polls its keyless sources instead of failing the whole poll."""
+    try:
+        return fernet_for(get_settings())
+    except SecretsError:
+        return None
+
+
 async def poll_now(ctx: dict[str, Any], task_id: str) -> None:
     """User-triggered poll: progress on the task channel, summary on the discovery channel."""
     factory: async_sessionmaker[AsyncSession] = ctx["session_factory"]
@@ -286,6 +296,7 @@ async def poll_now(ctx: dict[str, Any], task_id: str) -> None:
                 http=ctx["discovery_http"],
                 embedder=ctx["embedder"],
                 on_step=on_step,
+                fernet=_poll_fernet(),
             )
             task_repo.mark_succeeded(active, f"new:{summary.new_jobs}")
             await session.commit()
@@ -320,7 +331,11 @@ async def poll_all_sources(ctx: dict[str, Any]) -> None:
         for user_id in await list_user_ids(session):
             try:
                 summary = await poll_sources(
-                    session, user_id, http=ctx["discovery_http"], embedder=ctx["embedder"]
+                    session,
+                    user_id,
+                    http=ctx["discovery_http"],
+                    embedder=ctx["embedder"],
+                    fernet=_poll_fernet(),
                 )
                 await bus.publish(
                     DISCOVERY_CHANNEL, {"event": "discovery", "new_jobs": summary.new_jobs}
