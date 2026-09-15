@@ -34,6 +34,19 @@ def test_every_role_has_between_six_and_ten_keywords() -> None:
             assert 6 <= len(role.keywords) <= 10, f"{field.id}/{role.id}: {len(role.keywords)}"
 
 
+def test_keywords_are_plain_strings() -> None:
+    role = tax.find_role("engineering", "backend")
+    assert role is not None
+    assert all(type(k) is str for k in role.keywords)
+
+
+def test_every_keyword_is_between_two_and_sixty_characters() -> None:
+    for field in tax.taxonomy().fields:
+        for role in field.roles:
+            for keyword in role.keywords:
+                assert 2 <= len(keyword) <= 60, f"{field.id}/{role.id}: {keyword!r}"
+
+
 def test_role_ids_are_unique_within_a_field() -> None:
     for field in tax.taxonomy().fields:
         ids = [r.id for r in field.roles]

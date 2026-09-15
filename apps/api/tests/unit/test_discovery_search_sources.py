@@ -97,6 +97,24 @@ async def test_themuse_filters_on_keywords_and_stops_at_the_cap() -> None:
     assert len(postings) == 100
 
 
+async def test_themuse_appends_category_when_the_field_resolves() -> None:
+    http = FakeDiscoveryHttp({"themuse.com/api/public/jobs": _muse_page(1)})
+    spec = SearchSpec(keywords=("program manager",), location="Denver, CO", field="data-science")
+    await get_aggregator("themuse").fetch_search(http, spec, {})  # type: ignore[arg-type]
+    assert "category=Data%20Science" in http.calls[0]
+
+
+async def test_themuse_omits_category_when_the_field_is_none_or_unknown() -> None:
+    http = FakeDiscoveryHttp({"themuse.com/api/public/jobs": _muse_page(1)})
+    await get_aggregator("themuse").fetch_search(http, SPEC, {})  # type: ignore[arg-type]
+    assert "category=" not in http.calls[0]
+
+    http = FakeDiscoveryHttp({"themuse.com/api/public/jobs": _muse_page(1)})
+    spec = SearchSpec(keywords=("program manager",), field="not-a-real-field")
+    await get_aggregator("themuse").fetch_search(http, spec, {})  # type: ignore[arg-type]
+    assert "category=" not in http.calls[0]
+
+
 async def test_remotive_maps_salary_and_skips_when_remote_is_excluded() -> None:
     body = {
         "jobs": [
@@ -141,6 +159,26 @@ async def test_adzuna_sends_both_key_fields_and_maps_salary() -> None:
     assert postings[0].salary_text == "150000-170000"
     assert "app_id=id-1" in http.calls[0] and "app_key=key-1" in http.calls[0]
     assert "where=Denver%2C+CO" in http.calls[0] or "where=Denver%2C%20CO" in http.calls[0]
+
+
+async def test_adzuna_sets_category_when_the_field_resolves() -> None:
+    http = FakeDiscoveryHttp({"api.adzuna.com": {"results": []}})
+    creds = {"app_id": "id-1", "app_key": "key-1"}
+    spec = SearchSpec(keywords=("scientist",), field="data-science")
+    await get_aggregator("adzuna").fetch_search(http, spec, creds)  # type: ignore[arg-type]
+    assert "category=Scientific+%26+QA+Jobs" in http.calls[0]
+
+
+async def test_adzuna_omits_category_when_the_field_is_none_or_unknown() -> None:
+    http = FakeDiscoveryHttp({"api.adzuna.com": {"results": []}})
+    creds = {"app_id": "id-1", "app_key": "key-1"}
+    await get_aggregator("adzuna").fetch_search(http, SPEC, creds)  # type: ignore[arg-type]
+    assert "category=" not in http.calls[0]
+
+    http = FakeDiscoveryHttp({"api.adzuna.com": {"results": []}})
+    spec = SearchSpec(keywords=("scientist",), field="not-a-real-field")
+    await get_aggregator("adzuna").fetch_search(http, spec, creds)  # type: ignore[arg-type]
+    assert "category=" not in http.calls[0]
 
 
 async def test_adzuna_missing_key_is_a_source_error() -> None:

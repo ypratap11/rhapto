@@ -5,11 +5,7 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from pydantic import BaseModel, ConfigDict, Field, RootModel
-
-
-class Keyword(RootModel[str]):
-    root: Annotated[str, Field(max_length=60, min_length=2)]
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class TaxonomyRole(BaseModel):
@@ -18,7 +14,7 @@ class TaxonomyRole(BaseModel):
     )
     id: Annotated[str, Field(pattern='^[a-z0-9][a-z0-9-]*$')]
     name: str
-    keywords: Annotated[list[Keyword], Field(max_length=10, min_length=6)]
+    keywords: Annotated[list[str], Field(max_length=10, min_length=6)]
 
 
 class TaxonomyField(BaseModel):
