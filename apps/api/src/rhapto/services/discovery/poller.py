@@ -204,6 +204,7 @@ async def _ingest(
             identity_hash=ident,
             repost_of=repost_source.id if repost_source else None,
             search_id=spec.search_id,
+            salary_text=posting.salary_text,
         )
         created.append(job)
     return created

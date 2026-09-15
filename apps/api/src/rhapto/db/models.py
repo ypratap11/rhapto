@@ -7,9 +7,11 @@ from typing import Any
 from pgvector.sqlalchemy import Vector
 from sqlalchemy import (
     Boolean,
+    CheckConstraint,
     DateTime,
     ForeignKey,
     Integer,
+    SmallInteger,
     String,
     Text,
     UniqueConstraint,
@@ -25,6 +27,7 @@ APPLICATION_STATUSES = ("discovered", "queued", "applied", "screen", "interview"
 APPLIED_STATUSES = ("applied", "screen", "interview", "offer", "closed")
 TASK_STATUSES = ("queued", "running", "succeeded", "failed")
 PACKAGE_STATUSES = ("draft", "blocked")
+CLOSED_REASONS = ("rejected", "withdrew", "no_response", "filled")
 
 
 class User(TimestampMixin, Base):
@@ -182,6 +185,18 @@ class Job(UserScopedMixin, TimestampMixin, Base):
     search_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("searches.id", ondelete="SET NULL")
     )
+    # "Not interested": the job leaves the grid's default view, recommendations and the Resumes
+    # queue. The row stays, so a later repost can still point at it.
+    hidden_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Set once the source stopped returning this posting on UNLISTED_AFTER consecutive polls.
+    unlisted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Whatever the source said about pay, verbatim; NULL when it said nothing. Never computed.
+    salary_text: Mapped[str | None] = mapped_column(String(200))
+    # Consecutive polls of this job's own source and scope that did not return its external id.
+    # A smallint because it never exceeds UNLISTED_AFTER before the row is marked and reset.
+    miss_count: Mapped[int] = mapped_column(
+        SmallInteger, default=0, server_default="0", nullable=False
+    )
 
 
 class Package(UserScopedMixin, TimestampMixin, Base):
@@ -217,10 +232,19 @@ class Package(UserScopedMixin, TimestampMixin, Base):
     )
     edits_json: Mapped[list[dict[str, Any]] | None] = mapped_column(JSONB)
     source_document_json: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    # "Skip": the draft leaves the Resumes queue. Kept, not deleted, so the change log survives.
+    archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class Application(UserScopedMixin, TimestampMixin, Base):
     __tablename__ = "applications"
+    __table_args__ = (
+        # A reason only means something on a closed application; the router clears it when a
+        # closed application is reopened, and this makes the invariant the database's.
+        CheckConstraint(
+            "closed_reason IS NULL OR status = 'closed'", name="ck_applications_closed_reason"
+        ),
+    )
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=new_uuid)
     job_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("jobs.id", ondelete="CASCADE"), index=True, nullable=False
@@ -234,6 +258,8 @@ class Application(UserScopedMixin, TimestampMixin, Base):
     status_history_json: Mapped[list[dict[str, Any]]] = mapped_column(
         JSONB, default=list, nullable=False
     )
+    closed_reason: Mapped[str | None] = mapped_column(String(20))
+    follow_up_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class Task(UserScopedMixin, TimestampMixin, Base):
@@ -307,6 +333,8 @@ class SearchRow(UserScopedMixin, TimestampMixin, Base):
     )
     #: The track this search was derived from, until the user edits its criteria.
     derived_from_track_id: Mapped[str | None] = mapped_column(String(100))
+    # When the user last opened this search's results; "N new" counts jobs discovered after it.
+    last_viewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class SourceCredentialRow(UserScopedMixin, TimestampMixin, Base):
