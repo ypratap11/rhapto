@@ -287,3 +287,47 @@ async def application_for_job(
         .limit(1)
     )
     return result
+
+
+#: Consecutive polls that must miss a posting before it counts as gone. Two, not one: a source
+#: paginating differently, or a transient partial page, routinely drops a posting for one run.
+UNLISTED_AFTER = 2
+
+
+async def reconcile_listing(
+    session: AsyncSession,
+    user_id: uuid.UUID,
+    *,
+    source: str,
+    company: str | None,
+    search_id: uuid.UUID | None,
+    seen_external_ids: set[str],
+) -> int:
+    """Update miss counts for one poll of one source, and return how many jobs it just retired.
+
+    The scope is what this particular fetch could have returned -- the saved search's own
+    `search_id`, or the company for a board -- never the whole source. Scoping wider would mark
+    every job from a search the user just paused as unlisted the first time another search ran.
+    A job that is seen again has both fields cleared: postings come back.
+    """
+    scope = [Job.user_id == user_id, Job.source == source, Job.external_id.is_not(None)]
+    if search_id is not None:
+        scope.append(Job.search_id == search_id)
+    elif company is not None:
+        scope.append(Job.company == company)
+    rows = list(await session.scalars(select(Job).where(*scope)))
+    now = datetime.now(UTC)
+    retired = 0
+    for job in rows:
+        if job.external_id in seen_external_ids:
+            job.miss_count = 0
+            job.unlisted_at = None
+            continue
+        if job.unlisted_at is not None:
+            continue
+        job.miss_count = min(job.miss_count + 1, UNLISTED_AFTER)
+        if job.miss_count >= UNLISTED_AFTER:
+            job.unlisted_at = now
+            retired += 1
+    await session.flush()
+    return retired

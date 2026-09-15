@@ -1,4 +1,3 @@
-from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta
 
 import pytest
@@ -22,7 +21,7 @@ from rhapto.services.discovery.http import FakeDiscoveryHttp
 from rhapto.services.discovery.poller import PAUSED_MESSAGE, SourceSpec, build_specs, poll_sources
 from rhapto.services.discovery.posting import Posting
 from rhapto.services.discovery.search import SearchSpec
-from rhapto.services.discovery.sources import SOURCES, get_source
+from rhapto.services.discovery.sources import get_source
 from rhapto.services.discovery.sources.base import SourceError, SourceInfo
 
 TRACKS = [
@@ -349,18 +348,6 @@ class KeyedAggregator(FakeAggregator):
     info = SourceInfo(
         "fake-keyed", "aggregator", "Fake keyed", False, needs_key=True, fields=("api_key",)
     )
-
-
-@pytest.fixture
-def fake_aggregators() -> Iterator[None]:
-    FakeAggregator.seen = []
-    FakeAggregator.postings = []
-    FakeAggregator.fail_names = set()
-    SOURCES["fake-agg"] = FakeAggregator  # type: ignore[assignment]
-    SOURCES["fake-keyed"] = KeyedAggregator  # type: ignore[assignment]
-    yield
-    SOURCES.pop("fake-agg", None)
-    SOURCES.pop("fake-keyed", None)
 
 
 async def test_every_active_search_runs_against_every_enabled_aggregator(

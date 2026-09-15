@@ -25,7 +25,7 @@ from rhapto.services.discovery.boards import board_from_url
 from rhapto.services.discovery.dedupe import identity_hash
 from rhapto.services.discovery.http import DiscoveryHttp, FakeDiscoveryHttp
 from rhapto.services.discovery.posting import Posting
-from rhapto.services.discovery.search import Remote, SearchSpec, derive_searches
+from rhapto.services.discovery.search import SEARCH_CAP, Remote, SearchSpec, derive_searches
 from rhapto.services.discovery.sources import SOURCES, get_aggregator, get_source
 from rhapto.services.discovery.sources.base import SourceError
 from rhapto.services.scoring import score_and_store
@@ -65,6 +65,7 @@ class PollSummary:
     results: list[RunResult]
     new_jobs: int
     new_job_ids: list[uuid.UUID]
+    unlisted_jobs: int = 0
 
 
 async def build_specs(
@@ -294,11 +295,33 @@ async def poll_sources(
             await _discover_boards(session, user_id, spec, created)
             await step("score")
             await score_and_store(session, user_id, created, embedder)
+            unlisted = 0
+            # A search-driven fetch that hit SEARCH_CAP was truncated, not exhaustive: it cannot
+            # prove any of this scope's other jobs are gone, so reconciling on it would retire
+            # postings the source never got a chance to report. A board fetch has no such cap.
+            truncated = spec.search_id is not None and len(postings) >= SEARCH_CAP
+            if postings and not truncated:
+                # Only a fetch that actually returned something can tell us a posting is gone.
+                # An empty page would otherwise retire the whole queue on the next poll.
+                unlisted = await jobs_repo.reconcile_listing(
+                    session,
+                    user_id,
+                    source=spec.source,
+                    company=spec.company,
+                    search_id=spec.search_id,
+                    seen_external_ids={p.external_id for p in postings},
+                )
             disc_repo.finish_run(run, found=len(postings), new=len(created), error=None)
             await session.commit()
             results.append(
                 RunResult(
-                    spec.source, spec.board, len(postings), len(created), None, spec.search_id
+                    spec.source,
+                    spec.board,
+                    len(postings),
+                    len(created),
+                    None,
+                    spec.search_id,
+                    unlisted,
                 )
             )
             new_ids.extend(j.id for j in created)
@@ -315,4 +338,9 @@ async def poll_sources(
             await session.commit()
             results.append(RunResult(spec.source, spec.board, 0, 0, message, spec.search_id))
     await step("done")
-    return PollSummary(results=results, new_jobs=len(new_ids), new_job_ids=new_ids)
+    return PollSummary(
+        results=results,
+        new_jobs=len(new_ids),
+        new_job_ids=new_ids,
+        unlisted_jobs=sum(r.unlisted for r in results),
+    )
