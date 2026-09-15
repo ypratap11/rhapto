@@ -18,6 +18,8 @@ class Track(BaseModel):
     keywords: list[str] = []
     resume_base: str
     min_fit: Annotated[int, Field(ge=0, le=100)] = 50
+    field: str | None = None
+    role: str | None = None
 
 
 class TracksFile(BaseModel):

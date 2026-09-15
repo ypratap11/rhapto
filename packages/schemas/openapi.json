@@ -2297,6 +2297,128 @@
         "title": "TaskOut",
         "type": "object"
       },
+      "TaxonomyField": {
+        "additionalProperties": false,
+        "properties": {
+          "adzuna_category": {
+            "title": "Adzuna Category",
+            "type": "string"
+          },
+          "id": {
+            "pattern": "^[a-z0-9][a-z0-9-]*$",
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "roles": {
+            "items": {
+              "$ref": "#/components/schemas/TaxonomyRole"
+            },
+            "minItems": 1,
+            "title": "Roles",
+            "type": "array"
+          },
+          "themuse_category": {
+            "title": "Themuse Category",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "themuse_category",
+          "adzuna_category",
+          "roles"
+        ],
+        "title": "TaxonomyField",
+        "type": "object"
+      },
+      "TaxonomyFile": {
+        "additionalProperties": false,
+        "description": "taxonomy.yaml: career fields, the roles inside them, the keywords a track starts from, and the category name each aggregator uses for the field.",
+        "properties": {
+          "fields": {
+            "items": {
+              "$ref": "#/components/schemas/TaxonomyField"
+            },
+            "minItems": 1,
+            "title": "Fields",
+            "type": "array"
+          }
+        },
+        "required": [
+          "fields"
+        ],
+        "title": "TaxonomyFile",
+        "type": "object"
+      },
+      "TaxonomyRole": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "pattern": "^[a-z0-9][a-z0-9-]*$",
+            "title": "Id",
+            "type": "string"
+          },
+          "keywords": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 10,
+            "minItems": 6,
+            "title": "Keywords",
+            "type": "array"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "keywords"
+        ],
+        "title": "TaxonomyRole",
+        "type": "object"
+      },
+      "TaxonomySuggestionOut": {
+        "description": "One role the uploaded resume's entry titles point at, for the picker's chip row.",
+        "properties": {
+          "field_id": {
+            "title": "Field Id",
+            "type": "string"
+          },
+          "field_name": {
+            "title": "Field Name",
+            "type": "string"
+          },
+          "matched_title": {
+            "title": "Matched Title",
+            "type": "string"
+          },
+          "role_id": {
+            "title": "Role Id",
+            "type": "string"
+          },
+          "role_name": {
+            "title": "Role Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "field_id",
+          "field_name",
+          "role_id",
+          "role_name",
+          "matched_title"
+        ],
+        "title": "TaxonomySuggestionOut",
+        "type": "object"
+      },
       "Track": {
         "additionalProperties": false,
         "properties": {
@@ -2310,6 +2432,17 @@
               }
             ],
             "title": "Description"
+          },
+          "field": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Field"
           },
           "id": {
             "pattern": "^[a-z0-9][a-z0-9-]*$",
@@ -2338,6 +2471,17 @@
           "resume_base": {
             "title": "Resume Base",
             "type": "string"
+          },
+          "role": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Role"
           }
         },
         "required": [
@@ -5967,6 +6111,110 @@
         "summary": "Task Events",
         "tags": [
           "tailor"
+        ]
+      }
+    },
+    "/api/v1/taxonomy": {
+      "get": {
+        "description": "The whole field -> role tree. Static data, but behind auth like every other route.",
+        "operationId": "get_taxonomy_api_v1_taxonomy_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaxonomyFile"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Taxonomy",
+        "tags": [
+          "taxonomy"
+        ]
+      }
+    },
+    "/api/v1/taxonomy/suggestions": {
+      "get": {
+        "description": "Roles whose name appears in one of the uploaded resume's entry titles.\n\nMatching is deliberately blunt -- normalised containment in either direction -- because entry\ntitles carry seniority and team (\"Senior Technical Program Manager, Platform\"). Anything\ncleverer would need the LLM, and this has to answer while the picker is opening.",
+        "operationId": "suggestions_api_v1_taxonomy_suggestions_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/TaxonomySuggestionOut"
+                  },
+                  "title": "Response Suggestions Api V1 Taxonomy Suggestions Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Suggestions",
+        "tags": [
+          "taxonomy"
         ]
       }
     }

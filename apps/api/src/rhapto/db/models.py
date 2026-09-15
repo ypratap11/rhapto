@@ -77,6 +77,11 @@ class Track(UserScopedMixin, TimestampMixin, Base):
     keywords: Mapped[list[str]] = mapped_column(ARRAY(String), default=list, nullable=False)
     resume_base: Mapped[str] = mapped_column(String(100), nullable=False)
     min_fit: Mapped[int] = mapped_column(Integer, default=50, nullable=False)
+    # Where this track came from in packages/schemas/taxonomy.yaml. NULL on tracks written by
+    # hand or imported from a tracks.yaml that predates the picker, which is why the Field
+    # filter treats NULL as "not in any field" rather than guessing.
+    field: Mapped[str | None] = mapped_column(String(50))
+    role: Mapped[str | None] = mapped_column(String(50))
     embedding: Mapped[list[float] | None] = mapped_column(Vector(EMBEDDING_DIMENSIONS))
 
 

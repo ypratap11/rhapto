@@ -19,6 +19,7 @@ from rhapto.api.routers import (
     profile,
     searches,
     tailor,
+    taxonomy,
 )
 from rhapto.api.routers import settings as settings_router
 from rhapto.config import Settings, get_settings
@@ -109,6 +110,7 @@ def create_app(
     app.include_router(applications.router, prefix=API_PREFIX, tags=["applications"])
     app.include_router(settings_router.router, prefix=API_PREFIX, tags=["settings"])
     app.include_router(searches.router, prefix=API_PREFIX, tags=["searches"])
+    app.include_router(taxonomy.router, prefix=API_PREFIX, tags=["taxonomy"])
     return app
 
 

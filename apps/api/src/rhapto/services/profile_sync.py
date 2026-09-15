@@ -54,6 +54,8 @@ def track_row_to_model(row: db.Track) -> Track:
         keywords=list(row.keywords),
         resume_base=row.resume_base,
         min_fit=row.min_fit,
+        field=row.field,
+        role=row.role,
     )
 
 

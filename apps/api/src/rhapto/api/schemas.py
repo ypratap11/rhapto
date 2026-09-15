@@ -344,3 +344,13 @@ class SourceTestOut(BaseModel):
     ok: bool
     found: int | None = None
     error: str | None = None
+
+
+class TaxonomySuggestionOut(BaseModel):
+    """One role the uploaded resume's entry titles point at, for the picker's chip row."""
+
+    field_id: str
+    field_name: str
+    role_id: str
+    role_name: str
+    matched_title: str

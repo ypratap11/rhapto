@@ -726,6 +726,50 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/taxonomy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Taxonomy
+         * @description The whole field -> role tree. Static data, but behind auth like every other route.
+         */
+        get: operations["get_taxonomy_api_v1_taxonomy_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/taxonomy/suggestions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Suggestions
+         * @description Roles whose name appears in one of the uploaded resume's entry titles.
+         *
+         *     Matching is deliberately blunt -- normalised containment in either direction -- because entry
+         *     titles carry seniority and team ("Senior Technical Program Manager, Platform"). Anything
+         *     cleverer would need the LLM, and this has to answer while the picker is opening.
+         */
+        get: operations["suggestions_api_v1_taxonomy_suggestions_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1556,10 +1600,58 @@ export interface components {
             /** Type */
             type: string;
         };
+        /** TaxonomyField */
+        TaxonomyField: {
+            /** Adzuna Category */
+            adzuna_category: string;
+            /** Id */
+            id: string;
+            /** Name */
+            name: string;
+            /** Roles */
+            roles: components["schemas"]["TaxonomyRole"][];
+            /** Themuse Category */
+            themuse_category: string;
+        };
+        /**
+         * TaxonomyFile
+         * @description taxonomy.yaml: career fields, the roles inside them, the keywords a track starts from, and the category name each aggregator uses for the field.
+         */
+        TaxonomyFile: {
+            /** Fields */
+            fields: components["schemas"]["TaxonomyField"][];
+        };
+        /** TaxonomyRole */
+        TaxonomyRole: {
+            /** Id */
+            id: string;
+            /** Keywords */
+            keywords: string[];
+            /** Name */
+            name: string;
+        };
+        /**
+         * TaxonomySuggestionOut
+         * @description One role the uploaded resume's entry titles point at, for the picker's chip row.
+         */
+        TaxonomySuggestionOut: {
+            /** Field Id */
+            field_id: string;
+            /** Field Name */
+            field_name: string;
+            /** Matched Title */
+            matched_title: string;
+            /** Role Id */
+            role_id: string;
+            /** Role Name */
+            role_name: string;
+        };
         /** Track */
         Track: {
             /** Description */
             description?: string | null;
+            /** Field */
+            field?: string | null;
             /** Id */
             id: string;
             /**
@@ -1576,6 +1668,8 @@ export interface components {
             name: string;
             /** Resume Base */
             resume_base: string;
+            /** Role */
+            role?: string | null;
         };
         /** ValidationError */
         ValidationError: {
@@ -3632,6 +3726,68 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_taxonomy_api_v1_taxonomy_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaxonomyFile"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    suggestions_api_v1_taxonomy_suggestions_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaxonomySuggestionOut"][];
                 };
             };
             /** @description Validation Error */

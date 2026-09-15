@@ -20,7 +20,9 @@
         "description": { "type": "string" },
         "keywords": { "type": "array", "items": { "type": "string" }, "default": [] },
         "resume_base": { "type": "string" },
-        "min_fit": { "type": "integer", "minimum": 0, "maximum": 100, "default": 50 }
+        "min_fit": { "type": "integer", "minimum": 0, "maximum": 100, "default": 50 },
+        "field": { "type": ["string", "null"], "default": null },
+        "role": { "type": ["string", "null"], "default": null }
       }
     }
   }

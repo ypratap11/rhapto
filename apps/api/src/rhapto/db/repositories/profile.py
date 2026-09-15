@@ -189,6 +189,8 @@ async def upsert_track(
     row.keywords = list(data.keywords)
     row.resume_base = data.resume_base
     row.min_fit = data.min_fit
+    row.field = data.field
+    row.role = data.role
     if embedding_stale:
         row.embedding = None
     row.updated_at = datetime.now(UTC)
