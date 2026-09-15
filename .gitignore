@@ -28,3 +28,6 @@ apps/web/coverage/
 
 # superpowers scratch (ledgers, briefs, review packages)
 .superpowers/
+
+# Local screenshot walkthroughs (may contain real profile data)
+apps/web/.screenshots/
