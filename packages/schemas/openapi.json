@@ -3278,6 +3278,24 @@
             }
           },
           {
+            "description": "comma-separated job ids, at most 200",
+            "in": "query",
+            "name": "ids",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "comma-separated job ids, at most 200",
+              "title": "Ids"
+            }
+          },
+          {
             "description": "show only hidden jobs",
             "in": "query",
             "name": "hidden",
@@ -3286,6 +3304,87 @@
               "default": false,
               "description": "show only hidden jobs",
               "title": "Hidden",
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
+            "name": "search_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Search Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "posted_within",
+            "required": false,
+            "schema": {
+              "default": "any",
+              "enum": [
+                "24h",
+                "7d",
+                "30d",
+                "any"
+              ],
+              "title": "Posted Within",
+              "type": "string"
+            }
+          },
+          {
+            "description": "comma-separated source ids",
+            "in": "query",
+            "name": "sources",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "comma-separated source ids",
+              "title": "Sources"
+            }
+          },
+          {
+            "description": "taxonomy field id",
+            "in": "query",
+            "name": "field",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "taxonomy field id",
+              "title": "Field"
+            }
+          },
+          {
+            "description": "only jobs with no resume, no application, not hidden and not unlisted",
+            "in": "query",
+            "name": "recommended",
+            "required": false,
+            "schema": {
+              "default": false,
+              "description": "only jobs with no resume, no application, not hidden and not unlisted",
+              "title": "Recommended",
               "type": "boolean"
             }
           },

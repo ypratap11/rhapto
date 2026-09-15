@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any, cast
 
 from sqlalchemy import CursorResult, and_, delete, func, not_, nulls_last, or_, select
@@ -49,6 +49,10 @@ async def find_duplicate(
     return result
 
 
+#: How far back each `posted_within` value reaches.
+POSTED_WITHIN_DAYS = {"24h": 1, "7d": 7, "30d": 30}
+
+
 async def list_jobs(
     session: AsyncSession,
     user_id: uuid.UUID,
@@ -58,7 +62,13 @@ async def list_jobs(
     bucket: str | None = None,
     region: str = "any",
     sort: str = "fit",
+    ids: list[uuid.UUID] | None = None,
     hidden: bool = False,
+    search_id: uuid.UUID | None = None,
+    posted_within: str = "any",
+    sources: list[str] | None = None,
+    track_ids: list[str] | None = None,
+    recommended: bool = False,
 ) -> list[tuple[Job, str | None]]:
     tracks = select(Track.track_id, Track.min_fit).where(Track.user_id == user_id).subquery()
     query = (
@@ -67,9 +77,35 @@ async def list_jobs(
         .outerjoin(SearchRow, SearchRow.id == Job.search_id)
         .where(Job.user_id == user_id)
     )
+    if ids is not None:
+        query = query.where(Job.id.in_(ids))
     # `hidden` is a switch, not a filter that can be off: the grid's default view must not show
     # jobs the user said no to, and "Show hidden" wants exactly those and nothing else.
     query = query.where(Job.hidden_at.is_not(None) if hidden else Job.hidden_at.is_(None))
+    if search_id is not None:
+        query = query.where(Job.search_id == search_id)
+    if sources:
+        query = query.where(Job.source.in_(sources))
+    if track_ids is not None:
+        # An empty list means "the user has no track in that field", which is an empty result,
+        # not "no filter" -- hence the `is not None` test rather than a truthiness test.
+        query = query.where(Job.best_track_id.in_(track_ids))
+    days = POSTED_WITHIN_DAYS.get(posted_within)
+    if days is not None:
+        cutoff = datetime.now(UTC) - timedelta(days=days)
+        # A posting with no date from the source is judged by when Rhapto first saw it, which is
+        # the only honest answer available.
+        query = query.where(func.coalesce(Job.posted_at, Job.discovered_at) >= cutoff)
+    if recommended:
+        has_package = select(Package.id).where(Package.user_id == user_id, Package.job_id == Job.id)
+        has_application = select(Application.id).where(
+            Application.user_id == user_id, Application.job_id == Job.id
+        )
+        query = query.where(
+            Job.unlisted_at.is_(None),
+            ~has_package.exists(),
+            ~has_application.exists(),
+        )
     if search:
         # Escape LIKE metacharacters so a search for "100%" is a literal, not a wildcard.
         escaped = search.lower().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
@@ -107,7 +143,13 @@ async def list_jobs(
     elif bucket == "low":
         query = query.where(Job.best_fit.is_not(None), not_(fit_condition))
     if sort == "newest":
-        query = query.order_by(Job.discovered_at.desc(), Job.created_at.desc(), Job.id)
+        # A posting with its own date sorts by that; a manual or dateless one falls back to when
+        # Rhapto discovered it -- the same coalesce `posted_within` judges recency by above.
+        query = query.order_by(
+            func.coalesce(Job.posted_at, Job.discovered_at).desc(),
+            Job.created_at.desc(),
+            Job.id,
+        )
     else:
         query = query.order_by(nulls_last(Job.best_fit.desc()), Job.discovered_at.desc(), Job.id)
     return [(job, name) for job, name in (await session.execute(query)).all()]

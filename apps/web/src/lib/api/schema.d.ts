@@ -2117,8 +2117,18 @@ export interface operations {
                 bucket?: ("fit" | "low") | null;
                 region?: "preferred" | "us" | "any";
                 sort?: "fit" | "newest";
+                /** @description comma-separated job ids, at most 200 */
+                ids?: string | null;
                 /** @description show only hidden jobs */
                 hidden?: boolean;
+                search_id?: string | null;
+                posted_within?: "24h" | "7d" | "30d" | "any";
+                /** @description comma-separated source ids */
+                sources?: string | null;
+                /** @description taxonomy field id */
+                field?: string | null;
+                /** @description only jobs with no resume, no application, not hidden and not unlisted */
+                recommended?: boolean;
             };
             header?: {
                 authorization?: string | null;

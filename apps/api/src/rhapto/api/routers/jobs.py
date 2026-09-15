@@ -4,7 +4,7 @@ import logging
 import uuid
 from typing import Annotated, Any, Literal, cast
 
-from fastapi import APIRouter, Depends, Query, Response
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from rhapto.api.deps import current_user, get_enqueuer, get_fetch_text, get_session, get_storage
@@ -19,6 +19,7 @@ from rhapto.models.jd_extract import JDExtract
 from rhapto.services.enqueue import Enqueuer
 from rhapto.services.jobtext import FetchText
 from rhapto.services.storage import PackageStorage
+from rhapto.services.taxonomy import find_field
 
 logger = logging.getLogger(__name__)
 
@@ -29,6 +30,31 @@ SessionDep = Annotated[AsyncSession, Depends(get_session)]
 FetchTextDep = Annotated[FetchText, Depends(get_fetch_text)]
 StorageDep = Annotated[PackageStorage, Depends(get_storage)]
 EnqueuerDep = Annotated[Enqueuer, Depends(get_enqueuer)]
+
+#: A refetch after a live search asks for at most LIVE_CAP jobs per source across a handful of
+#: sources; 200 is generous for that and small enough to keep the IN clause sane.
+MAX_IDS = 200
+
+
+def parse_ids(raw: str | None) -> list[uuid.UUID] | None:
+    """`?ids=a,b,c` as UUIDs. None when the parameter was not sent at all."""
+    if raw is None:
+        return None
+    parts = [p.strip() for p in raw.split(",") if p.strip()]
+    if len(parts) > MAX_IDS:
+        raise HTTPException(status_code=422, detail=f"ids accepts at most {MAX_IDS} values")
+    try:
+        return [uuid.UUID(p) for p in parts]
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=422, detail=f"ids contains a value that is not a UUID: {exc}"
+        ) from exc
+
+
+def parse_csv(raw: str | None) -> list[str] | None:
+    if raw is None:
+        return None
+    return [p.strip() for p in raw.split(",") if p.strip()]
 
 
 def job_to_out(
@@ -189,9 +215,25 @@ async def list_jobs(
     bucket: Literal["fit", "low"] | None = Query(default=None),
     region: Literal["preferred", "us", "any"] = Query(default="any"),
     sort: Literal["fit", "newest"] = Query(default="fit"),
+    ids: str | None = Query(default=None, description="comma-separated job ids, at most 200"),
     hidden: bool = Query(default=False, description="show only hidden jobs"),
+    search_id: Annotated[uuid.UUID | None, Query()] = None,
+    posted_within: Literal["24h", "7d", "30d", "any"] = Query(default="any"),
+    sources: str | None = Query(default=None, description="comma-separated source ids"),
+    field: str | None = Query(default=None, description="taxonomy field id"),
+    recommended: bool = Query(
+        default=False,
+        description="only jobs with no resume, no application, not hidden and not unlisted",
+    ),
 ) -> list[JobOut]:
-    jobs = await repo.list_jobs(
+    track_ids: list[str] | None = None
+    if field is not None:
+        if find_field(field) is None:
+            raise HTTPException(status_code=422, detail=f"unknown taxonomy field {field!r}")
+        track_ids = [
+            t.track_id for t in await profile_repo.list_tracks(session, user_id) if t.field == field
+        ]
+    rows = await repo.list_jobs(
         session,
         user_id,
         search=search,
@@ -199,9 +241,15 @@ async def list_jobs(
         bucket=bucket,
         region=region,
         sort=sort,
+        ids=parse_ids(ids),
         hidden=hidden,
+        search_id=search_id,
+        posted_within=posted_within,
+        sources=parse_csv(sources),
+        track_ids=track_ids,
+        recommended=recommended,
     )
-    return await _outs(session, user_id, jobs)
+    return await _outs(session, user_id, rows)
 
 
 @router.get("/{job_id}", response_model=JobOut)
