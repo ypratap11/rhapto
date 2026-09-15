@@ -138,14 +138,28 @@ async def _is_paused(session: AsyncSession, user_id: uuid.UUID, spec: SourceSpec
         # there is nothing a human could "save" to lift a pause, so it is never paused.
         return False
     # Only failures after the entry was last saved count, so a save grants three fresh attempts
-    # instead of a single retry.
+    # instead of a single retry. search_id narrows the streak to this spec's own saved search
+    # (None for a board spec), so a keyless aggregator fanned out across several searches gets
+    # one independent streak per search instead of one shared streak per (source, board).
     failures = await disc_repo.consecutive_failures(
-        session, user_id, spec.source, spec.board, since=spec.entry_updated_at
+        session,
+        user_id,
+        spec.source,
+        spec.board,
+        search_id=spec.search_id,
+        since=spec.entry_updated_at,
     )
     if failures < PAUSE_AFTER:
         return False
     runs = await disc_repo.latest_runs(session, user_id)
-    last = next((r for r in runs if r.source == spec.source and r.board == spec.board), None)
+    last = next(
+        (
+            r
+            for r in runs
+            if r.source == spec.source and r.board == spec.board and r.search_id == spec.search_id
+        ),
+        None,
+    )
     if last is None:
         return True
     return spec.entry_updated_at <= last.started_at

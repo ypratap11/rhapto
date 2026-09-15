@@ -26,12 +26,18 @@ def finish_run(run: PollRun, *, found: int, new: int, error: str | None) -> None
 
 
 async def latest_runs(session: AsyncSession, user_id: uuid.UUID) -> list[PollRun]:
-    """Newest run per (source, board)."""
+    """Newest run per (source, board, search_id).
+
+    A board poll always has ``search_id`` NULL, so this is a no-op refinement for boards;
+    a keyless aggregator driven by several saved searches shares ``(source, board=None)``
+    but not ``search_id``, so each search's own runs now survive here instead of collapsing
+    into whichever one happened to start last.
+    """
     rows = await session.scalars(
         select(PollRun)
         .where(PollRun.user_id == user_id)
-        .order_by(PollRun.source, PollRun.board, PollRun.started_at.desc())
-        .distinct(PollRun.source, PollRun.board)
+        .order_by(PollRun.source, PollRun.board, PollRun.search_id, PollRun.started_at.desc())
+        .distinct(PollRun.source, PollRun.board, PollRun.search_id)
     )
     return sorted(rows, key=lambda r: r.started_at, reverse=True)
 
@@ -47,12 +53,19 @@ async def consecutive_failures(
     source: str,
     board: str | None,
     *,
+    search_id: uuid.UUID | None = None,
     since: datetime | None = None,
 ) -> int:
     """Failed runs in a row, newest first, capped at PAUSE_AFTER.
 
     ``since`` restarts the streak: runs started at or before it (for example before the user
     re-saved the watchlist entry) are not counted, so a save grants a fresh three attempts.
+
+    ``search_id`` narrows the streak to one saved search: a keyless aggregator driven by
+    several searches shares ``(source, board=None)``, so without this a failing search's
+    streak would be reset by another search's successes against the same aggregator (and
+    vice versa). A board poll always passes ``search_id=None``, which keeps today's
+    behaviour exactly (see the ``== None`` -> ``IS NULL`` note just below).
     """
     conditions = [
         PollRun.user_id == user_id,
@@ -60,6 +73,7 @@ async def consecutive_failures(
         # SQLAlchemy compiles `== None` to `IS NULL`, so this covers both
         # a real board and the no-board (board=None) case in one comparison.
         PollRun.board == board,
+        PollRun.search_id == search_id,
     ]
     if since is not None:
         conditions.append(PollRun.started_at > since)

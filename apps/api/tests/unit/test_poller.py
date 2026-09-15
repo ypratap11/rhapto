@@ -1,4 +1,5 @@
 from collections.abc import Iterator
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from cryptography.fernet import Fernet
@@ -325,14 +326,22 @@ async def test_poll_ingests_a_workday_watchlist_row(session: AsyncSession, user:
 
 
 class FakeAggregator:
-    """Registered under a throwaway id so a poll can be driven without any HTTP at all."""
+    """Registered under a throwaway id so a poll can be driven without any HTTP at all.
+
+    `fail_names` lets a test make specific searches (by `SearchSpec.name`) fail with a
+    `SourceError` while others sharing the same aggregator keep succeeding, so the
+    per-search pause/failure-streak semantics can be exercised directly.
+    """
 
     info = SourceInfo("fake-agg", "aggregator", "Fake", False)
     seen: list[SearchSpec] = []
     postings: list[Posting] = []
+    fail_names: set[str] = set()
 
     async def fetch_search(self, http, spec, credentials):  # type: ignore[no-untyped-def]
         type(self).seen.append(spec)
+        if spec.name in type(self).fail_names:
+            raise SourceError("boom")
         return list(type(self).postings)
 
 
@@ -346,6 +355,7 @@ class KeyedAggregator(FakeAggregator):
 def fake_aggregators() -> Iterator[None]:
     FakeAggregator.seen = []
     FakeAggregator.postings = []
+    FakeAggregator.fail_names = set()
     SOURCES["fake-agg"] = FakeAggregator  # type: ignore[assignment]
     SOURCES["fake-keyed"] = KeyedAggregator  # type: ignore[assignment]
     yield
@@ -427,3 +437,93 @@ async def test_a_result_on_a_lever_board_joins_the_watchlist_once(
         await session.scalars(select(WatchlistEntry).where(WatchlistEntry.user_id == user.id))
     )
     assert len(rows) == 1
+
+
+async def test_several_failing_searches_in_one_cycle_do_not_pause_each_other(
+    session: AsyncSession, user: User, fake_aggregators: None
+) -> None:
+    """PAUSE_AFTER is 3, and _is_paused only sees runs already committed earlier in this same
+    poll_sources() call. Before search_id-scoped streaks, 4 different searches failing against
+    one keyless aggregator in a single cycle would make the 4th spec see 3 already-committed
+    failures for (source, board=None) -- from the *other* searches -- and pause without ever
+    attempting its own fetch."""
+    names = ["S1", "S2", "S3", "S4"]
+    for name in names:
+        await searches_repo.create_search(
+            session, user.id, name=name, keywords=["alpha"], location=None, remote="include"
+        )
+    # An explicit, safely-past updated_at (rather than the server_default "now") keeps the
+    # entry-saved-after-the-last-run comparison in _is_paused unaffected by any clock skew
+    # between this host and the database server.
+    session.add(
+        Aggregator(
+            user_id=user.id,
+            source="fake-agg",
+            enabled=True,
+            keywords=[],
+            updated_at=datetime.now(UTC) - timedelta(hours=1),
+        )
+    )
+    await session.flush()
+    FakeAggregator.fail_names = set(names)
+    summary = await poll_sources(
+        session,
+        user.id,
+        http=FakeDiscoveryHttp({}),
+        embedder=FakeEmbeddingProvider(dimensions=384),
+    )
+    assert len(summary.results) == 4
+    assert all(r.error == "boom" for r in summary.results)
+    # every search's spec actually attempted the fetch -- none was skipped as "paused".
+    assert len(FakeAggregator.seen) == 4
+
+
+async def test_a_failing_search_pauses_alone_without_a_healthy_searchs_successes_resetting_it(
+    session: AsyncSession, user: User, fake_aggregators: None
+) -> None:
+    """Two searches share one keyless aggregator: one always fails, one always succeeds, and the
+    healthy one is created (and so processed) after the failing one every cycle. Before
+    search_id-scoped streaks, consecutive_failures grouped purely by (source, board=None) would
+    see the healthy search's success as the newest run each cycle and reset the count to 0, so
+    the failing search would never auto-pause; and the healthy search must never be paused by the
+    failing one's errors either."""
+    failing = await searches_repo.create_search(
+        session, user.id, name="Fails", keywords=["alpha"], location=None, remote="include"
+    )
+    healthy = await searches_repo.create_search(
+        session, user.id, name="Healthy", keywords=["beta"], location=None, remote="include"
+    )
+    session.add(
+        Aggregator(
+            user_id=user.id,
+            source="fake-agg",
+            enabled=True,
+            keywords=[],
+            updated_at=datetime.now(UTC) - timedelta(hours=1),
+        )
+    )
+    await session.flush()
+    FakeAggregator.fail_names = {"Fails"}
+    embedder = FakeEmbeddingProvider(dimensions=384)
+    for _ in range(3):
+        summary = await poll_sources(
+            session, user.id, http=FakeDiscoveryHttp({}), embedder=embedder
+        )
+        fails_result = next(r for r in summary.results if r.search_id == failing.id)
+        healthy_result = next(r for r in summary.results if r.search_id == healthy.id)
+        assert fails_result.error == "boom"
+        assert healthy_result.error is None
+    # A 4th cycle: the failing search's own 3-in-a-row streak now pauses it, while the healthy
+    # search -- never paused, and never resetting the other search's streak -- keeps polling.
+    summary = await poll_sources(session, user.id, http=FakeDiscoveryHttp({}), embedder=embedder)
+    fails_result = next(r for r in summary.results if r.search_id == failing.id)
+    healthy_result = next(r for r in summary.results if r.search_id == healthy.id)
+    assert fails_result.error == PAUSED_MESSAGE
+    assert healthy_result.error is None
+
+
+# Board-poll pause behaviour is unchanged by the search_id-scoped streak: it always sees
+# search_id=None on both sides of the comparison. See
+# test_failed_source_is_recorded_and_paused_after_three and
+# test_resaving_the_entry_grants_three_fresh_attempts above, which already cover it and still
+# pass unmodified.
