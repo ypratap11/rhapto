@@ -58,7 +58,14 @@ class AdzunaSource:
                 if spec.location:
                     query["where"] = spec.location
                 url = f"https://api.adzuna.com/v1/api/jobs/us/search/{page}?{urlencode(query)}"
-                data = await http.get_json(url)
+                # Adzuna authenticates via app_id/app_key in the query string, so every error
+                # raised from here is rewritten: the raw message (http.py embeds the full URL)
+                # would otherwise carry both credentials into a run row and the UI.
+                try:
+                    data = await http.get_json(url)
+                except SourceError as exc:
+                    redacted = str(exc).replace(creds["app_id"], "…").replace(creds["app_key"], "…")
+                    raise SourceError(f"Adzuna: check the API key ({redacted})") from None
                 if not isinstance(data, dict):
                     raise SourceError("Adzuna: unexpected response shape")
                 results = data.get("results")

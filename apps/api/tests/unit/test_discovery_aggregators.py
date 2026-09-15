@@ -2,7 +2,8 @@ from datetime import UTC, datetime
 
 from test_discovery_sources import fake_http_for
 
-from rhapto.services.discovery.sources import get_source
+from rhapto.services.discovery.search import SearchSpec
+from rhapto.services.discovery.sources import get_aggregator, get_source
 
 
 async def test_remoteok_skips_legal_notice_and_filters_keywords() -> None:
@@ -40,3 +41,25 @@ async def test_hn_hiring_parses_header_line_and_skips_empty_comments() -> None:
     assert p.url == "https://news.ycombinator.com/item?id=49500002"
     assert "analytics data platform" in p.jd_text and "<p>" not in p.jd_text
     assert p.posted_at == datetime(2026, 9, 1, 15, 5, tzinfo=UTC)
+
+
+async def test_remoteok_fetch_search_matches_fetch() -> None:
+    keywords = ["ETL", "program manager"]
+    expected = await get_source("remoteok").fetch(
+        fake_http_for("remoteok"), board=None, keywords=keywords
+    )
+    postings = await get_aggregator("remoteok").fetch_search(
+        fake_http_for("remoteok"), SearchSpec(keywords=tuple(keywords)), {}
+    )
+    assert postings == expected
+
+
+async def test_hn_hiring_fetch_search_matches_fetch() -> None:
+    keywords = ["program manager"]
+    expected = await get_source("hn-hiring").fetch(
+        fake_http_for("hn-hiring"), board=None, keywords=keywords
+    )
+    postings = await get_aggregator("hn-hiring").fetch_search(
+        fake_http_for("hn-hiring"), SearchSpec(keywords=tuple(keywords)), {}
+    )
+    assert postings == expected
