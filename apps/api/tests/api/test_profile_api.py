@@ -68,7 +68,7 @@ async def test_answers_and_watchlist(client: httpx.AsyncClient) -> None:
     )
     assert put.status_code == 200 and put.json()["name"] == "Maya Chen"
     entries = [{"company": "ExampleCo", "source": "greenhouse", "board": "exampleco"}]
-    expected = [{**entries[0], "keywords": []}]
+    expected = [{**entries[0], "keywords": [], "discovered": False}]
     assert (await client.put("/api/v1/profile/watchlist", json=entries)).json() == expected
     assert (await client.get("/api/v1/profile/watchlist")).json() == expected
 

@@ -141,6 +141,11 @@ class WatchlistEntry(UserScopedMixin, TimestampMixin, Base):
     keywords: Mapped[list[str]] = mapped_column(
         ARRAY(String), default=list, server_default="{}", nullable=False
     )
+    #: True once a poll on this board has actually returned a job (as opposed to the entry
+    #: existing but never having matched anything yet).
+    discovered: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="false", nullable=False
+    )
 
 
 class Job(UserScopedMixin, TimestampMixin, Base):
@@ -169,6 +174,9 @@ class Job(UserScopedMixin, TimestampMixin, Base):
         Boolean, default=False, server_default="false", nullable=False
     )
     identity_hash: Mapped[str | None] = mapped_column(String(64), index=True)
+    search_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("searches.id", ondelete="SET NULL")
+    )
 
 
 class Package(UserScopedMixin, TimestampMixin, Base):
@@ -270,3 +278,37 @@ class PollRun(UserScopedMixin, TimestampMixin, Base):
     found: Mapped[int] = mapped_column(Integer, default=0, server_default="0", nullable=False)
     new: Mapped[int] = mapped_column(Integer, default=0, server_default="0", nullable=False)
     error: Mapped[str | None] = mapped_column(Text)
+    search_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("searches.id", ondelete="SET NULL")
+    )
+
+
+REMOTE_VALUES = ("include", "only", "exclude")
+
+
+class SearchRow(UserScopedMixin, TimestampMixin, Base):
+    """One saved search: what to ask every enabled aggregator for, on the normal schedule."""
+
+    __tablename__ = "searches"
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=new_uuid)
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
+    keywords: Mapped[list[str]] = mapped_column(JSONB, default=list, nullable=False)
+    location: Mapped[str | None] = mapped_column(String(200))
+    remote: Mapped[str] = mapped_column(
+        String(10), default="include", server_default="include", nullable=False
+    )
+    active: Mapped[bool] = mapped_column(
+        Boolean, default=True, server_default="true", nullable=False
+    )
+    #: The track this search was derived from, until the user edits its criteria.
+    derived_from_track_id: Mapped[str | None] = mapped_column(String(100))
+
+
+class SourceCredentialRow(UserScopedMixin, TimestampMixin, Base):
+    """The user's key(s) for one keyed aggregator, Fernet-encrypted as one JSON object."""
+
+    __tablename__ = "source_credentials"
+    __table_args__ = (UniqueConstraint("user_id", "source"),)
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=new_uuid)
+    source: Mapped[str] = mapped_column(String(50), nullable=False)
+    credentials_encrypted: Mapped[str] = mapped_column(Text, nullable=False)

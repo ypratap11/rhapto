@@ -18,13 +18,16 @@ class WatchlistEntry(BaseModel):
     ]
     board: str
     keywords: list[str] = []
+    discovered: bool = False
 
 
 class AggregatorEntry(BaseModel):
     model_config = ConfigDict(
         extra='forbid',
     )
-    source: Literal['remoteok', 'hn-hiring']
+    source: Literal[
+        'remoteok', 'hn-hiring', 'themuse', 'remotive', 'adzuna', 'jooble', 'jsearch'
+    ]
     enabled: bool = True
     keywords: list[str] = []
 

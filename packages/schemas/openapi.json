@@ -20,7 +20,12 @@
           "source": {
             "enum": [
               "remoteok",
-              "hn-hiring"
+              "hn-hiring",
+              "themuse",
+              "remotive",
+              "adzuna",
+              "jooble",
+              "jsearch"
             ],
             "title": "Source",
             "type": "string"
@@ -2191,6 +2196,11 @@
           "company": {
             "title": "Company",
             "type": "string"
+          },
+          "discovered": {
+            "default": false,
+            "title": "Discovered",
+            "type": "boolean"
           },
           "keywords": {
             "default": [],

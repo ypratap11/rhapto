@@ -639,7 +639,7 @@ export interface components {
              * Source
              * @enum {string}
              */
-            source: "remoteok" | "hn-hiring";
+            source: "remoteok" | "hn-hiring" | "themuse" | "remotive" | "adzuna" | "jooble" | "jsearch";
         };
         /** ApplicationCreate */
         ApplicationCreate: {
@@ -1426,6 +1426,11 @@ export interface components {
             board: string;
             /** Company */
             company: string;
+            /**
+             * Discovered
+             * @default false
+             */
+            discovered: boolean;
             /**
              * Keywords
              * @default []

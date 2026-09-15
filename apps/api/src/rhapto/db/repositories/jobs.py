@@ -145,6 +145,7 @@ async def create_discovered_job(
     posted_at: datetime | None,
     identity_hash: str,
     repost_of: uuid.UUID | None,
+    search_id: uuid.UUID | None = None,
 ) -> Job:
     job = Job(
         user_id=user_id,
@@ -160,6 +161,7 @@ async def create_discovered_job(
         posted_at=posted_at,
         identity_hash=identity_hash,
         repost_of=repost_of,
+        search_id=search_id,
     )
     session.add(job)
     await session.flush()

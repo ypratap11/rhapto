@@ -19,7 +19,8 @@
         "company": { "type": "string" },
         "source": { "type": "string", "enum": ["greenhouse", "lever", "ashby", "workday", "smartrecruiters", "workable"] },
         "board": { "type": "string" },
-        "keywords": { "type": "array", "items": { "type": "string" }, "default": [] }
+        "keywords": { "type": "array", "items": { "type": "string" }, "default": [] },
+        "discovered": { "type": "boolean", "default": false }
       }
     },
     "AggregatorEntry": {
@@ -28,7 +29,10 @@
       "additionalProperties": false,
       "required": ["source"],
       "properties": {
-        "source": { "type": "string", "enum": ["remoteok", "hn-hiring"] },
+        "source": {
+          "type": "string",
+          "enum": ["remoteok", "hn-hiring", "themuse", "remotive", "adzuna", "jooble", "jsearch"]
+        },
         "enabled": { "type": "boolean", "default": true },
         "keywords": { "type": "array", "items": { "type": "string" }, "default": [] }
       }
