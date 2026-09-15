@@ -189,3 +189,62 @@ rhapto score --jd job.txt --profile ./profile # per-track breakdown for one desc
 
 Adding a source is one adapter module plus a registry entry (`apps/api/src/rhapto/services/discovery/sources/`);
 LinkedIn and Indeed scraping stay out of core.
+
+## Find jobs across the whole market
+
+Rhapto polls two kinds of source: **company boards** on your watchlist (Greenhouse, Lever, Ashby,
+Workday) and **aggregators** that search the market. Aggregators are driven by your *saved
+searches*, which are derived from your tracks the first time you poll — one search per track,
+using the track's first six keywords, your preferred location, and your `remote_ok` answer. Edit
+them through `GET/POST/PUT/DELETE /api/v1/searches` (the Searches screen arrives with the
+portal UI).
+
+Zero-setup sources are on by default: **The Muse**, **Remotive**, **RemoteOK**, **HN Who's
+Hiring**. Three more need a free key, saved with `PUT /api/v1/settings/sources/{source}`
+(keys are encrypted at rest and never returned by the API):
+
+| Source | Where the key comes from | Fields |
+|---|---|---|
+| Adzuna | developer.adzuna.com | `app_id`, `app_key` |
+| Jooble | jooble.org/api/about | `api_key` |
+| JSearch (Google Jobs) | rapidapi.com/letscrape-6bRBa3QguO5/api/jsearch | `rapidapi_key` |
+
+When a result points at a company's own ATS board, Rhapto adds that board to your watchlist
+automatically and marks it *discovered*; remove it from your watchlist if you are not
+interested.
+
+Everything then enters the usual flow: **Tailor → Review → download → apply on the employer's own
+site → Mark applied.** Rhapto never submits an application for you.
+
+### Try it from the command line
+
+Below is a curl-driven walkthrough of the API while the portal UI is pending.
+
+```bash
+docker compose build api && docker compose build worker && docker compose up -d db redis api worker
+export TOKEN="$(grep -E '^RHAPTO_API_TOKEN=' .env | cut -d= -f2-)"
+API=http://localhost:8000/api/v1
+AUTH="Authorization: Bearer $TOKEN"
+
+# 1. Every registered aggregator, with which ones need a key and which have one saved.
+curl -sS -H "$AUTH" "$API/settings/sources" | python -m json.tool
+
+# 2. Create a saved search by hand (or POST /searches/derive to get one per track).
+curl -sS -X POST -H "$AUTH" -H 'Content-Type: application/json'   -d '{"name":"Platform","keywords":["technical program manager"],"location":"Denver, CO","remote":"include"}'   "$API/searches" | python -m json.tool
+
+# 3. Poll: the existing endpoint returns a task; watch the worker log for the run rows.
+curl -sS -X POST -H "$AUTH" "$API/discovery/poll" | python -m json.tool
+docker compose logs --tail 40 worker
+curl -sS -H "$AUTH" "$API/discovery/runs" | python -m json.tool
+
+# 4. What arrived, newest first, with its source and the search it came from.
+curl -sS -H "$AUTH" "$API/jobs?sort=newest"   | python -c 'import json,sys; [print(j["source"], "|", j["search_name"], "|", j["title"]) for j in json.load(sys.stdin)]'
+
+# 5. The boards discovered from those results.
+curl -sS -H "$AUTH" "$API/profile/watchlist" | python -m json.tool
+```
+
+Confirm: step 1 lists seven aggregators; step 3's runs include `themuse` and `remotive` with a
+non-zero `found`; step 4 prints jobs carrying those source ids and `Platform` as the search name;
+step 5 shows at least one entry with `"discovered": true`. Then tailor one of those job ids through
+`POST /jobs/{id}/tailor` and confirm a package comes back from `GET /jobs/{id}/packages`.
