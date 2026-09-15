@@ -3,7 +3,7 @@ from __future__ import annotations
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Response
+from fastapi import APIRouter, Depends, HTTPException, Response
 from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -39,6 +39,8 @@ def application_to_out(row: Application, job: Job) -> ApplicationOut:
         status_history=[StatusChange.model_validate(h) for h in row.status_history_json],
         created_at=row.created_at,
         updated_at=row.updated_at,
+        closed_reason=row.closed_reason,
+        follow_up_at=row.follow_up_at,
     )
 
 
@@ -113,10 +115,23 @@ async def patch_application(
     row = await repo.get_application(session, user_id, application_id)
     if row is None:
         raise not_found("application", application_id)
+    sent = body.model_dump(exclude_unset=True)
     if body.status is not None:
         repo.set_status(row, body.status)
+        if body.status != "closed":
+            # A reopened application cannot keep "rejected" on it; the DB check constraint would
+            # refuse the row anyway, and a 500 is the wrong way to say "that makes no sense".
+            row.closed_reason = None
     if body.notes is not None:
         row.notes = body.notes
+    if "closed_reason" in sent:
+        if body.closed_reason is not None and row.status != "closed":
+            raise HTTPException(
+                status_code=422, detail="closed_reason is only valid when status is closed"
+            )
+        row.closed_reason = body.closed_reason
+    if "follow_up_at" in sent:
+        row.follow_up_at = body.follow_up_at
     await session.commit()
     await session.refresh(row)
     return await _out(session, row)

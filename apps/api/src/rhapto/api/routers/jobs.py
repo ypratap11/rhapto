@@ -80,6 +80,9 @@ def job_to_out(
             for s in scores
         ],
         search_name=search_name,
+        salary_text=job.salary_text,
+        hidden_at=job.hidden_at,
+        unlisted_at=job.unlisted_at,
     )
 
 
@@ -186,9 +189,17 @@ async def list_jobs(
     bucket: Literal["fit", "low"] | None = Query(default=None),
     region: Literal["preferred", "us", "any"] = Query(default="any"),
     sort: Literal["fit", "newest"] = Query(default="fit"),
+    hidden: bool = Query(default=False, description="show only hidden jobs"),
 ) -> list[JobOut]:
     jobs = await repo.list_jobs(
-        session, user_id, search=search, track=track, bucket=bucket, region=region, sort=sort
+        session,
+        user_id,
+        search=search,
+        track=track,
+        bucket=bucket,
+        region=region,
+        sort=sort,
+        hidden=hidden,
     )
     return await _outs(session, user_id, jobs)
 
@@ -207,6 +218,28 @@ async def rescue_job(job_id: uuid.UUID, user_id: UserDep, session: SessionDep) -
     if job is None:
         raise not_found("job", job_id)
     repo.set_rescued(job, True)
+    await session.commit()
+    return await _out(session, user_id, job)
+
+
+@router.post("/{job_id}/hide", response_model=JobOut)
+async def hide_job(job_id: uuid.UUID, user_id: UserDep, session: SessionDep) -> JobOut:
+    """ "Not interested": the job leaves the grid, recommendations and the Resumes queue."""
+    job = await repo.get_job(session, user_id, job_id)
+    if job is None:
+        raise not_found("job", job_id)
+    repo.set_hidden(job, True)
+    await session.commit()
+    return await _out(session, user_id, job)
+
+
+@router.post("/{job_id}/unhide", response_model=JobOut)
+async def unhide_job(job_id: uuid.UUID, user_id: UserDep, session: SessionDep) -> JobOut:
+    """Undo, from the toast or the "Show hidden" view."""
+    job = await repo.get_job(session, user_id, job_id)
+    if job is None:
+        raise not_found("job", job_id)
+    repo.set_hidden(job, False)
     await session.commit()
     return await _out(session, user_id, job)
 

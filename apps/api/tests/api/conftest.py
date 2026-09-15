@@ -9,6 +9,7 @@ import httpx
 import pytest
 from asgi_lifespan import LifespanManager
 from fastapi import FastAPI
+from helpers import default_tailor_script
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -196,3 +197,30 @@ async def imported_profile(
         await get_or_create_user(session, "test@example.com")
         await import_profile_dir(session, user_id, demo_profile_dir)
         await session.commit()
+
+
+@pytest.fixture
+async def tailored_package(
+    client: httpx.AsyncClient, imported_profile: None, fake_llm: ScriptableLLM
+) -> dict[str, Any]:
+    """One job tailored end to end with the fake provider, for tests about what happens next.
+
+    The inline enqueuer runs the worker task in-process, so the package exists by the time the
+    tailor call returns.
+    """
+    job = (
+        await client.post(
+            "/api/v1/jobs",
+            json={
+                "jd_text": "Technical program manager for the data platform team. " * 6,
+                "company": "ExampleCo",
+                "title": "Technical Program Manager",
+            },
+        )
+    ).json()
+    fake_llm.script(*default_tailor_script())
+    response = await client.post(f"/api/v1/jobs/{job['id']}/tailor", json={})
+    assert response.status_code in (200, 202), response.text
+    packages = (await client.get(f"/api/v1/jobs/{job['id']}/packages")).json()
+    assert packages, "the inline enqueuer should have produced a package"
+    return dict(packages[-1])

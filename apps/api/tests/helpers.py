@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from typing import Any
+
+from rhapto.engine.compose import AnswerItem, ComposeOutput
 from rhapto.models.jd_extract import JDExtract
 from rhapto.models.resume_document import (
     ResumeBullet,
@@ -87,3 +90,19 @@ def demo_resume() -> ResumeDocument:
             ),
         ],
     )
+
+
+def good_output() -> dict[str, Any]:
+    resume = demo_resume()
+    return ComposeOutput(
+        summary=resume.summary,
+        sections=resume.sections,
+        cover_note="Dear team, " + "word " * 130,
+        change_log="Emphasised migration.",
+        answers=[AnswerItem(key="why_this_company", value="Data.")],
+    ).model_dump(mode="json")
+
+
+def default_tailor_script() -> tuple[JDExtract, dict[str, Any]]:
+    """The (extract, compose) LLM response pair a plain, guardrail-clean tailor run scripts."""
+    return demo_extract(), good_output()

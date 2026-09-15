@@ -107,8 +107,11 @@ async def list_all_packages(
     session: SessionDep,
     status: Literal["draft", "blocked"] | None = Query(default=None),
     applied: bool | None = Query(default=None),
+    archived: bool = Query(default=False),
 ) -> list[PackageListItem]:
-    rows = await repo.list_packages(session, user_id, status=status, applied=applied)
+    rows = await repo.list_packages(
+        session, user_id, status=status, applied=applied, archived=archived
+    )
     return [
         PackageListItem(
             id=p.id,
@@ -122,6 +125,7 @@ async def list_all_packages(
             best_fit=j.best_fit,
             best_track_id=j.best_track_id,
             created_at=p.created_at,
+            archived_at=p.archived_at,
         )
         for p, j, a in rows
     ]
@@ -140,6 +144,26 @@ async def list_packages(
 @router.get("/packages/{package_id}", response_model=PackageOut)
 async def get_package(package_id: uuid.UUID, user_id: UserDep, session: SessionDep) -> PackageOut:
     return package_to_out(await _get_package(session, user_id, package_id))
+
+
+@router.post("/packages/{package_id}/archive", response_model=PackageOut)
+async def archive_package(
+    package_id: uuid.UUID, user_id: UserDep, session: SessionDep
+) -> PackageOut:
+    """ "Skip": the draft leaves the review queue and its job leaves the Jobs grid together.
+
+    Archiving only the package would leave the job in recommendations, where Tailor would offer
+    to write the very draft the user just skipped.
+    """
+    row = await _get_package(session, user_id, package_id)
+    repo.set_archived(row, True)
+    job = await job_repo.get_job(session, user_id, row.job_id)
+    if job is None:
+        raise not_found("job", row.job_id)
+    job_repo.set_hidden(job, True)
+    await session.commit()
+    await session.refresh(row)
+    return package_to_out(row)
 
 
 class EditedVersion(NamedTuple):

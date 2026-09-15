@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import uuid
+from datetime import UTC, datetime
 
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -78,14 +79,27 @@ async def list_packages_for_job(
     )
 
 
+def set_archived(package: Package, archived: bool) -> None:
+    if archived:
+        package.archived_at = package.archived_at or datetime.now(UTC)
+    else:
+        package.archived_at = None
+
+
 async def list_packages(
     session: AsyncSession,
     user_id: uuid.UUID,
     *,
     status: str | None = None,
     applied: bool | None = None,
+    archived: bool = False,
 ) -> list[tuple[Package, Job, Application | None]]:
-    """Latest package per job, newest first, with its job and application (if any)."""
+    """Latest package per job, newest first, with its job and application (if any).
+
+    `archived=False` is the Resumes queue: it drops archived packages and packages whose job the
+    user hid or a source stopped listing, because none of those have a next step any more.
+    `archived=True` is the archive view and shows only archived packages.
+    """
     latest = (
         select(Package.job_id, func.max(Package.version).label("version"))
         .where(Package.user_id == user_id)
@@ -100,6 +114,12 @@ async def list_packages(
         .where(Package.user_id == user_id)
         .order_by(Package.created_at.desc(), Package.id)
     )
+    if archived:
+        query = query.where(Package.archived_at.is_not(None))
+    else:
+        query = query.where(
+            Package.archived_at.is_(None), Job.hidden_at.is_(None), Job.unlisted_at.is_(None)
+        )
     if status:
         query = query.where(Package.status == status)
     if applied is True:

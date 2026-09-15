@@ -145,6 +145,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/jobs/{job_id}/hide": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Hide Job
+         * @description "Not interested": the job leaves the grid, recommendations and the Resumes queue.
+         */
+        post: operations["hide_job_api_v1_jobs__job_id__hide_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/jobs/{job_id}/packages": {
         parameters: {
             query?: never;
@@ -190,6 +210,26 @@ export interface paths {
         put?: never;
         /** Tailor Job Endpoint */
         post: operations["tailor_job_endpoint_api_v1_jobs__job_id__tailor_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/jobs/{job_id}/unhide": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Unhide Job
+         * @description Undo, from the toast or the "Show hidden" view.
+         */
+        post: operations["unhide_job_api_v1_jobs__job_id__unhide_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -254,6 +294,29 @@ export interface paths {
          *     a resume has no meaning for a tuned document, and vice versa.
          */
         patch: operations["patch_package_api_v1_packages__package_id__patch"];
+        trace?: never;
+    };
+    "/api/v1/packages/{package_id}/archive": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Archive Package
+         * @description "Skip": the draft leaves the review queue and its job leaves the Jobs grid together.
+         *
+         *     Archiving only the package would leave the job in recommendations, where Tailor would offer
+         *     to write the very draft the user just skipped.
+         */
+        post: operations["archive_package_api_v1_packages__package_id__archive_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/api/v1/packages/{package_id}/download": {
@@ -806,11 +869,15 @@ export interface components {
         ApplicationOut: {
             /** Applied At */
             applied_at: string | null;
+            /** Closed Reason */
+            closed_reason?: string | null;
             /**
              * Created At
              * Format: date-time
              */
             created_at: string;
+            /** Follow Up At */
+            follow_up_at?: string | null;
             /**
              * Id
              * Format: uuid
@@ -831,8 +898,16 @@ export interface components {
              */
             updated_at: string;
         };
-        /** ApplicationPatch */
+        /**
+         * ApplicationPatch
+         * @description A partial update. An omitted field is left alone; an explicit null clears it, which is
+         *     why the router reads `model_dump(exclude_unset=True)` rather than testing for None.
+         */
         ApplicationPatch: {
+            /** Closed Reason */
+            closed_reason?: string | null;
+            /** Follow Up At */
+            follow_up_at?: string | null;
             /** Notes */
             notes?: string | null;
             /** Status */
@@ -1059,6 +1134,8 @@ export interface components {
              */
             discovered_at: string;
             extracted: components["schemas"]["JDExtract"] | null;
+            /** Hidden At */
+            hidden_at?: string | null;
             /**
              * Id
              * Format: uuid
@@ -1093,6 +1170,8 @@ export interface components {
             source: string;
             /** Title */
             title: string | null;
+            /** Unlisted At */
+            unlisted_at?: string | null;
             /** Url */
             url: string | null;
         };
@@ -1184,6 +1263,8 @@ export interface components {
         PackageListItem: {
             /** Application Status */
             application_status: string | null;
+            /** Archived At */
+            archived_at?: string | null;
             /** Best Fit */
             best_fit: number | null;
             /** Best Track Id */
@@ -2036,6 +2117,8 @@ export interface operations {
                 bucket?: ("fit" | "low") | null;
                 region?: "preferred" | "us" | "any";
                 sort?: "fit" | "newest";
+                /** @description show only hidden jobs */
+                hidden?: boolean;
             };
             header?: {
                 authorization?: string | null;
@@ -2173,6 +2256,39 @@ export interface operations {
             };
         };
     };
+    hide_job_api_v1_jobs__job_id__hide_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_packages_api_v1_jobs__job_id__packages_get: {
         parameters: {
             query?: never;
@@ -2276,6 +2392,39 @@ export interface operations {
             };
         };
     };
+    unhide_job_api_v1_jobs__job_id__unhide_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     me_api_v1_me_get: {
         parameters: {
             query?: never;
@@ -2312,6 +2461,7 @@ export interface operations {
             query?: {
                 status?: ("draft" | "blocked") | null;
                 applied?: boolean | null;
+                archived?: boolean;
             };
             header?: {
                 authorization?: string | null;
@@ -2396,6 +2546,39 @@ export interface operations {
                 headers: {
                     /** @description URL of the newly created package version */
                     Location?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PackageOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    archive_package_api_v1_packages__package_id__archive_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                package_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
                     [name: string]: unknown;
                 };
                 content: {

@@ -5,28 +5,17 @@ from typing import Any
 
 import httpx
 import pytest
-from helpers import demo_extract, demo_resume
+from helpers import default_tailor_script, demo_extract
 from helpers_docx import build_fixture_docx
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from rhapto.db.repositories.llm_settings import upsert_llm_settings
 from rhapto.db.repositories.users import get_or_create_user
-from rhapto.engine.compose import AnswerItem, ComposeOutput
+from rhapto.engine.compose import AnswerItem
 from rhapto.engine.tune import ProposedEdit, TuneOutput
 from rhapto.services.eventbus import InMemoryEventBus
 
 JD = "ExampleCo seeks a Data Platform Program Manager to lead our Snowflake migration. " * 3
-
-
-def good_output() -> dict[str, Any]:
-    resume = demo_resume()
-    return ComposeOutput(
-        summary=resume.summary,
-        sections=resume.sections,
-        cover_note="Dear team, " + "word " * 130,
-        change_log="Emphasised migration.",
-        answers=[AnswerItem(key="why_this_company", value="Data.")],
-    ).model_dump(mode="json")
 
 
 async def _job(client: httpx.AsyncClient) -> str:
@@ -53,7 +42,7 @@ def _events(raw: str) -> list[tuple[str, dict[str, Any]]]:
 async def test_tailor_runs_inline_and_task_succeeds(
     client: httpx.AsyncClient, fake_llm, llm_resolver
 ) -> None:  # type: ignore[no-untyped-def]
-    fake_llm.script(demo_extract(), good_output())
+    fake_llm.script(*default_tailor_script())
     job_id = await _job(client)
     accepted = await client.post(f"/api/v1/jobs/{job_id}/tailor", json={})
     assert accepted.status_code == 202, accepted.text
@@ -131,7 +120,7 @@ async def test_tailor_without_profile_marks_task_failed(client: httpx.AsyncClien
 async def test_events_replays_finished_state_and_closes(
     client: httpx.AsyncClient, fake_llm
 ) -> None:  # type: ignore[no-untyped-def]
-    fake_llm.script(demo_extract(), good_output())
+    fake_llm.script(*default_tailor_script())
     job_id = await _job(client)
     task = (await client.post(f"/api/v1/jobs/{job_id}/tailor", json={})).json()
     async with client.stream("GET", f"/api/v1/tasks/{task['id']}/events") as response:
@@ -181,7 +170,7 @@ async def test_repeated_streams_do_not_exhaust_the_pool(
     client: httpx.AsyncClient, fake_llm
 ) -> None:  # type: ignore[no-untyped-def]
     """Each stream must release its connection; 20 sequential streams outlast the 5+10 pool."""
-    fake_llm.script(demo_extract(), good_output())
+    fake_llm.script(*default_tailor_script())
     job_id = await _job(client)
     task = (await client.post(f"/api/v1/jobs/{job_id}/tailor", json={})).json()
     for _ in range(20):
@@ -250,7 +239,7 @@ async def test_tailor_mode_blocks_still_works_with_document(
     client: httpx.AsyncClient, fake_llm
 ) -> None:  # type: ignore[no-untyped-def]
     await _upload_document(client)
-    fake_llm.script(demo_extract(), good_output())
+    fake_llm.script(*default_tailor_script())
     job_id = await _job(client)
     task = (await client.post(f"/api/v1/jobs/{job_id}/tailor", json={"mode": "blocks"})).json()
     assert task["status"] == "succeeded", task

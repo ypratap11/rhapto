@@ -77,10 +77,33 @@
             ],
             "title": "Applied At"
           },
+          "closed_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Closed Reason"
+          },
           "created_at": {
             "format": "date-time",
             "title": "Created At",
             "type": "string"
+          },
+          "follow_up_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Follow Up At"
           },
           "id": {
             "format": "uuid",
@@ -138,7 +161,32 @@
         "type": "object"
       },
       "ApplicationPatch": {
+        "additionalProperties": false,
+        "description": "A partial update. An omitted field is left alone; an explicit null clears it, which is\nwhy the router reads `model_dump(exclude_unset=True)` rather than testing for None.",
         "properties": {
+          "closed_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Closed Reason"
+          },
+          "follow_up_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Follow Up At"
+          },
           "notes": {
             "anyOf": [
               {
@@ -766,6 +814,18 @@
               }
             ]
           },
+          "hidden_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hidden At"
+          },
           "id": {
             "format": "uuid",
             "title": "Id",
@@ -887,6 +947,18 @@
               }
             ],
             "title": "Title"
+          },
+          "unlisted_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unlisted At"
           },
           "url": {
             "anyOf": [
@@ -1181,6 +1253,18 @@
               }
             ],
             "title": "Application Status"
+          },
+          "archived_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Archived At"
           },
           "best_fit": {
             "anyOf": [
@@ -3194,6 +3278,18 @@
             }
           },
           {
+            "description": "show only hidden jobs",
+            "in": "query",
+            "name": "hidden",
+            "required": false,
+            "schema": {
+              "default": false,
+              "description": "show only hidden jobs",
+              "title": "Hidden",
+              "type": "boolean"
+            }
+          },
+          {
             "in": "header",
             "name": "authorization",
             "required": false,
@@ -3414,6 +3510,66 @@
         ]
       }
     },
+    "/api/v1/jobs/{job_id}/hide": {
+      "post": {
+        "description": "\"Not interested\": the job leaves the grid, recommendations and the Resumes queue.",
+        "operationId": "hide_job_api_v1_jobs__job_id__hide_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Job Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Hide Job",
+        "tags": [
+          "jobs"
+        ]
+      }
+    },
     "/api/v1/jobs/{job_id}/packages": {
       "get": {
         "operationId": "list_packages_api_v1_jobs__job_id__packages_get",
@@ -3605,6 +3761,66 @@
         ]
       }
     },
+    "/api/v1/jobs/{job_id}/unhide": {
+      "post": {
+        "description": "Undo, from the toast or the \"Show hidden\" view.",
+        "operationId": "unhide_job_api_v1_jobs__job_id__unhide_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Job Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Unhide Job",
+        "tags": [
+          "jobs"
+        ]
+      }
+    },
     "/api/v1/me": {
       "get": {
         "operationId": "me_api_v1_me_get",
@@ -3692,6 +3908,16 @@
                 }
               ],
               "title": "Applied"
+            }
+          },
+          {
+            "in": "query",
+            "name": "archived",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Archived",
+              "type": "boolean"
             }
           },
           {
@@ -3874,6 +4100,66 @@
           }
         },
         "summary": "Patch Package",
+        "tags": [
+          "packages"
+        ]
+      }
+    },
+    "/api/v1/packages/{package_id}/archive": {
+      "post": {
+        "description": "\"Skip\": the draft leaves the review queue and its job leaves the Jobs grid together.\n\nArchiving only the package would leave the job in recommendations, where Tailor would offer\nto write the very draft the user just skipped.",
+        "operationId": "archive_package_api_v1_packages__package_id__archive_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "package_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Package Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PackageOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Archive Package",
         "tags": [
           "packages"
         ]

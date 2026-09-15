@@ -4,9 +4,9 @@ import uuid
 from datetime import datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from rhapto.db.models import APPLICATION_STATUSES
+from rhapto.db.models import APPLICATION_STATUSES, CLOSED_REASONS
 from rhapto.engine.scoring import LocationTier
 from rhapto.models.guardrail_report import GuardrailReport
 from rhapto.models.jd_extract import JDExtract
@@ -140,6 +140,9 @@ class JobOut(BaseModel):
     # Not populated until Task 9 adds the column; declared now so the generated TypeScript
     # settles once.
     salary_text: str | None = None
+    # "Not interested" / "no longer listed"; see Job.hidden_at and Job.unlisted_at.
+    hidden_at: datetime | None = None
+    unlisted_at: datetime | None = None
 
 
 class TailorBody(BaseModel):
@@ -211,6 +214,7 @@ class PackageListItem(BaseModel):
     best_fit: int | None
     best_track_id: str | None
     created_at: datetime
+    archived_at: datetime | None = None
 
 
 class ResumeDocumentOut(BaseModel):
@@ -230,14 +234,28 @@ class ApplicationCreate(BaseModel):
 
 
 class ApplicationPatch(BaseModel):
+    """A partial update. An omitted field is left alone; an explicit null clears it, which is
+    why the router reads `model_dump(exclude_unset=True)` rather than testing for None."""
+
+    model_config = ConfigDict(extra="forbid")
+
     status: str | None = None
     notes: str | None = None
+    closed_reason: str | None = None
+    follow_up_at: datetime | None = None
 
     @field_validator("status")
     @classmethod
     def _known_status(cls, value: str | None) -> str | None:
         if value is not None and value not in APPLICATION_STATUSES:
             raise ValueError(f"status must be one of {', '.join(APPLICATION_STATUSES)}")
+        return value
+
+    @field_validator("closed_reason")
+    @classmethod
+    def _known_reason(cls, value: str | None) -> str | None:
+        if value is not None and value not in CLOSED_REASONS:
+            raise ValueError(f"closed_reason must be one of {', '.join(CLOSED_REASONS)}")
         return value
 
 
@@ -257,6 +275,8 @@ class ApplicationOut(BaseModel):
     status_history: list[StatusChange]
     created_at: datetime
     updated_at: datetime
+    closed_reason: str | None = None
+    follow_up_at: datetime | None = None
 
 
 class BoardOut(BaseModel):

@@ -58,6 +58,7 @@ async def list_jobs(
     bucket: str | None = None,
     region: str = "any",
     sort: str = "fit",
+    hidden: bool = False,
 ) -> list[tuple[Job, str | None]]:
     tracks = select(Track.track_id, Track.min_fit).where(Track.user_id == user_id).subquery()
     query = (
@@ -66,6 +67,9 @@ async def list_jobs(
         .outerjoin(SearchRow, SearchRow.id == Job.search_id)
         .where(Job.user_id == user_id)
     )
+    # `hidden` is a switch, not a filter that can be off: the grid's default view must not show
+    # jobs the user said no to, and "Show hidden" wants exactly those and nothing else.
+    query = query.where(Job.hidden_at.is_not(None) if hidden else Job.hidden_at.is_(None))
     if search:
         # Escape LIKE metacharacters so a search for "100%" is a literal, not a wildcard.
         escaped = search.lower().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
@@ -184,6 +188,14 @@ async def create_discovered_job(
 
 def set_rescued(job: Job, value: bool) -> None:
     job.rescued = value
+
+
+def set_hidden(job: Job, hidden: bool) -> None:
+    """Idempotent: hiding an already-hidden job keeps its original timestamp."""
+    if hidden:
+        job.hidden_at = job.hidden_at or datetime.now(UTC)
+    else:
+        job.hidden_at = None
 
 
 async def get_job(session: AsyncSession, user_id: uuid.UUID, job_id: uuid.UUID) -> Job | None:
