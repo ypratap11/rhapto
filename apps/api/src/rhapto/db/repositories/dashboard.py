@@ -37,11 +37,11 @@ LOCATION_KEYS = ("location_home", "location_preferred", "remote_ok")
 @dataclass(frozen=True)
 class Checklist:
     resume_template: bool
-    contact: bool
+    contact_answers: bool
     tracks: bool
     blocks_verified: bool
     guardrails: bool
-    location: bool
+    location_preferences: bool
     verified_blocks: int
     total_blocks: int
 
@@ -124,11 +124,11 @@ async def checklist(session: AsyncSession, user_id: uuid.UUID) -> Checklist:
     answers = dict(answers_row.answers_json) if answers_row is not None else {}
     return Checklist(
         resume_template=documents > 0,
-        contact=all((answers.get(k) or "").strip() for k in CONTACT_KEYS),
+        contact_answers=all((answers.get(k) or "").strip() for k in CONTACT_KEYS),
         tracks=tracks > 0,
         blocks_verified=verified_blocks > 0,
         guardrails=guardrails > 0,
-        location=all((answers.get(k) or "").strip() for k in LOCATION_KEYS),
+        location_preferences=all((answers.get(k) or "").strip() for k in LOCATION_KEYS),
         verified_blocks=verified_blocks,
         total_blocks=total_blocks,
     )

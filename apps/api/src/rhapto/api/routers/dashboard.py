@@ -40,11 +40,11 @@ async def dashboard(user_id: UserDep, session: SessionDep) -> DashboardOut:
         needs_review_count=await repo.needs_review_count(session, user_id),
         checklist=ChecklistOut(
             resume_template=checklist.resume_template,
-            contact=checklist.contact,
+            contact_answers=checklist.contact_answers,
             tracks=checklist.tracks,
             blocks_verified=checklist.blocks_verified,
             guardrails=checklist.guardrails,
-            location=checklist.location,
+            location_preferences=checklist.location_preferences,
             verified_blocks=checklist.verified_blocks,
             total_blocks=checklist.total_blocks,
         ),

@@ -386,16 +386,16 @@
             "title": "Blocks Verified",
             "type": "boolean"
           },
-          "contact": {
-            "title": "Contact",
+          "contact_answers": {
+            "title": "Contact Answers",
             "type": "boolean"
           },
           "guardrails": {
             "title": "Guardrails",
             "type": "boolean"
           },
-          "location": {
-            "title": "Location",
+          "location_preferences": {
+            "title": "Location Preferences",
             "type": "boolean"
           },
           "resume_template": {
@@ -417,11 +417,11 @@
         },
         "required": [
           "resume_template",
-          "contact",
+          "contact_answers",
           "tracks",
           "blocks_verified",
           "guardrails",
-          "location",
+          "location_preferences",
           "verified_blocks",
           "total_blocks"
         ],

@@ -1029,12 +1029,12 @@ export interface components {
         ChecklistOut: {
             /** Blocks Verified */
             blocks_verified: boolean;
-            /** Contact */
-            contact: boolean;
+            /** Contact Answers */
+            contact_answers: boolean;
             /** Guardrails */
             guardrails: boolean;
-            /** Location */
-            location: boolean;
+            /** Location Preferences */
+            location_preferences: boolean;
             /** Resume Template */
             resume_template: boolean;
             /** Total Blocks */

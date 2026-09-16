@@ -20,11 +20,11 @@ async def test_an_empty_account_reports_zeroes_and_an_empty_checklist(
     assert body["saved_searches"] == [] and body["due_followups"] == []
     assert body["checklist"] == {
         "resume_template": False,
-        "contact": False,
+        "contact_answers": False,
         "tracks": False,
         "blocks_verified": False,
         "guardrails": False,
-        "location": False,
+        "location_preferences": False,
         "verified_blocks": 0,
         "total_blocks": 0,
     }
@@ -34,10 +34,10 @@ async def test_the_checklist_reads_the_imported_profile(
     client: httpx.AsyncClient, imported_profile: None
 ) -> None:
     checklist = (await client.get("/api/v1/dashboard")).json()["checklist"]
-    assert checklist["contact"] is True
+    assert checklist["contact_answers"] is True
     assert checklist["tracks"] is True
     assert checklist["guardrails"] is True
-    assert checklist["location"] is True
+    assert checklist["location_preferences"] is True
     assert checklist["total_blocks"] > 0
     assert checklist["blocks_verified"] is (checklist["verified_blocks"] > 0)
     # No .docx was uploaded by the importer.

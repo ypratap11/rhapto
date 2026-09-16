@@ -429,11 +429,11 @@ class ChecklistOut(BaseModel):
     """Six setup tests plus the verified-block tally, rendered as "18 of 23 verified"."""
 
     resume_template: bool
-    contact: bool
+    contact_answers: bool
     tracks: bool
     blocks_verified: bool
     guardrails: bool
-    location: bool
+    location_preferences: bool
     verified_blocks: int
     total_blocks: int
 
