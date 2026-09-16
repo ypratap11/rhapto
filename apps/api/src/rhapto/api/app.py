@@ -32,6 +32,7 @@ from rhapto.services.discovery.http import DiscoveryHttp
 from rhapto.services.enqueue import ArqEnqueuer, Enqueuer
 from rhapto.services.eventbus import EventBus, RedisEventBus
 from rhapto.services.jobtext import FetchText, fetch_job_text
+from rhapto.services.llm import warn_if_fake_llm
 from rhapto.services.storage import PackageStorage
 
 API_PREFIX = "/api/v1"
@@ -70,6 +71,7 @@ def create_app(
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+        warn_if_fake_llm(settings)
         async with state.session_factory() as session:
             user = await get_or_create_user(session, settings.rhapto_user_email)
             await session.commit()

@@ -1,0 +1,16 @@
+# End-to-end / demo override. Layer it on top of the real file:
+#
+#   docker compose -f docker-compose.yml -f docker-compose.e2e.yml up -d
+#
+# It adds exactly one variable, so everything else (DATABASE_URL, RHAPTO_API_TOKEN and the rest
+# of your .env) is untouched -- which is why this is an override layer and not an --env-file.
+# With it, tailoring runs on the deterministic fake provider: no vendor key, no network, no bill,
+# and the same package every run. Never use it for a deployment you rely on; both the api and the
+# worker log a warning at startup while it is active.
+services:
+  api:
+    environment:
+      RHAPTO_LLM_PROVIDER: fake
+  worker:
+    environment:
+      RHAPTO_LLM_PROVIDER: fake

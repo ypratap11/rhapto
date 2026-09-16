@@ -13,6 +13,7 @@ from rhapto.db.session import make_engine, make_session_factory
 from rhapto.engine.providers.embeddings import FastEmbedProvider
 from rhapto.services.discovery.http import DiscoveryHttp
 from rhapto.services.eventbus import RedisEventBus
+from rhapto.services.llm import warn_if_fake_llm
 from rhapto.services.scoring import users_needing_location_backfill
 from rhapto.services.storage import PackageStorage
 from rhapto.worker.tasks import (
@@ -70,6 +71,7 @@ async def enqueue_location_backfill(ctx: dict[str, Any]) -> int:
 
 async def on_startup(ctx: dict[str, Any]) -> None:
     settings = get_settings()
+    warn_if_fake_llm(settings)
     engine = make_engine(settings.database_url)
     ctx["engine"] = engine
     ctx["session_factory"] = make_session_factory(engine)

@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from rhapto.engine.providers.anthropic import AnthropicProvider
+from rhapto.engine.providers.fake import FAKE_MODEL, DeterministicFakeProvider
 from rhapto.engine.providers.gemini import GeminiProvider
 from rhapto.engine.providers.llm import LLMProvider
 from rhapto.engine.providers.openai import OpenAIProvider
@@ -45,8 +46,32 @@ PROVIDERS: dict[str, ProviderInfo] = {
 }
 
 
+FAKE_PROVIDER_ID = "fake"
+
+#: Providers that exist but are never offered in Settings and can never be saved by a user.
+#: `env_key` is RHAPTO_LLM_PROVIDER itself: asking for the fake *is* the credential, which is why
+#: the e2e stack needs no key at all. Kept out of PROVIDERS so `provider_list()` and the Settings
+#: router's `known_provider()` stay exactly as strict as they were.
+ENV_ONLY_PROVIDERS: dict[str, ProviderInfo] = {
+    FAKE_PROVIDER_ID: ProviderInfo(
+        id=FAKE_PROVIDER_ID,
+        label="Deterministic fake (testing only)",
+        models=(FAKE_MODEL,),
+        default=FAKE_MODEL,
+        env_key="RHAPTO_LLM_PROVIDER",
+    )
+}
+
+
+def provider_info(provider: str) -> ProviderInfo | None:
+    """Any provider this build can actually construct, selectable or not."""
+    return PROVIDERS.get(provider) or ENV_ONLY_PROVIDERS.get(provider)
+
+
 # {model id: the provider that curates it}. Precomputed once so `model_for` is a dict lookup
-# rather than a scan of every provider's list on each write.
+# rather than a scan of every provider's list on each write. Only `PROVIDERS` (the user-selectable
+# providers), so `model_for("fake", "claude-sonnet-5")` sees the id owned by anthropic and falls
+# back to the fake's own default rather than treating it as the fake's own model.
 _MODEL_OWNER: dict[str, str] = {
     model: info.id for info in PROVIDERS.values() for model in info.models
 }
@@ -67,7 +92,7 @@ def model_for(provider: str, model: str) -> str:
     this provider's default. An unknown provider has no opinion to offer, so the id is returned
     unchanged; callers validate the provider first.
     """
-    info = PROVIDERS.get(provider)
+    info = provider_info(provider)
     if info is None:
         return model
     if not model:
@@ -79,6 +104,8 @@ def model_for(provider: str, model: str) -> str:
 def build_llm(provider: str, model: str, api_key: str) -> LLMProvider:
     """Build the adapter for a provider id. `model` is passed through: the curated lists in
     PROVIDERS are suggestions for the UI, not a whitelist, so a newer model id still works."""
+    if provider == FAKE_PROVIDER_ID:
+        return DeterministicFakeProvider(model=model or FAKE_MODEL)
     if provider not in PROVIDERS:
         raise EngineError(f"unknown provider {provider!r}")
     if provider == "anthropic":

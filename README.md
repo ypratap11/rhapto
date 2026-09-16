@@ -248,3 +248,17 @@ Confirm: step 1 lists seven aggregators; step 3's runs include `themuse` and `re
 non-zero `found`; step 4 prints jobs carrying those source ids and `Platform` as the search name;
 step 5 shows at least one entry with `"discovered": true`. Then tailor one of those job ids through
 `POST /jobs/{id}/tailor` and confirm a package comes back from `GET /jobs/{id}/packages`.
+
+### Running the stack without an API key
+
+For a demo or an end-to-end test run, `docker-compose.e2e.yml` switches the API and worker to a
+deterministic fake provider:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.e2e.yml up -d
+```
+
+Tailoring then needs no vendor key and no network: every bullet is copied verbatim from your own
+blocks, so the package is guardrail-clean and identical on every run — and completely untailored.
+Both services log a warning at startup while it is active. Never set `RHAPTO_LLM_PROVIDER=fake`
+on a deployment you rely on.

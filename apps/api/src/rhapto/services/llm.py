@@ -14,6 +14,7 @@ dict key; rotating a key therefore produces a new entry instead of reusing the s
 from __future__ import annotations
 
 import hashlib
+import logging
 import uuid
 from dataclasses import dataclass, field
 from typing import Literal
@@ -23,8 +24,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from rhapto.config import Settings
 from rhapto.db.repositories.llm_settings import get_llm_settings
 from rhapto.engine.providers.llm import LLMProvider
-from rhapto.engine.providers.registry import PROVIDERS, build_llm, model_for
+from rhapto.engine.providers.registry import FAKE_PROVIDER_ID, build_llm, model_for, provider_info
 from rhapto.services.secrets import SecretsError, decrypt
+
+logger = logging.getLogger("rhapto.llm")
 
 NOT_CONFIGURED_MESSAGE = "No LLM configured. Add a key in Settings."
 # What the *user* is told when their stored key no longer decrypts. Lives here, not in the API, so
@@ -81,7 +84,7 @@ class LlmConfig:
 
 def env_llm_config(settings: Settings) -> LlmConfig | None:
     """The provider configured in the environment, or None when it has no key or is not supported."""
-    info = PROVIDERS.get(settings.rhapto_llm_provider)
+    info = provider_info(settings.rhapto_llm_provider)
     if info is None:
         return None
     # Settings field names are the env var names lowercased (ANTHROPIC_API_KEY → anthropic_api_key),
@@ -174,3 +177,19 @@ def clear_llm_cache() -> None:
 
 async def resolve_llm(session: AsyncSession, settings: Settings, user_id: uuid.UUID) -> LLMProvider:
     return llm_for(await resolve_llm_config(session, settings, user_id))
+
+
+FAKE_PROVIDER_WARNING = (
+    "RHAPTO_LLM_PROVIDER=fake: every resume on this deployment is written by the deterministic "
+    "fake provider, not by a language model. Bullets are copied verbatim from your blocks and no "
+    "tailoring happens. This is for end-to-end tests and demos and must never be set in a "
+    "deployment anyone relies on."
+)
+
+
+def warn_if_fake_llm(settings: Settings) -> bool:
+    """Say loudly, once per process start, that this deployment writes nothing real."""
+    if settings.rhapto_llm_provider != FAKE_PROVIDER_ID:
+        return False
+    logger.warning("%s", FAKE_PROVIDER_WARNING)
+    return True
