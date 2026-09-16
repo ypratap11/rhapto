@@ -4540,6 +4540,13 @@
         },
         "responses": {
           "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PackageOut"
+                }
+              }
+            },
             "description": "The package's status was changed in place"
           },
           "201": {

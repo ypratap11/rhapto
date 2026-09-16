@@ -297,7 +297,7 @@ async def _mark_status(
     response_model=PackageOut,
     status_code=201,
     responses={
-        200: {"description": "The package's status was changed in place"},
+        200: {"description": "The package's status was changed in place", "model": PackageOut},
         201: {
             "description": "A new package version was created",
             "headers": {

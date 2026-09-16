@@ -2769,7 +2769,9 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["PackageOut"];
+                };
             };
             /** @description A new package version was created */
             201: {
