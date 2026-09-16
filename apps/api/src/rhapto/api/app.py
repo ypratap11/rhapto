@@ -12,6 +12,7 @@ from rhapto.api.deps import AppState, LlmFactory
 from rhapto.api.errors import install_error_handlers
 from rhapto.api.routers import (
     applications,
+    dashboard,
     discovery,
     jobs,
     meta,
@@ -113,6 +114,7 @@ def create_app(
     app.include_router(searches.router, prefix=API_PREFIX, tags=["searches"])
     app.include_router(taxonomy.router, prefix=API_PREFIX, tags=["taxonomy"])
     app.include_router(search.router, prefix=API_PREFIX, tags=["search"])
+    app.include_router(dashboard.router, prefix=API_PREFIX, tags=["dashboard"])
     return app
 
 

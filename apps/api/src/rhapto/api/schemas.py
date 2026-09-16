@@ -423,3 +423,37 @@ class TaxonomySuggestionOut(BaseModel):
     role_id: str
     role_name: str
     matched_title: str
+
+
+class ChecklistOut(BaseModel):
+    """Six setup tests plus the verified-block tally, rendered as "18 of 23 verified"."""
+
+    resume_template: bool
+    contact: bool
+    tracks: bool
+    blocks_verified: bool
+    guardrails: bool
+    location: bool
+    verified_blocks: int
+    total_blocks: int
+
+
+class SavedSearchCountOut(BaseModel):
+    id: uuid.UUID
+    name: str
+    new_count: int
+
+
+class FollowUpOut(BaseModel):
+    application_id: uuid.UUID
+    job: JobRef
+    status: str
+    follow_up_at: datetime
+
+
+class DashboardOut(BaseModel):
+    new_fit_count: int
+    needs_review_count: int
+    checklist: ChecklistOut
+    saved_searches: list[SavedSearchCountOut]
+    due_followups: list[FollowUpOut]

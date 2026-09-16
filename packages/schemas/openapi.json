@@ -379,6 +379,93 @@
         "title": "Body_upload_resume_document_api_v1_profile_resume_document_post",
         "type": "object"
       },
+      "ChecklistOut": {
+        "description": "Six setup tests plus the verified-block tally, rendered as \"18 of 23 verified\".",
+        "properties": {
+          "blocks_verified": {
+            "title": "Blocks Verified",
+            "type": "boolean"
+          },
+          "contact": {
+            "title": "Contact",
+            "type": "boolean"
+          },
+          "guardrails": {
+            "title": "Guardrails",
+            "type": "boolean"
+          },
+          "location": {
+            "title": "Location",
+            "type": "boolean"
+          },
+          "resume_template": {
+            "title": "Resume Template",
+            "type": "boolean"
+          },
+          "total_blocks": {
+            "title": "Total Blocks",
+            "type": "integer"
+          },
+          "tracks": {
+            "title": "Tracks",
+            "type": "boolean"
+          },
+          "verified_blocks": {
+            "title": "Verified Blocks",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "resume_template",
+          "contact",
+          "tracks",
+          "blocks_verified",
+          "guardrails",
+          "location",
+          "verified_blocks",
+          "total_blocks"
+        ],
+        "title": "ChecklistOut",
+        "type": "object"
+      },
+      "DashboardOut": {
+        "properties": {
+          "checklist": {
+            "$ref": "#/components/schemas/ChecklistOut"
+          },
+          "due_followups": {
+            "items": {
+              "$ref": "#/components/schemas/FollowUpOut"
+            },
+            "title": "Due Followups",
+            "type": "array"
+          },
+          "needs_review_count": {
+            "title": "Needs Review Count",
+            "type": "integer"
+          },
+          "new_fit_count": {
+            "title": "New Fit Count",
+            "type": "integer"
+          },
+          "saved_searches": {
+            "items": {
+              "$ref": "#/components/schemas/SavedSearchCountOut"
+            },
+            "title": "Saved Searches",
+            "type": "array"
+          }
+        },
+        "required": [
+          "new_fit_count",
+          "needs_review_count",
+          "checklist",
+          "saved_searches",
+          "due_followups"
+        ],
+        "title": "DashboardOut",
+        "type": "object"
+      },
       "DocParagraph": {
         "additionalProperties": false,
         "properties": {
@@ -496,6 +583,35 @@
           "after"
         ],
         "title": "EditPatch",
+        "type": "object"
+      },
+      "FollowUpOut": {
+        "properties": {
+          "application_id": {
+            "format": "uuid",
+            "title": "Application Id",
+            "type": "string"
+          },
+          "follow_up_at": {
+            "format": "date-time",
+            "title": "Follow Up At",
+            "type": "string"
+          },
+          "job": {
+            "$ref": "#/components/schemas/JobRef"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "application_id",
+          "job",
+          "status",
+          "follow_up_at"
+        ],
+        "title": "FollowUpOut",
         "type": "object"
       },
       "GuardrailReport": {
@@ -2073,6 +2189,30 @@
         "title": "ResumeSection",
         "type": "object"
       },
+      "SavedSearchCountOut": {
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "new_count": {
+            "title": "New Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "new_count"
+        ],
+        "title": "SavedSearchCountOut",
+        "type": "object"
+      },
       "SearchIn": {
         "description": "What the form sends: either the one phrase the user typed, or an explicit keyword list.\n\nThe search box has a single input, so `query` is the common case and `name` follows from it;\nthe Searches tab edits the keyword list directly. Accepting both at once would leave \"what\nis this search actually looking for\" ambiguous, so exactly one is required.",
         "properties": {
@@ -3179,6 +3319,55 @@
         "summary": "Patch Application",
         "tags": [
           "applications"
+        ]
+      }
+    },
+    "/api/v1/dashboard": {
+      "get": {
+        "operationId": "dashboard_api_v1_dashboard_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DashboardOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Dashboard",
+        "tags": [
+          "dashboard"
         ]
       }
     },

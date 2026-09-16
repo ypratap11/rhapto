@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import uuid
-from collections.abc import AsyncIterator, Awaitable, Callable
+from collections.abc import AsyncIterator, Awaitable, Callable, Iterator
 from pathlib import Path
 from typing import Any
 
@@ -11,7 +11,8 @@ from asgi_lifespan import LifespanManager
 from fastapi import FastAPI
 from helpers import default_tailor_script
 from pydantic import BaseModel
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+from sqlalchemy import event
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from rhapto.api.app import create_app
 from rhapto.api.deps import AppState, LlmFactory
@@ -197,6 +198,26 @@ async def imported_profile(
         await get_or_create_user(session, "test@example.com")
         await import_profile_dir(session, user_id, demo_profile_dir)
         await session.commit()
+
+
+@pytest.fixture
+def select_counter(engine: AsyncEngine) -> Iterator[list[str]]:
+    """Every SELECT the app issues while the fixture is active.
+
+    The dashboard is one request that has to answer five questions; the guard exists so a
+    well-meaning refactor cannot turn it back into a loop of per-row queries.
+    """
+    seen: list[str] = []
+
+    def before(conn, cursor, statement, parameters, context, executemany):  # type: ignore[no-untyped-def]
+        if statement.lstrip().upper().startswith("SELECT"):
+            seen.append(statement)
+
+    event.listen(engine.sync_engine, "before_cursor_execute", before)
+    try:
+        yield seen
+    finally:
+        event.remove(engine.sync_engine, "before_cursor_execute", before)
 
 
 @pytest.fixture

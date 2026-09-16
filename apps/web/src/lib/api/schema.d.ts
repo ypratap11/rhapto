@@ -41,6 +41,23 @@ export interface paths {
         patch: operations["patch_application_api_v1_applications__application_id__patch"];
         trace?: never;
     };
+    "/api/v1/dashboard": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Dashboard */
+        get: operations["dashboard_api_v1_dashboard_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/discovery/poll": {
         parameters: {
             query?: never;
@@ -1005,6 +1022,40 @@ export interface components {
             /** File */
             file: string;
         };
+        /**
+         * ChecklistOut
+         * @description Six setup tests plus the verified-block tally, rendered as "18 of 23 verified".
+         */
+        ChecklistOut: {
+            /** Blocks Verified */
+            blocks_verified: boolean;
+            /** Contact */
+            contact: boolean;
+            /** Guardrails */
+            guardrails: boolean;
+            /** Location */
+            location: boolean;
+            /** Resume Template */
+            resume_template: boolean;
+            /** Total Blocks */
+            total_blocks: number;
+            /** Tracks */
+            tracks: boolean;
+            /** Verified Blocks */
+            verified_blocks: number;
+        };
+        /** DashboardOut */
+        DashboardOut: {
+            checklist: components["schemas"]["ChecklistOut"];
+            /** Due Followups */
+            due_followups: components["schemas"]["FollowUpOut"][];
+            /** Needs Review Count */
+            needs_review_count: number;
+            /** New Fit Count */
+            new_fit_count: number;
+            /** Saved Searches */
+            saved_searches: components["schemas"]["SavedSearchCountOut"][];
+        };
         /** DocParagraph */
         DocParagraph: {
             /** Id */
@@ -1047,6 +1098,22 @@ export interface components {
             after: string;
             /** Paragraph Id */
             paragraph_id: string;
+        };
+        /** FollowUpOut */
+        FollowUpOut: {
+            /**
+             * Application Id
+             * Format: uuid
+             */
+            application_id: string;
+            /**
+             * Follow Up At
+             * Format: date-time
+             */
+            follow_up_at: string;
+            job: components["schemas"]["JobRef"];
+            /** Status */
+            status: string;
         };
         /** GuardrailReport */
         GuardrailReport: {
@@ -1610,6 +1677,18 @@ export interface components {
             /** Title */
             title: string;
         };
+        /** SavedSearchCountOut */
+        SavedSearchCountOut: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string;
+            /** New Count */
+            new_count: number;
+        };
         /**
          * SearchIn
          * @description What the form sends: either the one phrase the user typed, or an explicit keyword list.
@@ -2080,6 +2159,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ApplicationOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    dashboard_api_v1_dashboard_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DashboardOut"];
                 };
             };
             /** @description Validation Error */
