@@ -41,7 +41,7 @@ class ApplicationPackage(BaseModel):
     answers: dict[str, str]
     guardrail_report: guardrail_report_1.GuardrailReport
     version: Annotated[int, Field(ge=1)]
-    status: Literal['draft', 'blocked']
+    status: Literal['draft', 'ready', 'blocked']
     llm_calls: Annotated[int, Field(ge=0)]
     created_at: AwareDatetime
     mode: Literal['blocks', 'tune'] = 'blocks'

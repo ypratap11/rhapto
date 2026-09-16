@@ -1490,15 +1490,21 @@ export interface components {
         };
         /**
          * PackagePatch
-         * @description A human edit to a package: `resume` in blocks mode, `edits` in tune mode.
+         * @description A human action on a package: `resume` in blocks mode, `edits` in tune mode, or `status`.
          *
          *     Each field carries the complete new state for its mode, not a delta, so a new version is
-         *     always a full replacement of the thing the mode owns.
+         *     always a full replacement of the thing the mode owns. `status` is the odd one out: it changes
+         *     the existing row in place and creates no version, because "I have read this and it is ready"
+         *     is a fact about the draft that already exists, not a new draft.
+         *
+         *     `blocked` is not settable: it is the guardrail validator's verdict, not a human's.
          */
         PackagePatch: {
             /** Edits */
             edits?: components["schemas"]["EditPatch"][] | null;
             resume?: components["schemas"]["ResumeDocument"] | null;
+            /** Status */
+            status?: ("ready" | "draft") | null;
         };
         /** PackageSummary */
         PackageSummary: {
@@ -2676,7 +2682,7 @@ export interface operations {
     list_all_packages_api_v1_packages_get: {
         parameters: {
             query?: {
-                status?: ("draft" | "blocked") | null;
+                status?: ("draft" | "ready" | "blocked") | null;
                 applied?: boolean | null;
                 archived?: boolean;
             };
@@ -2758,6 +2764,13 @@ export interface operations {
             };
         };
         responses: {
+            /** @description The package's status was changed in place */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
             /** @description A new package version was created */
             201: {
                 headers: {
@@ -2767,6 +2780,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PackageOut"];
+                };
+            };
+            /** @description Blocked by guardrails, or not the latest version */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": unknown;
                 };
             };
             /** @description Validation Error */

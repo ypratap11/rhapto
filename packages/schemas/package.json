@@ -16,7 +16,7 @@
     "answers": { "type": "object", "additionalProperties": { "type": "string" } },
     "guardrail_report": { "$ref": "guardrail_report.json" },
     "version": { "type": "integer", "minimum": 1 },
-    "status": { "type": "string", "enum": ["draft", "blocked"] },
+    "status": { "type": "string", "enum": ["draft", "ready", "blocked"] },
     "llm_calls": { "type": "integer", "minimum": 0 },
     "created_at": { "type": "string", "format": "date-time" },
     "mode": { "type": "string", "enum": ["blocks", "tune"], "default": "blocks" },

@@ -86,6 +86,11 @@ def set_archived(package: Package, archived: bool) -> None:
         package.archived_at = None
 
 
+def set_status(package: Package, status: str) -> None:
+    """Promote or demote a package between draft and ready. Nothing else on the row changes."""
+    package.status = status
+
+
 async def list_packages(
     session: AsyncSession,
     user_id: uuid.UUID,

@@ -186,19 +186,25 @@ class EditPatch(BaseModel):
 
 
 class PackagePatch(BaseModel):
-    """A human edit to a package: `resume` in blocks mode, `edits` in tune mode.
+    """A human action on a package: `resume` in blocks mode, `edits` in tune mode, or `status`.
 
     Each field carries the complete new state for its mode, not a delta, so a new version is
-    always a full replacement of the thing the mode owns.
+    always a full replacement of the thing the mode owns. `status` is the odd one out: it changes
+    the existing row in place and creates no version, because "I have read this and it is ready"
+    is a fact about the draft that already exists, not a new draft.
+
+    `blocked` is not settable: it is the guardrail validator's verdict, not a human's.
     """
 
     resume: ResumeDocument | None = None
     edits: list[EditPatch] | None = None
+    status: Literal["ready", "draft"] | None = None
 
     @model_validator(mode="after")
     def _exactly_one(self) -> PackagePatch:
-        if (self.resume is None) == (self.edits is None):
-            raise ValueError("provide exactly one of resume or edits")
+        given = [f for f in (self.resume, self.edits, self.status) if f is not None]
+        if len(given) != 1:
+            raise ValueError("provide exactly one of resume, edits or status")
         return self
 
 

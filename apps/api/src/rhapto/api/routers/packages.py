@@ -105,7 +105,7 @@ async def _basename(session: AsyncSession, user_id: uuid.UUID) -> str:
 async def list_all_packages(
     user_id: UserDep,
     session: SessionDep,
-    status: Literal["draft", "blocked"] | None = Query(default=None),
+    status: Literal["draft", "ready", "blocked"] | None = Query(default=None),
     applied: bool | None = Query(default=None),
     archived: bool = Query(default=False),
 ) -> list[PackageListItem]:
@@ -251,11 +251,53 @@ async def _edited_tune_version(
     )
 
 
+async def _mark_status(
+    session: AsyncSession,
+    user_id: uuid.UUID,
+    parent: Package,
+    status: str,
+    response: Response,
+) -> PackageOut:
+    """Promote a draft to ready (or back). In place, no new version, nothing else touched."""
+    if status == "ready":
+        # Read the raw report rather than the strict `GuardrailReport` model: only `passed` and
+        # the violation count matter here, and a report written before this field existed (or
+        # patched in directly, as tests do) may be missing `rules_run`.
+        report_json = parent.guardrail_report_json or {}
+        passed = bool(report_json.get("passed"))
+        violation_count = len(report_json.get("violations") or [])
+        if parent.status == "blocked" or not passed:
+            # The last gate before a human sends this to an employer. Naming the count is what
+            # makes the 409 actionable: the Review page lists the violations themselves.
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    f"this package is blocked by {violation_count} guardrail violation(s); "
+                    "fix them and regenerate before marking it ready"
+                ),
+            )
+        latest = await job_repo.latest_package(session, user_id, parent.job_id)
+        if latest is not None and latest.id != parent.id:
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    f"version {parent.version} is not the latest for this job "
+                    f"(v{latest.version} is); mark that one ready instead"
+                ),
+            )
+    repo.set_status(parent, status)
+    await session.commit()
+    await session.refresh(parent)
+    response.status_code = 200
+    return package_to_out(parent)
+
+
 @router.patch(
     "/packages/{package_id}",
     response_model=PackageOut,
     status_code=201,
     responses={
+        200: {"description": "The package's status was changed in place"},
         201: {
             "description": "A new package version was created",
             "headers": {
@@ -264,7 +306,11 @@ async def _edited_tune_version(
                     "schema": {"type": "string", "format": "uri"},
                 }
             },
-        }
+        },
+        409: {
+            "description": "Blocked by guardrails, or not the latest version",
+            "content": {"application/problem+json": {}},
+        },
     },
 )
 async def patch_package(
@@ -285,6 +331,8 @@ async def patch_package(
     a resume has no meaning for a tuned document, and vice versa.
     """
     parent = await _get_package(session, user_id, package_id)
+    if body.status is not None:
+        return await _mark_status(session, user_id, parent, body.status, response)
     job = await job_repo.get_job(session, user_id, parent.job_id)
     if job is None:
         raise not_found("job", parent.job_id)

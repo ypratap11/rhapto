@@ -1701,7 +1701,7 @@
         "type": "object"
       },
       "PackagePatch": {
-        "description": "A human edit to a package: `resume` in blocks mode, `edits` in tune mode.\n\nEach field carries the complete new state for its mode, not a delta, so a new version is\nalways a full replacement of the thing the mode owns.",
+        "description": "A human action on a package: `resume` in blocks mode, `edits` in tune mode, or `status`.\n\nEach field carries the complete new state for its mode, not a delta, so a new version is\nalways a full replacement of the thing the mode owns. `status` is the odd one out: it changes\nthe existing row in place and creates no version, because \"I have read this and it is ready\"\nis a fact about the draft that already exists, not a new draft.\n\n`blocked` is not settable: it is the guardrail validator's verdict, not a human's.",
         "properties": {
           "edits": {
             "anyOf": [
@@ -1726,6 +1726,21 @@
                 "type": "null"
               }
             ]
+          },
+          "status": {
+            "anyOf": [
+              {
+                "enum": [
+                  "ready",
+                  "draft"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
           }
         },
         "title": "PackagePatch",
@@ -4337,6 +4352,7 @@
                 {
                   "enum": [
                     "draft",
+                    "ready",
                     "blocked"
                   ],
                   "type": "string"
@@ -4523,6 +4539,9 @@
           "required": true
         },
         "responses": {
+          "200": {
+            "description": "The package's status was changed in place"
+          },
           "201": {
             "content": {
               "application/json": {
@@ -4541,6 +4560,12 @@
                 }
               }
             }
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {}
+            },
+            "description": "Blocked by guardrails, or not the latest version"
           },
           "422": {
             "content": {

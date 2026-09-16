@@ -26,7 +26,9 @@ EMBEDDING_DIMENSIONS = 384
 APPLICATION_STATUSES = ("discovered", "queued", "applied", "screen", "interview", "offer", "closed")
 APPLIED_STATUSES = ("applied", "screen", "interview", "offer", "closed")
 TASK_STATUSES = ("queued", "running", "succeeded", "failed")
-PACKAGE_STATUSES = ("draft", "blocked")
+# draft: written, not yet reviewed. ready: a human reviewed it and it may be applied with.
+# blocked: guardrails refused it. A package is never written as "ready" -- only promoted.
+PACKAGE_STATUSES = ("draft", "ready", "blocked")
 CLOSED_REASONS = ("rejected", "withdrew", "no_response", "filled")
 
 

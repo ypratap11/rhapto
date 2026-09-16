@@ -84,6 +84,8 @@ async def needs_review_count(session: AsyncSession, user_id: uuid.UUID) -> int:
         .outerjoin(Application, Application.job_id == Package.job_id)
         .where(
             Package.user_id == user_id,
+            # Exactly "draft": a ready package has been reviewed (the human pressed Mark ready)
+            # and a blocked one cannot be reviewed into shape without a regenerate.
             Package.status == "draft",
             Package.archived_at.is_(None),
             Job.hidden_at.is_(None),
