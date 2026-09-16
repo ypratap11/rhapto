@@ -90,16 +90,15 @@ async def build_specs(
     # A user who has never opened the Searches tab still gets the market: derive on first poll.
     await derive_searches(session, user_id)
     searches = [s for s in await searches_repo.list_searches(session, user_id) if s.active]
+
+    async def credentials_for(source: str) -> dict[str, str]:
+        info = SOURCES[source].info if source in SOURCES else None
+        if info is None or not info.needs_key or fernet is None:
+            return {}
+        return await creds_repo.get_credentials(session, fernet, user_id, source)
+
     for search in searches:
         for agg in enabled:
-            info = SOURCES[agg.source].info if agg.source in SOURCES else None
-            credentials: dict[str, str] = {}
-            if info is not None and info.needs_key:
-                credentials = (
-                    await creds_repo.get_credentials(session, fernet, user_id, agg.source)
-                    if fernet is not None
-                    else {}
-                )
             specs.append(
                 SourceSpec(
                     source=agg.source,
@@ -114,20 +113,41 @@ async def build_specs(
                         name=search.name,
                     ),
                     search_id=search.id,
-                    credentials=credentials,
+                    credentials=await credentials_for(agg.source),
                 )
             )
     if not searches:
         # Legacy path: no tracks and no searches, so fall back to the aggregator row's own
-        # keywords exactly as before saved searches existed.
+        # keywords exactly as before saved searches existed. Every enabled aggregator is an
+        # AggregatorSource (fetch_search only, or fetch+fetch_search) -- never a board Source --
+        # so this must dispatch through get_aggregator(...).fetch_search(...), never through
+        # get_source(...).fetch(...): the five SearchSpec-only sources (themuse, remotive,
+        # adzuna, jooble, jsearch) have no `.fetch` and raised AttributeError on every poll here.
+        # Setting `search` (below) is what routes a spec through fetch_search in poll_sources.
         for agg in enabled:
+            keywords = list(agg.keywords) or track_keywords
+            if not keywords:
+                # Nothing to search on -- no keywords on the row, no track to borrow from. Skip
+                # rather than fetch unfiltered or crash. No spec, no run row: this never joins
+                # (and could never accidentally pause) the failure streak a real fetch error
+                # would, since there is nothing to retry -- only the user adding keywords fixes
+                # it, same as an aggregator with no saved search ever did before this branch
+                # existed.
+                logger.info(
+                    "skipping aggregator %s for user %s: no keywords configured",
+                    agg.source,
+                    user_id,
+                )
+                continue
             specs.append(
                 SourceSpec(
                     source=agg.source,
                     board=None,
                     company=None,
-                    keywords=list(agg.keywords) or track_keywords,
+                    keywords=keywords,
                     entry_updated_at=agg.updated_at,
+                    search=SearchSpec(keywords=tuple(keywords)),
+                    credentials=await credentials_for(agg.source),
                 )
             )
     return specs

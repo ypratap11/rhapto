@@ -87,6 +87,29 @@ async def test_the_scope_is_the_search_or_the_company_not_the_whole_source(
     assert other_company.miss_count == 0
 
 
+async def test_no_search_id_and_no_company_skips_reconciliation_entirely(
+    session: AsyncSession, user: User
+) -> None:
+    """Finding 2. A keyless aggregator spec with no saved search behind it has neither
+    `search_id` nor `company` to narrow the scope. Falling back to the whole source there would
+    eventually mark every other search's and board's job on that source unlisted; reconciliation
+    must skip instead."""
+    job = await _job(session, user, "widelisted", source="themuse")
+    for _ in range(3):
+        assert (
+            await jobs_repo.reconcile_listing(
+                session,
+                user.id,
+                source="themuse",
+                company=None,
+                search_id=None,
+                seen_external_ids=set(),
+            )
+            == 0
+        )
+    assert job.miss_count == 0 and job.unlisted_at is None
+
+
 async def test_manual_jobs_are_never_touched(session: AsyncSession, user: User) -> None:
     manual = await jobs_repo.create_job(session, user.id, jd_text="y" * 80, company="ExampleCo")
     await session.flush()

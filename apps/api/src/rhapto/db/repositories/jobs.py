@@ -309,7 +309,14 @@ async def reconcile_listing(
     `search_id`, or the company for a board -- never the whole source. Scoping wider would mark
     every job from a search the user just paused as unlisted the first time another search ran.
     A job that is seen again has both fields cleared: postings come back.
+
+    When neither narrows the scope (a keyless aggregator spec with no saved search behind it),
+    there is no way to know what this fetch could and could not have returned, so reconciliation
+    is skipped entirely rather than falling back to the whole source -- which would eventually
+    mark every other search's and board's jobs on that source as unlisted.
     """
+    if search_id is None and company is None:
+        return 0
     scope = [Job.user_id == user_id, Job.source == source, Job.external_id.is_not(None)]
     if search_id is not None:
         scope.append(Job.search_id == search_id)

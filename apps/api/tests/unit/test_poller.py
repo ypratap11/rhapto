@@ -514,3 +514,62 @@ async def test_a_failing_search_pauses_alone_without_a_healthy_searchs_successes
 # test_failed_source_is_recorded_and_paused_after_three and
 # test_resaving_the_entry_grants_three_fresh_attempts above, which already cover it and still
 # pass unmodified.
+
+
+async def test_track_less_user_with_a_new_aggregator_gets_results_not_a_crash(
+    session: AsyncSession, user: User
+) -> None:
+    """Finding 1 regression. A user with zero tracks and one enabled aggregator (any of the five
+    SearchSpec-only sources -- themuse here) takes build_specs' legacy branch (`derive_searches`
+    creates nothing, so `searches` is empty). That branch must route the aggregator through
+    `get_aggregator(...).fetch_search(...)`, not `get_source(...).fetch(...)`: themuse implements
+    only `fetch_search`, so the old code raised `AttributeError` on every poll and the run row
+    recorded that internal string instead of any jobs -- silently and permanently, for exactly the
+    scenario ("aggregator on, no tracks yet") the headline feature exists for."""
+    session.add(
+        Aggregator(user_id=user.id, source="themuse", enabled=True, keywords=["program manager"])
+    )
+    await session.flush()
+    assert await profile_repo.list_tracks(session, user.id) == []
+    body = {
+        "page": 1,
+        "page_count": 1,
+        "results": [
+            {
+                "id": 4242,
+                "name": "Technical Program Manager",
+                "company": {"name": "ExampleCo"},
+                "locations": [{"name": "Denver, CO"}],
+                "refs": {"landing_page": "https://www.themuse.com/jobs/exampleco/tpm-0"},
+                "contents": "<p>Run programs for the platform team.</p>",
+                "publication_date": "2026-09-01T10:00:00Z",
+            }
+        ],
+    }
+    http = FakeDiscoveryHttp({"themuse.com/api/public/jobs": body})
+    summary = await poll_sources(
+        session, user.id, http=http, embedder=FakeEmbeddingProvider(dimensions=384)
+    )
+    result = next(r for r in summary.results if r.source == "themuse")
+    assert result.error is None, f"themuse poll failed: {result.error}"
+    assert result.found == 1 and result.new == 1
+    assert summary.new_jobs == 1
+
+
+async def test_a_keyless_aggregator_with_no_keywords_and_no_tracks_is_skipped_not_crashed(
+    session: AsyncSession, user: User
+) -> None:
+    """Same legacy branch, but the aggregator row has no keywords and there is no track to borrow
+    from. There is nothing to search on, so build_specs skips the row instead of fetching
+    unfiltered or crashing -- and, because no run row is written for it, the skip never joins the
+    failure streak that would eventually pause the source."""
+    session.add(Aggregator(user_id=user.id, source="themuse", enabled=True, keywords=[]))
+    await session.flush()
+    summary = await poll_sources(
+        session,
+        user.id,
+        http=FakeDiscoveryHttp({}),
+        embedder=FakeEmbeddingProvider(dimensions=384),
+    )
+    assert summary.results == []
+    assert await disc_repo.latest_runs(session, user.id) == []

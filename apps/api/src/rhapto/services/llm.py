@@ -121,6 +121,14 @@ async def stored_llm_config(
 async def resolve_llm_config(
     session: AsyncSession, settings: Settings, user_id: uuid.UUID
 ) -> LlmConfig:
+    # RHAPTO_LLM_PROVIDER=fake is an operator-level promise ("no vendor key, no network, no
+    # bill") for the whole deployment. A user's stored key must not be able to override that
+    # promise, so the env wins over Settings for exactly this one provider; every other provider
+    # keeps the normal stored-over-env precedence.
+    if settings.rhapto_llm_provider == FAKE_PROVIDER_ID:
+        fake_config = env_llm_config(settings)
+        if fake_config is not None:
+            return fake_config
     config = await stored_llm_config(session, settings, user_id) or env_llm_config(settings)
     if config is None:
         raise LLMNotConfiguredError

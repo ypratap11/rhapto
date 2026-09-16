@@ -98,6 +98,26 @@ async def test_stored_config_wins_over_the_environment(monkeypatch: pytest.Monke
     assert await resolve_llm_config(_session(), settings, USER_ID) == stored
 
 
+async def test_env_fake_wins_over_a_stored_real_provider(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Finding 4. RHAPTO_LLM_PROVIDER=fake is `docker-compose.e2e.yml`'s promise of "no vendor
+    key, no network, no bill" for the whole deployment. A user who saved a real key in Settings
+    must not be able to defeat that promise -- the stack would silently call the paid vendor while
+    the fake-provider banner (`warn_if_fake_llm`) still told everyone it was safe."""
+    stored = LlmConfig(
+        provider="anthropic", model="claude-sonnet-5", api_key="sk-real-stored", source="settings"
+    )
+
+    async def fake_stored(
+        session: AsyncSession, settings: Settings, user_id: uuid.UUID
+    ) -> LlmConfig:
+        return stored
+
+    monkeypatch.setattr(llm_service, "stored_llm_config", fake_stored)
+    settings = _settings(rhapto_llm_provider="fake")
+    config = await resolve_llm_config(_session(), settings, USER_ID)
+    assert config.provider == "fake" and config.source == "env"
+
+
 async def test_falls_back_to_the_environment_when_no_row_exists(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

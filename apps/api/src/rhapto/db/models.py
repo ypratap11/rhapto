@@ -151,8 +151,8 @@ class WatchlistEntry(UserScopedMixin, TimestampMixin, Base):
     keywords: Mapped[list[str]] = mapped_column(
         ARRAY(String), default=list, server_default="{}", nullable=False
     )
-    #: True once a poll on this board has actually returned a job (as opposed to the entry
-    #: existing but never having matched anything yet).
+    #: True when this row was auto-discovered from a job's URL by the poller
+    #: (`poller._discover_boards`, spec §5) rather than added directly by the user.
     discovered: Mapped[bool] = mapped_column(
         Boolean, default=False, server_default="false", nullable=False
     )
