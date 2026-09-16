@@ -145,6 +145,33 @@ async def test_the_composed_resume_passes_every_guardrail(demo_profile_dir: obje
     assert report.passed, [v.model_dump() for v in report.violations]
 
 
+async def test_a_period_nested_inside_another_entrys_period_is_skipped_and_recorded(
+    demo_profile_dir: object,
+) -> None:
+    """`acme-migration` (achievement, period "2023") sits entirely inside `acme-data-pm`'s own
+    period ("2019-2025"). This provider never merges an achievement's bullet into its role's
+    entry the way the real compose prompt does -- every entry here cites exactly one block -- so
+    giving `acme-migration` its own "experience" entry would trip the real date-consistency
+    guardrail on a false-positive overlap (two "jobs" that were never actually concurrent). It
+    must be dropped, and the drop must be visible rather than silent: a change to the skip logic
+    that started over- or under-dropping content should break this test, not sail through with
+    every existing assertion (which only check subset relations) still green.
+    """
+    profile = load_profile(demo_profile_dir)  # type: ignore[arg-type]
+    by_id = {b.id: b for b in profile.blocks}
+    blocks = [
+        by_id["acme-data-pm"].model_dump(mode="json", exclude_none=True),
+        by_id["acme-migration"].model_dump(mode="json", exclude_none=True),
+    ]
+    selected = [b["id"] for b in blocks]
+    output = await _compose(json.dumps(blocks), selected)
+    cited = {e.source_block_id for s in output.sections for e in s.entries}
+    assert cited == {"acme-data-pm"}, "acme-migration's period nests inside acme-data-pm's"
+    # Observable, not silent: the change log names the dropped block and why.
+    assert "acme-migration" in output.change_log
+    assert "overlap" in output.change_log.lower()
+
+
 async def test_tune_mode_proposes_no_edits() -> None:
     provider = DeterministicFakeProvider()
     result = await provider.complete_structured(
