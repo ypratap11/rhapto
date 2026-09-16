@@ -4,6 +4,11 @@ The data lives in `packages/schemas/taxonomy.yaml`, is validated by `packages/sc
 and is read through the generated `models.taxonomy.TaxonomyFile`. `packages/` is not on the runtime
 path, so the Docker image copies the file to `/app/schemas/taxonomy.yaml`; `RHAPTO_TAXONOMY_PATH`
 overrides both, for tests and for anyone who wants their own list.
+
+Path resolution (`taxonomy_path`) is entirely lazy: nothing in this module touches the filesystem
+or does path arithmetic at import time, so importing this module can never raise. A missing or
+unreadable file only ever surfaces as `TaxonomyError`, and only once something actually asks for
+the taxonomy.
 """
 
 from __future__ import annotations
@@ -22,8 +27,11 @@ from rhapto.models.taxonomy import TaxonomyField, TaxonomyFile, TaxonomyRole
 
 #: Where the Docker image puts the file (see apps/api/Dockerfile).
 IMAGE_PATH = Path("/app/schemas/taxonomy.yaml")
-#: Where it lives in a source checkout: .../apps/api/src/rhapto/services/ -> repo root.
-REPO_PATH = Path(__file__).resolve().parents[5] / "packages" / "schemas" / "taxonomy.yaml"
+
+#: This module's own path, as a module attribute (not a bare `Path(__file__)` inline below) so a
+#: test can monkeypatch it to simulate a shallower layout -- e.g. inside the Docker image --
+#: without needing Docker.
+_MODULE_FILE = Path(__file__)
 
 _PUNCT = re.compile(r"[^a-z0-9]+")
 
@@ -32,12 +40,33 @@ class TaxonomyError(Exception):
     """The taxonomy file is missing, unreadable, or does not match its schema."""
 
 
+def _repo_checkout_path() -> Path | None:
+    """Where the taxonomy lives in a source checkout: .../apps/api/src/rhapto/services/ -> repo
+    root -- computed lazily (only when actually needed, never at import time) and safely: `None`
+    when the module's own path does not have enough parents to resolve a repo root from, which is
+    the case inside the Docker image, where the module sits at a shallower path than a checkout.
+    A bare `.parents[5]` there raises `IndexError` if evaluated eagerly at import, which is exactly
+    what used to crash the api/worker containers on startup.
+    """
+    parents = _MODULE_FILE.resolve().parents
+    if len(parents) <= 5:
+        return None
+    return parents[5] / "packages" / "schemas" / "taxonomy.yaml"
+
+
 def taxonomy_path() -> Path:
-    """The file this deployment reads: the env override, then the image, then the checkout."""
+    """The file this deployment reads: the env override, then the image, then the checkout.
+
+    Never raises: a checkout path that cannot be resolved (see `_repo_checkout_path`) just falls
+    back to the image path, which is a `TaxonomyError` -- naming that path -- the moment something
+    actually tries to load it, not a crash here or at import time.
+    """
     override = os.environ.get("RHAPTO_TAXONOMY_PATH", "").strip()
     if override:
         return Path(override)
-    return IMAGE_PATH if IMAGE_PATH.exists() else REPO_PATH
+    if IMAGE_PATH.exists():
+        return IMAGE_PATH
+    return _repo_checkout_path() or IMAGE_PATH
 
 
 def load_taxonomy(path: Path) -> TaxonomyFile:

@@ -131,6 +131,29 @@ def test_the_env_override_wins(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) 
         tax.taxonomy.cache_clear()
 
 
+def test_importing_the_module_never_raises_even_from_a_shallow_anchor(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Regression for the image-boot crash: the old code computed the repo-root candidate eagerly
+    at import time as `Path(__file__).resolve().parents[5]`. Inside the Docker image the module
+    sits at a shallower path than that assumes (`/app/rhapto/services/taxonomy.py` has only four
+    parents), so merely importing the module raised `IndexError: 5` and the api/worker containers
+    crashed on startup before ever asking for the taxonomy.
+
+    Re-importing the already-imported module cannot reproduce an import-time crash, so this
+    exercises the equivalent condition directly: with the module's anchor patched to a path as
+    shallow as the image's, resolving *where* the taxonomy would come from must not raise, and
+    the missing-checkout case must fall back to the (non-existent, here) image path rather than
+    blowing up -- the corresponding TaxonomyError only appears once someone actually loads it.
+    """
+    monkeypatch.setattr(tax, "_MODULE_FILE", Path("/app/rhapto/services/taxonomy.py"))
+    monkeypatch.delenv("RHAPTO_TAXONOMY_PATH", raising=False)
+    assert tax._repo_checkout_path() is None
+    assert tax.taxonomy_path() == tax.IMAGE_PATH
+    with pytest.raises(tax.TaxonomyError):
+        tax.load_taxonomy(tax.taxonomy_path())
+
+
 def test_a_broken_or_missing_file_raises_taxonomy_error(tmp_path: Path) -> None:
     bad = tmp_path / "taxonomy.yaml"
     bad.write_text("fields: [{id: x}]", encoding="utf-8")
