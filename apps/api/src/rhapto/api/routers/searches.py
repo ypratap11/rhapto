@@ -19,7 +19,7 @@ UserDep = Annotated[uuid.UUID, Depends(current_user)]
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
 
 
-def search_to_out(row: SearchRow) -> SearchOut:
+def search_to_out(row: SearchRow, new_count: int = 0) -> SearchOut:
     return SearchOut(
         id=row.id,
         name=row.name,
@@ -29,12 +29,17 @@ def search_to_out(row: SearchRow) -> SearchOut:
         active=row.active,
         derived_from_track_id=row.derived_from_track_id,
         created_at=row.created_at,
+        last_viewed_at=row.last_viewed_at,
+        new_count=new_count,
     )
 
 
 @router.get("", response_model=list[SearchOut])
 async def list_searches(user_id: UserDep, session: SessionDep) -> list[SearchOut]:
-    return [search_to_out(r) for r in await repo.list_searches(session, user_id)]
+    counts = await repo.new_counts(session, user_id)
+    return [
+        search_to_out(r, counts.get(r.id, 0)) for r in await repo.list_searches(session, user_id)
+    ]
 
 
 @router.post("", response_model=SearchOut, status_code=201)
@@ -42,8 +47,8 @@ async def create_search(body: SearchIn, user_id: UserDep, session: SessionDep) -
     row = await repo.create_search(
         session,
         user_id,
-        name=body.name,
-        keywords=body.keywords,
+        name=body.resolved_name,
+        keywords=body.resolved_keywords,
         location=body.location,
         remote=body.remote,
         active=body.active,
@@ -69,14 +74,27 @@ async def update_search(
     await repo.update_search(
         session,
         row,
-        name=body.name,
-        keywords=body.keywords,
+        name=body.resolved_name,
+        keywords=body.resolved_keywords,
         location=body.location,
         remote=body.remote,
         active=body.active,
     )
     await session.commit()
-    return search_to_out(row)
+    counts = await repo.new_counts(session, user_id)
+    return search_to_out(row, counts.get(row.id, 0))
+
+
+@router.post("/{search_id}/viewed", response_model=SearchOut)
+async def mark_viewed(search_id: uuid.UUID, user_id: UserDep, session: SessionDep) -> SearchOut:
+    """The user opened this search's results, so nothing in it is unseen any more."""
+    row = await repo.get_search(session, user_id, search_id)
+    if row is None:
+        raise not_found("search", search_id)
+    repo.mark_viewed(row)
+    await session.commit()
+    counts = await repo.new_counts(session, user_id)
+    return search_to_out(row, counts.get(row.id, 0))
 
 
 @router.delete("/{search_id}", status_code=204)

@@ -2074,6 +2074,7 @@
         "type": "object"
       },
       "SearchIn": {
+        "description": "What the form sends: either the one phrase the user typed, or an explicit keyword list.\n\nThe search box has a single input, so `query` is the common case and `name` follows from it;\nthe Searches tab edits the keyword list directly. Accepting both at once would leave \"what\nis this search actually looking for\" ambiguous, so exactly one is required.",
         "properties": {
           "active": {
             "default": true,
@@ -2081,13 +2082,19 @@
             "type": "boolean"
           },
           "keywords": {
-            "items": {
-              "type": "string"
-            },
-            "maxItems": 10,
-            "minItems": 1,
-            "title": "Keywords",
-            "type": "array"
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "maxItems": 10,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Keywords"
           },
           "location": {
             "anyOf": [
@@ -2102,10 +2109,28 @@
             "title": "Location"
           },
           "name": {
-            "maxLength": 100,
-            "minLength": 1,
-            "title": "Name",
-            "type": "string"
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "query": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Query"
           },
           "remote": {
             "default": "include",
@@ -2118,10 +2143,6 @@
             "type": "string"
           }
         },
-        "required": [
-          "name",
-          "keywords"
-        ],
         "title": "SearchIn",
         "type": "object"
       },
@@ -2159,6 +2180,18 @@
             "title": "Keywords",
             "type": "array"
           },
+          "last_viewed_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Viewed At"
+          },
           "location": {
             "anyOf": [
               {
@@ -2173,6 +2206,11 @@
           "name": {
             "title": "Name",
             "type": "string"
+          },
+          "new_count": {
+            "default": 0,
+            "title": "New Count",
+            "type": "integer"
           },
           "remote": {
             "enum": [
@@ -6179,6 +6217,66 @@
           }
         },
         "summary": "Update Search",
+        "tags": [
+          "searches"
+        ]
+      }
+    },
+    "/api/v1/searches/{search_id}/viewed": {
+      "post": {
+        "description": "The user opened this search's results, so nothing in it is unseen any more.",
+        "operationId": "mark_viewed_api_v1_searches__search_id__viewed_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "search_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Search Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SearchOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Mark Viewed",
         "tags": [
           "searches"
         ]

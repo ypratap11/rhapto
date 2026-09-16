@@ -679,6 +679,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/searches/{search_id}/viewed": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Mark Viewed
+         * @description The user opened this search's results, so nothing in it is unseen any more.
+         */
+        post: operations["mark_viewed_api_v1_searches__search_id__viewed_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/settings/llm": {
         parameters: {
             query?: never;
@@ -1590,7 +1610,14 @@ export interface components {
             /** Title */
             title: string;
         };
-        /** SearchIn */
+        /**
+         * SearchIn
+         * @description What the form sends: either the one phrase the user typed, or an explicit keyword list.
+         *
+         *     The search box has a single input, so `query` is the common case and `name` follows from it;
+         *     the Searches tab edits the keyword list directly. Accepting both at once would leave "what
+         *     is this search actually looking for" ambiguous, so exactly one is required.
+         */
         SearchIn: {
             /**
              * Active
@@ -1598,11 +1625,13 @@ export interface components {
              */
             active: boolean;
             /** Keywords */
-            keywords: string[];
+            keywords?: string[] | null;
             /** Location */
             location?: string | null;
             /** Name */
-            name: string;
+            name?: string | null;
+            /** Query */
+            query?: string | null;
             /**
              * Remote
              * @default include
@@ -1628,10 +1657,17 @@ export interface components {
             id: string;
             /** Keywords */
             keywords: string[];
+            /** Last Viewed At */
+            last_viewed_at?: string | null;
             /** Location */
             location: string | null;
             /** Name */
             name: string;
+            /**
+             * New Count
+             * @default 0
+             */
+            new_count: number;
             /**
              * Remote
              * @enum {string}
@@ -3719,6 +3755,39 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    mark_viewed_api_v1_searches__search_id__viewed_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                search_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SearchOut"];
+                };
             };
             /** @description Validation Error */
             422: {

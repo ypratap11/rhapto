@@ -319,19 +319,41 @@ RemoteValue = Literal["include", "only", "exclude"]
 
 
 class SearchIn(BaseModel):
-    name: str = Field(min_length=1, max_length=100)
-    keywords: list[str] = Field(min_length=1, max_length=10)
+    """What the form sends: either the one phrase the user typed, or an explicit keyword list.
+
+    The search box has a single input, so `query` is the common case and `name` follows from it;
+    the Searches tab edits the keyword list directly. Accepting both at once would leave "what
+    is this search actually looking for" ambiguous, so exactly one is required.
+    """
+
+    name: str | None = Field(default=None, max_length=100)
+    query: str | None = Field(default=None, max_length=200)
+    keywords: list[str] | None = Field(default=None, max_length=10)
     location: str | None = Field(default=None, max_length=200)
     remote: RemoteValue = "include"
     active: bool = True
 
-    @field_validator("keywords")
-    @classmethod
-    def _non_empty(cls, value: list[str]) -> list[str]:
-        cleaned = [k.strip() for k in value if k.strip()]
-        if not cleaned or any(len(k) > 60 for k in cleaned):
-            raise ValueError("each keyword must be 1-60 characters")
-        return cleaned
+    @model_validator(mode="after")
+    def _exactly_one_source(self) -> SearchIn:
+        if (self.query is None) == (self.keywords is None):
+            raise ValueError("provide exactly one of query or keywords")
+        if self.query is not None and not self.query.strip():
+            raise ValueError("query must not be blank")
+        if self.keywords is not None:
+            cleaned = [k.strip() for k in self.keywords if k.strip()]
+            if not cleaned or any(len(k) > 60 for k in cleaned):
+                raise ValueError("each keyword must be 1-60 characters")
+        return self
+
+    @property
+    def resolved_keywords(self) -> list[str]:
+        if self.keywords is not None:
+            return [k.strip() for k in self.keywords if k.strip()]
+        return [(self.query or "").strip()]
+
+    @property
+    def resolved_name(self) -> str:
+        return ((self.name or "").strip() or self.resolved_keywords[0])[:100]
 
 
 class SearchOut(BaseModel):
@@ -343,6 +365,9 @@ class SearchOut(BaseModel):
     active: bool
     derived_from_track_id: str | None
     created_at: datetime
+    last_viewed_at: datetime | None = None
+    #: Jobs this search found since `last_viewed_at`, excluding hidden and unlisted ones.
+    new_count: int = 0
 
 
 class SourceSettingOut(BaseModel):
