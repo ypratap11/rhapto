@@ -1,0 +1,93 @@
+# Portal backend — follow-ups
+
+Written at the end of the portal-backend implementation run (plan
+`docs/superpowers/plans/2026-09-14-portal-backend.md`, branch `portal`). Every item here was
+found by review, triaged as a follow-up rather than a merge blocker, and left deliberately
+undone. Nothing in this list is a known-broken promise to a user; the blockers that were found
+are fixed on the branch.
+
+## 1. Decide what a track-less user sees (product call)
+
+A saved search is derived from a track, and aggregators are driven by saved searches. A user who
+enables a job source **before** creating any track therefore has nothing to search for.
+
+Today `PUT /api/v1/settings/sources/{source}` is the only writer of an `Aggregator` row and it
+always writes `keywords=[]`; nothing else ever sets that column. The keyless sources (The Muse,
+Remotive) default to enabled. So "enable a source, then add a track" — a plausible onboarding
+order — leaves the poller with no keywords and nothing to do. It skips that source silently:
+no run row, no UI signal, only an INFO log.
+
+That silence is deliberate (an aggregator with no query must not be recorded as a failure, or it
+would trip the "paused after 3 failures" gate and hand the user advice that cannot help). But
+silence is not the same as an answer. Options, cheapest first:
+
+- Show "not searching yet — add a track, or give this source its own keywords" wherever sources
+  are listed, and leave the backend as is.
+- Let a source carry its own keywords (`Aggregator.keywords` already exists and is already read;
+  only the write path is missing).
+- Record an informational, non-failure run row so the Runs drawer can explain the skip. This one
+  needs a run "kind" the schema does not have yet.
+
+## 2. Worth doing soon
+
+These compound with each other or with the item above.
+
+- A keyed source with no key saved reports "no API key" per poll, and after three polls flips to
+  "paused after 3 failures" — the less actionable message wins. Same unactionable-pause shape as
+  the item above; fix them together.
+- `TaxonomyError` has no named `problem+json` handler, so it falls through to a generic 500. It is
+  now reachable from **every track write** (taxonomy validation runs there), and this file's path
+  resolution has already broken once (the eager `parents[5]` crash that stopped the containers
+  booting). A missing taxonomy file should not look like an unexplained server error.
+- `GET /jobs?recommended=true` does not itself exclude hidden jobs; it is correct today only
+  because the separate `hidden` filter defaults to false. One explicit predicate removes the
+  implicit coupling.
+- A blocked package can be demoted to `draft`, which puts it back in the "needs review" count
+  while its guardrail report still says `passed: false`. It cannot be marked ready (that path
+  checks the report), so this is a display problem, not a safety one.
+- `POST /search` with an unknown id in `sources` silently narrows the fan-out to nothing instead
+  of returning 422.
+- Live-search jobs are never marked "no longer listed": `POST /search` stores them with no
+  `search_id`, and every reconciliation is scoped to a search or a company. Errs safe — nothing is
+  wrongly retired — but a dead posting keeps offering Tailor.
+- `Job.search_id` has no index. It is now filtered in the job list, grouped in the saved-search
+  counts, and scoped in unlisted detection. It will want one before the jobs table grows.
+
+## 3. Routine
+
+- Adzuna's credential redaction matches the raw value, but the URL carries the percent-encoded
+  one; a key containing `+`, `/`, `=` or a space would survive into a stored error. Adzuna ids are
+  hex in practice, so this is latent.
+- Jooble builds its key into the URL path unquoted (quoting it would break the adjacent
+  redaction) — worth a comment saying so.
+- The fake provider's `<blocks>` parsing anchors on the last literal occurrence of the tag; block
+  content containing that literal string would break it. Test/demo-only code.
+- The fake provider's attribution path digit-checks the block content but not the appended
+  attribution string. A digit there produces a *blocked* package, never a dishonest one — the
+  metrics guardrail catches it — so this is a tension between two guardrails, not a leak.
+- `POST /search`'s per-source `found` count includes jobs that the result list then omits because
+  they are hidden, so the count and the list can disagree.
+- `fernet_for(settings)` is caught and degraded on the live-search path but uncaught on
+  `PUT /settings/sources/{source}` and the source test endpoint — the same misconfiguration is a
+  warning in one place and a 500 in another.
+- The dashboard's seven reads run sequentially; `asyncio.gather` would cut first-screen latency.
+- `needs_review_count` and `due_followups` join without an explicit `Job.user_id` filter, relying
+  on the package/application scoping. Safe today; an explicit filter is cheap.
+- Missing tests, all inert by inspection: cross-user isolation for `/searches` and
+  `/settings/sources` (the pattern exists elsewhere now), re-marking an already-ready package,
+  promoting an archived-but-latest package, the `MAX_SUGGESTIONS` cap, and four sources' identical
+  malformed-item skip paths.
+- Small cleanups: field/role id uniqueness is enforced by test but not by schema or loader;
+  `roles_by_name()` rebuilds per request; duplicated `SOURCES[...].info` lookups in the poller and
+  in the settings router; a stray leading space in two docstrings; migration 0006 names a
+  constraint the other migrations leave unnamed.
+
+## 4. Not verified
+
+- The README's docker + curl walkthrough (`## Find jobs across the whole market`) was written but
+  never executed — it rebuilds the stack, calls live third-party APIs, and runs a paid tailor.
+  Run it once before trusting it.
+- The five new sources are exercised against fixtures only. The first live run may find mapping
+  surprises; malformed items degrade to skipped rows rather than failures.
+- The fake provider's end-to-end behaviour is proven by unit tests and one manual Docker run, not
+  by an automated e2e suite — that belongs to the portal-ui plan.
