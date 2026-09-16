@@ -100,3 +100,79 @@ async def test_new_counts_is_one_query_for_every_search(session: AsyncSession, u
     await session.commit()
     counts = await searches_repo.new_counts(session, user.id)
     assert len(counts) == 3 and set(counts.values()) == {0}
+
+
+async def test_new_counts_never_counts_another_users_jobs_or_searches(
+    session: AsyncSession, user: Any
+) -> None:
+    from rhapto.db.repositories.users import get_or_create_user
+
+    other = await get_or_create_user(session, "other@example.com")
+    await session.commit()
+
+    mine = await searches_repo.create_search(
+        session, user.id, name="mine", keywords=["mine"], location=None, remote="include"
+    )
+    theirs = await searches_repo.create_search(
+        session, other.id, name="theirs", keywords=["theirs"], location=None, remote="include"
+    )
+    await session.commit()
+
+    # Both users have a job discovered after their own (never-set) last_viewed_at.
+    await jobs_repo.create_discovered_job(
+        session,
+        user.id,
+        source="themuse",
+        external_id="mine-1",
+        company="ExampleCo",
+        title="Program Manager",
+        location=None,
+        url="https://example.com/mine-1",
+        jd_text="x" * 80,
+        posted_at=None,
+        identity_hash="h-mine-1",
+        repost_of=None,
+        search_id=mine.id,
+    )
+    await jobs_repo.create_discovered_job(
+        session,
+        other.id,
+        source="themuse",
+        external_id="theirs-1",
+        company="ExampleCo",
+        title="Program Manager",
+        location=None,
+        url="https://example.com/theirs-1",
+        jd_text="x" * 80,
+        posted_at=None,
+        identity_hash="h-theirs-1",
+        repost_of=None,
+        search_id=theirs.id,
+    )
+    await session.commit()
+
+    counts = await searches_repo.new_counts(session, user.id)
+    # If the other user's job or search leaked in, "mine" would read 2 or "theirs" would appear.
+    assert counts == {mine.id: 1}
+
+
+async def test_viewed_on_another_users_search_is_404_and_leaves_it_untouched(
+    client: httpx.AsyncClient, session_factory: async_sessionmaker[AsyncSession]
+) -> None:
+    from rhapto.db.repositories.users import get_or_create_user
+
+    async with session_factory() as session:
+        other = await get_or_create_user(session, "other@example.com")
+        theirs = await searches_repo.create_search(
+            session, other.id, name="theirs", keywords=["theirs"], location=None, remote="include"
+        )
+        await session.commit()
+        other_id, their_search_id = other.id, theirs.id
+
+    response = await client.post(f"/api/v1/searches/{their_search_id}/viewed")
+    assert response.status_code == 404
+
+    async with session_factory() as session:
+        reloaded = await searches_repo.get_search(session, other_id, their_search_id)
+        assert reloaded is not None
+        assert reloaded.last_viewed_at is None
