@@ -64,4 +64,26 @@ describe("useLiveSearch", () => {
     await waitFor(() => expect(result.current.status).toBe("done"));
     expect(result.current.jobs).toHaveLength(1);
   });
+
+  // Not from the plan's test list, but the plan flags a leaked interval as a real hazard here
+  // (it surfaces as cross-test pollution, not a clean failure), so unmount cleanup gets its own case.
+  it("clears its poll interval on unmount instead of leaking it", async () => {
+    post.mockReturnValue(ok({ jobs: [job("j1", null)], per_source: {} }));
+    get.mockReturnValue(ok([job("j1", null)]));
+
+    const { result, unmount } = renderHook(() => useLiveSearch(), { wrapper });
+    act(() => result.current.run({ ...DEFAULT_SEARCH_STATE, query: "pm" }));
+    await waitFor(() => expect(result.current.status).toBe("scoring"));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(3000);
+    });
+    const callsBeforeUnmount = get.mock.calls.length;
+    expect(callsBeforeUnmount).toBeGreaterThan(0);
+
+    unmount();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(30_000);
+    });
+    expect(get).toHaveBeenCalledTimes(callsBeforeUnmount);
+  });
 });
