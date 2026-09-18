@@ -9,7 +9,8 @@
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "gen:api": "openapi-typescript ../../packages/schemas/openapi.json -o src/lib/api/schema.d.ts"
+    "gen:api": "openapi-typescript ../../packages/schemas/openapi.json -o src/lib/api/schema.d.ts",
+    "check:contrast": "node scripts/check-contrast.mjs"
   },
   "dependencies": {
     "@base-ui/react": "^1.8.0",
@@ -19,6 +20,7 @@
     "@tanstack/react-query": "^5.102.8",
     "class-variance-authority": "^0.7.1",
     "cn": "^0.2.6",
+    "diff": "^9.0.0",
     "lucide-react": "^1.44.0",
     "next": "16.3.4",
     "next-themes": "^0.4.6",

@@ -7,6 +7,22 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+  --color-surface: var(--surface);
+  --color-surface-muted: var(--surface-muted);
+  --color-primary-hover: var(--primary-hover);
+  --color-band-peach: var(--band-peach);
+  --color-band-mint: var(--band-mint);
+  --color-band-sand: var(--band-sand);
+  --color-fit-high: var(--fit-high);
+  --color-fit-high-bg: var(--fit-high-bg);
+  --color-fit-mid: var(--fit-mid);
+  --color-fit-mid-bg: var(--fit-mid-bg);
+  --color-fit-low: var(--fit-low);
+  --color-fit-low-bg: var(--fit-low-bg);
+  --color-diff-add: var(--diff-add);
+  --color-diff-add-bg: var(--diff-add-bg);
+  --color-diff-del: var(--diff-del);
+  --color-diff-del-bg: var(--diff-del-bg);
   --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
   --font-serif: var(--font-fraunces), Georgia, serif;
   --font-mono: var(--font-jetbrains), ui-monospace, monospace;
@@ -49,31 +65,61 @@
   --radius-4xl: calc(var(--radius) * 2.6);
 }
 
+/* Not `inline`, so `rounded-card`/`rounded-control`/`rounded-chip` and the band heights resolve
+   through the custom property. Same in both themes (spec §8). */
+@theme {
+  --radius-card: 10px;
+  --radius-control: 8px;
+  --radius-chip: 6px;
+  --height-band-tall: 160px;
+  --height-band-short: 120px;
+}
+
 :root {
   --background: #faf8f5;
+  --surface: #ffffff;
+  --surface-muted: #f1ece4;
+  --border: #e7e1d8;
+  --input: #e7e1d8;
   --foreground: #1c1917;
+  --muted-foreground: #6b6259;
+  --primary: #b4432e;
+  --primary-foreground: #ffffff;
+  --primary-hover: #9a3826;
+  --ring: #b4432e;
+  --destructive: #a32d2d;
+  --band-peach: #f8e3d2;
+  --band-mint: #d9efe6;
+  --band-sand: #f1ece4;
+  /* spec §8 says #2f7d4f; 4.26:1 on --fit-high-bg is below AA, darkened to pass. */
+  --fit-high: #2b7349;
+  --fit-high-bg: #dff0e5;
+  /* spec §8 says #a65f0f; 4.11:1 on --fit-mid-bg is below AA, darkened to pass. */
+  --fit-mid: #95540d;
+  --fit-mid-bg: #f8e9cf;
+  --fit-low: #6b6259;
+  --fit-low-bg: #f1ece4;
+  --diff-add: #2b7349;
+  --diff-add-bg: #dff0e5;
+  --diff-del: #a32d2d;
+  --diff-del-bg: #f7dedb;
   --card: #ffffff;
   --card-foreground: #1c1917;
   --popover: #ffffff;
   --popover-foreground: #1c1917;
-  --primary: #b4432e;
-  --primary-foreground: #ffffff;
   --secondary: #f1ece4;
   --secondary-foreground: #1c1917;
   --muted: #f1ece4;
-  --muted-foreground: #6b6259;
-  --accent: #b4432e;
-  --accent-foreground: #ffffff;
-  --destructive: #b4432e;
-  --border: #e7e1d8;
-  --input: #e7e1d8;
-  --ring: #b4432e;
+  --accent: #f1ece4;
+  --accent-foreground: #1c1917;
   --chart-1: #b4432e;
-  --chart-2: #6b6259;
-  --chart-3: #1c1917;
-  --chart-4: #e7e1d8;
-  --chart-5: #f1ece4;
+  --chart-2: #2b7349;
+  --chart-3: #95540d;
+  --chart-4: #6b6259;
+  --chart-5: #e7e1d8;
   --radius: 0.5rem;
+  --shadow-card: 0 1px 2px rgb(28 25 23 / 0.05), 0 4px 14px rgb(28 25 23 / 0.06);
+  --shadow-card-hover: 0 1px 2px rgb(28 25 23 / 0.05), 0 4px 14px rgb(28 25 23 / 0.06), 0 8px 24px rgb(28 25 23 / 0.09);
   --sidebar: #ffffff;
   --sidebar-foreground: #1c1917;
   --sidebar-primary: #b4432e;
@@ -82,6 +128,58 @@
   --sidebar-accent-foreground: #1c1917;
   --sidebar-border: #e7e1d8;
   --sidebar-ring: #b4432e;
+}
+
+.dark {
+  --background: #191614;
+  --surface: #221e1b;
+  --surface-muted: #2b2622;
+  --border: #3a332e;
+  --input: #3a332e;
+  --foreground: #f3ede6;
+  --muted-foreground: #b3a89c;
+  --primary: #e0715a;
+  --primary-foreground: #191614;
+  --primary-hover: #e98a76;
+  --ring: #e0715a;
+  --destructive: #f08a8a;
+  --band-peach: #3a2a22;
+  --band-mint: #1f3029;
+  --band-sand: #2b2622;
+  --fit-high: #7fd19a;
+  --fit-high-bg: #1f3d2b;
+  --fit-mid: #f0b35a;
+  --fit-mid-bg: #3f2d10;
+  --fit-low: #b3a89c;
+  --fit-low-bg: #2b2622;
+  --diff-add: #7fd19a;
+  --diff-add-bg: #1f3d2b;
+  --diff-del: #f08a8a;
+  --diff-del-bg: #3d2323;
+  --card: #221e1b;
+  --card-foreground: #f3ede6;
+  --popover: #221e1b;
+  --popover-foreground: #f3ede6;
+  --secondary: #2b2622;
+  --secondary-foreground: #f3ede6;
+  --muted: #2b2622;
+  --accent: #2b2622;
+  --accent-foreground: #f3ede6;
+  --chart-1: #e0715a;
+  --chart-2: #7fd19a;
+  --chart-3: #f0b35a;
+  --chart-4: #b3a89c;
+  --chart-5: #3a332e;
+  --shadow-card: 0 1px 2px rgb(0 0 0 / 0.45), 0 4px 14px rgb(0 0 0 / 0.4);
+  --shadow-card-hover: 0 1px 2px rgb(0 0 0 / 0.45), 0 4px 14px rgb(0 0 0 / 0.4), 0 8px 24px rgb(0 0 0 / 0.5);
+  --sidebar: #221e1b;
+  --sidebar-foreground: #f3ede6;
+  --sidebar-primary: #e0715a;
+  --sidebar-primary-foreground: #191614;
+  --sidebar-accent: #2b2622;
+  --sidebar-accent-foreground: #f3ede6;
+  --sidebar-border: #3a332e;
+  --sidebar-ring: #e0715a;
 }
 
 @layer base {
@@ -95,9 +193,71 @@
     @apply font-sans;
   }
   h1, h2, h3 {
-    @apply font-serif tracking-tight;
+    @apply font-serif font-medium tracking-tight;
   }
   mark {
-    @apply bg-amber-100 text-foreground rounded-sm px-0.5;
+    @apply bg-fit-mid-bg text-fit-mid rounded-chip px-0.5;
+  }
+  /* A 2px ring with a 2px offset on anything focusable. `:where()` keeps specificity at 0 so a
+     component can still opt out or paint its own ring. */
+  :where(a[href], button, input, select, textarea, summary, [tabindex]:not([tabindex="-1"]), [role="button"], [role="tab"], [role="option"], [role="menuitem"], [role="switch"], [role="checkbox"]):focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
+}
+
+/* Tailwind's `shadow-*` namespace bakes the resolved value into the utility at build time, which
+   would freeze the light shadow in place; these keep the custom property so `.dark` can override it. */
+/* Word-level diff highlights for the Changes pane read view: soft backgrounds, no
+   strike-through/underline (the browser default for del/ins). */
+@utility diff-add {
+  background-color: var(--diff-add-bg);
+  color: var(--diff-add);
+  text-decoration: none;
+  border-radius: 3px;
+  padding: 0 2px;
+}
+
+@utility diff-del {
+  background-color: var(--diff-del-bg);
+  color: var(--diff-del);
+  text-decoration: none;
+  border-radius: 3px;
+  padding: 0 2px;
+}
+
+@utility shadow-card {
+  box-shadow: var(--shadow-card);
+}
+
+@utility shadow-card-hover {
+  box-shadow: var(--shadow-card-hover);
+}
+
+/* The hover lift used by cards and rows: shadow plus a 1px rise, 150ms ease-out. */
+@utility hover-lift {
+  transition-property: box-shadow, transform, background-color, border-color, color;
+  transition-timing-function: cubic-bezier(0, 0, 0.2, 1);
+  transition-duration: 150ms;
+
+  &:hover {
+    box-shadow: var(--shadow-card-hover);
+    transform: translateY(-1px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  /* Only the decorative transforms go: drag-and-drop and popup positioning still need theirs. */
+  .hover-lift,
+  .hover-lift:hover {
+    transform: none !important;
   }
 }
