@@ -33,4 +33,13 @@ describe("TopBar", () => {
     expect(screen.getByRole("link", { name: "Settings" })).toHaveAttribute("href", "/settings");
     expect(screen.getByRole("link", { name: "Help" })).toHaveAttribute("href", "/settings#help");
   });
+
+  it("orders the trailing controls as theme toggle, then Settings, then Help", () => {
+    pathname.mockReturnValue("/");
+    render(<TopBar />);
+    const trailing = [...screen.getByRole("banner").querySelectorAll("button, a[aria-label]")].map((el) =>
+      el.getAttribute("aria-label"),
+    );
+    expect(trailing).toEqual(["Toggle theme", "Settings", "Help"]);
+  });
 });

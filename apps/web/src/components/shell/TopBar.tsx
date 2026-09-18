@@ -42,13 +42,13 @@ export function TopBar() {
         </nav>
         <div className="flex items-center gap-1">
           <ThemeToggle />
-          <Link href="/settings#help" aria-label="Help" title="Help" className="rounded-control p-1.5 text-muted-foreground hover:text-foreground">
-            <CircleQuestionMark className="size-4" aria-hidden />
-            <span className="sr-only">Help</span>
-          </Link>
           <Link href="/settings" aria-label="Settings" title="Settings" className="rounded-control p-1.5 text-muted-foreground hover:text-foreground">
             <Settings className="size-4" aria-hidden />
             <span className="sr-only">Settings</span>
+          </Link>
+          <Link href="/settings#help" aria-label="Help" title="Help" className="rounded-control p-1.5 text-muted-foreground hover:text-foreground">
+            <CircleQuestionMark className="size-4" aria-hidden />
+            <span className="sr-only">Help</span>
           </Link>
         </div>
       </div>

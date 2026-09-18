@@ -4,8 +4,16 @@ import { cn } from "cn";
 const TONE_CLASS = { peach: "bg-band-peach", mint: "bg-band-mint", sand: "bg-band-sand" } as const;
 const HEIGHT_CLASS = { tall: "min-h-band-tall", short: "min-h-band-short" } as const;
 
-/** Full-bleed tinted band. The shell's main element is width-capped and padded, so the band
- * cancels both with negative margins to reach the viewport edges (spec §8: full-width). */
+/** Full-bleed tinted band. The shell's main element is width-capped (`max-w-6xl`) and centered, so
+ * a fixed `-mx-6` only cancels main's own padding — it stops at main's box edge, not the viewport,
+ * on any screen wider than the cap (spec §8: full-width). `w-screen` + `mx-[calc(50%-50vw)]` is the
+ * standard breakout: because main is itself centered on the page, the parent-width term in `50%`
+ * cancels algebraically against main's offset from the viewport, so this reaches the true viewport
+ * edges regardless of main's width or padding. `100vw` includes the scrollbar's width though, so on
+ * a page tall enough to scroll this would overflow the real viewport by a few pixels; `Shell`'s root
+ * carries `overflow-x-clip` to swallow that instead of letting it grow into a horizontal scrollbar.
+ * Layout correctness here is algebraic, not something jsdom can render — confirmed visually, not by
+ * this component's unit tests. */
 export function HeroBand({
   tone,
   height = "short",
@@ -19,7 +27,7 @@ export function HeroBand({
     <div
       data-testid="hero-band"
       className={cn(
-        "relative -mx-6 -mt-8 mb-8 overflow-hidden border-b border-border px-6 py-8 text-foreground",
+        "relative mx-[calc(50%-50vw)] -mt-8 mb-8 w-screen overflow-hidden border-b border-border px-6 py-8 text-foreground",
         TONE_CLASS[tone],
         HEIGHT_CLASS[height],
       )}
