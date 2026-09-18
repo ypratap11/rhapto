@@ -79,8 +79,15 @@ function ProfilePageInner() {
   // `openCard` is derived straight from `searchParams` on every render, the same way Jobs derives
   // `currentPage` (src/app/jobs/page.tsx) — not mirrored into local state. That is what makes
   // `?card=` genuinely addressable rather than a one-time initial value: a shared `?card=guardrails`
-  // link opens straight to that sheet, and Back closes an open sheet instead of leaving the page,
-  // because `setOpenCard` below pushes a new history entry rather than replacing the current one.
+  // link opens straight to that sheet.
+  //
+  // Open pushes a new history entry; close replaces the current one rather than pushing another.
+  // A close is the undo of an open, not a fresh step — the same distinction Task 5b drew between
+  // `goToPage` (push, an undoable step) and `updateState` (replace, a filter edit that shouldn't
+  // spam history). Getting this backwards — pushing on close too — means Back from the closed state
+  // lands back on the *open* entry and reopens the sheet the user just dismissed, the opposite of
+  // what push-on-open was for. With push-on-open + replace-on-close: Back while a sheet is open
+  // returns to the card-less URL and closes it; Back after an explicit close leaves the page.
   const rawCard = searchParams.get("card");
   const openCard: ProfileCardId | null = isProfileCardId(rawCard) ? rawCard : null;
 
@@ -88,7 +95,9 @@ function ProfilePageInner() {
     const next = new URLSearchParams(searchParams.toString());
     if (open) next.set("card", id);
     else next.delete("card");
-    router.push(`/profile${next.toString() ? `?${next.toString()}` : ""}`);
+    const url = `/profile${next.toString() ? `?${next.toString()}` : ""}`;
+    if (open) router.push(url);
+    else router.replace(url);
   }
 
   const answers = useAnswers();

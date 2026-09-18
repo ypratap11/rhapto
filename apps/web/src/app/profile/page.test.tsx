@@ -8,7 +8,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 // Next's real router does on navigation. This is what lets `openCard` (page.tsx) be derived
 // straight from `searchParams` — not mirrored into local state — and still be exercised by a click
 // in these tests: real round-tripping, not just a value read once on mount.
-const { getSearchParams, setSearchParams, subscribeSearchParams, routerPush } = vi.hoisted(() => {
+const { getSearchParams, setSearchParams, subscribeSearchParams, routerPush, routerReplace } = vi.hoisted(() => {
   let params = new URLSearchParams();
   const listeners = new Set<() => void>();
   function setSearchParams(next: URLSearchParams) {
@@ -25,11 +25,12 @@ const { getSearchParams, setSearchParams, subscribeSearchParams, routerPush } = 
       };
     },
     routerPush: vi.fn((url: string) => setSearchParams(new URLSearchParams(url.split("?")[1] ?? ""))),
+    routerReplace: vi.fn((url: string) => setSearchParams(new URLSearchParams(url.split("?")[1] ?? ""))),
   };
 });
 
 vi.mock("next/navigation", () => ({
-  useRouter: () => ({ push: routerPush }),
+  useRouter: () => ({ push: routerPush, replace: routerReplace }),
   useSearchParams: () => {
     const [, forceRender] = useState(0);
     useEffect(() => subscribeSearchParams(() => forceRender((n) => n + 1)), []);
@@ -90,6 +91,7 @@ import ProfilePage from "./page";
 describe("ProfilePage", () => {
   beforeEach(() => {
     routerPush.mockClear();
+    routerReplace.mockClear();
   });
 
   it("shows the name, location and blocks-verified tally in the sand band", () => {
@@ -151,11 +153,28 @@ describe("ProfilePage", () => {
     expect(routerPush).toHaveBeenLastCalledWith("/profile?card=guardrails");
     expect(getSearchParams().get("card")).toBe("guardrails");
 
-    // Closing removes it from the URL again.
+    // Closing removes it from the URL again — via `replace`, not `push` (see the next test): a
+    // close is the undo of an open, not a fresh step.
     await user.click(screen.getByRole("button", { name: "Close" }));
-    expect(routerPush).toHaveBeenLastCalledWith("/profile");
     expect(getSearchParams().get("card")).toBeNull();
     expect(screen.queryByText("Guardrails content")).not.toBeInTheDocument();
+  });
+
+  it("pushes to open a sheet but replaces to close it, so Back after closing leaves the page instead of reopening it", async () => {
+    setSearchParams(new URLSearchParams());
+    const user = userEvent.setup({ delay: null });
+    render(<ProfilePage />);
+
+    await user.click(screen.getByRole("button", { name: "Edit Guardrails" }));
+    expect(routerPush).toHaveBeenCalledWith("/profile?card=guardrails");
+    expect(routerReplace).not.toHaveBeenCalled();
+
+    routerPush.mockClear();
+    await user.click(screen.getByRole("button", { name: "Close" }));
+    // Pushing here (the bug this test pins) would leave a `?card=guardrails` entry in history that
+    // one Back would land back on, reopening the very sheet the user just dismissed.
+    expect(routerPush).not.toHaveBeenCalled();
+    expect(routerReplace).toHaveBeenCalledWith("/profile");
   });
 
   it("closes an open sheet on browser Back, since openCard is derived from the URL, not latched", () => {

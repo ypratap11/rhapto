@@ -129,6 +129,11 @@ export function FieldPicker({ open, onOpenChange }: { open: boolean; onOpenChang
                 ))}
                 {suggestionsHasIssue ? <span className="text-xs text-fit-mid">(couldn&rsquo;t refresh)</span> : null}
               </div>
+            ) : suggestionsHasIssue ? (
+              // `suggestions.data` is a cached (possibly empty) array and the background refetch
+              // that would confirm or update it failed — that is not the same as a resume that
+              // genuinely matched nothing, so it gets its own note rather than rendering nothing.
+              <p className="text-xs text-fit-mid">Couldn&rsquo;t refresh suggestions from your resume.</p>
             ) : null}
             {fields.length === 0 ? (
               <p className="text-sm text-muted-foreground">No fields configured yet.</p>

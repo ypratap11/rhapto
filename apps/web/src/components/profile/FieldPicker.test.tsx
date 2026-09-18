@@ -130,5 +130,14 @@ describe("FieldPicker", () => {
       expect(within(group).getByRole("button", { name: "Backend" })).toBeInTheDocument();
       expect(within(group).getByText(/couldn.?t refresh/i)).toBeInTheDocument();
     });
+
+    it("notes a failed refresh even when the cached suggestions were empty, rather than rendering nothing", () => {
+      // A cached empty array is not `undefined`, so this must not fall into the same branch as
+      // "genuinely no matches" just because a background refetch also failed.
+      state.suggestions = { data: [], isLoading: false, error: new Error("boom"), isPaused: false };
+      render(<FieldPicker open onOpenChange={vi.fn()} />);
+      expect(screen.queryByRole("group", { name: /suggested from your resume/i })).not.toBeInTheDocument();
+      expect(screen.getByText(/couldn.?t refresh suggestions from your resume/i)).toBeInTheDocument();
+    });
   });
 });
