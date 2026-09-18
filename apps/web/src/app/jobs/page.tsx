@@ -2,10 +2,11 @@
 
 import { Search } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Suspense, useEffect, useMemo, useState } from "react";
+import { Suspense, useMemo, useState } from "react";
 import { FilterChips } from "@/components/jobs/FilterChips";
 import type { TrackInfo } from "@/components/jobs/JobCard";
 import { JobGrid } from "@/components/jobs/JobGrid";
+import { MarkSearchViewed } from "@/components/jobs/MarkSearchViewed";
 import { SaveSearchButton } from "@/components/jobs/SaveSearchButton";
 import { SearchForm } from "@/components/jobs/SearchForm";
 import { SourceReport } from "@/components/jobs/SourceReport";
@@ -14,32 +15,10 @@ import { HeroBand } from "@/components/shell/HeroBand";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import {
-  useJobsQuery,
-  useLiveSearch,
-  useMarkSearchViewed,
-  useSavedSearches,
-  useSourceSettings,
-  useTaxonomy,
-  useTracks,
-} from "@/lib/api/queries";
+import { useJobsQuery, useLiveSearch, useSavedSearches, useSourceSettings, useTaxonomy, useTracks } from "@/lib/api/queries";
 import { decodeSearchState, encodeSearchState, passesFit, type SearchState } from "@/lib/search-state";
 
 const SORT_LABEL: Record<SearchState["sort"], string> = { fit: "Fit", newest: "Newest" };
-
-/** Opening a saved search's results from the Dashboard rail clears its "N new" badge (spec §6).
- * Rendered only while `?search_id=` is present, so the real `useMarkSearchViewed` mutation (and
- * the `useQueryClient` it needs) is never invoked on a plain `/jobs` visit. */
-function MarkSearchViewed({ searchId }: { searchId: string }) {
-  const markViewed = useMarkSearchViewed();
-  const { mutateAsync } = markViewed;
-
-  useEffect(() => {
-    void mutateAsync(searchId).catch(() => {});
-  }, [searchId, mutateAsync]);
-
-  return null;
-}
 
 function JobsPageInner() {
   const router = useRouter();

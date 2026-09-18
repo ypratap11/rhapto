@@ -49,7 +49,9 @@ export function JobCard({ job, track }: { job: JobOut; track: TrackInfo | null }
       <p className="line-clamp-2 text-sm text-muted-foreground">{truncate(job.jd_text, 160)}</p>
       <p className="mt-auto text-xs text-muted-foreground">Posted · {formatRelative(job.posted_at ?? job.discovered_at)}</p>
       <div className="flex items-center justify-between gap-2 border-t border-border pt-3">
-        <Button size="sm" render={<Link href={`/jobs/${job.id}`} />}>
+        {/* Rendered as an <a>, not a <button> — nativeButton={false} tells Base UI to apply link
+            semantics instead of claiming native button semantics it can't back. */}
+        <Button size="sm" nativeButton={false} render={<Link href={`/jobs/${job.id}`} />}>
           Tailor
         </Button>
         <NotInterestedButton job={job} size="sm" />

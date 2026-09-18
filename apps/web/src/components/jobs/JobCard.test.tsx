@@ -35,6 +35,24 @@ const job = {
 const track = { name: "Data PM", min_fit: 60 };
 
 describe("JobCard", () => {
+  // Must run before any other test in this file renders a JobCard: Base UI's dev warnings are
+  // logged at most once per unique message for the life of the module (see
+  // `@base-ui/utils/createLogOnce`), so once some other test's render has already triggered it,
+  // a later spy here would see nothing regardless of whether the bug is still present. Base UI
+  // warns when a Button renders a non-<button> element (the Tailor link) while its `nativeButton`
+  // prop is still true — a real accessibility defect (the element claims native button semantics
+  // it can't back), not just console noise. Nothing else asserts on console output, so this would
+  // otherwise ship silently every time.
+  it("does not warn on the console about the Tailor button's element type", () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    render(<JobCard job={job} track={track} />);
+    expect(errorSpy).not.toHaveBeenCalled();
+    expect(warnSpy).not.toHaveBeenCalled();
+    errorSpy.mockRestore();
+    warnSpy.mockRestore();
+  });
+
   it("shows the fit ring, the logo initial, chips, salary and the posted line", () => {
     render(<JobCard job={job} track={track} />);
     expect(screen.getByRole("img", { name: "Fit 82" })).toBeInTheDocument();
