@@ -54,7 +54,7 @@ describe("flow", () => {
     });
     expect(flowPrompt({ needsReview: 3, nextTailor: tailorJob, nextReview: reviewJob })).toEqual({
       text: "3 packages ready to review",
-      href: "/packages?filter=review",
+      href: "/resumes?tab=review",
     });
     expect(flowPrompt({ needsReview: 0, nextTailor: tailorJob, nextReview: reviewJob })).toEqual({
       text: "Next: tailor ExampleCo, Data PM (fit 72)",

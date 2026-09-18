@@ -31,7 +31,7 @@ export function flowPrompt(input: {
 }): { text: string; href: string } | null {
   if (input.needsReview > 0) {
     const n = input.needsReview;
-    return { text: `${n} package${n === 1 ? "" : "s"} ready to review`, href: "/packages?filter=review" };
+    return { text: `${n} package${n === 1 ? "" : "s"} ready to review`, href: "/resumes?tab=review" };
   }
   if (input.nextTailor) {
     const j = input.nextTailor;

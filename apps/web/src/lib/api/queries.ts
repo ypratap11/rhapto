@@ -172,19 +172,18 @@ export const packageKeys = {
 };
 
 export type PackageListItem = components["schemas"]["PackageListItem"];
-export type PackageListFilter = "all" | "review" | "blocked" | "applied" | "ready";
+// Spec §3.4's four tabs. "all" is gone: every row belongs to exactly one of these.
+export type PackageListFilter = "review" | "ready" | "blocked" | "applied";
 
 export const packageListKeys = {
   list: (filter: PackageListFilter) => ["package-list", filter] as const,
 };
 
-export const PACKAGE_LIST_PARAMS: Record<PackageListFilter, { status?: "draft" | "ready" | "blocked"; applied?: boolean }> = {
-  all: {},
-  review: { applied: false, status: "draft" },
-  blocked: { status: "blocked" },
+export const PACKAGE_LIST_PARAMS: Record<PackageListFilter, { status?: "draft" | "ready" | "blocked"; applied?: boolean; archived?: boolean }> = {
+  review: { applied: false, status: "draft", archived: false },
+  ready: { applied: false, status: "ready", archived: false },
+  blocked: { status: "blocked", archived: false },
   applied: { applied: true },
-  // Dashboard's Active applications: packages tailored and ready to go out, but not yet applied to.
-  ready: { status: "ready" },
 };
 
 export function usePackageList(filter: PackageListFilter) {
@@ -225,6 +224,16 @@ export function usePackage(id: string, enabled = true) {
 
 export function usePackages(jobId: string) {
   return useQuery({ queryKey: packageKeys.packages(jobId), queryFn: () => unwrap(apiClient().GET("/api/v1/jobs/{job_id}/packages", { params: { path: { job_id: jobId } } })) });
+}
+
+/** Assumption A2: PATCH /packages/{id} {status:"ready"} is how a reviewed resume becomes Ready. */
+export function useMarkPackageReady() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      unwrap(apiClient().PATCH("/api/v1/packages/{package_id}", { params: { path: { package_id: id } }, body: { status: "ready" } })),
+    onSuccess: (updated) => invalidatePackages(queryClient, updated.job_id),
+  });
 }
 
 /** "Skip" on the job page (spec: DidYouApplyPrompt) — archives the draft so it leaves the review

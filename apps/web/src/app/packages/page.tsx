@@ -9,15 +9,16 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { usePackageList, useTracks, type PackageListFilter } from "@/lib/api/queries";
 
+// This route is superseded by /resumes (next.config.ts 307-redirects /packages there); kept
+// buildable only until Task 14 deletes it.
 const FILTERS: { value: PackageListFilter; label: string }[] = [
-  { value: "all", label: "All" },
   { value: "review", label: "Needs review" },
   { value: "blocked", label: "Blocked" },
   { value: "applied", label: "Applied" },
 ];
 
 function isPackageListFilter(value: string | null): value is PackageListFilter {
-  return value === "all" || value === "review" || value === "blocked" || value === "applied";
+  return value === "review" || value === "blocked" || value === "applied" || value === "ready";
 }
 
 function PackagesPageInner() {

@@ -12,7 +12,6 @@ const EMPTY_TEXT: Record<PackageListFilter, string> = {
   review: "Nothing to review",
   blocked: "No blocked packages",
   applied: "Nothing applied yet",
-  all: "No packages yet",
   // Not one of this page's own filter chips — the Dashboard's Active applications card is the only
   // caller of usePackageList("ready"); this key exists so PackageListFilter stays exhaustive here.
   ready: "Nothing ready yet",

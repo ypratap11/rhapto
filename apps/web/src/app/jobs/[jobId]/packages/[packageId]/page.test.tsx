@@ -6,6 +6,7 @@ import type { PackageOut } from "@/lib/api/queries";
 vi.mock("next/navigation", () => ({
   useParams: () => ({ jobId: "j1", packageId: "pkg-1" }),
   useRouter: () => ({ push: vi.fn() }),
+  useSearchParams: () => new URLSearchParams(),
 }));
 
 const tunePackage = {

@@ -27,7 +27,7 @@ describe("StepBar", () => {
     render(<StepBar />);
     expect(screen.getByText("Find").closest("li")).toHaveAttribute("aria-current", "step");
     const link = screen.getByRole("link", { name: "2 packages ready to review" });
-    expect(link).toHaveAttribute("href", "/packages?filter=review");
+    expect(link).toHaveAttribute("href", "/resumes?tab=review");
   });
 
   it("marks Apply current on the pipeline route", () => {

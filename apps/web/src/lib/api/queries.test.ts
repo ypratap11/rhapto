@@ -68,9 +68,9 @@ describe("keys.jobs", () => {
 
 describe("PACKAGE_LIST_PARAMS", () => {
   it("maps each PackageListFilter to its query params", () => {
-    expect(PACKAGE_LIST_PARAMS.all).toEqual({});
-    expect(PACKAGE_LIST_PARAMS.review).toEqual({ applied: false, status: "draft" });
-    expect(PACKAGE_LIST_PARAMS.blocked).toEqual({ status: "blocked" });
+    expect(PACKAGE_LIST_PARAMS.review).toEqual({ applied: false, status: "draft", archived: false });
+    expect(PACKAGE_LIST_PARAMS.ready).toEqual({ applied: false, status: "ready", archived: false });
+    expect(PACKAGE_LIST_PARAMS.blocked).toEqual({ status: "blocked", archived: false });
     expect(PACKAGE_LIST_PARAMS.applied).toEqual({ applied: true });
   });
 });

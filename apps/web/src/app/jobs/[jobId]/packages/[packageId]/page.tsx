@@ -1,10 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { useParams, useRouter } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
+import { Suspense, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { ApiErrorBanner } from "@/components/shell/ApiErrorBanner";
+import { Breadcrumbs } from "@/components/shell/Breadcrumbs";
 import { ChangesPane } from "@/components/review/ChangesPane";
 import { GuardrailPanel } from "@/components/review/GuardrailPanel";
 import { JdPane } from "@/components/review/JdPane";
@@ -36,9 +37,10 @@ function scrollToChange(path: string): void {
   document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "center" });
 }
 
-export default function PackageReviewPage() {
+function PackageReviewPageInner() {
   const { jobId, packageId } = useParams<{ jobId: string; packageId: string }>();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const job = useJob(jobId);
   const pkg = usePackage(packageId);
   const packages = usePackages(jobId);
@@ -48,7 +50,7 @@ export default function PackageReviewPage() {
   const patch = usePatchPackage();
   const patchEdits = usePatchPackageEdits();
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
-  const [regenOpen, setRegenOpen] = useState(false);
+  const [regenOpen, setRegenOpen] = useState(searchParams.get("regenerate") === "1");
 
   const blockMap = useMemo(() => new Map<string, Block>((blocks.data ?? []).map((b) => [b.id, b])), [blocks.data]);
   const violationsByPath = useMemo(() => new Set((pkg.data?.guardrail_report.violations ?? []).map((v) => v.path)), [pkg.data]);
@@ -82,8 +84,11 @@ export default function PackageReviewPage() {
     router.push(`/jobs/${jobId}/packages/${created.id}`);
   }
 
+  const crumbLabel = `${job.data.company ?? "Unknown company"} · ${job.data.title ?? "Untitled role"}`;
+
   return (
     <div className="space-y-6">
+      <Breadcrumbs items={[{ label: "Resumes", href: "/resumes" }, { label: crumbLabel, href: `/jobs/${jobId}` }, { label: `v${pkg.data.version}` }]} />
       <div className="sticky top-0 z-10 -mx-6 border-b border-border bg-background/95 px-6 py-3 backdrop-blur">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
@@ -163,5 +168,13 @@ export default function PackageReviewPage() {
         )}
       </div>
     </div>
+  );
+}
+
+export default function PackageReviewPage() {
+  return (
+    <Suspense fallback={<Skeleton className="h-64 w-full" />}>
+      <PackageReviewPageInner />
+    </Suspense>
   );
 }
