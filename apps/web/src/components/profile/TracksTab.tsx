@@ -115,12 +115,12 @@ export function TracksTab() {
               <div className="space-y-1">
                 <Label htmlFor="track-id">Id</Label>
                 <Input id="track-id" value={form.id} onChange={(e) => set({ id: e.target.value })} disabled={!isNew} />
-                {errors.id ? <p className="text-xs text-red-700">{errors.id}</p> : null}
+                {errors.id ? <p className="text-xs text-destructive">{errors.id}</p> : null}
               </div>
               <div className="space-y-1">
                 <Label htmlFor="track-name">Name</Label>
                 <Input id="track-name" value={form.name} onChange={(e) => set({ name: e.target.value })} />
-                {errors.name ? <p className="text-xs text-red-700">{errors.name}</p> : null}
+                {errors.name ? <p className="text-xs text-destructive">{errors.name}</p> : null}
               </div>
               <div className="space-y-1">
                 <Label htmlFor="track-description">Description</Label>
@@ -152,12 +152,12 @@ export function TracksTab() {
                 ) : (
                   <Input aria-label="Resume base" value={form.resume_base} onChange={(e) => set({ resume_base: e.target.value })} placeholder="base id" />
                 )}
-                {errors.resume_base ? <p className="text-xs text-red-700">{errors.resume_base}</p> : null}
+                {errors.resume_base ? <p className="text-xs text-destructive">{errors.resume_base}</p> : null}
               </div>
               <div className="space-y-1">
                 <Label htmlFor="track-min-fit">Min fit (0-100)</Label>
                 <Input id="track-min-fit" type="number" min={0} max={100} value={form.min_fit} onChange={(e) => set({ min_fit: e.target.value })} />
-                {errors.min_fit ? <p className="text-xs text-red-700">{errors.min_fit}</p> : null}
+                {errors.min_fit ? <p className="text-xs text-destructive">{errors.min_fit}</p> : null}
               </div>
               <div className="flex justify-end gap-2">
                 <Button variant="outline" onClick={() => setForm(null)}>

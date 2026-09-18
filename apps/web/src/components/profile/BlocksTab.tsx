@@ -56,7 +56,7 @@ export function BlocksTab() {
       ) : (
         <Input id={`block-${id}`} value={String(form?.[id] ?? "")} onChange={(e) => set({ [id]: e.target.value } as Partial<BlockForm>)} disabled={id === "id" && !isNew} />
       )}
-      {errors[id] ? <p className="text-xs text-red-700">{errors[id]}</p> : null}
+      {errors[id] ? <p className="text-xs text-destructive">{errors[id]}</p> : null}
     </div>
   );
 
@@ -84,7 +84,7 @@ export function BlocksTab() {
           { key: "type", header: "Type", render: (b) => b.type },
           { key: "org", header: "Org / role", render: (b) => [b.org, b.role].filter(Boolean).join(" · ") },
           { key: "period", header: "Period", render: (b) => b.period ?? "" },
-          { key: "verified", header: "Verified", render: (b) => <StatusBadge tone={b.verified ? "green" : "zinc"}>{b.verified ? "yes" : "no"}</StatusBadge> },
+          { key: "verified", header: "Verified", render: (b) => <StatusBadge tone={b.verified ? "high" : "muted"}>{b.verified ? "yes" : "no"}</StatusBadge> },
         ]}
       />
       <Sheet open={form !== null} onOpenChange={(o) => !o && setForm(null)}>

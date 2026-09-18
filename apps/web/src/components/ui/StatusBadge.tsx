@@ -1,13 +1,14 @@
 import { Badge } from "@/components/ui/badge";
 import type { Tone } from "@/lib/status";
 
+// 6px chips (spec §8): the Badge base is a 999px pill, so every tone overrides the radius.
 const TONE_CLASS: Record<Tone, string> = {
-  slate: "bg-slate-100 text-slate-700 border-slate-200",
-  amber: "bg-amber-100 text-amber-800 border-amber-200",
-  green: "bg-green-100 text-green-800 border-green-200",
-  zinc: "bg-zinc-100 text-zinc-600 border-zinc-200",
-  red: "bg-red-100 text-red-800 border-red-200",
-  indigo: "bg-indigo-100 text-indigo-800 border-indigo-200",
+  neutral: "rounded-chip border-border bg-surface-muted text-foreground",
+  muted: "rounded-chip border-border bg-surface-muted text-muted-foreground",
+  high: "rounded-chip border-fit-high/30 bg-fit-high-bg text-fit-high",
+  mid: "rounded-chip border-fit-mid/30 bg-fit-mid-bg text-fit-mid",
+  primary: "rounded-chip border-primary/30 bg-primary/10 text-primary",
+  danger: "rounded-chip border-destructive/30 bg-destructive/10 text-destructive",
 };
 
 export function StatusBadge({ tone, children }: { tone: Tone; children: React.ReactNode }) {

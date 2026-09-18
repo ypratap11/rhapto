@@ -18,7 +18,7 @@ export function JobActionButton({ job, size = "default" }: { job: JobOut; size?:
   if (state === "applied") {
     return (
       <div className="flex items-center gap-2">
-        <StatusBadge tone="green">Applied</StatusBadge>
+        <StatusBadge tone="high">Applied</StatusBadge>
         <Link href="/pipeline" className="text-sm underline">
           Pipeline
         </Link>

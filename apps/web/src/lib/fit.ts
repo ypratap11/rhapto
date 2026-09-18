@@ -1,10 +1,10 @@
 import type { Tone } from "./status";
 
 export function fitTone(fit: number | null, minFit: number | null): Tone {
-  if (fit === null || minFit === null) return "slate";
-  if (fit >= 75) return "green";
-  if (fit >= minFit) return "amber";
-  return "slate";
+  if (fit === null || minFit === null) return "neutral";
+  if (fit >= 75) return "high";
+  if (fit >= minFit) return "mid";
+  return "neutral";
 }
 
 export function formatFit(fit: number | null): string {
@@ -38,4 +38,10 @@ export const SOURCE_LABEL: Record<string, string> = {
   ashby: "Ashby",
   remoteok: "RemoteOK",
   "hn-hiring": "HN",
+  themuse: "The Muse",
+  remotive: "Remotive",
+  adzuna: "Adzuna",
+  jooble: "Jooble",
+  jsearch: "JSearch",
+  workday: "Workday",
 };

@@ -44,9 +44,9 @@ export function NextUp({ jobs }: { jobs: JobOut[] }) {
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="font-medium">{job.company ?? "Unknown company"}</span>
                     <FitBadge fit={job.best_fit ?? null} trackName={trackName(job)} minFit={null} />
-                    {locationTierLabel(job.location_tier) ? <StatusBadge tone="zinc">{locationTierLabel(job.location_tier)}</StatusBadge> : null}
+                    {locationTierLabel(job.location_tier) ? <StatusBadge tone="muted">{locationTierLabel(job.location_tier)}</StatusBadge> : null}
                     {/* Which mode produced the draft waiting for review, so a mixed-mode queue is readable. */}
-                    {job.latest_package ? <StatusBadge tone="zinc">{job.latest_package.mode}</StatusBadge> : null}
+                    {job.latest_package ? <StatusBadge tone="muted">{job.latest_package.mode}</StatusBadge> : null}
                   </div>
                   <p className="truncate text-sm text-muted-foreground">{job.title ?? "Untitled role"}</p>
                 </div>

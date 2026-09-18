@@ -106,7 +106,7 @@ export function RegenerateDialog({ job, pkg, open, onOpenChange }: { job: JobOut
             </Select>
           </div>
           {error ? (
-            <p role="alert" className="text-sm text-red-700">
+            <p role="alert" className="text-sm text-destructive">
               {error}
             </p>
           ) : null}

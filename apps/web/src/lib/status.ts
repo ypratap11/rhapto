@@ -11,23 +11,24 @@ export const STATUS_LABEL: Record<ApplicationStatus, string> = {
   closed: "Closed",
 };
 
-export type Tone = "slate" | "amber" | "green" | "zinc" | "red" | "indigo";
+/** Status-pill tones, named for the token they paint with (spec §8: fit and primary tokens only). */
+export type Tone = "neutral" | "muted" | "high" | "mid" | "primary" | "danger";
 
 export function statusTone(status: string): Tone {
   switch (status) {
     case "applied":
-      return "green";
+      return "high";
     case "screen":
     case "interview":
-      return "indigo";
+      return "primary";
     case "offer":
-      return "amber";
+      return "mid";
     case "closed":
-      return "zinc";
+      return "muted";
     default:
-      return "slate";
+      return "neutral";
   }
 }
 
-export const PACKAGE_STATUS_TONE: Record<string, Tone> = { draft: "slate", blocked: "amber" };
-export const TASK_STATUS_TONE: Record<string, Tone> = { queued: "slate", running: "indigo", succeeded: "green", failed: "red" };
+export const PACKAGE_STATUS_TONE: Record<string, Tone> = { draft: "neutral", ready: "high", blocked: "mid" };
+export const TASK_STATUS_TONE: Record<string, Tone> = { queued: "neutral", running: "primary", succeeded: "high", failed: "danger" };

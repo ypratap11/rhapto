@@ -105,13 +105,13 @@ export function TaskProgress({
           const done = state.status === "succeeded" || i < activeIndex;
           const active = i === activeIndex && state.status === "running";
           return (
-            <li key={step} className={`rounded-full border px-2 py-0.5 ${done ? "border-green-300 bg-green-50 text-green-800" : active ? "border-accent bg-accent/10 text-accent" : "border-border text-muted-foreground"}`}>
+            <li key={step} className={`rounded-full border px-2 py-0.5 ${done ? "border-fit-high/40 bg-fit-high-bg text-fit-high" : active ? "border-accent bg-accent/10 text-accent" : "border-border text-muted-foreground"}`}>
               {step}
             </li>
           );
         })}
       </ol>
-      {state.status === "failed" ? <p className="text-sm text-red-700">{state.error}</p> : null}
+      {state.status === "failed" ? <p className="text-sm text-destructive">{state.error}</p> : null}
       {kind === "tailor" && state.status === "succeeded" && state.packageId ? (
         <Link href={`/jobs/${jobId}/packages/${state.packageId}`} className="text-sm text-accent underline">
           Open package {state.packageStatus === "blocked" ? "(blocked)" : ""}

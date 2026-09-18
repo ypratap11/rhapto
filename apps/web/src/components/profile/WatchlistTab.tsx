@@ -75,7 +75,7 @@ function WatchlistBody({ initial, boardOptions }: { initial: WatchlistEntry[]; b
   async function save() {
     const entries: WatchlistEntry[] = rows
       .filter((r) => r.company.trim() && r.board.trim())
-      .map((r) => ({ company: r.company, source: r.source, board: r.board, keywords: splitList(r.keywords) }));
+      .map((r) => ({ company: r.company, source: r.source, board: r.board, keywords: splitList(r.keywords), discovered: r.discovered }));
     const dropped = rows.length - entries.length;
     try {
       await put.mutateAsync(entries);
@@ -149,7 +149,7 @@ function WatchlistBody({ initial, boardOptions }: { initial: WatchlistEntry[]; b
         </TableBody>
       </Table>
       <div className="flex justify-between">
-        <Button variant="outline" onClick={() => setRows((r) => [...r, { company: "", source: "greenhouse", board: "", keywords: "" }])}>
+        <Button variant="outline" onClick={() => setRows((r) => [...r, { company: "", source: "greenhouse", board: "", keywords: "", discovered: false }])}>
           Add row
         </Button>
         <Button onClick={save} disabled={put.isPending}>

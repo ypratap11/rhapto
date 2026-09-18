@@ -163,7 +163,7 @@ export function LlmProviderSection() {
       <CardContent className="space-y-4">
         {settings ? <p className="text-sm text-muted-foreground">{statusLine(settings, providers)}</p> : null}
         {alerts.length > 0 ? (
-          <div role="alert" className="space-y-1 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm">
+          <div role="alert" className="space-y-1 rounded-md border border-fit-mid/40 bg-fit-mid-bg px-3 py-2 text-sm text-foreground">
             {alerts.map((a) => (
               <p key={a.slot}>{a.message}</p>
             ))}
@@ -226,7 +226,7 @@ export function LlmProviderSection() {
               ) : null}
             </fieldset>
             {result?.ok ? (
-              <p role="status" className="text-sm text-green-700">
+              <p role="status" className="text-sm text-fit-high">
                 ✓ Connected · {result.model ?? model}
               </p>
             ) : null}

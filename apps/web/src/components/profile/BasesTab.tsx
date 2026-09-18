@@ -115,12 +115,12 @@ export function BasesTab() {
               <div className="space-y-1">
                 <Label htmlFor="base-id">Id</Label>
                 <Input id="base-id" value={form.id} onChange={(e) => set({ id: e.target.value })} disabled={!isNew} />
-                {errors.id ? <p className="text-xs text-red-700">{errors.id}</p> : null}
+                {errors.id ? <p className="text-xs text-destructive">{errors.id}</p> : null}
               </div>
               <div className="space-y-1">
                 <Label htmlFor="base-name">Name</Label>
                 <Input id="base-name" value={form.name} onChange={(e) => set({ name: e.target.value })} />
-                {errors.name ? <p className="text-xs text-red-700">{errors.name}</p> : null}
+                {errors.name ? <p className="text-xs text-destructive">{errors.name}</p> : null}
               </div>
               <div className="space-y-1">
                 <Label htmlFor="base-section-order">Section order (comma separated)</Label>

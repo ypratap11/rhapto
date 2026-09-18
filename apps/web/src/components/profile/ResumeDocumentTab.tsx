@@ -118,7 +118,7 @@ export function ResumeDocumentTab() {
                 if (!paragraph) return null;
                 return (
                   <li key={id} className="flex items-start gap-2 text-sm">
-                    <StatusBadge tone={EDITABLE_ROLES.has(paragraph.role) ? "green" : "zinc"}>{paragraph.role}</StatusBadge>
+                    <StatusBadge tone={EDITABLE_ROLES.has(paragraph.role) ? "high" : "muted"}>{paragraph.role}</StatusBadge>
                     <span className="text-muted-foreground">{paragraph.text}</span>
                   </li>
                 );

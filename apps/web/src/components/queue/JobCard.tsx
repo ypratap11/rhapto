@@ -35,11 +35,11 @@ export function JobCard({ job, onDelete, tracks }: { job: JobOut; onDelete: (job
         <div className="min-w-0 space-y-1">
           <div className="flex flex-wrap items-center gap-2">
             <FitBadge fit={job.best_fit ?? null} trackName={track?.name ?? null} minFit={track?.min_fit ?? null} />
-            <StatusBadge tone="zinc">{SOURCE_LABEL[job.source] ?? job.source}</StatusBadge>
-            {locationTierLabel(job.location_tier) ? <StatusBadge tone="zinc">{locationTierLabel(job.location_tier)}</StatusBadge> : null}
-            {job.repost_of ? <StatusBadge tone="zinc">Re-post</StatusBadge> : null}
+            <StatusBadge tone="muted">{SOURCE_LABEL[job.source] ?? job.source}</StatusBadge>
+            {locationTierLabel(job.location_tier) ? <StatusBadge tone="muted">{locationTierLabel(job.location_tier)}</StatusBadge> : null}
+            {job.repost_of ? <StatusBadge tone="muted">Re-post</StatusBadge> : null}
             <span className="font-medium">{job.company ?? "Unknown company"}</span>
-            {pkg ? <StatusBadge tone={PACKAGE_STATUS_TONE[pkg.status] ?? "slate"}>{`v${pkg.version} · ${pkg.status}`}</StatusBadge> : null}
+            {pkg ? <StatusBadge tone={PACKAGE_STATUS_TONE[pkg.status] ?? "neutral"}>{`v${pkg.version} · ${pkg.status}`}</StatusBadge> : null}
             {job.application_status ? (
               <StatusBadge tone={statusTone(job.application_status)}>{STATUS_LABEL[job.application_status as ApplicationStatus] ?? job.application_status}</StatusBadge>
             ) : null}

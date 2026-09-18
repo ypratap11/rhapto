@@ -56,8 +56,8 @@ export function PackageTable({
               </TableCell>
               <TableCell>
                 <div className="flex flex-wrap items-center gap-1.5">
-                  <StatusBadge tone={PACKAGE_STATUS_TONE[row.status] ?? "slate"}>{`v${row.version} · ${row.status}`}</StatusBadge>
-                  <StatusBadge tone="zinc">{row.mode}</StatusBadge>
+                  <StatusBadge tone={PACKAGE_STATUS_TONE[row.status] ?? "neutral"}>{`v${row.version} · ${row.status}`}</StatusBadge>
+                  <StatusBadge tone="muted">{row.mode}</StatusBadge>
                 </div>
               </TableCell>
               <TableCell>

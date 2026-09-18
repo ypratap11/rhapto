@@ -83,7 +83,7 @@ export function BulletRow({
   return (
     <li>
       <div
-        className={`flex items-start gap-1 rounded-md border px-3 py-2 text-sm ${selected ? "border-accent bg-accent/5" : hasViolation ? "border-amber-300 bg-amber-50" : "border-transparent hover:border-border"}`}
+        className={`flex items-start gap-1 rounded-md border px-3 py-2 text-sm ${selected ? "border-accent bg-accent/5" : hasViolation ? "border-fit-mid/40 bg-fit-mid-bg" : "border-transparent hover:border-border"}`}
       >
         <button type="button" onClick={() => onSelect(path)} onDoubleClick={editable ? startEditing : undefined} aria-pressed={selected} className="flex-1 text-left">
           <span>{text}</span>

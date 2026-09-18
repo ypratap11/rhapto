@@ -1,11 +1,31 @@
 "use client";
 
+import { diffWords } from "diff";
 import { useId, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { DocumentSurface } from "@/components/ui/document-surface";
 import { Label } from "@/components/ui/label";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { Textarea } from "@/components/ui/textarea";
 import type { DocParagraph, EditPatch, PackageOut } from "@/lib/api/queries";
+
+/** Word-level diff of a change, `before` read against `after`, one side at a time: the
+ * "before" side renders unchanged words plain plus removed words in `<del>` (what this used to
+ * say); the "after" side renders unchanged words plain plus added words in `<ins>` (what it says
+ * now). Each side only ever shows its own kind of change, so the two never need to sit in the
+ * same node. */
+function WordDiff({ before, after, side }: { before: string; after: string; side: "before" | "after" }) {
+  const parts = useMemo(() => diffWords(before, after), [before, after]);
+  const nodes: React.ReactNode[] = [];
+  parts.forEach((part, i) => {
+    if (side === "before" && part.added) return;
+    if (side === "after" && part.removed) return;
+    if (part.removed) nodes.push(<del key={`d${i}`} className="diff-del">{part.value}</del>);
+    else if (part.added) nodes.push(<ins key={`i${i}`} className="diff-add">{part.value}</ins>);
+    else nodes.push(<span key={`s${i}`}>{part.value}</span>);
+  });
+  return <>{nodes}</>;
+}
 
 /** The rewritten text of one paragraph, keyed by the paragraph the tune touched. */
 type Draft = { paragraph_id: string; after: string };
@@ -47,10 +67,10 @@ function ChangesPaneBody({ pkg, violationsByPath, onSave }: { pkg: PackageOut; v
   }
 
   return (
-    <div className="space-y-4">
+    <DocumentSurface className="space-y-6">
       {/* The heading id is the scroll target for a guardrail violation whose path is the whole
           `edits` list rather than one card, so it stays a stable, simple `changes`. */}
-      <section aria-labelledby="changes" className="space-y-4 rounded-md border border-border bg-card p-4">
+      <section aria-labelledby="changes" className="space-y-4">
         <div className="flex flex-wrap items-baseline justify-between gap-2">
           <h2 id="changes" className="font-sans text-sm font-medium">
             Changes
@@ -70,6 +90,7 @@ function ChangesPaneBody({ pkg, violationsByPath, onSave }: { pkg: PackageOut; v
                 before={edit.before}
                 reason={edit.reason}
                 after={drafts[i]?.after ?? edit.after}
+                originalAfter={edit.after}
                 role={paragraphById.get(edit.paragraph_id)?.role ?? "unknown"}
                 section={paragraphById.get(edit.paragraph_id)?.section ?? sectionByParagraphId.get(edit.paragraph_id) ?? null}
                 hasViolation={violationsByPath.has(`edits[${i}]`)}
@@ -94,7 +115,7 @@ function ChangesPaneBody({ pkg, violationsByPath, onSave }: { pkg: PackageOut; v
         ) : null}
       </section>
       {paragraphs.length ? (
-        <section aria-labelledby="full-document-heading" className="space-y-2 rounded-md border border-border bg-card p-4">
+        <section aria-labelledby="full-document-heading" className="space-y-2 border-t border-border pt-6">
           <h3 id="full-document-heading" className="font-sans text-xs font-semibold uppercase tracking-wide text-muted-foreground">
             Full document
           </h3>
@@ -106,7 +127,7 @@ function ChangesPaneBody({ pkg, violationsByPath, onSave }: { pkg: PackageOut; v
                 return (
                   <li
                     key={p.id}
-                    className={`whitespace-pre-wrap ${edited === undefined ? "border-l-2 border-transparent pl-3" : "border-l-2 border-amber-400 bg-amber-50/50 pl-3"} ${p.role === "heading" ? "font-sans text-xs font-semibold uppercase tracking-wide text-muted-foreground" : ""}`}
+                    className={`whitespace-pre-wrap ${edited === undefined ? "border-l-2 border-transparent pl-3" : "border-l-2 border-primary/50 bg-primary/5 pl-3"} ${p.role === "heading" ? "font-sans text-xs font-semibold uppercase tracking-wide text-muted-foreground" : ""}`}
                   >
                     {edited ?? p.text}
                   </li>
@@ -115,7 +136,7 @@ function ChangesPaneBody({ pkg, violationsByPath, onSave }: { pkg: PackageOut; v
           </ul>
         </section>
       ) : null}
-    </div>
+    </DocumentSurface>
   );
 }
 
@@ -123,6 +144,7 @@ function ChangeCard({
   index,
   before,
   after,
+  originalAfter,
   reason,
   role,
   section,
@@ -133,6 +155,7 @@ function ChangeCard({
   index: number;
   before: string;
   after: string;
+  originalAfter: string;
   reason: string;
   role: string;
   section: string | null;
@@ -141,23 +164,56 @@ function ChangeCard({
   onChange: (text: string) => void;
 }) {
   const afterId = useId();
+  const [focused, setFocused] = useState(false);
+  // Once this row has actually been edited, keep the textarea up rather than snapping back to
+  // the (now stale) read view on blur.
+  const touched = after !== originalAfter;
+  const showTextarea = editable && (focused || touched);
+
   return (
     <li
       id={`change-${index}`}
       data-violation={hasViolation ? "true" : "false"}
-      className={`space-y-2 rounded-md border p-3 ${hasViolation ? "border-red-400 bg-red-50/40" : "border-border"}`}
+      className={`space-y-3 rounded-control border p-3 ${hasViolation ? "border-destructive/60 bg-destructive/5" : "border-border"}`}
     >
       <div className="flex flex-wrap items-center gap-2">
-        <StatusBadge tone="zinc">{role}</StatusBadge>
+        <StatusBadge tone="muted">{role}</StatusBadge>
         {section ? <span className="text-xs text-muted-foreground">{section}</span> : null}
       </div>
-      <div className="space-y-1">
-        <p className="font-sans text-xs font-semibold uppercase tracking-wide text-muted-foreground">Before</p>
-        <p className="whitespace-pre-wrap text-sm text-muted-foreground">{before || "(this paragraph is not in the stored document)"}</p>
-      </div>
-      <div className="space-y-1">
-        <Label htmlFor={afterId}>After</Label>
-        <Textarea id={afterId} value={after} rows={3} readOnly={!editable} aria-invalid={hasViolation} onChange={(e) => onChange(e.target.value)} />
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div className="space-y-1">
+          <p className="font-sans text-xs font-semibold uppercase tracking-wide text-muted-foreground">Before</p>
+          <p data-slot="before-diff" className="whitespace-pre-wrap text-sm text-muted-foreground">
+            {before ? <WordDiff before={before} after={after} side="before" /> : "(this paragraph is not in the stored document)"}
+          </p>
+        </div>
+        <div className="space-y-1">
+          <Label htmlFor={afterId}>After</Label>
+          {!showTextarea ? (
+            <div
+              data-slot="after-preview"
+              aria-hidden="true"
+              onClick={editable ? () => document.getElementById(afterId)?.focus() : undefined}
+              className={`min-h-16 whitespace-pre-wrap rounded-lg border border-input px-2.5 py-2 text-sm text-foreground ${editable ? "cursor-text hover:border-primary/50" : ""}`}
+            >
+              {before ? <WordDiff before={before} after={after} side="after" /> : after}
+            </div>
+          ) : null}
+          <Textarea
+            id={afterId}
+            value={after}
+            rows={3}
+            readOnly={!editable}
+            // A read-only pane is not something to tab into: the sr-only mirror of the preview would
+            // otherwise put an unreachable-looking stop between every change card.
+            tabIndex={editable ? undefined : -1}
+            aria-invalid={hasViolation}
+            onChange={(e) => onChange(e.target.value)}
+            onFocus={() => setFocused(true)}
+            onBlur={() => setFocused(false)}
+            className={showTextarea ? "" : "sr-only"}
+          />
+        </div>
       </div>
       <p className="text-xs text-muted-foreground">{reason}</p>
     </li>

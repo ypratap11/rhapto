@@ -33,7 +33,7 @@ export function RunsDrawer({ open, onOpenChange }: { open: boolean; onOpenChange
               <p className="text-muted-foreground">
                 found {run.found} · {run.new} new
               </p>
-              {run.error ? <p className="text-red-700">{run.error}</p> : null}
+              {run.error ? <p className="text-destructive">{run.error}</p> : null}
             </div>
           ))}
         </div>

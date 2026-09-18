@@ -90,7 +90,7 @@ export default function PackageReviewPage() {
             <p className="text-sm text-muted-foreground">{job.data.company}</p>
             <h1 className="text-2xl">{job.data.title ?? "Package review"}</h1>
             <p className="mt-1 flex items-center gap-2 text-sm text-muted-foreground">
-              <StatusBadge tone={PACKAGE_STATUS_TONE[pkg.data.status] ?? "slate"}>{`v${pkg.data.version} · ${pkg.data.status}`}</StatusBadge>
+              <StatusBadge tone={PACKAGE_STATUS_TONE[pkg.data.status] ?? "neutral"}>{`v${pkg.data.version} · ${pkg.data.status}`}</StatusBadge>
               created {formatDate(pkg.data.created_at)} · {pkg.data.llm_calls} LLM calls · track {pkg.data.track_id}
             </p>
           </div>

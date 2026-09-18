@@ -61,7 +61,7 @@ describe("TaskProgress", () => {
     renderTaskProgress({ taskId: "t2", jobId: "j1", onFinished: vi.fn() });
 
     for (const step of ["extract", "select", "compose", "validate", "repair"]) {
-      expect(screen.getByText(step).className).toContain("border-green-300");
+      expect(screen.getByText(step).className).toContain("border-fit-high");
     }
     // A blocks run never tunes, so claiming a finished `tune` step would be a lie.
     expect(screen.queryByText("tune")).not.toBeInTheDocument();
@@ -75,7 +75,7 @@ describe("TaskProgress", () => {
     });
     renderTaskProgress({ taskId: "t2b", jobId: "j1", onFinished: vi.fn() });
 
-    expect(screen.getByText("tune").className).toContain("border-green-300");
+    expect(screen.getByText("tune").className).toContain("border-fit-high");
     expect(screen.queryByText("select")).not.toBeInTheDocument();
     expect(screen.queryByText("compose")).not.toBeInTheDocument();
     expect(screen.getByText("validate").className).toContain("border-accent");

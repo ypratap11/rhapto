@@ -7,7 +7,7 @@ export function SourceBlockCard({ block }: { block: Block | null }) {
     <section className="space-y-2 rounded-md border border-border bg-card p-4 text-sm">
       <div className="flex items-center justify-between">
         <span className="font-mono text-xs">{block.id}</span>
-        <StatusBadge tone={block.verified ? "green" : "zinc"}>{block.verified ? "verified" : "unverified"}</StatusBadge>
+        <StatusBadge tone={block.verified ? "high" : "muted"}>{block.verified ? "verified" : "unverified"}</StatusBadge>
       </div>
       <p className="text-muted-foreground">{[block.type, block.org, block.role, block.period].filter(Boolean).join(" · ")}</p>
       {block.metric ? <p className="font-mono text-xs">{block.metric}</p> : null}

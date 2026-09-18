@@ -50,31 +50,35 @@ export function PackageActions({
   const showStatusBadge = application !== null && (APPLIED_STATUSES as readonly string[]).includes(application.status);
 
   return (
-    <div className="flex flex-wrap items-center gap-2">
-      <Button variant="outline" onClick={() => downloadFile("pdf")} disabled={!pkg.has_pdf}>
-        <Download className="size-4" aria-hidden /> Download PDF
-      </Button>
-      <Button variant="outline" onClick={() => downloadFile("docx")} disabled={!pkg.has_docx}>
-        <Download className="size-4" aria-hidden /> Download DOCX
-      </Button>
-      <Button variant="outline" onClick={() => downloadFile("zip")}>
-        <Download className="size-4" aria-hidden /> Download zip
-      </Button>
-      <Button variant="outline" onClick={onRegenerate}>
-        <RefreshCw className="size-4" aria-hidden /> Regenerate
-      </Button>
+    <div className="flex flex-wrap items-center gap-3">
+      <div data-slot="button-group" className="inline-flex divide-x divide-border overflow-hidden rounded-control border border-border">
+        <Button variant="outline" className="rounded-none border-0" onClick={() => downloadFile("pdf")} disabled={!pkg.has_pdf}>
+          <Download className="size-4" aria-hidden /> Download PDF
+        </Button>
+        <Button variant="outline" className="rounded-none border-0" onClick={() => downloadFile("docx")} disabled={!pkg.has_docx}>
+          <Download className="size-4" aria-hidden /> Download DOCX
+        </Button>
+        <Button variant="outline" className="rounded-none border-0" onClick={() => downloadFile("zip")}>
+          <Download className="size-4" aria-hidden /> Download zip
+        </Button>
+      </div>
+      <div className="flex items-center gap-2">
+        <Button variant="outline" onClick={onRegenerate}>
+          <RefreshCw className="size-4" aria-hidden /> Regenerate
+        </Button>
+        {showStatusBadge && application ? (
+          <StatusBadge tone={statusTone(application.status)}>{STATUS_LABEL[application.status as ApplicationStatus] ?? application.status}</StatusBadge>
+        ) : (
+          <Button onClick={handleMarkApplied} disabled={isPending}>
+            Mark applied
+          </Button>
+        )}
+      </div>
       {job.url ? (
         <Button variant="outline" render={<a href={job.url} target="_blank" rel="noreferrer" />}>
           <ExternalLink className="size-4" aria-hidden /> Open posting
         </Button>
       ) : null}
-      {showStatusBadge && application ? (
-        <StatusBadge tone={statusTone(application.status)}>{STATUS_LABEL[application.status as ApplicationStatus] ?? application.status}</StatusBadge>
-      ) : (
-        <Button onClick={handleMarkApplied} disabled={isPending}>
-          Mark applied
-        </Button>
-      )}
     </div>
   );
 }

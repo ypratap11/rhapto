@@ -101,7 +101,7 @@ function SheetBody({ application, onOpenChange }: { application: ApplicationOut;
           <span />
         )}
         <AlertDialog>
-          <AlertDialogTrigger render={<Button variant="ghost" size="sm" className="text-red-700" />}>Delete</AlertDialogTrigger>
+          <AlertDialogTrigger render={<Button variant="ghost" size="sm" className="text-destructive" />}>Delete</AlertDialogTrigger>
           <AlertDialogContent>
             <AlertDialogHeader>
               <AlertDialogTitle>Remove this application from the board?</AlertDialogTitle>

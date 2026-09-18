@@ -5,9 +5,14 @@ import { cn } from "cn"
 
 function Table({ className, ...props }: React.ComponentProps<"table">) {
   return (
+    // `overflow-x-auto` alone leaves `overflow-y` computed as `auto` too, with no bounded height —
+    // that makes this div its own scroll container with nothing to scroll, so a `sticky` header
+    // inside it has nothing to stick to. Giving it an explicit max-height makes it a real scroll
+    // panel (vertically and horizontally) so `position: sticky` on `TableHeader` has something to
+    // stick within.
     <div
       data-slot="table-container"
-      className="relative w-full overflow-x-auto"
+      className="relative w-full max-h-[70vh] overflow-auto rounded-card border border-border"
     >
       <table
         data-slot="table"
@@ -22,7 +27,7 @@ function TableHeader({ className, ...props }: React.ComponentProps<"thead">) {
   return (
     <thead
       data-slot="table-header"
-      className={cn("[&_tr]:border-b", className)}
+      className={cn("sticky top-0 z-10 bg-surface [&_tr]:border-b", className)}
       {...props}
     />
   )
@@ -56,7 +61,7 @@ function TableRow({ className, ...props }: React.ComponentProps<"tr">) {
     <tr
       data-slot="table-row"
       className={cn(
-        "border-b transition-colors hover:bg-muted/50 has-aria-expanded:bg-muted/50 data-[state=selected]:bg-muted",
+        "h-11 border-b transition-colors odd:bg-surface even:bg-surface-muted hover:bg-muted/50 has-aria-expanded:bg-muted/50 data-[state=selected]:bg-muted",
         className
       )}
       {...props}
@@ -69,7 +74,7 @@ function TableHead({ className, ...props }: React.ComponentProps<"th">) {
     <th
       data-slot="table-head"
       className={cn(
-        "h-10 px-2 text-left align-middle font-medium whitespace-nowrap text-foreground [&:has([role=checkbox])]:pr-0",
+        "h-11 px-2 text-left align-middle font-medium whitespace-nowrap text-foreground [&:has([role=checkbox])]:pr-0",
         className
       )}
       {...props}

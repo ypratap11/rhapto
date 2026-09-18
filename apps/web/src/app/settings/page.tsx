@@ -89,7 +89,7 @@ export default function SettingsPage() {
             <Label htmlFor="apiUrl">API URL</Label>
             <Input id="apiUrl" ref={apiUrlRef} defaultValue="" placeholder="http://localhost:8000" />
             {apiUrlError ? (
-              <p role="alert" className="text-xs text-red-700">
+              <p role="alert" className="text-xs text-destructive">
                 {apiUrlError}
               </p>
             ) : null}
