@@ -18,6 +18,8 @@ export type SearchState = {
   fit: FitFilter;
   sort: "fit" | "newest";
   hidden: boolean;
+  /** 0-based Browse grid page (Task 5b). Omitted from the URL when 0, same as the other defaults. */
+  page: number;
 };
 
 export const DEFAULT_SEARCH_STATE: SearchState = {
@@ -30,6 +32,7 @@ export const DEFAULT_SEARCH_STATE: SearchState = {
   fit: "all",
   sort: "fit",
   hidden: false,
+  page: 0,
 };
 
 export function toSearchBody(s: SearchState): SearchBody {
@@ -70,6 +73,14 @@ function pick<T extends string>(value: string | null, allowed: T[], fallback: T)
   return allowed.includes(value as T) ? (value as T) : fallback;
 }
 
+/** Any non-positive-integer `page` param (missing, negative, fractional, non-numeric) falls back to 0
+ * rather than producing a negative or fractional page. */
+function pickPage(value: string | null): number {
+  if (value === null) return 0;
+  const n = Number(value);
+  return Number.isInteger(n) && n > 0 ? n : 0;
+}
+
 export function encodeSearchState(s: SearchState): URLSearchParams {
   const p = new URLSearchParams();
   if (s.query) p.set("q", s.query);
@@ -81,6 +92,7 @@ export function encodeSearchState(s: SearchState): URLSearchParams {
   if (s.fit !== "all") p.set("fit", s.fit);
   if (s.sort !== "fit") p.set("sort", s.sort);
   if (s.hidden) p.set("hidden", "true");
+  if (s.page !== 0) p.set("page", String(s.page));
   return p;
 }
 
@@ -96,5 +108,6 @@ export function decodeSearchState(p: URLSearchParams): SearchState {
     fit: pick(p.get("fit"), FITS, "all"),
     sort: p.get("sort") === "newest" ? "newest" : "fit",
     hidden: p.get("hidden") === "true",
+    page: pickPage(p.get("page")),
   };
 }

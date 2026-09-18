@@ -35,4 +35,23 @@ describe("search state", () => {
     expect(passesFit(60, "60")).toBe(true);
     expect(passesFit(null, "75")).toBe(true);
   });
+
+  it("defaults page to 0", () => {
+    expect(DEFAULT_SEARCH_STATE.page).toBe(0);
+  });
+
+  it("round-trips a non-zero page through the URL, but omits page 0", () => {
+    const state = { ...DEFAULT_SEARCH_STATE, page: 3 };
+    const encoded = encodeSearchState(state);
+    expect(encoded.get("page")).toBe("3");
+    expect(decodeSearchState(encoded)).toEqual(state);
+    expect(encodeSearchState(DEFAULT_SEARCH_STATE).has("page")).toBe(false);
+    expect(decodeSearchState(new URLSearchParams())).toEqual(DEFAULT_SEARCH_STATE);
+  });
+
+  it("falls back to page 0 for a garbage page param", () => {
+    expect(decodeSearchState(new URLSearchParams("page=-1")).page).toBe(0);
+    expect(decodeSearchState(new URLSearchParams("page=abc")).page).toBe(0);
+    expect(decodeSearchState(new URLSearchParams("page=1.5")).page).toBe(0);
+  });
 });

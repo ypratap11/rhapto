@@ -12,6 +12,7 @@ import { SearchForm } from "@/components/jobs/SearchForm";
 import { SourceReport } from "@/components/jobs/SourceReport";
 import { ApiErrorBanner } from "@/components/shell/ApiErrorBanner";
 import { HeroBand } from "@/components/shell/HeroBand";
+import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
@@ -20,6 +21,19 @@ import { decodeSearchState, encodeSearchState, passesFit, type SearchState } fro
 
 const SORT_LABEL: Record<SearchState["sort"], string> = { fit: "Fit", newest: "Newest" };
 
+/** Three columns x eight rows at desktop width (Task 5b brief §1). Unlike Recommended Roles, Browse
+ * has no page cap — every job the filters match must stay reachable. */
+export const BROWSE_PAGE_SIZE = 24;
+
+/** The `SearchState` fields whose change means the result set itself changed, as opposed to just the
+ * page. Listed explicitly (rather than "everything but `page`") so a future field is opted in on
+ * purpose, per the brief's own list (query, location, field, remote, date, source, fit, sort, hidden). */
+const RESULT_FIELDS = ["query", "location", "remote", "field", "posted_within", "sources", "fit", "sort", "hidden"] as const;
+
+function resultsChanged(a: SearchState, b: SearchState): boolean {
+  return RESULT_FIELDS.some((key) => a[key] !== b[key]);
+}
+
 function JobsPageInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -27,10 +41,13 @@ function JobsPageInner() {
   const searchId = searchParams.get("search_id");
 
   // Every change also rewrites the URL, so the current search is shareable and "Save this search"
-  // always has the latest filters to save (spec §6).
+  // always has the latest filters to save (spec §6). Any change to the fields that shape the result
+  // set sends the user back to page 0 — landing on "page 12 of 3 results" is the bug this guards
+  // against (Task 5b brief §5). A page-only change (Previous/Next) leaves the requested page alone.
   function updateState(next: SearchState) {
-    setState(next);
-    router.replace(`/jobs?${encodeSearchState(next).toString()}`);
+    const resolved = resultsChanged(state, next) ? { ...next, page: 0 } : next;
+    setState(resolved);
+    router.replace(`/jobs?${encodeSearchState(resolved).toString()}`);
   }
 
   const live = useLiveSearch();
@@ -59,6 +76,18 @@ function JobsPageInner() {
   const jobs = rawJobs.filter((j) => passesFit(j.best_fit ?? null, state.fit));
   const loading = live.status === "idle" ? browse.isLoading : live.status === "searching";
   const error = live.status === "idle" ? browse.error : live.status === "error" ? live.error : null;
+
+  // Client-side paging over the already-fetched, already-filtered set (Task 5b brief §3): no
+  // server-side offset/limit. `pageCount` is clamped to at least 1 so an (unusual) stale `page` from
+  // the URL — e.g. Back to a page that no longer has that many results — never slices past the end.
+  const pageCount = Math.max(1, Math.ceil(jobs.length / BROWSE_PAGE_SIZE));
+  const currentPage = Math.min(state.page, pageCount - 1);
+  const pageJobs = jobs.slice(currentPage * BROWSE_PAGE_SIZE, currentPage * BROWSE_PAGE_SIZE + BROWSE_PAGE_SIZE);
+  const showPager = !loading && jobs.length > 0 && pageCount > 1;
+
+  function goToPage(page: number) {
+    updateState({ ...state, page });
+  }
 
   return (
     <div className="space-y-6">
@@ -96,11 +125,24 @@ function JobsPageInner() {
       <SourceReport perSource={live.perSource} />
       <ApiErrorBanner error={error} />
       <JobGrid
-        jobs={jobs}
+        jobs={pageJobs}
         tracks={tracks}
         loading={loading}
         empty={<EmptyState icon={Search} title="No jobs yet" description="Search above, or let your saved searches fill this in." />}
       />
+      {showPager ? (
+        <nav aria-label="Browse jobs pages" className="flex items-center justify-center gap-3">
+          <Button variant="outline" size="sm" onClick={() => goToPage(currentPage - 1)} disabled={currentPage === 0}>
+            Previous
+          </Button>
+          <span className="text-sm text-muted-foreground" aria-live="polite">
+            Page {currentPage + 1} of {pageCount}
+          </span>
+          <Button variant="outline" size="sm" onClick={() => goToPage(currentPage + 1)} disabled={currentPage >= pageCount - 1}>
+            Next
+          </Button>
+        </nav>
+      ) : null}
     </div>
   );
 }
