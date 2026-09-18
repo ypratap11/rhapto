@@ -32,3 +32,17 @@ export function statusTone(status: string): Tone {
 
 export const PACKAGE_STATUS_TONE: Record<string, Tone> = { draft: "neutral", ready: "high", blocked: "mid" };
 export const TASK_STATUS_TONE: Record<string, Tone> = { queued: "neutral", running: "primary", succeeded: "high", failed: "danger" };
+
+/** Spec §4: a closed application always says why, so the Closed-reasons chart (§13) has data later. */
+export const CLOSED_REASONS = ["rejected", "withdrew", "no_response", "filled"] as const;
+export type ClosedReason = (typeof CLOSED_REASONS)[number];
+export const CLOSED_REASON_LABEL: Record<ClosedReason, string> = {
+  rejected: "Rejected",
+  withdrew: "Withdrew",
+  no_response: "No response",
+  filled: "Filled",
+};
+
+/** The five tabs the Pipeline groups by; `discovered`/`queued` never reach this page. */
+export const PIPELINE_STATUSES = ["applied", "screen", "interview", "offer", "closed"] as const;
+export type PipelineStatus = (typeof PIPELINE_STATUSES)[number];
