@@ -74,4 +74,15 @@ describe("ResumesPage", () => {
     render(<ResumesPage />);
     expect(screen.getByRole("link", { name: /^fix$/i })).toHaveAttribute("href", "/jobs/j3/packages/p3");
   });
+
+  // A paused background refetch (TanStack's networkMode: "online" when the API is unreachable)
+  // must not discard rows already on screen — same shape as src/app/page.tsx:39-49. The banner is
+  // additive, not a replacement for cached content.
+  it("shows the error banner alongside cached rows when a background refetch is paused", () => {
+    searchParams.current = new URLSearchParams("tab=blocked");
+    listState.current = { data: [blockedRow], isLoading: false, error: null, isPaused: true };
+    render(<ResumesPage />);
+    expect(screen.getByRole("alert")).toBeInTheDocument();
+    expect(screen.getByText("BlockedCo")).toBeInTheDocument();
+  });
 });
