@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Button } from "@/components/ui/button";
+import { buttonVariants } from "@/components/ui/button";
 import { FitRing } from "@/components/ui/fit-ring";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import type { JobOut } from "@/lib/api/queries";
@@ -49,11 +49,13 @@ export function JobCard({ job, track }: { job: JobOut; track: TrackInfo | null }
       <p className="line-clamp-2 text-sm text-muted-foreground">{truncate(job.jd_text, 160)}</p>
       <p className="mt-auto text-xs text-muted-foreground">Posted · {formatRelative(job.posted_at ?? job.discovered_at)}</p>
       <div className="flex items-center justify-between gap-2 border-t border-border pt-3">
-        {/* Rendered as an <a>, not a <button> — nativeButton={false} tells Base UI to apply link
-            semantics instead of claiming native button semantics it can't back. */}
-        <Button size="sm" nativeButton={false} render={<Link href={`/jobs/${job.id}`} />}>
+        {/* A plain styled Link, not the Base UI `Button` primitive: Tailor is a navigation, and
+            `Button render={<Link/>}` forces a choice between misreporting this as role="button"
+            (`nativeButton={false}`) or a dev-mode console error (`nativeButton` left at its `true`
+            default on a non-<button> element). `buttonVariants` gets the same look without either. */}
+        <Link href={`/jobs/${job.id}`} className={buttonVariants({ size: "sm" })}>
           Tailor
-        </Button>
+        </Link>
         <NotInterestedButton job={job} size="sm" />
       </div>
     </article>

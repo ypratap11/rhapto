@@ -49,7 +49,7 @@ describe("RecommendedRoles", () => {
     recommendedJobs.mockReturnValue({ data: tenJobs, isLoading: false, error: null });
     render(<RecommendedRoles tracks={tracks} />);
     expect(recommendedJobs).toHaveBeenCalledWith(0);
-    expect(screen.getAllByRole("button", { name: /tailor/i })).toHaveLength(10);
+    expect(screen.getAllByRole("link", { name: /tailor/i })).toHaveLength(10);
     expect(screen.getAllByText("Not interested")).toHaveLength(10);
   });
 
