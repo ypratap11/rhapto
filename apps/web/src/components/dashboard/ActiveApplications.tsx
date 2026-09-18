@@ -1,0 +1,105 @@
+"use client";
+
+import { Package } from "lucide-react";
+import Link from "next/link";
+import { EmptyState } from "@/components/ui/empty-state";
+import { StatusBadge } from "@/components/ui/StatusBadge";
+import { useApplications, useDashboard, usePackageList, type ApplicationOut, type PackageListItem } from "@/lib/api/queries";
+import { formatRelative } from "@/lib/format";
+import { STATUS_LABEL, statusTone, type ApplicationStatus } from "@/lib/status";
+
+const RECENT_COUNT = 3;
+
+type Row = { key: string; href: string; dueToday: boolean; card: React.ReactNode };
+
+function isoDate(iso: string): string {
+  return iso.slice(0, 10);
+}
+
+function applicationCard(application: ApplicationOut, dueToday: boolean): Row {
+  return {
+    key: `application-${application.id}`,
+    href: `/jobs/${application.job.id}`,
+    dueToday,
+    card: (
+      <>
+        {dueToday ? <StatusBadge tone="danger">Follow up today</StatusBadge> : null}
+        <p className="truncate text-sm font-medium">{application.job.company ?? "Unknown company"}</p>
+        <p className="truncate text-xs text-muted-foreground">{application.job.title ?? "Untitled role"}</p>
+        <StatusBadge tone={statusTone(application.status)}>{STATUS_LABEL[application.status as ApplicationStatus] ?? application.status}</StatusBadge>
+        <p className="mt-auto text-xs text-muted-foreground">Updated {formatRelative(application.updated_at)}</p>
+      </>
+    ),
+  };
+}
+
+function readyCard(item: PackageListItem): Row {
+  return {
+    key: `ready-${item.id}`,
+    href: `/jobs/${item.job_id}/packages/${item.id}`,
+    dueToday: false,
+    card: (
+      <>
+        <StatusBadge tone="mid">Ready to apply</StatusBadge>
+        <p className="truncate text-sm font-medium">{item.company ?? "Unknown company"}</p>
+        <p className="truncate text-xs text-muted-foreground">{item.title ?? "Untitled role"}</p>
+      </>
+    ),
+  };
+}
+
+/**
+ * Spec §3.1: the three most recently updated pipeline items, plus tailored packages that are ready
+ * but have no application yet. Anything due for a follow-up today or earlier is pulled to the front
+ * and flagged, rather than living in a separate list the user has to check twice.
+ */
+export function ActiveApplications() {
+  const applications = useApplications();
+  const ready = usePackageList("ready");
+  const dashboard = useDashboard();
+
+  const today = isoDate(new Date().toISOString());
+  const dueTodayIds = new Set(
+    (dashboard.data?.due_followups ?? []).filter((f) => isoDate(f.follow_up_at) <= today).map((f) => f.application_id),
+  );
+
+  const recent = Object.values(applications.data?.columns ?? {})
+    .flat()
+    .sort((a, b) => b.updated_at.localeCompare(a.updated_at))
+    .slice(0, RECENT_COUNT);
+
+  const readyNotApplied = (ready.data ?? []).filter((p) => p.application_status === null);
+
+  const rows = [...recent.map((a) => applicationCard(a, dueTodayIds.has(a.id))), ...readyNotApplied.map(readyCard)].sort(
+    (a, b) => Number(b.dueToday) - Number(a.dueToday),
+  );
+
+  const loading = applications.isLoading || ready.isLoading;
+
+  return (
+    <section aria-labelledby="active-applications-heading" className="space-y-3">
+      <h2 id="active-applications-heading" className="font-sans text-base font-semibold">
+        Active applications
+      </h2>
+      {loading ? (
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3" aria-hidden="true">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <div key={i} className="h-28 animate-pulse rounded-card bg-surface-muted" />
+          ))}
+        </div>
+      ) : rows.length === 0 ? (
+        <EmptyState icon={Package} title="Nothing in flight yet" description="Tailor a role from Recommended roles above to start your pipeline." />
+      ) : (
+        <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {rows.map((row) => (
+            <li key={row.key}>
+              <Link href={row.href} className="hover-lift flex h-full flex-col gap-2 rounded-card border border-border bg-surface p-3 shadow-card">
+                {row.card}
+              </Link>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}

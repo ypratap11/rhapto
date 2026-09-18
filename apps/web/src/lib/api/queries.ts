@@ -172,17 +172,19 @@ export const packageKeys = {
 };
 
 export type PackageListItem = components["schemas"]["PackageListItem"];
-export type PackageListFilter = "all" | "review" | "blocked" | "applied";
+export type PackageListFilter = "all" | "review" | "blocked" | "applied" | "ready";
 
 export const packageListKeys = {
   list: (filter: PackageListFilter) => ["package-list", filter] as const,
 };
 
-export const PACKAGE_LIST_PARAMS: Record<PackageListFilter, { status?: "draft" | "blocked"; applied?: boolean }> = {
+export const PACKAGE_LIST_PARAMS: Record<PackageListFilter, { status?: "draft" | "ready" | "blocked"; applied?: boolean }> = {
   all: {},
   review: { applied: false, status: "draft" },
   blocked: { status: "blocked" },
   applied: { applied: true },
+  // Dashboard's Active applications: packages tailored and ready to go out, but not yet applied to.
+  ready: { status: "ready" },
 };
 
 export function usePackageList(filter: PackageListFilter) {
@@ -524,6 +526,10 @@ export const portalKeys = {
   suggestions: ["taxonomy", "suggestions"] as const,
   sourceSettings: ["settings", "sources"] as const,
   jobsQuery: (s: SearchState, ids?: string[]) => ["jobs", "query", toJobsQuery(s, ids)] as const,
+  // Prefixed with "jobs" (like jobsQuery above), not "dashboard": hiding or unhiding a job should
+  // drop it from the recommendations too, and invalidateJobs already invalidates every ["jobs", ...]
+  // key by prefix. One cache entry for all five pages — see useRecommendedJobs for why.
+  recommended: ["jobs", "recommended"] as const,
 };
 
 export const LIVE_SEARCH_INTERVAL_MS = 3000;
@@ -724,4 +730,32 @@ export function useSourceSettings() {
 /** Career fields and roles for the Field select (spec §5) — static enough per deploy to cache like source settings. */
 export function useTaxonomy() {
   return useQuery({ queryKey: portalKeys.taxonomy, queryFn: () => unwrap(apiClient().GET("/api/v1/taxonomy")), staleTime: 60_000 });
+}
+
+/** The Dashboard's one call: both headline numbers, the checklist, due follow-ups and saved-search counts. */
+export function useDashboard() {
+  return useQuery({ queryKey: portalKeys.dashboard, queryFn: () => unwrap(apiClient().GET("/api/v1/dashboard")), staleTime: 30_000 });
+}
+
+export const RECOMMENDED_PAGE_SIZE = 10;
+export const RECOMMENDED_MAX_PAGES = 5;
+
+/**
+ * Spec §3.1: fit-ranked jobs with no resume and no application, ten per page, up to five pages. The
+ * server applies the "no package, no application, not hidden, not unlisted" filter (assumption A8)
+ * via `recommended=true`; the client pages.
+ *
+ * `GET /jobs` has no `limit`/`offset` (schema.d.ts's `list_jobs_api_v1_jobs_get` query only has
+ * search/track/bucket/region/sort/ids/hidden/search_id/posted_within/sources/field/recommended), so
+ * this takes the client-side path the brief allows: fetch the whole recommended set once and slice
+ * it into pages here.
+ */
+export function useRecommendedJobs(page: number) {
+  const query = useQuery({
+    queryKey: portalKeys.recommended,
+    queryFn: () => unwrap(apiClient().GET("/api/v1/jobs", { params: { query: { recommended: true, sort: "fit" } } })),
+    staleTime: 30_000,
+  });
+  const all = query.data ?? [];
+  return { ...query, data: all.slice(page * RECOMMENDED_PAGE_SIZE, page * RECOMMENDED_PAGE_SIZE + RECOMMENDED_PAGE_SIZE) };
 }

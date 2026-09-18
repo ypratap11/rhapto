@@ -1,73 +1,70 @@
 "use client";
 
-import { Plus } from "lucide-react";
-import { useEffect, useState } from "react";
-import { useQueryClient } from "@tanstack/react-query";
-import { AddJobDialog } from "@/components/queue/AddJobDialog";
-import { FilterBar } from "@/components/queue/FilterBar";
-import { JobList } from "@/components/queue/JobList";
-import { NextUp } from "@/components/queue/NextUp";
-import { PollNowButton } from "@/components/queue/PollNowButton";
-import { RunsDrawer } from "@/components/queue/RunsDrawer";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { DEFAULT_REGION, invalidateDiscovery, useDiscoveryRuns, useJobs, useTracks, type JobFilters } from "@/lib/api/queries";
-import { formatRelative } from "@/lib/format";
+import { useRouter } from "next/navigation";
+import { useMemo, useState } from "react";
+import { ActiveApplications } from "@/components/dashboard/ActiveApplications";
+import { DashboardHero } from "@/components/dashboard/DashboardHero";
+import { ProfileChecklist } from "@/components/dashboard/ProfileChecklist";
+import { RecommendedRoles } from "@/components/dashboard/RecommendedRoles";
+import { SavedSearchesRail } from "@/components/dashboard/SavedSearchesRail";
+import type { TrackInfo } from "@/components/jobs/JobCard";
+import { SearchForm } from "@/components/jobs/SearchForm";
+import { ApiErrorBanner } from "@/components/shell/ApiErrorBanner";
+import { HeroBand } from "@/components/shell/HeroBand";
+import { useDashboard, useTaxonomy, useTracks } from "@/lib/api/queries";
+import { DEFAULT_SEARCH_STATE, encodeSearchState, type SearchState } from "@/lib/search-state";
 
-export default function QueuePage() {
-  const [query, setQuery] = useState("");
-  const [filters, setFilters] = useState<JobFilters>({ search: "", track: null, tab: "new", region: DEFAULT_REGION, sort: "fit" });
-  // "Apply to these first" follows the Region choice too: a shortlist that leads with jobs you
-  // have filtered out of the list below would send you somewhere you already said no to.
-  const allFit = useJobs({ search: "", track: null, tab: "new", region: filters.region, sort: "fit" });
-  const [open, setOpen] = useState(false);
-  const [runsOpen, setRunsOpen] = useState(false);
-  const queryClient = useQueryClient();
-  const tracks = useTracks();
-  const runs = useDiscoveryRuns();
+// Layout: hero band, then a two-column body — 2fr of work, 1fr of context (spec §3.1). No
+// Breadcrumbs here: the Dashboard is the root, so the layout's static "Rhapto" title stands as-is.
+export default function DashboardPage() {
+  const router = useRouter();
+  const [state, setState] = useState<SearchState>(DEFAULT_SEARCH_STATE);
+  const dashboard = useDashboard();
+  const tracksQuery = useTracks();
+  const taxonomy = useTaxonomy();
 
-  useEffect(() => {
-    const t = setTimeout(() => setFilters((f) => ({ ...f, search: query.trim() })), 250);
-    return () => clearTimeout(t);
-  }, [query]);
+  const tracks = useMemo(() => {
+    const map: Record<string, TrackInfo> = {};
+    for (const t of tracksQuery.data ?? []) map[t.id] = { name: t.name, min_fit: t.min_fit };
+    return map;
+  }, [tracksQuery.data]);
 
-  const runRows = runs.data ?? [];
-  const lastRun = runRows[0];
-  const newCount = runRows.reduce((sum, r) => sum + r.new, 0);
+  const fields = useMemo(() => (taxonomy.data?.fields ?? []).map((f) => ({ id: f.id, name: f.name })), [taxonomy.data]);
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-2xl">Jobs</h1>
-        <div className="flex gap-2">
-          <Input aria-label="Search jobs" placeholder="Search company, title, text" value={query} onChange={(e) => setQuery(e.target.value)} className="w-64" />
-          <PollNowButton onFinished={() => invalidateDiscovery(queryClient)} />
-          <Button onClick={() => setOpen(true)}>
-            <Plus className="size-4" aria-hidden /> Add job
-          </Button>
+    <>
+      <HeroBand tone="peach" height="tall">
+        <DashboardHero newFitCount={dashboard.data?.new_fit_count ?? 0} needsReviewCount={dashboard.data?.needs_review_count ?? 0} />
+      </HeroBand>
+      {dashboard.error ? (
+        <div className="mb-6">
+          <ApiErrorBanner error={dashboard.error} />
         </div>
-      </div>
-      <NextUp jobs={allFit.data ?? []} />
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <FilterBar filters={filters} onChange={setFilters} tracks={(tracks.data ?? []).map((t) => ({ id: t.id, name: t.name }))} />
-        <div className="text-sm text-muted-foreground">
-          {runs.isLoading ? null : runs.error ? (
-            "Could not load poll runs "
-          ) : lastRun ? (
-            <>
-              Last poll {formatRelative(lastRun.finished_at ?? lastRun.started_at)} · {newCount} new{" "}
-            </>
-          ) : (
-            "No polls yet "
-          )}
-          <button type="button" className="underline" onClick={() => setRunsOpen(true)}>
-            Runs
-          </button>
+      ) : null}
+      <div className="grid gap-8 lg:grid-cols-[2fr_1fr]">
+        <div className="space-y-8">
+          <section aria-labelledby="search-heading" className="space-y-3 rounded-card border border-border bg-surface p-4 shadow-card">
+            <h2 id="search-heading" className="font-sans text-base font-semibold">
+              Find your next role
+            </h2>
+            {/* The Dashboard's search card does not run a live search: it hands the state to /jobs,
+                which owns the result grid (spec §3.1). */}
+            <SearchForm
+              value={state}
+              onChange={setState}
+              onSubmit={() => router.push(`/jobs?${encodeSearchState(state).toString()}`)}
+              fields={fields}
+              pending={false}
+            />
+          </section>
+          <RecommendedRoles tracks={tracks} />
+          <ActiveApplications />
         </div>
+        <aside className="space-y-8">
+          {dashboard.data ? <ProfileChecklist checklist={dashboard.data.checklist} /> : null}
+          <SavedSearchesRail searches={dashboard.data?.saved_searches ?? []} />
+        </aside>
       </div>
-      <JobList filters={filters} />
-      <AddJobDialog open={open} onOpenChange={setOpen} />
-      <RunsDrawer open={runsOpen} onOpenChange={setRunsOpen} />
-    </div>
+    </>
   );
 }
