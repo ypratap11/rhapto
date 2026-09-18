@@ -1,7 +1,7 @@
 "use client";
 
-import { Suspense, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { AnswersTab } from "@/components/profile/AnswersTab";
 import { BasesTab } from "@/components/profile/BasesTab";
 import { BlocksTab } from "@/components/profile/BlocksTab";
@@ -74,14 +74,22 @@ function CardSummary<T>({ query, render }: { query: QueryState<T>; render: (data
 }
 
 function ProfilePageInner() {
+  const router = useRouter();
   const searchParams = useSearchParams();
-  // `?card=` only decides which sheet is open on first load — read once via the lazy initializer,
-  // never re-synchronised from the URL with an effect. From here on, Edit buttons and sheet closes
-  // own `openCard` directly.
-  const [openCard, setOpenCard] = useState<ProfileCardId | null>(() => {
-    const param = searchParams.get("card");
-    return isProfileCardId(param) ? param : null;
-  });
+  // `openCard` is derived straight from `searchParams` on every render, the same way Jobs derives
+  // `currentPage` (src/app/jobs/page.tsx) — not mirrored into local state. That is what makes
+  // `?card=` genuinely addressable rather than a one-time initial value: a shared `?card=guardrails`
+  // link opens straight to that sheet, and Back closes an open sheet instead of leaving the page,
+  // because `setOpenCard` below pushes a new history entry rather than replacing the current one.
+  const rawCard = searchParams.get("card");
+  const openCard: ProfileCardId | null = isProfileCardId(rawCard) ? rawCard : null;
+
+  function setOpenCard(open: boolean, id: ProfileCardId) {
+    const next = new URLSearchParams(searchParams.toString());
+    if (open) next.set("card", id);
+    else next.delete("card");
+    router.push(`/profile${next.toString() ? `?${next.toString()}` : ""}`);
+  }
 
   const answers = useAnswers();
   const dashboard = useDashboard();
@@ -176,7 +184,7 @@ function ProfilePageInner() {
         title={card.title}
         summary={cardSummary[card.id]}
         open={openCard === card.id}
-        onOpenChange={(open) => setOpenCard(open ? card.id : null)}
+        onOpenChange={(open) => setOpenCard(open, card.id)}
       >
         {cardContent[card.id]}
       </ProfileSummaryCard>

@@ -80,6 +80,13 @@ export function FieldPicker({ open, onOpenChange }: { open: boolean; onOpenChang
   const hasIssue = Boolean(taxonomy.error) || taxonomy.isPaused;
   const nothingToShow = !taxonomy.data && hasIssue;
 
+  // Suggestions have their own loading/failed/stale-cache states, independent of taxonomy's (they
+  // come from separate queries with different staleTimes): a loading suggestions call must show a
+  // skeleton, not silently render the same empty chip row a genuinely-suggestion-less resume would —
+  // that would be indistinguishable from "nothing matched."
+  const suggestionsHasIssue = Boolean(suggestions.error) || suggestions.isPaused;
+  const suggestionsNothingToShow = !suggestions.data && suggestionsHasIssue;
+
   async function pick(field: TaxonomyField, role: TaxonomyRole) {
     try {
       await putTrack.mutateAsync(trackFromRole(field, role, bases.data?.[0]?.id ?? "default"));
@@ -106,13 +113,21 @@ export function FieldPicker({ open, onOpenChange }: { open: boolean; onOpenChang
         ) : (
           <>
             {hasIssue ? <ApiErrorBanner error={taxonomy.error ?? "Can't reach Rhapto's API."} /> : null}
-            {suggested.length > 0 ? (
-              <div role="group" aria-label="Suggested from your resume" className="flex flex-wrap gap-1.5">
+            {suggestions.isLoading ? (
+              <div className="flex flex-wrap gap-1.5" aria-hidden="true">
+                <Skeleton className="h-7 w-32 rounded-chip" />
+                <Skeleton className="h-7 w-40 rounded-chip" />
+              </div>
+            ) : suggestionsNothingToShow ? (
+              <p className="text-xs text-fit-mid">Couldn&rsquo;t load suggestions from your resume.</p>
+            ) : suggested.length > 0 ? (
+              <div role="group" aria-label="Suggested from your resume" className="flex flex-wrap items-center gap-1.5">
                 {suggested.map(({ field, role }) => (
                   <ChipButton key={role.id} onClick={() => pick(field, role)} disabled={putTrack.isPending}>
                     {role.name}
                   </ChipButton>
                 ))}
+                {suggestionsHasIssue ? <span className="text-xs text-fit-mid">(couldn&rsquo;t refresh)</span> : null}
               </div>
             ) : null}
             {fields.length === 0 ? (

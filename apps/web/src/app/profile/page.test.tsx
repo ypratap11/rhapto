@@ -1,10 +1,40 @@
-import { render, screen, within } from "@testing-library/react";
+import { act, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { useEffect, useState } from "react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const searchParams = { current: new URLSearchParams() };
+// A faithful-enough App Router stand-in (mirrors src/app/jobs/page.test.tsx): `push` updates the
+// "current URL" and notifies subscribers, so `useSearchParams()` re-renders the page the same way
+// Next's real router does on navigation. This is what lets `openCard` (page.tsx) be derived
+// straight from `searchParams` — not mirrored into local state — and still be exercised by a click
+// in these tests: real round-tripping, not just a value read once on mount.
+const { getSearchParams, setSearchParams, subscribeSearchParams, routerPush } = vi.hoisted(() => {
+  let params = new URLSearchParams();
+  const listeners = new Set<() => void>();
+  function setSearchParams(next: URLSearchParams) {
+    params = next;
+    listeners.forEach((l) => l());
+  }
+  return {
+    getSearchParams: () => params,
+    setSearchParams,
+    subscribeSearchParams: (l: () => void) => {
+      listeners.add(l);
+      return () => {
+        listeners.delete(l);
+      };
+    },
+    routerPush: vi.fn((url: string) => setSearchParams(new URLSearchParams(url.split("?")[1] ?? ""))),
+  };
+});
+
 vi.mock("next/navigation", () => ({
-  useSearchParams: () => searchParams.current,
+  useRouter: () => ({ push: routerPush }),
+  useSearchParams: () => {
+    const [, forceRender] = useState(0);
+    useEffect(() => subscribeSearchParams(() => forceRender((n) => n + 1)), []);
+    return getSearchParams();
+  },
 }));
 
 vi.mock("@/components/profile/ResumeDocumentTab", () => ({ ResumeDocumentTab: () => <div>Resume template content</div> }));
@@ -58,8 +88,12 @@ vi.mock("@/lib/api/queries", async (importOriginal) => ({
 import ProfilePage from "./page";
 
 describe("ProfilePage", () => {
+  beforeEach(() => {
+    routerPush.mockClear();
+  });
+
   it("shows the name, location and blocks-verified tally in the sand band", () => {
-    searchParams.current = new URLSearchParams();
+    setSearchParams(new URLSearchParams());
     render(<ProfilePage />);
     const band = screen.getByTestId("hero-band");
     expect(band.className).toContain("bg-band-sand");
@@ -69,7 +103,7 @@ describe("ProfilePage", () => {
   });
 
   it("lays out the eight summary cards in the two documented columns", () => {
-    searchParams.current = new URLSearchParams();
+    setSearchParams(new URLSearchParams());
     render(<ProfilePage />);
     const cards = document.querySelectorAll("[data-card-id]");
     expect(Array.from(cards).map((c) => c.getAttribute("data-card-id"))).toEqual([
@@ -91,14 +125,14 @@ describe("ProfilePage", () => {
   });
 
   it("opens the Tracks sheet on load when the URL says ?card=tracks", () => {
-    searchParams.current = new URLSearchParams("card=tracks");
+    setSearchParams(new URLSearchParams("card=tracks"));
     render(<ProfilePage />);
     expect(screen.getByText("Tracks content")).toBeInTheDocument();
     expect(screen.queryByText("Guardrails content")).not.toBeInTheDocument();
   });
 
   it("opens the Guardrails sheet when its Edit button is clicked", async () => {
-    searchParams.current = new URLSearchParams();
+    setSearchParams(new URLSearchParams());
     const user = userEvent.setup({ delay: null });
     render(<ProfilePage />);
     expect(screen.queryByText("Guardrails content")).not.toBeInTheDocument();
@@ -106,8 +140,37 @@ describe("ProfilePage", () => {
     expect(screen.getByText("Guardrails content")).toBeInTheDocument();
   });
 
+  it("round-trips through the URL on open and close, so ?card= is a real, shareable, Back-able address", async () => {
+    setSearchParams(new URLSearchParams());
+    const user = userEvent.setup({ delay: null });
+    render(<ProfilePage />);
+
+    // Opening pushes ?card=guardrails — a link to it is shareable, and it is a distinct history
+    // entry a Back can undo (mirrors src/app/jobs/page.tsx's goToPage, which also pushes).
+    await user.click(screen.getByRole("button", { name: "Edit Guardrails" }));
+    expect(routerPush).toHaveBeenLastCalledWith("/profile?card=guardrails");
+    expect(getSearchParams().get("card")).toBe("guardrails");
+
+    // Closing removes it from the URL again.
+    await user.click(screen.getByRole("button", { name: "Close" }));
+    expect(routerPush).toHaveBeenLastCalledWith("/profile");
+    expect(getSearchParams().get("card")).toBeNull();
+    expect(screen.queryByText("Guardrails content")).not.toBeInTheDocument();
+  });
+
+  it("closes an open sheet on browser Back, since openCard is derived from the URL, not latched", () => {
+    setSearchParams(new URLSearchParams("card=guardrails"));
+    render(<ProfilePage />);
+    expect(screen.getByText("Guardrails content")).toBeInTheDocument();
+
+    // A real Back doesn't call this page's own push — it changes the URL out from under it, the
+    // same way the mocked router does here. The page must react to that, not just to its own calls.
+    act(() => setSearchParams(new URLSearchParams()));
+    expect(screen.queryByText("Guardrails content")).not.toBeInTheDocument();
+  });
+
   it("shows a skeleton, not the fallback name, while the band's queries are loading", () => {
-    searchParams.current = new URLSearchParams();
+    setSearchParams(new URLSearchParams());
     state.answers = { data: undefined, isLoading: true, error: null, isPaused: false };
     render(<ProfilePage />);
     expect(screen.queryByRole("heading", { level: 1 })).not.toBeInTheDocument();
@@ -115,7 +178,7 @@ describe("ProfilePage", () => {
   });
 
   it("keeps a cached name on screen, with a note, when a background refetch is paused", () => {
-    searchParams.current = new URLSearchParams();
+    setSearchParams(new URLSearchParams());
     state.answers = { data: answersData, isLoading: false, error: null, isPaused: true };
     render(<ProfilePage />);
     expect(screen.getByRole("heading", { level: 1, name: "Maya Chen" })).toBeInTheDocument();
