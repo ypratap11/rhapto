@@ -2,10 +2,12 @@
 
 import Link from "next/link";
 import { useMemo } from "react";
+import { toast } from "sonner";
 import { TailorButton } from "@/components/queue/TailorButton";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { FitRing } from "@/components/ui/fit-ring";
 import { StatusBadge } from "@/components/ui/StatusBadge";
+import { ApiError } from "@/lib/api/client";
 import { useApplications, type JobOut } from "@/lib/api/queries";
 import { markApplyOpened } from "@/lib/apply-prompt";
 import { downloadPackage } from "@/lib/download";
@@ -30,11 +32,18 @@ export function JobHeader({ job, track }: { job: JobOut; track: TrackInfo | null
   const tier = locationTierLabel(job.location_tier);
   const latest = job.latest_package;
 
-  function onApply() {
+  // Same try/catch-then-toast shape as PackageActions.downloadFile: a failed download here is
+  // worse than a failed download from the review page, since Apply has already sent the user off
+  // to the employer's tab — silence would mean they apply with no resume and never know it.
+  async function onApply() {
     if (!latest) return;
     markApplyOpened(job.id);
     if (job.url) window.open(job.url, "_blank", "noopener");
-    void downloadPackage(latest.id, "pdf");
+    try {
+      await downloadPackage(latest.id, "pdf");
+    } catch (e) {
+      toast.error(e instanceof ApiError ? e.message : "Could not download the resume");
+    }
   }
 
   const primary = (() => {
@@ -58,7 +67,7 @@ export function JobHeader({ job, track }: { job: JobOut; track: TrackInfo | null
     }
     if (latest.status === "ready") {
       return (
-        <Button size="sm" onClick={onApply}>
+        <Button size="sm" onClick={() => void onApply()}>
           Apply
         </Button>
       );

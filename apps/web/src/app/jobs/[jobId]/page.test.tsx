@@ -1,7 +1,7 @@
 import { render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "@/lib/api/client";
-import type { ApplicationOut, JobOut, PackageSummary } from "@/lib/api/queries";
+import type { ApplicationOut, JobOut, PackageOut, PackageSummary } from "@/lib/api/queries";
 import JobPage from "./page";
 
 vi.mock("next/navigation", () => ({
@@ -20,10 +20,15 @@ vi.mock("@/components/jobs/DidYouApplyPrompt", () => ({ DidYouApplyPrompt: () =>
 type JobResult = { data: JobOut | undefined; error: unknown; isLoading: boolean; isPaused?: boolean };
 type PackagesResult = { data: PackageSummary[] | undefined; error: unknown; isLoading: boolean };
 type ApplicationsResult = { data: { columns: Record<string, ApplicationOut[]> } | undefined; error: unknown; isLoading: boolean };
+type PackageResult = { data: PackageOut | undefined; error: unknown; isLoading: boolean };
 
 let jobResult: JobResult = { data: undefined, error: null, isLoading: true };
 let packagesResult: PackagesResult = { data: [], error: null, isLoading: false };
 let applicationsResult: ApplicationsResult = { data: { columns: {} }, error: null, isLoading: false };
+// What the page page's own usePackage(latest?.id ?? "", blocked) call would see if it were live:
+// data only when the caller enabled the fetch, exactly like the real hook's `enabled` option.
+let packageResult: PackageResult = { data: undefined, error: null, isLoading: false };
+const usePackageSpy = vi.fn<(id: string, enabled: boolean) => void>();
 
 vi.mock("@/lib/api/queries", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/api/queries")>()),
@@ -31,10 +36,20 @@ vi.mock("@/lib/api/queries", async (importOriginal) => ({
   usePackages: () => packagesResult,
   useApplications: () => applicationsResult,
   useTracks: () => ({ data: [] }),
-  // The job page calls this unconditionally (Rules of Hooks) but only the blocked-package branch,
-  // which no test here exercises, ever reads its data.
-  usePackage: () => ({ data: undefined, error: null, isLoading: false }),
+  usePackage: (id: string, enabled = true) => {
+    usePackageSpy(id, enabled);
+    // Mirrors TanStack's `enabled: false` behaviour: no data comes back, regardless of what a
+    // test staged in `packageResult` — this is what makes a regression in the page's own
+    // `enabled: blocked` gating (page.tsx's conditional usePackage fetch) show up as a failure
+    // rather than passing by accident.
+    return enabled ? packageResult : { data: undefined, error: null, isLoading: false };
+  },
 }));
+
+beforeEach(() => {
+  packageResult = { data: undefined, error: null, isLoading: false };
+  usePackageSpy.mockClear();
+});
 
 function job(over: Partial<JobOut> = {}): JobOut {
   return {
@@ -81,6 +96,35 @@ function application(over: Partial<ApplicationOut> & { job: ApplicationOut["job"
 }
 
 const pkg = (over: Partial<PackageSummary> = {}): PackageSummary => ({ id: "p1", version: 1, status: "draft", mode: "tune", created_at: "2026-09-10T00:00:00Z", ...over });
+
+function pkgOut(over: Partial<PackageOut> = {}): PackageOut {
+  return {
+    id: "p1",
+    job_id: "j1",
+    version: 1,
+    status: "blocked",
+    mode: "tune",
+    track_id: "enterprise-tpm",
+    llm_calls: 1,
+    created_at: "2026-09-10T00:00:00Z",
+    cover_note: "",
+    change_log: "",
+    has_pdf: false,
+    has_docx: false,
+    answers: {},
+    parent_package_id: null,
+    jd_extract: {},
+    resume: { header: { name: "Maya Chen", links: [] }, summary: [], sections: [] },
+    guardrail_report: {
+      passed: false,
+      rules_run: ["no-invented-entities"],
+      violations: [{ rule: "no-invented-entities", severity: "error", message: "invented a company name", path: "summary[0]", block_id: null }],
+    },
+    edits: [],
+    source_document: null,
+    ...over,
+  } as unknown as PackageOut;
+}
 
 describe("JobPage", () => {
   it("shows a shape-matched skeleton while loading, not an empty or error state", () => {
@@ -132,6 +176,21 @@ describe("JobPage", () => {
     jobResult = { data: job({ latest_package: pkg({ id: "p1", version: 1, status: "draft" }) }), error: null, isLoading: false };
     render(<JobPage />);
     expect(screen.getByRole("link", { name: "Review" })).toHaveAttribute("href", "/jobs/j1/packages/p1");
+    // A draft package isn't blocked, so the page must not enable the guardrail-panel fetch for it.
+    expect(usePackageSpy).toHaveBeenCalledWith("p1", false);
+    expect(screen.queryByText("Guardrails")).not.toBeInTheDocument();
+  });
+
+  it("offers Fix guardrails and renders the guardrail panel when the latest package is blocked", () => {
+    jobResult = { data: job({ latest_package: pkg({ id: "p1", version: 1, status: "blocked" }) }), error: null, isLoading: false };
+    packageResult = { data: pkgOut({ id: "p1", status: "blocked" }), error: null, isLoading: false };
+    render(<JobPage />);
+    expect(screen.getByRole("link", { name: "Fix guardrails" })).toHaveAttribute("href", "/jobs/j1/packages/p1");
+    expect(usePackageSpy).toHaveBeenCalledWith("p1", true);
+    expect(screen.getByText("Guardrails")).toBeInTheDocument();
+    expect(screen.getByText(/invented a company name/i)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Apply" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Review" })).not.toBeInTheDocument();
   });
 
   it("offers Apply, and mounts the Did-you-apply prompt, when the latest package is ready", () => {
