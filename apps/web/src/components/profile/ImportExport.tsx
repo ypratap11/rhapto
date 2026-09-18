@@ -3,7 +3,6 @@
 import { useId, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { ApiError } from "@/lib/api/client";
 import { useImportProfile } from "@/lib/api/queries";
@@ -39,14 +38,13 @@ export function ImportExport() {
     }
   }
 
+  // No self-wrapping Card or title here: the caller (Settings) supplies both, so this renders just
+  // the description and controls as content for whatever Card it's placed inside.
   return (
-    <Card className="space-y-3 p-4">
-      <div>
-        <h2 className="font-heading text-base font-medium">Import / export</h2>
-        <p className="text-sm text-muted-foreground">
-          Your profile lives in the database now. Import YAML files to replace it, or export it back to YAML — <code className="font-mono text-xs">rhapto profile export</code> writes the same files locally.
-        </p>
-      </div>
+    <div className="space-y-3">
+      <p className="text-sm text-muted-foreground">
+        Your profile lives in the database now. Import YAML files to replace it, or export it back to YAML — <code className="font-mono text-xs">rhapto profile export</code> writes the same files locally.
+      </p>
       <div className="flex flex-wrap items-end gap-3">
         <div className="space-y-1">
           <Label htmlFor={fileInputId}>Profile YAML files</Label>
@@ -67,6 +65,6 @@ export function ImportExport() {
           Export YAML
         </Button>
       </div>
-    </Card>
+    </div>
   );
 }

@@ -3,7 +3,12 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
+import { ImportExport } from "@/components/profile/ImportExport";
+import { HelpSection } from "@/components/settings/HelpSection";
 import { LlmProviderSection } from "@/components/settings/LlmProviderSection";
+import { SavedSearchesSection } from "@/components/settings/SavedSearchesSection";
+import { SourcesSection } from "@/components/settings/SourcesSection";
+import { Breadcrumbs } from "@/components/shell/Breadcrumbs";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -77,9 +82,20 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="mx-auto max-w-xl space-y-6">
-      <h1 className="text-2xl">Settings</h1>
+    <div className="mx-auto max-w-3xl space-y-6">
+      <Breadcrumbs items={[{ label: "Settings" }]} />
+      <h1 className="font-serif text-2xl font-medium">Settings</h1>
       <LlmProviderSection />
+      <SourcesSection />
+      <SavedSearchesSection />
+      <Card>
+        <CardHeader>
+          <CardTitle>Import and export</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <ImportExport />
+        </CardContent>
+      </Card>
       <Card>
         <CardHeader>
           <CardTitle>API connection</CardTitle>
@@ -115,6 +131,7 @@ export default function SettingsPage() {
           </div>
         </CardContent>
       </Card>
+      <HelpSection />
     </div>
   );
 }

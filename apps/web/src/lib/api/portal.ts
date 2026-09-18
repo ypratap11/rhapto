@@ -17,3 +17,5 @@ export type TaxonomyField = TaxonomyOut["fields"][number];
 export type TaxonomyRole = TaxonomyField["roles"][number];
 export type TaxonomySuggestions = Json200<paths["/api/v1/taxonomy/suggestions"]["get"]>;
 export type SourceSetting = Json200<paths["/api/v1/settings/sources"]["get"]>[number];
+export type SourceSettingIn = JsonBody<paths["/api/v1/settings/sources/{source}"]["put"]>;
+export type SourceTestOut = Json200<paths["/api/v1/settings/sources/{source}/test"]["post"]>;

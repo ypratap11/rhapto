@@ -4,12 +4,29 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { type QueryClient, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ApiError, apiClient, apiUrl, authHeaders, unwrap, type Problem } from "./client";
 import type { components, paths } from "./schema";
-import type { PerSource, SearchIn, SearchResult } from "./portal";
+import type { PerSource, SearchIn, SearchResult, SourceSettingIn } from "./portal";
 import { DEFAULT_SEARCH_STATE, toJobsQuery, toSearchBody, type SearchState } from "@/lib/search-state";
 
 // Re-exported so a page that already imports from "@/lib/api/queries" doesn't also need
 // "@/lib/api/portal" for the shapes these hooks return.
-export type { DashboardOut, DashboardChecklist, DashboardSavedSearch, DueFollowup, PerSource, SearchBody, SearchIn, SearchOut, SearchResult, SourceSetting, TaxonomyField, TaxonomyOut, TaxonomyRole, TaxonomySuggestions } from "./portal";
+export type {
+  DashboardOut,
+  DashboardChecklist,
+  DashboardSavedSearch,
+  DueFollowup,
+  PerSource,
+  SearchBody,
+  SearchIn,
+  SearchOut,
+  SearchResult,
+  SourceSetting,
+  SourceSettingIn,
+  SourceTestOut,
+  TaxonomyField,
+  TaxonomyOut,
+  TaxonomyRole,
+  TaxonomySuggestions,
+} from "./portal";
 
 export type Schemas = components["schemas"];
 export type JobOut = Schemas["JobOut"];
@@ -755,6 +772,33 @@ export function useUnhideJob() {
 
 export function useSourceSettings() {
   return useQuery({ queryKey: portalKeys.sourceSettings, queryFn: () => unwrap(apiClient().GET("/api/v1/settings/sources")), staleTime: 60_000 });
+}
+
+/**
+ * Deviation from the task brief: `openapi.json` has no bulk `PUT /api/v1/settings/sources` — only
+ * a per-source `PUT /api/v1/settings/sources/{source}` taking `SourceSettingIn` (`enabled` plus an
+ * optional `credentials` map). So this saves one source at a time; the caller invokes it once per
+ * row that actually changed rather than posting the whole list back.
+ *
+ * Keys travel one way only: the API never returns a stored key (`key_set` is a bool), so
+ * `credentials` should be omitted entirely unless the user actually typed something to replace it.
+ */
+export function useSaveSourceSettings() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ source, body }: { source: string; body: SourceSettingIn }) =>
+      unwrap(apiClient().PUT("/api/v1/settings/sources/{source}", { params: { path: { source } }, body })),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: portalKeys.sourceSettings });
+      void queryClient.invalidateQueries({ queryKey: ["discovery"] });
+    },
+  });
+}
+
+export function useTestSource() {
+  return useMutation({
+    mutationFn: (source: string) => unwrap(apiClient().POST("/api/v1/settings/sources/{source}/test", { params: { path: { source } } })),
+  });
 }
 
 /** Career fields and roles for the Field select (spec §5) and the field/role picker (spec §5): a

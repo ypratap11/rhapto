@@ -9,20 +9,32 @@ import { getSettings, setSettings } from "@/lib/api/client";
 
 vi.mock("next/navigation", () => ({ usePathname: () => "/" }));
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
-// The AI provider section sits above the API connection card and has its own Save and Test
-// connection buttons. Holding its query in the loading state keeps those button names unambiguous
-// here; the section itself is covered by components/settings/LlmProviderSection.test.tsx.
+
+// The AI provider, Job sources and Saved searches sections each have their own Save/Test/Edit
+// buttons. Holding every one of their queries in the loading state keeps those button names
+// unambiguous for most tests here (and keeps this suite off the network); each section has its own
+// test file. `llmState` is mutable (reset in beforeEach) rather than a fixed loading shape, because
+// LlmProviderSection renders nothing but a bare Skeleton while loading — no "AI provider" title —
+// so the section-order test below needs it resolved to see that title at all.
+let llmState: { data: unknown; isLoading: boolean; error: unknown } = { data: undefined, isLoading: true, error: null };
 vi.mock("@/lib/api/queries", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/api/queries")>()),
-  useLlmSettings: () => ({ data: undefined, isLoading: true, error: null }),
+  useLlmSettings: () => llmState,
   useSaveLlmSettings: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useTestLlm: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useDeleteLlmSettings: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useSourceSettings: () => ({ data: undefined, isLoading: true, error: null, isPaused: false }),
+  useSaveSourceSettings: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useTestSource: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useSavedSearches: () => ({ data: undefined, isLoading: true, error: null, isPaused: false }),
+  useUpdateSavedSearch: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useDeleteSavedSearch: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }));
 
 afterEach(() => {
   window.localStorage.clear();
   vi.restoreAllMocks();
+  llmState = { data: undefined, isLoading: true, error: null };
 });
 
 function renderPage() {
@@ -75,5 +87,23 @@ describe("SettingsPage", () => {
 
     expect(toast.error).toHaveBeenCalledWith("Could not save settings in this browser");
     setItemSpy.mockRestore();
+  });
+
+  it("shows every section, in order, with the Help section addressable as #help", () => {
+    // Resolved (not loading), so LlmProviderSection renders its Card and "AI provider" title
+    // instead of the bare loading Skeleton the other tests above rely on for button-name safety.
+    llmState = { data: { kind: "ok", settings: { provider: null, model: null, key_set: false, key_hint: null, source: "none", providers: [] } }, isLoading: false, error: null };
+    // A token, so TokenGate's own "Connect to your Rhapto API" card isn't in the tree competing
+    // with the sections' card titles.
+    setSettings({ token: "tok", apiUrl: "http://localhost:8000" });
+    const { container } = renderPage();
+    // Card titles only — the Help section's doc list legitimately repeats names like "Job sources"
+    // and "Saved searches" in its body text, so a plain getByText(title) would be ambiguous.
+    const cardTitles = Array.from(container.querySelectorAll('[data-slot="card-title"]')).map((el) => el.textContent);
+    expect(cardTitles).toEqual(["AI provider", "Job sources", "Saved searches", "Import and export", "API connection", "Help"]);
+
+    const help = container.querySelector("#help");
+    expect(help).not.toBeNull();
+    expect(help).toHaveTextContent("Help");
   });
 });
