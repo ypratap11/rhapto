@@ -1,5 +1,6 @@
 import { CheckCircle2, Circle } from "lucide-react";
 import Link from "next/link";
+import { Skeleton } from "@/components/ui/skeleton";
 import type { DashboardChecklist } from "@/lib/api/queries";
 
 type Row = {
@@ -49,8 +50,42 @@ const ROWS: Row[] = [
   },
 ];
 
-/** Spec §2: six checks, each an "Edit" deep link into the Profile page's matching card. */
-export function ProfileChecklist({ checklist }: { checklist: DashboardChecklist }) {
+/**
+ * Spec §2: six checks, each an "Edit" deep link into the Profile page's matching card.
+ *
+ * `checklist` is `null` for two different reasons a caller must keep apart: `loading` (the
+ * `useDashboard()` call is still in flight — render a skeleton, not a row of false "not done"
+ * checks) versus settled-with-nothing-to-show (e.g. the call errored — render nothing, as before).
+ */
+export function ProfileChecklist({ checklist, loading = false }: { checklist: DashboardChecklist | null; loading?: boolean }) {
+  if (loading) {
+    return (
+      <section
+        aria-labelledby="checklist-heading"
+        className="space-y-3 rounded-card border border-border bg-surface p-4 shadow-card"
+        data-testid="checklist-skeleton"
+      >
+        <h2 id="checklist-heading" className="font-sans text-base font-semibold">
+          Profile checklist
+        </h2>
+        <ul className="space-y-2" aria-hidden="true">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <li key={i} className="flex items-center justify-between gap-3">
+              <div className="flex min-w-0 items-center gap-2">
+                <Skeleton className="size-4 shrink-0 rounded-full" />
+                <div className="space-y-1.5">
+                  <Skeleton className="h-3.5 w-28" />
+                  <Skeleton className="h-3 w-36" />
+                </div>
+              </div>
+              <Skeleton className="h-3 w-8" />
+            </li>
+          ))}
+        </ul>
+      </section>
+    );
+  }
+  if (!checklist) return null;
   return (
     <section aria-labelledby="checklist-heading" className="space-y-3 rounded-card border border-border bg-surface p-4 shadow-card">
       <h2 id="checklist-heading" className="font-sans text-base font-semibold">

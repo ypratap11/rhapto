@@ -30,4 +30,14 @@ describe("DashboardHero", () => {
     expect(screen.getByRole("link", { name: /add company/i })).toHaveAttribute("href", "/profile?card=watchlist");
     expect(screen.queryByRole("link", { name: /review resumes/i })).toBeNull();
   });
+
+  it("shows a loading skeleton instead of the empty-state prompt while the count is still in flight", () => {
+    // The real zero-count case and "still loading" would otherwise look identical to a caller that
+    // only had newFitCount/needsReviewCount to go on — loading must render neither the empty-state
+    // copy nor the has-data copy.
+    render(<DashboardHero newFitCount={0} needsReviewCount={0} loading />);
+    expect(screen.queryByText(/nothing new yet/i)).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { level: 1 })).not.toBeInTheDocument();
+    expect(screen.getByTestId("dashboard-hero-skeleton")).toBeInTheDocument();
+  });
 });

@@ -1,13 +1,39 @@
 import Link from "next/link";
 import { buttonVariants } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import { PollNowButton } from "@/components/queue/PollNowButton";
 
 function plural(n: number, one: string, many: string): string {
   return `${n} ${n === 1 ? one : many}`;
 }
 
-/** Spec §2: the dashboard reports facts, not promos — both numbers come from GET /dashboard. */
-export function DashboardHero({ newFitCount, needsReviewCount }: { newFitCount: number; needsReviewCount: number }) {
+/**
+ * Spec §2: the dashboard reports facts, not promos — both numbers come from GET /dashboard. While
+ * that call is still in flight, `loading` swaps in a shape-matched skeleton instead of falling back
+ * to `newFitCount={0} needsReviewCount={0}`: a real zero renders the *same* empty-state prompt this
+ * would, so a caller that didn't distinguish loading from empty would show it a beat too early —
+ * telling a user with plenty of new roles that they have none.
+ */
+export function DashboardHero({
+  newFitCount,
+  needsReviewCount,
+  loading = false,
+}: {
+  newFitCount: number;
+  needsReviewCount: number;
+  loading?: boolean;
+}) {
+  if (loading) {
+    return (
+      <div data-testid="dashboard-hero-skeleton" aria-hidden="true">
+        <Skeleton className="h-9 w-3/4 max-w-md" />
+        <div className="mt-3 flex flex-wrap gap-2">
+          <Skeleton className="h-8 w-32 rounded-lg" />
+          <Skeleton className="h-8 w-28 rounded-lg" />
+        </div>
+      </div>
+    );
+  }
   const empty = newFitCount === 0 && needsReviewCount === 0;
   return (
     <>

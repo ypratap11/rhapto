@@ -29,4 +29,19 @@ describe("ProfileChecklist", () => {
     expect(screen.getAllByRole("listitem")[0]).toHaveAttribute("data-done", "true");
     expect(screen.getAllByRole("listitem")[1]).toHaveAttribute("data-done", "false");
   });
+
+  it("shows a loading skeleton instead of a false 'not done' row while the checklist is still in flight", () => {
+    // A loading `checklist={null}` and a settled-but-missing one must not look the same: this one
+    // renders a skeleton, not silently nothing, and never claims "18 of 23 verified" or a "not
+    // done" icon for data it hasn't seen yet.
+    render(<ProfileChecklist checklist={null} loading />);
+    expect(screen.getByTestId("checklist-skeleton")).toBeInTheDocument();
+    expect(screen.queryByText("18 of 23 verified")).not.toBeInTheDocument();
+    expect(screen.queryAllByRole("listitem")).toHaveLength(0);
+  });
+
+  it("renders nothing when settled with no checklist to show (not loading, no data)", () => {
+    const { container } = render(<ProfileChecklist checklist={null} />);
+    expect(container).toBeEmptyDOMElement();
+  });
 });

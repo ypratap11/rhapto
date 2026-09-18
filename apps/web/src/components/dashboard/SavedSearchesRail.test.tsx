@@ -21,4 +21,12 @@ describe("SavedSearchesRail", () => {
     render(<SavedSearchesRail searches={[]} />);
     expect(screen.getByText(/save a search/i)).toBeInTheDocument();
   });
+
+  it("shows a loading skeleton instead of the empty-state copy while the list is still in flight", () => {
+    // An empty array is exactly what a caller has before the dashboard call resolves — without a
+    // separate `loading` signal this and "you've never saved a search" render identically.
+    render(<SavedSearchesRail searches={[]} loading />);
+    expect(screen.getByTestId("saved-searches-skeleton")).toBeInTheDocument();
+    expect(screen.queryByText(/save a search/i)).not.toBeInTheDocument();
+  });
 });

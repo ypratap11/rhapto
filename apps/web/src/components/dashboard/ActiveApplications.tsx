@@ -4,7 +4,7 @@ import { Package } from "lucide-react";
 import Link from "next/link";
 import { EmptyState } from "@/components/ui/empty-state";
 import { StatusBadge } from "@/components/ui/StatusBadge";
-import { useApplications, useDashboard, usePackageList, type ApplicationOut, type PackageListItem } from "@/lib/api/queries";
+import { useApplications, useDashboard, usePackageList, type ApplicationOut, type DueFollowup, type PackageListItem } from "@/lib/api/queries";
 import { formatRelative } from "@/lib/format";
 import { STATUS_LABEL, statusTone, type ApplicationStatus } from "@/lib/status";
 
@@ -33,6 +33,24 @@ function applicationCard(application: ApplicationOut, dueToday: boolean): Row {
   };
 }
 
+/** A due-followup application that didn't already make the recent-3 cut — built from `FollowUpOut`'s
+ * own `job` ref, since the full `ApplicationOut` (and its `updated_at`) isn't fetched for it. */
+function followupCard(followup: DueFollowup): Row {
+  return {
+    key: `application-${followup.application_id}`,
+    href: `/jobs/${followup.job.id}`,
+    dueToday: true,
+    card: (
+      <>
+        <StatusBadge tone="danger">Follow up today</StatusBadge>
+        <p className="truncate text-sm font-medium">{followup.job.company ?? "Unknown company"}</p>
+        <p className="truncate text-xs text-muted-foreground">{followup.job.title ?? "Untitled role"}</p>
+        <StatusBadge tone={statusTone(followup.status)}>{STATUS_LABEL[followup.status as ApplicationStatus] ?? followup.status}</StatusBadge>
+      </>
+    ),
+  };
+}
+
 function readyCard(item: PackageListItem): Row {
   return {
     key: `ready-${item.id}`,
@@ -50,8 +68,10 @@ function readyCard(item: PackageListItem): Row {
 
 /**
  * Spec §3.1: the three most recently updated pipeline items, plus tailored packages that are ready
- * but have no application yet. Anything due for a follow-up today or earlier is pulled to the front
- * and flagged, rather than living in a separate list the user has to check twice.
+ * but have no application yet. Every follow-up due today or earlier gets a row too — flagged on its
+ * existing card when it's already one of the recent three, or added as its own card (built from
+ * `FollowUpOut.job`, since its full `ApplicationOut` may not be among the recent three fetched) when
+ * it isn't — rather than a due reminder living in a separate list the user has to check twice.
  */
 export function ActiveApplications() {
   const applications = useApplications();
@@ -59,22 +79,29 @@ export function ActiveApplications() {
   const dashboard = useDashboard();
 
   const today = isoDate(new Date().toISOString());
-  const dueTodayIds = new Set(
-    (dashboard.data?.due_followups ?? []).filter((f) => isoDate(f.follow_up_at) <= today).map((f) => f.application_id),
-  );
+  const dueToday = (dashboard.data?.due_followups ?? []).filter((f) => isoDate(f.follow_up_at) <= today);
+  const dueTodayIds = new Set(dueToday.map((f) => f.application_id));
 
   const recent = Object.values(applications.data?.columns ?? {})
     .flat()
     .sort((a, b) => b.updated_at.localeCompare(a.updated_at))
     .slice(0, RECENT_COUNT);
+  const recentIds = new Set(recent.map((a) => a.id));
+
+  const dueNotInRecent = dueToday.filter((f) => !recentIds.has(f.application_id));
 
   const readyNotApplied = (ready.data ?? []).filter((p) => p.application_status === null);
 
-  const rows = [...recent.map((a) => applicationCard(a, dueTodayIds.has(a.id))), ...readyNotApplied.map(readyCard)].sort(
-    (a, b) => Number(b.dueToday) - Number(a.dueToday),
-  );
+  const rows = [
+    ...recent.map((a) => applicationCard(a, dueTodayIds.has(a.id))),
+    ...dueNotInRecent.map(followupCard),
+    ...readyNotApplied.map(readyCard),
+  ].sort((a, b) => Number(b.dueToday) - Number(a.dueToday));
 
-  const loading = applications.isLoading || ready.isLoading;
+  // Also waits on `dashboard` (not just applications/ready): due_followups defaults to [] until it
+  // settles, and starting the grid without it would flash cards in without their "Follow up today"
+  // flag, then re-flag them a moment later.
+  const loading = applications.isLoading || ready.isLoading || dashboard.isLoading;
 
   return (
     <section aria-labelledby="active-applications-heading" className="space-y-3">

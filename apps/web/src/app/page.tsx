@@ -34,7 +34,11 @@ export default function DashboardPage() {
   return (
     <>
       <HeroBand tone="peach" height="tall">
-        <DashboardHero newFitCount={dashboard.data?.new_fit_count ?? 0} needsReviewCount={dashboard.data?.needs_review_count ?? 0} />
+        <DashboardHero
+          newFitCount={dashboard.data?.new_fit_count ?? 0}
+          needsReviewCount={dashboard.data?.needs_review_count ?? 0}
+          loading={dashboard.isLoading}
+        />
       </HeroBand>
       {dashboard.error ? (
         <div className="mb-6">
@@ -61,8 +65,8 @@ export default function DashboardPage() {
           <ActiveApplications />
         </div>
         <aside className="space-y-8">
-          {dashboard.data ? <ProfileChecklist checklist={dashboard.data.checklist} /> : null}
-          <SavedSearchesRail searches={dashboard.data?.saved_searches ?? []} />
+          <ProfileChecklist checklist={dashboard.data?.checklist ?? null} loading={dashboard.isLoading} />
+          <SavedSearchesRail searches={dashboard.data?.saved_searches ?? []} loading={dashboard.isLoading} />
         </aside>
       </div>
     </>
