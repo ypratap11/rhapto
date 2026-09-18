@@ -35,9 +35,22 @@ export default function DashboardPage() {
   // network reachable, TanStack Query v5's default `networkMode: "online"` parks the query in
   // `fetchStatus: "paused"` instead — `status` stays "pending", so `isLoading` (`isPending &&
   // isFetching`) is false and `error` is null, the same shape a genuinely-empty dashboard has. From
-  // the user's seat both are "I can't see my dashboard right now," so both get the one error
-  // treatment below rather than a third visual state.
-  const unavailable = Boolean(dashboard.error) || dashboard.isPaused;
+  // the user's seat both are "something is wrong right now."
+  //
+  // But that's a different question from "do we have anything to show." A settled error or a pause
+  // can happen on a *background refetch* — `providers.tsx` doesn't disable refetchOnWindowFocus or
+  // reconnect refetches — after a prior fetch already populated `dashboard.data`. TanStack's query
+  // reducer never clears `data` on an `error` or `pause` transition, so it's still sitting there,
+  // valid, the moment this renders. Discarding it in favor of the panels' error branches would throw
+  // away real numbers the user is already looking at just because the *next* refresh stumbled.
+  //
+  // So two separate questions, two separate booleans: `hasIssue` says something is wrong right now
+  // (always shows the banner, additive context above the content) and `nothingToShow` says we have
+  // no data to fall back on (gates the panels into their error branches — only when there's truly
+  // nothing else to render). A background hiccup with cached data keeps showing that cached data,
+  // stale but visible, with the banner making the staleness honest instead of silent.
+  const hasIssue = Boolean(dashboard.error) || dashboard.isPaused;
+  const nothingToShow = !dashboard.data && hasIssue;
 
   return (
     <>
@@ -46,10 +59,10 @@ export default function DashboardPage() {
           newFitCount={dashboard.data?.new_fit_count ?? 0}
           needsReviewCount={dashboard.data?.needs_review_count ?? 0}
           loading={dashboard.isLoading}
-          error={unavailable}
+          error={nothingToShow}
         />
       </HeroBand>
-      {unavailable ? (
+      {hasIssue ? (
         <div className="mb-6">
           <ApiErrorBanner error={dashboard.error ?? "Can't reach Rhapto's API."} />
         </div>
@@ -74,8 +87,8 @@ export default function DashboardPage() {
           <ActiveApplications />
         </div>
         <aside className="space-y-8">
-          <ProfileChecklist checklist={dashboard.data?.checklist ?? null} loading={dashboard.isLoading} error={unavailable} />
-          <SavedSearchesRail searches={dashboard.data?.saved_searches ?? []} loading={dashboard.isLoading} error={unavailable} />
+          <ProfileChecklist checklist={dashboard.data?.checklist ?? null} loading={dashboard.isLoading} error={nothingToShow} />
+          <SavedSearchesRail searches={dashboard.data?.saved_searches ?? []} loading={dashboard.isLoading} error={nothingToShow} />
         </aside>
       </div>
     </>

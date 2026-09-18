@@ -36,6 +36,14 @@ const fullChecklist = {
   total_blocks: 1,
 };
 
+const populatedDashboard = {
+  new_fit_count: 3,
+  needs_review_count: 2,
+  checklist: fullChecklist,
+  due_followups: [],
+  saved_searches: [{ id: "s1", name: "PM roles", new_count: 4 }],
+};
+
 describe("DashboardPage loading state (real DashboardHero, ProfileChecklist, SavedSearchesRail)", () => {
   it("shows a loading skeleton on every dashboard-fed panel, not the false empty-state copy, while the call is in flight", () => {
     dashboardResult = { data: undefined, error: null, isLoading: true, isPaused: false };
@@ -97,5 +105,40 @@ describe("DashboardPage loading state (real DashboardHero, ProfileChecklist, Sav
     expect(screen.getByTestId("dashboard-hero-error")).toBeInTheDocument();
     expect(screen.getByTestId("checklist-error")).toBeInTheDocument();
     expect(screen.getByTestId("saved-searches-error")).toBeInTheDocument();
+  });
+
+  it("keeps showing cached dashboard content, with the error banner above it, when a background refetch settles into an error", () => {
+    // Round 3's `unavailable` boolean checked only `error`/`isPaused`, with no check on `data`.
+    // TanStack's query reducer never clears `data` on an `error` transition — `providers.tsx`
+    // doesn't disable refetchOnWindowFocus or reconnect refetches either — so a background refetch
+    // that fails after a prior successful load leaves `dashboard.data` populated and valid at the
+    // exact moment `dashboard.error` also becomes truthy. The panels must keep rendering that real,
+    // still-good data (stale but visible) rather than discarding it for their error branches — the
+    // banner is what makes the staleness honest, not a wall of "Couldn't load" badges over numbers
+    // that were just on screen a second ago.
+    dashboardResult = { data: populatedDashboard, error: new ApiError(500, null, "Server error"), isLoading: false, isPaused: false };
+    render(<DashboardPage />);
+
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("3 new roles fit you this week · 2 resumes waiting for review");
+    expect(screen.getByText("1 of 1 verified")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /pm roles/i })).toBeInTheDocument();
+    expect(screen.queryByTestId("dashboard-hero-error")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("checklist-error")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("saved-searches-error")).not.toBeInTheDocument();
+    expect(screen.getByRole("alert")).toBeInTheDocument();
+  });
+
+  it("keeps showing cached dashboard content, with the error banner above it, when a background refetch pauses instead of settling", () => {
+    // Same gap, the paused variant: a background refetch can pause (offline, unreachable) rather
+    // than settle into `error`, and `data` is just as untouched by that transition.
+    dashboardResult = { data: populatedDashboard, error: null, isLoading: false, isPaused: true };
+    render(<DashboardPage />);
+
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("3 new roles fit you this week · 2 resumes waiting for review");
+    expect(screen.getByRole("link", { name: /pm roles/i })).toBeInTheDocument();
+    expect(screen.queryByTestId("dashboard-hero-error")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("checklist-error")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("saved-searches-error")).not.toBeInTheDocument();
+    expect(screen.getByRole("alert")).toHaveTextContent(/can.t reach rhapto.s api/i);
   });
 });
