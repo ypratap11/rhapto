@@ -2,18 +2,19 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 type HelpDoc = { title: string; path: string; slug: string };
 
-// The eight user-guide pages Task 13 is expected to write, one per portal area. The paths below
-// are where they'll live on disk; nothing here reads those files, so this list is safe to ship
-// ahead of them existing.
+// The eight user-guide pages Task 13 is dispatched to write, one per portal area (the product's
+// five tabs, plus getting-started, settings and an FAQ). This exact filename list is canonical —
+// Task 13's own dispatch carries the same one, specifically so the two cannot drift apart again.
+// Nothing here reads those files, so this list is safe to ship ahead of them existing.
 const USER_GUIDE: HelpDoc[] = [
   { title: "Getting started", path: "docs/user-guide/getting-started.md", slug: "getting-started" },
-  { title: "Building your profile", path: "docs/user-guide/profile.md", slug: "profile" },
-  { title: "Job sources", path: "docs/user-guide/job-sources.md", slug: "job-sources" },
-  { title: "Searching for jobs", path: "docs/user-guide/searching.md", slug: "searching" },
-  { title: "Saved searches", path: "docs/user-guide/saved-searches.md", slug: "saved-searches" },
-  { title: "Reviewing generated resumes", path: "docs/user-guide/reviewing-resumes.md", slug: "reviewing-resumes" },
+  { title: "Your dashboard", path: "docs/user-guide/dashboard.md", slug: "dashboard" },
+  { title: "Finding and searching jobs", path: "docs/user-guide/jobs-and-search.md", slug: "jobs-and-search" },
+  { title: "Reviewing generated resumes", path: "docs/user-guide/resumes.md", slug: "resumes" },
   { title: "Tracking your pipeline", path: "docs/user-guide/pipeline.md", slug: "pipeline" },
-  { title: "AI providers & settings", path: "docs/user-guide/settings.md", slug: "settings" },
+  { title: "Your profile and tracks", path: "docs/user-guide/profile-and-tracks.md", slug: "profile-and-tracks" },
+  { title: "Settings and job sources", path: "docs/user-guide/settings-and-sources.md", slug: "settings-and-sources" },
+  { title: "Frequently asked questions", path: "docs/user-guide/faq.md", slug: "faq" },
 ];
 
 // Existing docs in this checkout (see docs/ and docs/superpowers/specs/).

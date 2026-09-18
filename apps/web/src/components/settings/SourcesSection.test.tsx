@@ -89,7 +89,18 @@ describe("SourcesSection", () => {
   it("shows a shape-matched skeleton while loading, not the empty or error state", () => {
     isLoading = true;
     data = undefined;
+    const { container } = render(<SourcesSection />);
+    // Positive assertion, not just the absence of the other states: a regression that rendered
+    // nothing at all while loading would still pass a purely negative check.
+    expect(container.querySelector('[data-slot="table-skeleton"]')).toBeInTheDocument();
+    expect(screen.queryByRole("group")).not.toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("shows a real empty state, distinct from a failure, when the source registry is genuinely empty", () => {
+    data = [];
     render(<SourcesSection />);
+    expect(screen.getByText(/no job sources configured/i)).toBeInTheDocument();
     expect(screen.queryByRole("group")).not.toBeInTheDocument();
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });

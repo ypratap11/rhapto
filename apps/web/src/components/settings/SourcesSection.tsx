@@ -1,10 +1,12 @@
 "use client";
 
+import { Plug } from "lucide-react";
 import { useRef } from "react";
 import { toast } from "sonner";
 import { ApiErrorBanner } from "@/components/shell/ApiErrorBanner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
@@ -88,6 +90,11 @@ export function SourcesSection() {
         {hasIssue ? <ApiErrorBanner error={sources.error ?? "Can't reach Rhapto's API."} /> : null}
         {!sources.data ? (
           nothingToShow ? null : <TableSkeleton />
+        ) : sources.data.length === 0 ? (
+          // Server-fixed today, but the registry could legitimately ship empty (a stripped-down
+          // deployment, a filtered response) — an empty array is truthy, so this needs its own
+          // branch rather than falling through to an empty `.map()` and a bare card body.
+          <EmptyState icon={Plug} title="No job sources configured" description="Ask whoever runs this Rhapto deployment to configure at least one job source." />
         ) : (
           sources.data.map((source) => (
             <fieldset key={source.id} role="group" aria-label={source.label} className="space-y-3 rounded-lg border border-border p-3">

@@ -116,7 +116,10 @@ describe("SavedSearchesSection", () => {
   it("shows a shape-matched skeleton while loading, not the empty state", () => {
     isLoading = true;
     data = undefined;
-    render(<SavedSearchesSection />);
+    const { container } = render(<SavedSearchesSection />);
+    // Positive assertion, not just the absence of the other states: a regression that rendered
+    // nothing at all while loading would still pass a purely negative check.
+    expect(container.querySelector('[data-slot="table-skeleton"]')).toBeInTheDocument();
     expect(screen.queryByText(/no saved searches yet/i)).not.toBeInTheDocument();
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
