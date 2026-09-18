@@ -1,8 +1,15 @@
 "use client";
 
+import { useCallback, useEffect, useRef, useState } from "react";
 import { type QueryClient, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ApiError, apiClient, apiUrl, authHeaders, unwrap, type Problem } from "./client";
-import type { components } from "./schema";
+import type { components, paths } from "./schema";
+import type { PerSource, SearchIn, SearchResult } from "./portal";
+import { DEFAULT_SEARCH_STATE, toJobsQuery, toSearchBody, type SearchState } from "@/lib/search-state";
+
+// Re-exported so a page that already imports from "@/lib/api/queries" doesn't also need
+// "@/lib/api/portal" for the shapes these hooks return.
+export type { DashboardOut, DashboardChecklist, DashboardSavedSearch, DueFollowup, PerSource, SearchBody, SearchIn, SearchOut, SearchResult, SourceSetting, TaxonomyField, TaxonomyOut, TaxonomyRole, TaxonomySuggestions } from "./portal";
 
 export type Schemas = components["schemas"];
 export type JobOut = Schemas["JobOut"];
@@ -42,6 +49,8 @@ export const discoveryKeys = {
 export function invalidateJobs(queryClient: QueryClient): void {
   void queryClient.invalidateQueries({ queryKey: ["jobs"] });
   void queryClient.invalidateQueries({ queryKey: ["job"] });
+  // Hiding/unhiding a job changes new_fit_count and the saved-search "N new" badges.
+  void queryClient.invalidateQueries({ queryKey: portalKeys.dashboard });
   invalidatePackageList(queryClient);
 }
 
@@ -504,4 +513,183 @@ export function useDeleteLlmSettings() {
     mutationFn: () => unwrap(apiClient().DELETE("/api/v1/settings/llm")),
     onSuccess: () => invalidateLlmSettings(queryClient),
   });
+}
+
+// --- Portal: live market search, saved searches, dashboard, taxonomy, source settings ---
+
+export const portalKeys = {
+  dashboard: ["dashboard"] as const,
+  searches: ["searches"] as const,
+  taxonomy: ["taxonomy"] as const,
+  suggestions: ["taxonomy", "suggestions"] as const,
+  sourceSettings: ["settings", "sources"] as const,
+  jobsQuery: (s: SearchState, ids?: string[]) => ["jobs", "query", toJobsQuery(s, ids)] as const,
+};
+
+export const LIVE_SEARCH_INTERVAL_MS = 3000;
+export const LIVE_SEARCH_TIMEOUT_MS = 60_000;
+
+export type LiveSearchStatus = "idle" | "searching" | "scoring" | "done" | "error";
+
+/**
+ * `GET /jobs` types `sort`/`hidden`/etc. as their native enum/boolean, but `toJobsQuery` returns the
+ * comma-joined `Record<string, string>` the API actually reads off the query string — openapi-fetch
+ * just stringifies whatever it's given, so this bridges the two without lying about the shape either
+ * side really has.
+ */
+type JobsQueryParams = NonNullable<paths["/api/v1/jobs"]["get"]["parameters"]["query"]>;
+function asJobsQuery(q: Record<string, string>): JobsQueryParams {
+  return q as unknown as JobsQueryParams;
+}
+
+/**
+ * Spec §6: the search returns immediately, known jobs already scored and new ones with
+ * `best_fit: null`. Rather than block the grid on the worker, show every job at once and refetch
+ * just the returned ids every 3s until nothing is unscored — or until 60s have passed, after
+ * which an unscored job simply keeps its dashed ring.
+ */
+export function useLiveSearch(options: { intervalMs?: number; timeoutMs?: number } = {}) {
+  const intervalMs = options.intervalMs ?? LIVE_SEARCH_INTERVAL_MS;
+  const timeoutMs = options.timeoutMs ?? LIVE_SEARCH_TIMEOUT_MS;
+  const [jobs, setJobs] = useState<JobOut[]>([]);
+  const [perSource, setPerSource] = useState<PerSource | null>(null);
+  const [status, setStatus] = useState<LiveSearchStatus>("idle");
+  const [error, setError] = useState<unknown>(null);
+  const timer = useRef<ReturnType<typeof setInterval> | null>(null);
+  const deadline = useRef(0);
+  const ids = useRef<string[]>([]);
+
+  const stop = useCallback(() => {
+    if (timer.current !== null) clearInterval(timer.current);
+    timer.current = null;
+  }, []);
+
+  useEffect(() => stop, [stop]);
+
+  const run = useCallback(
+    (state: SearchState) => {
+      stop();
+      setStatus("searching");
+      setError(null);
+      void (async () => {
+        try {
+          const result: SearchResult = await unwrap(apiClient().POST("/api/v1/search", { body: toSearchBody(state) }));
+          setJobs(result.jobs);
+          setPerSource(result.per_source);
+          ids.current = result.jobs.map((j) => j.id);
+          if (result.jobs.every((j) => j.best_fit !== null)) {
+            setStatus("done");
+            return;
+          }
+          setStatus("scoring");
+          deadline.current = Date.now() + timeoutMs;
+          timer.current = setInterval(() => {
+            void (async () => {
+              try {
+                const fresh = await unwrap(
+                  apiClient().GET("/api/v1/jobs", { params: { query: asJobsQuery(toJobsQuery({ ...DEFAULT_SEARCH_STATE, sort: state.sort }, ids.current)) } }),
+                );
+                setJobs(fresh);
+                if (fresh.every((j) => j.best_fit !== null) || Date.now() >= deadline.current) {
+                  stop();
+                  setStatus("done");
+                }
+              } catch (e) {
+                stop();
+                setError(e);
+                setStatus("error");
+              }
+            })();
+          }, intervalMs);
+        } catch (e) {
+          setError(e);
+          setStatus("error");
+        }
+      })();
+    },
+    [intervalMs, stop, timeoutMs],
+  );
+
+  return { run, jobs, perSource, status, error };
+}
+
+export function useJobsQuery(state: SearchState, options: { enabled?: boolean } = {}) {
+  return useQuery({
+    queryKey: portalKeys.jobsQuery(state),
+    queryFn: () => unwrap(apiClient().GET("/api/v1/jobs", { params: { query: asJobsQuery(toJobsQuery(state)) } })),
+    enabled: options.enabled ?? true,
+  });
+}
+
+export function useSavedSearches() {
+  return useQuery({ queryKey: portalKeys.searches, queryFn: () => unwrap(apiClient().GET("/api/v1/searches")) });
+}
+
+export function useSaveSearch() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    // Assumption A9: POST /searches takes the form shape and names the search after the query.
+    mutationFn: (state: SearchState) => {
+      const body: SearchIn = {
+        active: true,
+        query: state.query.trim() || null,
+        location: state.location.trim() || null,
+        remote: state.remote,
+      };
+      return unwrap(apiClient().POST("/api/v1/searches", { body }));
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: portalKeys.searches });
+      void queryClient.invalidateQueries({ queryKey: portalKeys.dashboard });
+    },
+  });
+}
+
+export function useDeleteSavedSearch() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => unwrap(apiClient().DELETE("/api/v1/searches/{search_id}", { params: { path: { search_id: id } } })),
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: portalKeys.searches }),
+  });
+}
+
+export function useUpdateSavedSearch() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, body }: { id: string; body: SearchIn }) =>
+      unwrap(apiClient().PUT("/api/v1/searches/{search_id}", { params: { path: { search_id: id } }, body })),
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: portalKeys.searches }),
+  });
+}
+
+/** Opening a saved search's results is what clears its "N new" badge (spec §6). */
+export function useMarkSearchViewed() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => unwrap(apiClient().POST("/api/v1/searches/{search_id}/viewed", { params: { path: { search_id: id } } })),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: portalKeys.searches });
+      void queryClient.invalidateQueries({ queryKey: portalKeys.dashboard });
+    },
+  });
+}
+
+export function useHideJob() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => unwrap(apiClient().POST("/api/v1/jobs/{job_id}/hide", { params: { path: { job_id: id } } })),
+    onSuccess: () => invalidateJobs(queryClient),
+  });
+}
+
+export function useUnhideJob() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => unwrap(apiClient().POST("/api/v1/jobs/{job_id}/unhide", { params: { path: { job_id: id } } })),
+    onSuccess: () => invalidateJobs(queryClient),
+  });
+}
+
+export function useSourceSettings() {
+  return useQuery({ queryKey: portalKeys.sourceSettings, queryFn: () => unwrap(apiClient().GET("/api/v1/settings/sources")), staleTime: 60_000 });
 }
