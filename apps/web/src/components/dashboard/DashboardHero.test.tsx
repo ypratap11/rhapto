@@ -40,4 +40,16 @@ describe("DashboardHero", () => {
     expect(screen.queryByRole("heading", { level: 1 })).not.toBeInTheDocument();
     expect(screen.getByTestId("dashboard-hero-skeleton")).toBeInTheDocument();
   });
+
+  it("says the dashboard failed to load instead of falling back to the empty-state prompt", () => {
+    // TanStack Query's isLoading is isPending && isFetching: once a failed request settles,
+    // loading goes false again with newFitCount/needsReviewCount still defaulted to 0 — the exact
+    // moment a caller with only `loading` (and no `error`) would show "Nothing new yet" for a
+    // request that never actually returned that answer.
+    render(<DashboardHero newFitCount={0} needsReviewCount={0} error />);
+    expect(screen.queryByText(/nothing new yet/i)).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /new search/i })).not.toBeInTheDocument();
+    expect(screen.getByTestId("dashboard-hero-error")).toBeInTheDocument();
+    expect(screen.getByText(/couldn.t load your dashboard/i)).toBeInTheDocument();
+  });
 });

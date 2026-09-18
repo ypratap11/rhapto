@@ -13,15 +13,22 @@ function plural(n: number, one: string, many: string): string {
  * to `newFitCount={0} needsReviewCount={0}`: a real zero renders the *same* empty-state prompt this
  * would, so a caller that didn't distinguish loading from empty would show it a beat too early —
  * telling a user with plenty of new roles that they have none.
+ *
+ * `error` covers the third state a `newFitCount`/`needsReviewCount` pair can't: TanStack Query's
+ * `isLoading` is `isPending && isFetching`, so once a failed request *settles*, loading goes false
+ * again while there was still never real data — the exact moment a caller with only the two counts
+ * would fall back to 0/0 and repeat the same false-empty prompt `loading` was added to prevent.
  */
 export function DashboardHero({
   newFitCount,
   needsReviewCount,
   loading = false,
+  error = false,
 }: {
   newFitCount: number;
   needsReviewCount: number;
   loading?: boolean;
+  error?: boolean;
 }) {
   if (loading) {
     return (
@@ -31,6 +38,17 @@ export function DashboardHero({
           <Skeleton className="h-8 w-32 rounded-lg" />
           <Skeleton className="h-8 w-28 rounded-lg" />
         </div>
+      </div>
+    );
+  }
+  if (error) {
+    // No CTAs: "Review resumes" and "New search" both imply a count we don't actually have. The
+    // ApiErrorBanner just below the hero band carries the real failure detail; this just avoids
+    // asserting "you have nothing" in its place.
+    return (
+      <div data-testid="dashboard-hero-error">
+        <h1 className="font-serif text-[32px] font-medium leading-tight tracking-tight">Couldn&rsquo;t load your dashboard right now.</h1>
+        <p className="text-sm text-muted-foreground">Try refreshing the page.</p>
       </div>
     );
   }

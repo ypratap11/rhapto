@@ -1,5 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
+import { ApiError } from "@/lib/api/client";
 import DashboardPage from "./page";
 
 vi.mock("next/navigation", () => ({
@@ -60,5 +61,20 @@ describe("DashboardPage loading state (real DashboardHero, ProfileChecklist, Sav
     expect(screen.queryByTestId("dashboard-hero-skeleton")).not.toBeInTheDocument();
     expect(screen.queryByTestId("checklist-skeleton")).not.toBeInTheDocument();
     expect(screen.queryByTestId("saved-searches-skeleton")).not.toBeInTheDocument();
+  });
+
+  it("says the dashboard failed to load on every dashboard-fed panel, not the false empty-state copy, once the call settles into an error", () => {
+    // TanStack Query v5: isLoading is isPending && isFetching, so once a failed request settles,
+    // isLoading goes back to false with data still undefined — the exact state that, before this
+    // fix, fell through to newFitCount ?? 0 / saved_searches ?? [] / checklist ?? null and rendered
+    // the same "you have nothing" copy as a real empty dashboard.
+    dashboardResult = { data: undefined, error: new ApiError(500, null, "Server error"), isLoading: false };
+    render(<DashboardPage />);
+
+    expect(screen.queryByText(/nothing new yet/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/save a search from the jobs page/i)).not.toBeInTheDocument();
+    expect(screen.getByTestId("dashboard-hero-error")).toBeInTheDocument();
+    expect(screen.getByTestId("checklist-error")).toBeInTheDocument();
+    expect(screen.getByTestId("saved-searches-error")).toBeInTheDocument();
   });
 });

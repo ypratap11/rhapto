@@ -29,4 +29,13 @@ describe("SavedSearchesRail", () => {
     expect(screen.getByTestId("saved-searches-skeleton")).toBeInTheDocument();
     expect(screen.queryByText(/save a search/i)).not.toBeInTheDocument();
   });
+
+  it("says the saved searches failed to load instead of claiming there are none", () => {
+    // Once a failed dashboard call settles, loading goes false with searches still []: the exact
+    // shape "you've never saved a search" has. error must not fall through to that copy.
+    render(<SavedSearchesRail searches={[]} error />);
+    expect(screen.getByTestId("saved-searches-error")).toBeInTheDocument();
+    expect(screen.getByText(/couldn.t load/i)).toBeInTheDocument();
+    expect(screen.queryByText(/save a search from the jobs page/i)).not.toBeInTheDocument();
+  });
 });

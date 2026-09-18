@@ -1,6 +1,7 @@
 import { CheckCircle2, Circle } from "lucide-react";
 import Link from "next/link";
 import { Skeleton } from "@/components/ui/skeleton";
+import { StatusBadge } from "@/components/ui/StatusBadge";
 import type { DashboardChecklist } from "@/lib/api/queries";
 
 type Row = {
@@ -53,11 +54,21 @@ const ROWS: Row[] = [
 /**
  * Spec §2: six checks, each an "Edit" deep link into the Profile page's matching card.
  *
- * `checklist` is `null` for two different reasons a caller must keep apart: `loading` (the
+ * Three states share the one `checklist` prop, and a caller must keep them apart: `loading` (the
  * `useDashboard()` call is still in flight — render a skeleton, not a row of false "not done"
- * checks) versus settled-with-nothing-to-show (e.g. the call errored — render nothing, as before).
+ * checks), `error` (the call settled but failed — say so, don't pretend there is nothing to show),
+ * and a settled `checklist` of `null` with neither flag set (defensive only; `DashboardOut.checklist`
+ * is required, so a successful response always has one) — which renders nothing, as before.
  */
-export function ProfileChecklist({ checklist, loading = false }: { checklist: DashboardChecklist | null; loading?: boolean }) {
+export function ProfileChecklist({
+  checklist,
+  loading = false,
+  error = false,
+}: {
+  checklist: DashboardChecklist | null;
+  loading?: boolean;
+  error?: boolean;
+}) {
   if (loading) {
     return (
       <section
@@ -82,6 +93,23 @@ export function ProfileChecklist({ checklist, loading = false }: { checklist: Da
             </li>
           ))}
         </ul>
+      </section>
+    );
+  }
+  if (error) {
+    return (
+      <section
+        aria-labelledby="checklist-heading"
+        className="space-y-3 rounded-card border border-border bg-surface p-4 shadow-card"
+        data-testid="checklist-error"
+      >
+        <div className="flex items-center justify-between gap-2">
+          <h2 id="checklist-heading" className="font-sans text-base font-semibold">
+            Profile checklist
+          </h2>
+          <StatusBadge tone="danger">Couldn&rsquo;t load</StatusBadge>
+        </div>
+        <p className="text-sm text-muted-foreground">Try refreshing the page.</p>
       </section>
     );
   }

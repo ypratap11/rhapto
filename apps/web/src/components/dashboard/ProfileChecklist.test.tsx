@@ -44,4 +44,14 @@ describe("ProfileChecklist", () => {
     const { container } = render(<ProfileChecklist checklist={null} />);
     expect(container).toBeEmptyDOMElement();
   });
+
+  it("says the checklist failed to load instead of silently rendering nothing", () => {
+    // Once a failed dashboard call settles, loading goes false with checklist still null — the
+    // same shape a genuinely-nothing-to-show case has. `error` must produce a visible state, not
+    // fall through to the silent `!checklist` branch above.
+    render(<ProfileChecklist checklist={null} error />);
+    expect(screen.getByTestId("checklist-error")).toBeInTheDocument();
+    expect(screen.getByText(/couldn.t load/i)).toBeInTheDocument();
+    expect(screen.queryAllByRole("listitem")).toHaveLength(0);
+  });
 });

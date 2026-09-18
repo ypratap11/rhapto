@@ -7,11 +7,20 @@ import type { DashboardSavedSearch } from "@/lib/api/queries";
  * Spec §6: opening a saved search's results is what clears its "N new" badge, so this only links —
  * `useMarkSearchViewed` fires from the Jobs page once `?search_id=` lands there.
  *
- * `loading` is separate from `searches.length === 0`: while `useDashboard()` is in flight there are
- * no searches to show *yet*, which is not the same claim as "you have never saved a search" — the
- * latter is what the empty-state copy below actually says.
+ * `loading` and `error` are both separate from `searches.length === 0`: while `useDashboard()` is
+ * in flight, or once it has settled into a failure, there are no searches to show *yet* (or ever,
+ * this time) — neither is the same claim as "you have never saved a search", which is what the
+ * empty-state copy below actually says.
  */
-export function SavedSearchesRail({ searches, loading = false }: { searches: DashboardSavedSearch[]; loading?: boolean }) {
+export function SavedSearchesRail({
+  searches,
+  loading = false,
+  error = false,
+}: {
+  searches: DashboardSavedSearch[];
+  loading?: boolean;
+  error?: boolean;
+}) {
   if (loading) {
     return (
       <section
@@ -26,6 +35,23 @@ export function SavedSearchesRail({ searches, loading = false }: { searches: Das
           <Skeleton className="h-8 w-full rounded-control" />
           <Skeleton className="h-8 w-full rounded-control" />
         </div>
+      </section>
+    );
+  }
+  if (error) {
+    return (
+      <section
+        aria-labelledby="saved-searches-heading"
+        className="space-y-3 rounded-card border border-border bg-surface p-4 shadow-card"
+        data-testid="saved-searches-error"
+      >
+        <div className="flex items-center justify-between gap-2">
+          <h2 id="saved-searches-heading" className="font-sans text-base font-semibold">
+            Saved searches
+          </h2>
+          <StatusBadge tone="danger">Couldn&rsquo;t load</StatusBadge>
+        </div>
+        <p className="text-sm text-muted-foreground">Try refreshing the page.</p>
       </section>
     );
   }
