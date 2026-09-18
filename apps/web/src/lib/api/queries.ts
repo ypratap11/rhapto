@@ -628,10 +628,22 @@ export function useLiveSearch(options: { intervalMs?: number; timeoutMs?: number
   return { run, jobs, perSource, status, error };
 }
 
-export function useJobsQuery(state: SearchState, options: { enabled?: boolean } = {}) {
+/**
+ * `searchId` is a `?search_id=` param carried over from the Dashboard's saved-search rail: it
+ * asks the API to scope results to that saved search rather than (or alongside) `state`'s own
+ * filters. It rides in as an extra query param next to whatever `toJobsQuery(state)` already
+ * produced, so `SearchState` itself never needs to know about it.
+ */
+export function useJobsQuery(state: SearchState, options: { enabled?: boolean; searchId?: string | null } = {}) {
+  const searchId = options.searchId ?? null;
   return useQuery({
-    queryKey: portalKeys.jobsQuery(state),
-    queryFn: () => unwrap(apiClient().GET("/api/v1/jobs", { params: { query: asJobsQuery(toJobsQuery(state)) } })),
+    queryKey: [...portalKeys.jobsQuery(state), searchId] as const,
+    queryFn: () =>
+      unwrap(
+        apiClient().GET("/api/v1/jobs", {
+          params: { query: asJobsQuery({ ...toJobsQuery(state), ...(searchId ? { search_id: searchId } : {}) }) },
+        }),
+      ),
     enabled: options.enabled ?? true,
   });
 }
@@ -707,4 +719,9 @@ export function useUnhideJob() {
 
 export function useSourceSettings() {
   return useQuery({ queryKey: portalKeys.sourceSettings, queryFn: () => unwrap(apiClient().GET("/api/v1/settings/sources")), staleTime: 60_000 });
+}
+
+/** Career fields and roles for the Field select (spec §5) — static enough per deploy to cache like source settings. */
+export function useTaxonomy() {
+  return useQuery({ queryKey: portalKeys.taxonomy, queryFn: () => unwrap(apiClient().GET("/api/v1/taxonomy")), staleTime: 60_000 });
 }
