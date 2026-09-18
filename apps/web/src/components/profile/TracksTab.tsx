@@ -14,6 +14,7 @@ import { ApiError } from "@/lib/api/client";
 import { useBases, useDeleteTrack, usePutTrack, useTracks, type Track } from "@/lib/api/queries";
 import { ID_RE, splitList, joinList } from "@/lib/profile-forms";
 import { EntityTable } from "./EntityTable";
+import { FieldPicker } from "./FieldPicker";
 
 type TrackForm = { id: string; name: string; description: string; keywords: string; resume_base: string; min_fit: string };
 
@@ -53,6 +54,7 @@ export function TracksTab() {
   const [form, setForm] = useState<TrackForm | null>(null);
   const [isNew, setIsNew] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [pickerOpen, setPickerOpen] = useState(false);
 
   function open(track: Track | null) {
     setErrors({});
@@ -81,7 +83,10 @@ export function TracksTab() {
 
   return (
     <div className="space-y-3">
-      <div className="flex justify-end">
+      <div className="flex justify-end gap-2">
+        <Button variant="outline" onClick={() => setPickerOpen(true)}>
+          Pick a field and role
+        </Button>
         <Button onClick={() => open(null)}>Add track</Button>
       </div>
       <EntityTable<Track>
@@ -171,6 +176,7 @@ export function TracksTab() {
           ) : null}
         </SheetContent>
       </Sheet>
+      <FieldPicker open={pickerOpen} onOpenChange={setPickerOpen} />
     </div>
   );
 }

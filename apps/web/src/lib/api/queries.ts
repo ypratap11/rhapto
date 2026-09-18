@@ -757,9 +757,18 @@ export function useSourceSettings() {
   return useQuery({ queryKey: portalKeys.sourceSettings, queryFn: () => unwrap(apiClient().GET("/api/v1/settings/sources")), staleTime: 60_000 });
 }
 
-/** Career fields and roles for the Field select (spec §5) — static enough per deploy to cache like source settings. */
+/** Career fields and roles for the Field select (spec §5) and the field/role picker (spec §5): a
+ * data file on the server (packages/schemas/taxonomy.yaml) that never changes within a session, so
+ * it is fetched once. */
 export function useTaxonomy() {
-  return useQuery({ queryKey: portalKeys.taxonomy, queryFn: () => unwrap(apiClient().GET("/api/v1/taxonomy")), staleTime: 60_000 });
+  return useQuery({ queryKey: portalKeys.taxonomy, queryFn: () => unwrap(apiClient().GET("/api/v1/taxonomy")), staleTime: Infinity });
+}
+
+/** Roles the uploaded resume's entry titles match, for the picker's one-tap suggestion chips
+ * (spec §5). Re-derived whenever the resume document changes, so it gets a real staleTime rather
+ * than Infinity. */
+export function useTaxonomySuggestions() {
+  return useQuery({ queryKey: portalKeys.suggestions, queryFn: () => unwrap(apiClient().GET("/api/v1/taxonomy/suggestions")), staleTime: 60_000 });
 }
 
 /** The Dashboard's one call: both headline numbers, the checklist, due follow-ups and saved-search counts. */
