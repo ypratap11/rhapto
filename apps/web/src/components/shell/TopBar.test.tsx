@@ -1,0 +1,36 @@
+import { render, screen } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
+import { TopBar } from "./TopBar";
+
+const pathname = vi.fn(() => "/jobs");
+vi.mock("next/navigation", () => ({ usePathname: () => pathname() }));
+
+describe("TopBar", () => {
+  it("lists the five portal tabs in order and marks the current one", () => {
+    render(<TopBar />);
+    const nav = screen.getByRole("navigation", { name: "Primary" });
+    expect([...nav.querySelectorAll("a")].map((a) => a.textContent)).toEqual([
+      "Dashboard",
+      "Jobs",
+      "Resumes",
+      "Pipeline",
+      "Profile",
+    ]);
+    expect(screen.getByRole("link", { name: "Jobs" })).toHaveAttribute("aria-current", "page");
+    expect(screen.getByRole("link", { name: "Dashboard" })).not.toHaveAttribute("aria-current");
+  });
+
+  it("keeps Dashboard current only on the exact root path", () => {
+    pathname.mockReturnValue("/");
+    render(<TopBar />);
+    expect(screen.getByRole("link", { name: "Dashboard" })).toHaveAttribute("aria-current", "page");
+  });
+
+  it("offers the theme toggle, Settings and Help", () => {
+    pathname.mockReturnValue("/");
+    render(<TopBar />);
+    expect(screen.getByRole("button", { name: /toggle theme/i })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Settings" })).toHaveAttribute("href", "/settings");
+    expect(screen.getByRole("link", { name: "Help" })).toHaveAttribute("href", "/settings#help");
+  });
+});
