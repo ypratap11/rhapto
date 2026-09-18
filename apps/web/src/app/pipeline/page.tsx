@@ -11,11 +11,27 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { Skeleton } from "@/components/ui/skeleton";
 import { TableSkeleton } from "@/components/ui/table-skeleton";
 import { useApplications } from "@/lib/api/queries";
+import { PIPELINE_STATUSES } from "@/lib/status";
+
+function isPipelineStatus(status: string): boolean {
+  return (PIPELINE_STATUSES as readonly string[]).includes(status);
+}
 
 export default function PipelinePage() {
   const applications = useApplications();
 
-  const rows = useMemo(() => Object.values(applications.data?.columns ?? {}).flat(), [applications.data]);
+  // The board endpoint buckets by every APPLICATION_STATUSES key, including `discovered`/`queued`
+  // (the status every Application is created with, before anyone applies) — but ApplicationList
+  // only ever renders tabs for the five PIPELINE_STATUSES. An application in one of the other
+  // buckets has no tab and no card here, so it's filtered out up front: it must never become the
+  // default selection, and ApplicationList must never be handed a row it cannot show as current.
+  const rows = useMemo(
+    () =>
+      Object.values(applications.data?.columns ?? {})
+        .flat()
+        .filter((a) => isPipelineStatus(a.status)),
+    [applications.data],
+  );
 
   // Same two-boolean shape as the Dashboard (app/page.tsx): a paused fetch (API unreachable)
   // settles with isLoading false and error null, so isPaused is checked explicitly; hasIssue shows
@@ -25,10 +41,19 @@ export default function PipelinePage() {
   const nothingToShow = !applications.data && hasIssue;
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  // Derived, never assigned in an effect: the first row is the default selection until the person
-  // picks one themselves.
-  const activeId = selectedId ?? rows[0]?.id ?? null;
-  const selected = rows.find((a) => a.id === activeId) ?? null;
+  // The default selection is latched once, the render after real rows first become available —
+  // calling `setState` conditionally during render (guarded so it can fire at most once) rather
+  // than in an effect, the pattern React's own docs recommend for "remembering something from a
+  // previous render" (https://react.dev/reference/react/useState#storing-information-from-previous-renders).
+  // Re-deriving `rows[0]` on every render instead would let the visible selection drift out from
+  // under a user who never explicitly picked one: acting on the default-selected application (e.g.
+  // a status change) reorders `rows` on the refetch that follows, and `rows[0]` can become a
+  // different application entirely. Once latched, `selectedId` never reverts to null, so this can
+  // only ever run once.
+  if (selectedId === null && rows[0]) {
+    setSelectedId(rows[0].id);
+  }
+  const selected = rows.find((a) => a.id === selectedId) ?? null;
 
   return (
     <>
@@ -55,7 +80,7 @@ export default function PipelinePage() {
         )
       ) : (
         <div className="grid gap-6 lg:grid-cols-[360px_1fr]">
-          <ApplicationList applications={rows} selectedId={activeId} onSelect={setSelectedId} />
+          <ApplicationList applications={rows} selectedId={selectedId} onSelect={setSelectedId} />
           {selected ? (
             <ApplicationDetail key={selected.id} application={selected} />
           ) : (

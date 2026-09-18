@@ -147,6 +147,65 @@ describe("PipelinePage", () => {
     expect(document.title).toBe("Pipeline › ExampleCo · TPM");
     expect(screen.getByText("ExampleCo · TPM")).toBeInTheDocument();
   });
+
+  it("never defaults the selection to a discovered/queued application that has no card in any tab", () => {
+    // discovered/queued flatten in ahead of applied (Object.values order), so a naive rows[0]
+    // would open the detail pane on an application ApplicationList can't render as current.
+    jobResult = { data: job({ id: "j2", company: "VisibleCo", title: "Eng" }), error: null, isLoading: false };
+    applicationsResult = {
+      data: {
+        columns: columns({
+          discovered: [application({ id: "d1", job: { id: "jd", company: "GhostCo", title: "Ghost" }, status: "discovered" })],
+          queued: [application({ id: "q1", job: { id: "jq", company: "QueuedCo", title: "Queued" }, status: "queued" })],
+          applied: [application({ id: "a1", job: { id: "j2", company: "VisibleCo", title: "Eng" }, status: "applied" })],
+        }),
+      },
+      error: null,
+    };
+    render(<PipelinePage />);
+
+    expect(document.title).toBe("Pipeline › VisibleCo · Eng");
+    expect(screen.queryByText("GhostCo")).not.toBeInTheDocument();
+    expect(screen.queryByText("QueuedCo")).not.toBeInTheDocument();
+
+    const card = screen.getAllByText("VisibleCo").map((el) => el.closest("button")).find((btn) => btn !== null);
+    expect(card).not.toBeUndefined();
+    expect(card).toHaveAttribute("aria-current", "true");
+  });
+
+  it("keeps the default selection fixed after a refetch reorders the visible rows (acting on it must not move it)", () => {
+    jobResult = { data: job({ id: "j0", company: "OtherCo", title: "Eng" }), error: null, isLoading: false };
+    applicationsResult = {
+      data: {
+        columns: columns({
+          applied: [
+            application({ id: "a0", job: { id: "j0", company: "OtherCo", title: "Eng" }, status: "applied" }),
+            application({ id: "a1", job: { id: "j1", company: "ExampleCo", title: "TPM" }, status: "applied" }),
+          ],
+        }),
+      },
+      error: null,
+    };
+    const { rerender } = render(<PipelinePage />);
+    expect(document.title).toBe("Pipeline › OtherCo · Eng");
+
+    // Simulate the refetch that follows acting on the default-selected application (a0): its
+    // status moves it to a different bucket, which reorders the flattened rows so a1 (ExampleCo)
+    // would now be rows[0] if the default were re-derived on every render.
+    applicationsResult = {
+      data: {
+        columns: columns({
+          applied: [application({ id: "a1", job: { id: "j1", company: "ExampleCo", title: "TPM" }, status: "applied" })],
+          screen: [application({ id: "a0", job: { id: "j0", company: "OtherCo", title: "Eng" }, status: "screen" })],
+        }),
+      },
+      error: null,
+    };
+    rerender(<PipelinePage />);
+
+    // The visible selection must not have jumped to ExampleCo just because it is now rows[0].
+    expect(document.title).toBe("Pipeline › OtherCo · Eng");
+  });
 });
 
 describe("PipelineBoardPage", () => {
