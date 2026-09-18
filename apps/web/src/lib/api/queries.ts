@@ -212,12 +212,33 @@ export function invalidateApplications(queryClient: QueryClient): void {
   invalidateJobs(queryClient);
 }
 
-export function usePackage(id: string) {
-  return useQuery({ queryKey: packageKeys.package(id), queryFn: () => unwrap(apiClient().GET("/api/v1/packages/{package_id}", { params: { path: { package_id: id } } })) });
+// `enabled` defaults to true for every existing caller (the review page always wants its package);
+// the job page passes false until it knows the latest package is blocked, so it can call this hook
+// unconditionally (Rules of Hooks) without firing a request for a package it will not show.
+export function usePackage(id: string, enabled = true) {
+  return useQuery({
+    queryKey: packageKeys.package(id),
+    queryFn: () => unwrap(apiClient().GET("/api/v1/packages/{package_id}", { params: { path: { package_id: id } } })),
+    enabled: enabled && id !== "",
+  });
 }
 
 export function usePackages(jobId: string) {
   return useQuery({ queryKey: packageKeys.packages(jobId), queryFn: () => unwrap(apiClient().GET("/api/v1/jobs/{job_id}/packages", { params: { path: { job_id: jobId } } })) });
+}
+
+/** "Skip" on the job page (spec: DidYouApplyPrompt) — archives the draft so it leaves the review
+ * queue and, together with hiding the job, gets it out of Recommended without deleting anything. */
+export function useArchivePackage() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => unwrap(apiClient().POST("/api/v1/packages/{package_id}/archive", { params: { path: { package_id: id } } })),
+    onSuccess: () => {
+      invalidatePackageList(queryClient);
+      void queryClient.invalidateQueries({ queryKey: ["jobs"] });
+      void queryClient.invalidateQueries({ queryKey: portalKeys.dashboard });
+    },
+  });
 }
 
 export function useBlocks() {

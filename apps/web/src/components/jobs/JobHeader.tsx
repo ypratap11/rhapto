@@ -1,0 +1,101 @@
+"use client";
+
+import Link from "next/link";
+import { useMemo } from "react";
+import { TailorButton } from "@/components/queue/TailorButton";
+import { Button, buttonVariants } from "@/components/ui/button";
+import { FitRing } from "@/components/ui/fit-ring";
+import { StatusBadge } from "@/components/ui/StatusBadge";
+import { useApplications, type JobOut } from "@/lib/api/queries";
+import { markApplyOpened } from "@/lib/apply-prompt";
+import { downloadPackage } from "@/lib/download";
+import { locationTierLabel, SOURCE_LABEL } from "@/lib/fit";
+import { STATUS_LABEL, statusTone, type ApplicationStatus } from "@/lib/status";
+import type { TrackInfo } from "./JobCard";
+import { NotInterestedButton } from "./NotInterestedButton";
+
+/** The job page's header: title, chips (same row `JobCard` uses), a fit ring against the best
+ * track, and a primary action that follows the job's state (spec §3.3) — Tailor with no package,
+ * Review/Fix guardrails with one in progress, Apply once it's ready, or the application's status
+ * once one exists. An existing application always wins: once applied, Apply has nothing to offer. */
+export function JobHeader({ job, track }: { job: JobOut; track: TrackInfo | null }) {
+  const applications = useApplications();
+  const application = useMemo(() => {
+    const columns = applications.data?.columns ?? {};
+    return Object.values(columns).flat().find((a) => a.job.id === job.id) ?? null;
+  }, [applications.data, job.id]);
+
+  const company = job.company ?? "Unknown company";
+  const title = job.title ?? "Untitled role";
+  const tier = locationTierLabel(job.location_tier);
+  const latest = job.latest_package;
+
+  function onApply() {
+    if (!latest) return;
+    markApplyOpened(job.id);
+    if (job.url) window.open(job.url, "_blank", "noopener");
+    void downloadPackage(latest.id, "pdf");
+  }
+
+  const primary = (() => {
+    if (application) {
+      return (
+        <div className="flex items-center gap-2">
+          <StatusBadge tone={statusTone(application.status)}>{STATUS_LABEL[application.status as ApplicationStatus] ?? application.status}</StatusBadge>
+          <Link href="/pipeline" className={buttonVariants({ variant: "outline", size: "sm" })}>
+            Pipeline
+          </Link>
+        </div>
+      );
+    }
+    if (!latest) return <TailorButton job={job} />;
+    if (latest.status === "blocked") {
+      return (
+        <Link href={`/jobs/${job.id}/packages/${latest.id}`} className={buttonVariants({ size: "sm" })}>
+          Fix guardrails
+        </Link>
+      );
+    }
+    if (latest.status === "ready") {
+      return (
+        <Button size="sm" onClick={onApply}>
+          Apply
+        </Button>
+      );
+    }
+    return (
+      <Link href={`/jobs/${job.id}/packages/${latest.id}`} className={buttonVariants({ size: "sm" })}>
+        Review
+      </Link>
+    );
+  })();
+
+  return (
+    <div className="flex flex-col gap-4 rounded-card border border-border bg-surface p-4 shadow-card sm:flex-row sm:items-start sm:justify-between">
+      <div className="flex min-w-0 items-start gap-4">
+        <div className="flex shrink-0 flex-col items-center gap-1">
+          <FitRing fit={job.best_fit ?? null} size={56} />
+          {track ? <p className="text-xs text-muted-foreground">against {track.name}</p> : null}
+        </div>
+        <div className="min-w-0 space-y-2">
+          <div>
+            <h1 className="text-2xl font-semibold">{title}</h1>
+            <p className="text-sm text-muted-foreground">{company}</p>
+          </div>
+          <div className="flex flex-wrap items-center gap-1.5">
+            {track ? <StatusBadge tone="primary">{track.name}</StatusBadge> : null}
+            <StatusBadge tone="muted">{SOURCE_LABEL[job.source] ?? job.source}</StatusBadge>
+            {tier ? <StatusBadge tone="muted">{tier}</StatusBadge> : null}
+            {job.repost_of ? <StatusBadge tone="mid">Reposted</StatusBadge> : null}
+            {job.unlisted_at ? <StatusBadge tone="muted">No longer listed</StatusBadge> : null}
+            {job.search_name ? <StatusBadge tone="muted">{`via ${job.search_name}`}</StatusBadge> : null}
+          </div>
+        </div>
+      </div>
+      <div className="flex shrink-0 items-center gap-2">
+        {primary}
+        <NotInterestedButton job={job} size="sm" />
+      </div>
+    </div>
+  );
+}

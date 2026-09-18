@@ -31,3 +31,9 @@ export function resumeFilename(name: string | null | undefined, kind: "pdf" | "d
   const stem = (name ?? "").replace(/[^A-Za-z0-9]+/g, "_").replace(/^_+|_+$/g, "") || "Resume";
   return kind === "zip" ? `${stem}_Package.zip` : `${stem}_Resume.${kind}`;
 }
+
+/** The job page's Apply action: no candidate name is loaded there, so this leaves the filename to
+ * the response's Content-Disposition header rather than calling `resumeFilename` itself. */
+export async function downloadPackage(packageId: string, kind: "pdf" | "docx"): Promise<void> {
+  await downloadAuthenticated(`/api/v1/packages/${packageId}/files/resume.${kind}`);
+}
