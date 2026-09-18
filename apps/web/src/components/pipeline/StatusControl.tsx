@@ -13,6 +13,11 @@ import { CLOSED_REASONS, CLOSED_REASON_LABEL, PIPELINE_STATUSES, STATUS_LABEL, t
 export function StatusControl({ application }: { application: ApplicationOut }) {
   const patch = usePatchApplication();
   const followUpRef = useRef<HTMLInputElement>(null);
+  // The API returns a full ISO datetime ("2026-09-25T00:00:00Z"), but a native `<input type="date">`
+  // only accepts exactly "YYYY-MM-DD" for its value/defaultValue — anything else is silently
+  // rejected and the field renders blank. Slicing to the date portion is enough since the time
+  // component is always midnight UTC for this field.
+  const followUpValue = application.follow_up_at ? application.follow_up_at.slice(0, 10) : "";
 
   async function saveStatus(status: string) {
     try {
@@ -65,7 +70,10 @@ export function StatusControl({ application }: { application: ApplicationOut }) 
       {application.status === "closed" ? (
         <div className="space-y-1">
           <Label htmlFor="closed-reason-select">Closed reason</Label>
-          <Select value={application.closed_reason ?? undefined} onValueChange={(value: string | null) => value && saveClosedReason(value)}>
+          {/* value is always a defined string (never undefined) so the Select stays controlled for
+              its whole lifetime — Base UI warns if a Select flips from uncontrolled to controlled,
+              which happens the moment a reason is first saved if this starts as `undefined`. */}
+          <Select value={application.closed_reason ?? ""} onValueChange={(value: string | null) => value && saveClosedReason(value)}>
             <SelectTrigger id="closed-reason-select" aria-label="Closed reason">
               <SelectValue placeholder="Why?" />
             </SelectTrigger>
@@ -83,7 +91,10 @@ export function StatusControl({ application }: { application: ApplicationOut }) 
       <div className="space-y-1">
         <Label htmlFor="follow-up-date">Follow up on</Label>
         <div className="flex items-center gap-2">
-          <Input id="follow-up-date" type="date" defaultValue={application.follow_up_at ?? ""} ref={followUpRef} />
+          {/* Keyed on the stored value: an uncontrolled input's `defaultValue` only applies once, so
+              a successful save (or any other external change to follow_up_at) must remount the
+              input — via key, not an effect — rather than warn Base UI about a moving default. */}
+          <Input key={followUpValue || "none"} id="follow-up-date" type="date" defaultValue={followUpValue} ref={followUpRef} />
           <Button type="button" size="sm" onClick={saveFollowUp} disabled={patch.isPending}>
             Save follow-up
           </Button>
