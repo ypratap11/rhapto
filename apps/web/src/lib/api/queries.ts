@@ -558,22 +558,34 @@ export function useLiveSearch(options: { intervalMs?: number; timeoutMs?: number
   const timer = useRef<ReturnType<typeof setInterval> | null>(null);
   const deadline = useRef(0);
   const ids = useRef<string[]>([]);
+  // Bumped by every run() call and by unmount, so an async continuation from an old run (its POST or
+  // a poll GET still in flight) can tell it's been superseded before it touches state or starts an
+  // interval — the component may already be gone, or a newer run() may already own `timer.current`.
+  const generation = useRef(0);
 
   const stop = useCallback(() => {
     if (timer.current !== null) clearInterval(timer.current);
     timer.current = null;
   }, []);
 
-  useEffect(() => stop, [stop]);
+  useEffect(
+    () => () => {
+      generation.current += 1;
+      stop();
+    },
+    [stop],
+  );
 
   const run = useCallback(
     (state: SearchState) => {
+      const myGeneration = (generation.current += 1);
       stop();
       setStatus("searching");
       setError(null);
       void (async () => {
         try {
           const result: SearchResult = await unwrap(apiClient().POST("/api/v1/search", { body: toSearchBody(state) }));
+          if (generation.current !== myGeneration) return; // unmounted, or superseded by a later run(), while this POST was in flight
           setJobs(result.jobs);
           setPerSource(result.per_source);
           ids.current = result.jobs.map((j) => j.id);
@@ -589,12 +601,14 @@ export function useLiveSearch(options: { intervalMs?: number; timeoutMs?: number
                 const fresh = await unwrap(
                   apiClient().GET("/api/v1/jobs", { params: { query: asJobsQuery(toJobsQuery({ ...DEFAULT_SEARCH_STATE, sort: state.sort }, ids.current)) } }),
                 );
+                if (generation.current !== myGeneration) return;
                 setJobs(fresh);
                 if (fresh.every((j) => j.best_fit !== null) || Date.now() >= deadline.current) {
                   stop();
                   setStatus("done");
                 }
               } catch (e) {
+                if (generation.current !== myGeneration) return;
                 stop();
                 setError(e);
                 setStatus("error");
@@ -602,6 +616,7 @@ export function useLiveSearch(options: { intervalMs?: number; timeoutMs?: number
             })();
           }, intervalMs);
         } catch (e) {
+          if (generation.current !== myGeneration) return;
           setError(e);
           setStatus("error");
         }
