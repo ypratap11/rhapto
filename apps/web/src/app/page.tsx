@@ -31,6 +31,14 @@ export default function DashboardPage() {
 
   const fields = useMemo(() => (taxonomy.data?.fields ?? []).map((f) => ({ id: f.id, name: f.name })), [taxonomy.data]);
 
+  // A settled error (`dashboard.error`) isn't the only way this call never produces data: with no
+  // network reachable, TanStack Query v5's default `networkMode: "online"` parks the query in
+  // `fetchStatus: "paused"` instead — `status` stays "pending", so `isLoading` (`isPending &&
+  // isFetching`) is false and `error` is null, the same shape a genuinely-empty dashboard has. From
+  // the user's seat both are "I can't see my dashboard right now," so both get the one error
+  // treatment below rather than a third visual state.
+  const unavailable = Boolean(dashboard.error) || dashboard.isPaused;
+
   return (
     <>
       <HeroBand tone="peach" height="tall">
@@ -38,12 +46,12 @@ export default function DashboardPage() {
           newFitCount={dashboard.data?.new_fit_count ?? 0}
           needsReviewCount={dashboard.data?.needs_review_count ?? 0}
           loading={dashboard.isLoading}
-          error={Boolean(dashboard.error)}
+          error={unavailable}
         />
       </HeroBand>
-      {dashboard.error ? (
+      {unavailable ? (
         <div className="mb-6">
-          <ApiErrorBanner error={dashboard.error} />
+          <ApiErrorBanner error={dashboard.error ?? "Can't reach Rhapto's API."} />
         </div>
       ) : null}
       <div className="grid gap-8 lg:grid-cols-[2fr_1fr]">
@@ -66,8 +74,8 @@ export default function DashboardPage() {
           <ActiveApplications />
         </div>
         <aside className="space-y-8">
-          <ProfileChecklist checklist={dashboard.data?.checklist ?? null} loading={dashboard.isLoading} error={Boolean(dashboard.error)} />
-          <SavedSearchesRail searches={dashboard.data?.saved_searches ?? []} loading={dashboard.isLoading} error={Boolean(dashboard.error)} />
+          <ProfileChecklist checklist={dashboard.data?.checklist ?? null} loading={dashboard.isLoading} error={unavailable} />
+          <SavedSearchesRail searches={dashboard.data?.saved_searches ?? []} loading={dashboard.isLoading} error={unavailable} />
         </aside>
       </div>
     </>
