@@ -121,6 +121,33 @@ async function ensureFixtureResumeDocument() {
   }
 }
 
+/** Guard #3: refuse to capture while an LLM provider key is configured, anywhere. The Settings
+ * screenshot renders the AI-provider section, and `GET /settings/llm`'s `key_hint` is the last
+ * four characters of whatever key resolved — a stored row, or (just as leaky, and easy to forget)
+ * the deployment's own `.env` key via the env fallback (`services/llm.py`'s `env_llm_config`).
+ * Four characters of a real key is a real secret fragment once it is a PNG committed to an
+ * AGPL-3.0 repo's docs/, so this checks the same way `assertExampleProfile` does: fail loudly
+ * before anything is captured, not just warn. There is no in-script fix — clear the key (stored
+ * row and/or environment) or point this script at a stack where no provider key resolves at all,
+ * e.g. one running the deterministic fake provider with nothing else configured. */
+async function assertNoLlmKeyConfigured() {
+  const res = await fetch(`${API_URL}/api/v1/settings/llm`, { headers: { Authorization: `Bearer ${TOKEN}` } });
+  if (!res.ok) {
+    console.error(`GET ${API_URL}/api/v1/settings/llm -> ${res.status}. Is the stack up (docker compose up -d)?`);
+    process.exit(1);
+  }
+  const settings = await res.json();
+  if (settings.key_hint !== null) {
+    console.error(
+      `GET /api/v1/settings/llm returned key_hint ${JSON.stringify(settings.key_hint)} (source: ${JSON.stringify(settings.source)}) — ` +
+        "an LLM provider key is configured, and the Settings screenshot renders this field. Refusing to capture a real key " +
+        "fragment into a committed image. Clear the key (DELETE /api/v1/settings/llm and/or the environment's provider key) " +
+        "or run this script against a stack where no provider resolves at all, then try again.",
+    );
+    process.exit(1);
+  }
+}
+
 /** The portal's routes (spec §3). The two nested pages are found by href pattern rather than
  * hard-coded ids, so the walkthrough works against any seeded database. */
 const PAGES = [
@@ -187,6 +214,7 @@ async function capture(page, name, theme) {
 async function run() {
   await assertExampleProfile();
   await ensureFixtureResumeDocument();
+  await assertNoLlmKeyConfigured();
   await mkdir(OUT_DIR, { recursive: true });
   const browser = await chromium.launch();
   const saved = [];
