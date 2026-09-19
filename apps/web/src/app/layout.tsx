@@ -20,7 +20,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <head>
         <script dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} />
       </head>
-      <body>
+      {/* Browser extensions (e.g. ColorZilla) inject attributes like cz-shortcut-listen onto
+          <body> before React hydrates, tripping a hydration-mismatch warning that has nothing to
+          do with our app. <html> above already needs suppressHydrationWarning for the theme boot
+          script; body needs it for the same class of reason — extension-injected attributes, not
+          an app bug. This only ignores mismatches on body's own attributes, one level deep. */}
+      <body suppressHydrationWarning>
         <Providers>
           <Shell>{children}</Shell>
         </Providers>
