@@ -1,12 +1,14 @@
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "@/lib/api/client";
 import type { ApplicationOut, JobOut, PackageOut, PackageSummary } from "@/lib/api/queries";
 import JobPage from "./page";
 
+const routerPush = vi.fn();
 vi.mock("next/navigation", () => ({
   useParams: () => ({ jobId: "j1" }),
-  useRouter: () => ({ push: vi.fn() }),
+  useRouter: () => ({ push: routerPush }),
 }));
 
 // These have their own dedicated test files (TailorButton.test.tsx, NotInterestedButton.test.tsx,
@@ -49,6 +51,7 @@ vi.mock("@/lib/api/queries", async (importOriginal) => ({
 beforeEach(() => {
   packageResult = { data: undefined, error: null, isLoading: false };
   usePackageSpy.mockClear();
+  routerPush.mockClear();
 });
 
 function job(over: Partial<JobOut> = {}): JobOut {
@@ -191,6 +194,18 @@ describe("JobPage", () => {
     expect(screen.getByText(/invented a company name/i)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Apply" })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Review" })).not.toBeInTheDocument();
+  });
+
+  it("deep-links to the specific violation clicked in the guardrail panel, not just the package", async () => {
+    jobResult = { data: job({ latest_package: pkg({ id: "p1", version: 1, status: "blocked" }) }), error: null, isLoading: false };
+    packageResult = { data: pkgOut({ id: "p1", status: "blocked" }), error: null, isLoading: false };
+    render(<JobPage />);
+    const user = userEvent.setup({ delay: null });
+    await user.click(screen.getByText(/invented a company name/i));
+    // "summary[0]" is pkgOut()'s violation path above -- on a blocked package the job page's whole
+    // purpose is "here is what to fix", so the specific violation clicked must carry through to
+    // the review page, not just the package as a whole.
+    expect(routerPush).toHaveBeenCalledWith("/jobs/j1/packages/p1?path=summary%5B0%5D");
   });
 
   it("offers Apply, and mounts the Did-you-apply prompt, when the latest package is ready", () => {

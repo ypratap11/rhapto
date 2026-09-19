@@ -110,7 +110,13 @@ export default function JobPage() {
         <div className="space-y-4">
           {blocked ? (
             pkg.data ? (
-              <GuardrailPanel report={pkg.data.guardrail_report} onSelect={() => router.push(`/jobs/${job.data.id}/packages/${latest.id}`)} />
+              <GuardrailPanel
+                report={pkg.data.guardrail_report}
+                // The review page reads this back (see its own `path` search param handling) to
+                // land the reviewer on the specific violation, not just the package — "here is
+                // what to fix" is the whole point of surfacing guardrails on the job page.
+                onSelect={(path) => router.push(`/jobs/${job.data.id}/packages/${latest.id}?path=${encodeURIComponent(path)}`)}
+              />
             ) : (
               <Skeleton className="h-40 w-full rounded-card" />
             )

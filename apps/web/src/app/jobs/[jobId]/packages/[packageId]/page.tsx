@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
-import { Suspense, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { ApiErrorBanner } from "@/components/shell/ApiErrorBanner";
 import { Breadcrumbs } from "@/components/shell/Breadcrumbs";
@@ -49,8 +49,15 @@ function PackageReviewPageInner() {
   const reviewQueue = usePackageList("review");
   const patch = usePatchPackage();
   const patchEdits = usePatchPackageEdits();
-  const [selectedPath, setSelectedPath] = useState<string | null>(null);
+  // The job page's blocked-package GuardrailPanel links here with `?path=` (the violation the
+  // reviewer clicked) rather than just the package — "here is what to fix", not just "here is the
+  // package". A blocks-mode package uses `selectedPath` directly, below; a tune-mode one has no
+  // such state (`ChangesPane` only flags violations inline via `violationsByPath`), so the effect
+  // further down scrolls to the matching change card once the package has loaded instead.
+  const initialPath = searchParams.get("path");
+  const [selectedPath, setSelectedPath] = useState<string | null>(initialPath);
   const [regenOpen, setRegenOpen] = useState(searchParams.get("regenerate") === "1");
+  const scrolledToInitialPath = useRef(false);
 
   const blockMap = useMemo(() => new Map<string, Block>((blocks.data ?? []).map((b) => [b.id, b])), [blocks.data]);
   const violationsByPath = useMemo(() => new Set((pkg.data?.guardrail_report.violations ?? []).map((v) => v.path)), [pkg.data]);
@@ -59,6 +66,12 @@ function PackageReviewPageInner() {
     return Object.values(columns).flat().find((a) => a.job.id === jobId) ?? null;
   }, [applications.data, jobId]);
   const nextPackage = useMemo(() => nextReviewPackage(reviewQueue.data ?? [], packageId), [reviewQueue.data, packageId]);
+
+  useEffect(() => {
+    if (scrolledToInitialPath.current || !initialPath || pkg.data?.mode !== "tune") return;
+    scrolledToInitialPath.current = true;
+    scrollToChange(initialPath);
+  }, [initialPath, pkg.data]);
 
   if (job.error || pkg.error) return <ApiErrorBanner error={job.error ?? pkg.error} />;
   if (!job.data || !pkg.data) return <Skeleton className="h-64 w-full" />;
