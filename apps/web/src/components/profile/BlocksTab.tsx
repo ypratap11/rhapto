@@ -1,5 +1,6 @@
 "use client";
 
+import { useQueryClient } from "@tanstack/react-query";
 import { useRef, useState } from "react";
 import { toast } from "sonner";
 import { ApiErrorBanner } from "@/components/shell/ApiErrorBanner";
@@ -12,7 +13,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { Textarea } from "@/components/ui/textarea";
 import { ApiError } from "@/lib/api/client";
-import { useBlocks, useDeleteBlock, usePutBlock, type Block } from "@/lib/api/queries";
+import { packageKeys, useBlocks, useDeleteBlock, usePutBlock, type Block } from "@/lib/api/queries";
 import { BLOCK_TYPES, blockToForm, emptyBlockForm, formToBlock, validateBlockForm, type BlockForm } from "@/lib/profile-forms";
 import { EntityTable } from "./EntityTable";
 import { CheckboxField } from "./fields";
@@ -21,19 +22,62 @@ export function BlocksTab() {
   const blocks = useBlocks();
   const put = usePutBlock();
   const remove = useDeleteBlock();
+  const queryClient = useQueryClient();
   const [form, setForm] = useState<BlockForm | null>(null);
   const [isNew, setIsNew] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [advancedOpen, setAdvancedOpen] = useState(false);
 
   // Inline "click to edit" state for the Period cell (spec item C). Only one row can be mid-edit
-  // at a time; Escape cancels without saving, Enter/blur save.
+  // at a time; Escape cancels without saving, Enter/blur save. `editingOriginalPeriod` is captured
+  // once, when the edit starts, so the no-op check below doesn't depend on a render-time snapshot
+  // that might already be stale by the time the user commits.
   const [editingPeriodId, setEditingPeriodId] = useState<string | null>(null);
   const [periodDraft, setPeriodDraft] = useState("");
+  const [editingOriginalPeriod, setEditingOriginalPeriod] = useState<string | null>(null);
   const skipPeriodBlurRef = useRef(false);
 
   // "N need a period" chip (spec item C): toggled on, the table shows only blocks with no period.
   const [showOnlyMissingPeriod, setShowOnlyMissingPeriod] = useState(false);
+
+  // Per-block in-flight tracking for row-level mutations (Verified toggle, Period edit), so one
+  // row's mutation doesn't disable every other row's toggle the way a single shared
+  // `put.isPending` would.
+  const [pendingIds, setPendingIds] = useState<Set<string>>(new Set());
+
+  function readBlock(id: string): Block | undefined {
+    // Prefer the query cache over `blocks.data`: `blocks.data` is this render's snapshot, which
+    // can already be one mutation behind if two row edits happen in quick succession before a
+    // background refetch lands. `patchBlock` below keeps the cache patched synchronously after
+    // every successful write specifically so this stays current without waiting on that refetch.
+    return queryClient.getQueryData<Block[]>(packageKeys.blocks)?.find((b) => b.id === id) ?? blocks.data?.find((b) => b.id === id);
+  }
+
+  /**
+   * Applies `patch` on top of the freshest known copy of block `id` (never a block object closed
+   * over at render time) and PUTs the result — the API only exposes a whole-block PUT, so this is
+   * how a single-field edit avoids clobbering a field some other in-flight edit just changed.
+   * After the PUT succeeds, the cache is patched immediately rather than waiting on the background
+   * refetch `usePutBlock`'s `onSuccess` triggers, so a second edit fired right after this one still
+   * reads a fresh base even before that refetch completes.
+   */
+  async function patchBlock(id: string, patch: Partial<Block>): Promise<Block> {
+    const current = readBlock(id);
+    if (!current) throw new Error(`${id} is no longer available — it may have just been deleted.`);
+    const next: Block = { ...current, ...patch };
+    setPendingIds((s) => new Set(s).add(id));
+    try {
+      await put.mutateAsync(next);
+    } finally {
+      setPendingIds((s) => {
+        const rest = new Set(s);
+        rest.delete(id);
+        return rest;
+      });
+    }
+    queryClient.setQueryData<Block[]>(packageKeys.blocks, (old) => old?.map((b) => (b.id === id ? next : b)));
+    return next;
+  }
 
   function open(block: Block | null) {
     setErrors({});
@@ -56,17 +100,26 @@ export function BlocksTab() {
     }
   }
 
-  async function toggleVerified(block: Block) {
-    const next: Block = { ...block, verified: !block.verified };
+  async function toggleVerified(id: string) {
+    const current = readBlock(id);
+    if (!current) {
+      toast.error(`${id} is no longer available — it may have just been deleted.`);
+      return;
+    }
+    const target = !current.verified;
+    const previousVerified = current.verified;
     try {
-      await put.mutateAsync(next);
-      toast.success(`${next.verified ? "Verified" : "Unverified"} ${block.id}`, {
+      await patchBlock(id, { verified: target });
+      toast.success(`${target ? "Verified" : "Unverified"} ${id}`, {
         duration: 8000,
         action: {
           label: "Undo",
           onClick: async () => {
             try {
-              await put.mutateAsync(block);
+              // Re-reads the current record inside patchBlock and flips only `verified` back — if
+              // the user edited the Period (or anything else) on this block while the toast was up,
+              // that edit survives; Undo does not re-PUT the old whole-object snapshot.
+              await patchBlock(id, { verified: previousVerified });
             } catch (e) {
               toast.error(e instanceof ApiError ? e.message : "Could not undo the change");
             }
@@ -81,6 +134,7 @@ export function BlocksTab() {
   function startEditingPeriod(block: Block) {
     setEditingPeriodId(block.id);
     setPeriodDraft(block.period ?? "");
+    setEditingOriginalPeriod(block.period ?? null);
   }
 
   function cancelEditingPeriod() {
@@ -88,13 +142,13 @@ export function BlocksTab() {
     setEditingPeriodId(null);
   }
 
-  async function commitPeriod(block: Block) {
+  async function commitPeriod(id: string) {
     const period = periodDraft.trim() ? periodDraft.trim() : null;
     setEditingPeriodId(null);
-    if (period === (block.period ?? null)) return;
+    if (period === editingOriginalPeriod) return;
     try {
-      await put.mutateAsync({ ...block, period });
-      toast.success(`Saved ${block.id}`);
+      await patchBlock(id, { period });
+      toast.success(`Saved ${id}`);
     } catch (e) {
       toast.error(e instanceof ApiError ? e.message : "Could not save the period");
     }
@@ -168,7 +222,7 @@ export function BlocksTab() {
                   onKeyDown={(e) => {
                     if (e.key === "Enter") {
                       e.preventDefault();
-                      void commitPeriod(b);
+                      void commitPeriod(b.id);
                     } else if (e.key === "Escape") {
                       // Also stop propagation: this table lives inside ProfileSummaryCard's own
                       // Sheet, which closes itself on Escape via a bubbled/document-level keydown
@@ -185,7 +239,7 @@ export function BlocksTab() {
                       skipPeriodBlurRef.current = false;
                       return;
                     }
-                    void commitPeriod(b);
+                    void commitPeriod(b.id);
                   }}
                   className="h-7 w-32"
                 />
@@ -210,8 +264,8 @@ export function BlocksTab() {
                 size="sm"
                 aria-pressed={b.verified}
                 aria-label={`Toggle verified for ${b.id}`}
-                onClick={() => void toggleVerified(b)}
-                disabled={put.isPending}
+                onClick={() => void toggleVerified(b.id)}
+                disabled={pendingIds.has(b.id)}
               >
                 <StatusBadge tone={b.verified ? "high" : "muted"}>{b.verified ? "yes" : "no"}</StatusBadge>
               </Button>
