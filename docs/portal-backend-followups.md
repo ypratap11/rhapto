@@ -91,3 +91,25 @@ These compound with each other or with the item above.
   surprises; malformed items degrade to skipped rows rather than failures.
 - The fake provider's end-to-end behaviour is proven by unit tests and one manual Docker run, not
   by an automated e2e suite — that belongs to the portal-ui plan.
+
+## 5. From the final whole-branch review (portal-ui, 2026-09-19)
+
+Two items the review found and triaged as follow-ups, not blockers for this branch:
+
+- **`GET /api/v1/jobs` has no `limit`/`offset`.** The whole corpus is re-fetched on every filter
+  change on the Jobs page (client-side paging over the full result set — see `BROWSE_PAGE_SIZE` in
+  `apps/web/src/app/jobs/page.tsx`). Two things make this worse than it looks: `JobOut` carries the
+  full `jd_text` for every row, not a summary, so each response is heavier than the list actually
+  needs; and `useRecommendedJobs` (`apps/web/src/lib/api/queries.ts`) has the identical problem —
+  it also fetches its whole recommended set in one call and pages client-side, for the same
+  "the schema has no limit/offset param" reason (see that function's own comment). Real
+  server-side pagination needs a schema change (`GET /jobs` query params, `JobOut` trimmed for
+  list views) big enough to be its own piece of work, not a fix folded into a review-response wave.
+- **Dead-weight cleanup**: `apps/web/src/components/jobs/RunsDrawer.tsx` and
+  `apps/web/src/components/jobs/AddJobDialog.tsx` are unreferenced outside their own files and
+  tests — nothing in `apps/web/src/app/**` imports either. Also worth checking: `queries.ts` for
+  exports nothing else calls. Not removed here because
+  `apps/web/src/lib/no-queue.test.ts:15` currently *asserts both components must exist*
+  (`for (const file of [..., "RunsDrawer.tsx", "AddJobDialog.tsx"]) expect(jobs).toContain(file)`)
+  — deleting the components without first updating that test would just trade one inconsistency
+  for another, and the test itself is what a future cleanup pass needs to touch first.
