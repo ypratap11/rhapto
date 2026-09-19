@@ -13,6 +13,17 @@ with a fit at or above your track's threshold, and not hidden or no-longer-liste
 numbers are zero, the headline changes to "Nothing new yet" with buttons to start a new search or
 add a company to your watchlist instead.
 
+## When a refresh fails
+
+The Dashboard is careful to distinguish "nothing to show" from "couldn't refresh." If a background
+refresh of the dashboard fails — the API is briefly unreachable, for instance — and you already
+have data on screen from an earlier successful load, that content stays exactly as it was: the
+headline numbers, the profile checklist, and the saved searches rail all keep showing what they
+last loaded, stale but genuine. A banner appears above the hero band telling you the refresh
+failed, so the staleness is visible rather than silent, but nothing is cleared out from under you.
+Only when there is truly nothing cached yet — for example, the very first load fails — does a panel
+fall back to its own "Couldn't load" message instead of real content.
+
 ## Recommended roles
 
 Below the search card, **Recommended roles** lists fit-ranked jobs that have no resume and no

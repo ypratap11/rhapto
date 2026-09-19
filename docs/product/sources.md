@@ -19,10 +19,10 @@ boards are managed on Profile → Watchlist.
 | Ashby | Company board | No (per board, from your watchlist) | 30 (live) / 100 (background) | `jobs.ashbyhq.com/<slug>` |
 | Workday | Company board | No (per board, from your watchlist) | 30 (live) / 100 (background) | Addressed as `<host prefix>/<site>`, not a plain slug — see below |
 
-Settings → Job sources shows each aggregator's status as one of three states: **enabled** (on and
-usable), **needs a key** (on, but no credentials saved yet), or **key set** (a key has been saved).
-A saved key is never displayed back — the form only ever shows a masked placeholder, never the
-key itself.
+Settings → Job sources shows each source's status as one of three states: **Zero setup** (no key
+needed), **Needs a key** (on, but nothing saved yet), or **Key saved** (a key has been saved). A
+saved key is never displayed back — the form only ever shows a masked placeholder, never the key
+itself.
 
 ## Caps and timeouts
 
