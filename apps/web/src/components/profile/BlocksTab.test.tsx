@@ -35,6 +35,24 @@ describe("BlocksTab", () => {
     expect(screen.getByLabelText(/^verified/i)).toBeChecked();
   });
 
+  it("opens the editor as a centred dialog, not a sheet, with Save reachable", async () => {
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <BlocksTab />
+      </QueryClientProvider>,
+    );
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: /edit acme-migration/i }));
+
+    const dialog = screen.getByRole("dialog");
+    expect(dialog).toBeInTheDocument();
+    expect(dialog.getAttribute("data-slot")).toBe("dialog-content");
+    // A Sheet is built from the same underlying primitive but is identifiable by data-side, which
+    // only SheetContent sets — this converted editor must not carry it.
+    expect(dialog).not.toHaveAttribute("data-side");
+    expect(screen.getByRole("button", { name: "Save" })).toBeVisible();
+  });
+
   it("closes the confirm dialog and shows an error toast when delete fails", async () => {
     deleteMutate.mockReset();
     deleteMutate.mockRejectedValueOnce(new Error("boom"));

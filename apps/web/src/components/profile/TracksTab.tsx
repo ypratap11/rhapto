@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import { ApiError } from "@/lib/api/client";
@@ -110,13 +110,13 @@ export function TracksTab() {
           { key: "min_fit", header: "Min fit", render: (t) => t.min_fit },
         ]}
       />
-      <Sheet open={form !== null} onOpenChange={(o) => !o && setForm(null)}>
-        <SheetContent className="w-[440px] space-y-3 overflow-y-auto">
-          <SheetHeader>
-            <SheetTitle>{isNew ? "New track" : `Edit ${form?.id}`}</SheetTitle>
-          </SheetHeader>
+      <Dialog open={form !== null} onOpenChange={(o) => !o && setForm(null)}>
+        <DialogContent className="flex max-h-[85vh] flex-col overflow-hidden sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>{isNew ? "New track" : `Edit ${form?.id}`}</DialogTitle>
+          </DialogHeader>
           {form ? (
-            <>
+            <div className="min-h-0 flex-1 space-y-3 overflow-y-auto pr-1">
               <div className="space-y-1">
                 <Label htmlFor="track-id">Id</Label>
                 <Input id="track-id" value={form.id} onChange={(e) => set({ id: e.target.value })} disabled={!isNew} />
@@ -164,18 +164,18 @@ export function TracksTab() {
                 <Input id="track-min-fit" type="number" min={0} max={100} value={form.min_fit} onChange={(e) => set({ min_fit: e.target.value })} />
                 {errors.min_fit ? <p className="text-xs text-destructive">{errors.min_fit}</p> : null}
               </div>
-              <div className="flex justify-end gap-2">
-                <Button variant="outline" onClick={() => setForm(null)}>
-                  Cancel
-                </Button>
-                <Button onClick={save} disabled={put.isPending}>
-                  Save
-                </Button>
-              </div>
-            </>
+            </div>
           ) : null}
-        </SheetContent>
-      </Sheet>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setForm(null)}>
+              Cancel
+            </Button>
+            <Button onClick={save} disabled={put.isPending}>
+              Save
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       <FieldPicker open={pickerOpen} onOpenChange={setPickerOpen} />
     </div>
   );

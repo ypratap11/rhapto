@@ -4,9 +4,9 @@ import { useState } from "react";
 import { toast } from "sonner";
 import { ApiErrorBanner } from "@/components/shell/ApiErrorBanner";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ApiError } from "@/lib/api/client";
 import { useBases, useBlocks, useDeleteBase, usePutBase, type ResumeBase } from "@/lib/api/queries";
@@ -105,13 +105,13 @@ export function BasesTab() {
           { key: "blocks", header: "Blocks", render: (b) => b.block_ids.length },
         ]}
       />
-      <Sheet open={form !== null} onOpenChange={(o) => !o && setForm(null)}>
-        <SheetContent className="w-[440px] space-y-3 overflow-y-auto">
-          <SheetHeader>
-            <SheetTitle>{isNew ? "New base" : `Edit ${form?.id}`}</SheetTitle>
-          </SheetHeader>
+      <Dialog open={form !== null} onOpenChange={(o) => !o && setForm(null)}>
+        <DialogContent className="flex max-h-[85vh] flex-col overflow-hidden sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>{isNew ? "New base" : `Edit ${form?.id}`}</DialogTitle>
+          </DialogHeader>
           {form ? (
-            <>
+            <div className="min-h-0 flex-1 space-y-3 overflow-y-auto pr-1">
               <div className="space-y-1">
                 <Label htmlFor="base-id">Id</Label>
                 <Input id="base-id" value={form.id} onChange={(e) => set({ id: e.target.value })} disabled={!isNew} />
@@ -141,18 +141,18 @@ export function BasesTab() {
                   </div>
                 )}
               </div>
-              <div className="flex justify-end gap-2">
-                <Button variant="outline" onClick={() => setForm(null)}>
-                  Cancel
-                </Button>
-                <Button onClick={save} disabled={put.isPending}>
-                  Save
-                </Button>
-              </div>
-            </>
+            </div>
           ) : null}
-        </SheetContent>
-      </Sheet>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setForm(null)}>
+              Cancel
+            </Button>
+            <Button onClick={save} disabled={put.isPending}>
+              Save
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

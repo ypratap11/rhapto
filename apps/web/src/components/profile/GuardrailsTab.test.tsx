@@ -28,6 +28,18 @@ function renderTab() {
 }
 
 describe("GuardrailsTab", () => {
+  it("opens the guardrail editor as a centred dialog, not a sheet, with Save reachable", async () => {
+    renderTab();
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: /edit no-unverified-metrics/i }));
+
+    const dialog = screen.getByRole("dialog");
+    expect(dialog).toBeInTheDocument();
+    expect(dialog.getAttribute("data-slot")).toBe("dialog-content");
+    expect(dialog).not.toHaveAttribute("data-side");
+    expect(screen.getByRole("button", { name: "Save" })).toBeVisible();
+  });
+
   it("requires confirmation to turn off no-unverified-metrics, and cancel leaves it on", async () => {
     renderTab();
     const user = userEvent.setup();

@@ -5,9 +5,9 @@ import { toast } from "sonner";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { ApiErrorBanner } from "@/components/shell/ApiErrorBanner";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Skeleton } from "@/components/ui/skeleton";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { Textarea } from "@/components/ui/textarea";
@@ -101,13 +101,13 @@ export function GuardrailsTab() {
           { key: "config", header: "Config", render: (r) => (Object.keys(r.config).length ? <span className="font-mono text-xs">{JSON.stringify(r.config)}</span> : <span className="text-muted-foreground">—</span>) },
         ]}
       />
-      <Sheet open={form !== null} onOpenChange={(o) => !o && setForm(null)}>
-        <SheetContent className="w-[440px] space-y-3 overflow-y-auto">
-          <SheetHeader>
-            <SheetTitle>{isNew ? "New guardrail override" : `Edit ${form?.rule}`}</SheetTitle>
-          </SheetHeader>
+      <Dialog open={form !== null} onOpenChange={(o) => !o && setForm(null)}>
+        <DialogContent className="flex max-h-[85vh] flex-col overflow-hidden sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>{isNew ? "New guardrail override" : `Edit ${form?.rule}`}</DialogTitle>
+          </DialogHeader>
           {form ? (
-            <>
+            <div className="min-h-0 flex-1 space-y-3 overflow-y-auto pr-1">
               <div className="space-y-1">
                 <Label>Rule</Label>
                 {isNew ? (
@@ -136,18 +136,18 @@ export function GuardrailsTab() {
                 <Textarea id="guardrail-config" rows={6} value={form.config} onChange={(e) => set({ config: e.target.value })} placeholder="{}" />
                 {errors.config ? <p className="text-xs text-destructive">{errors.config}</p> : null}
               </div>
-              <div className="flex justify-end gap-2">
-                <Button variant="outline" onClick={() => setForm(null)}>
-                  Cancel
-                </Button>
-                <Button onClick={save} disabled={put.isPending}>
-                  Save
-                </Button>
-              </div>
-            </>
+            </div>
           ) : null}
-        </SheetContent>
-      </Sheet>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setForm(null)}>
+              Cancel
+            </Button>
+            <Button onClick={save} disabled={put.isPending}>
+              Save
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       <AlertDialog open={confirmDeactivate} onOpenChange={(o) => !o && setConfirmDeactivate(false)}>
         <AlertDialogContent>
           <AlertDialogHeader>
