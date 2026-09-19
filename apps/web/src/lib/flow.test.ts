@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { flowPrompt, jobState, nextReviewPackage, nextUp, stepForPath } from "./flow";
+import { flowPrompt, jobState, nextReviewPackage, nextUp } from "./flow";
 import type { JobOut, PackageListItem } from "./api/queries";
 
 const base = (over: Partial<JobOut>): JobOut => ({
@@ -35,15 +35,6 @@ describe("flow", () => {
     ];
     expect(nextUp(jobs, ["e"], 5).map((j) => j.id)).toEqual(["b", "a"]);
     expect(nextUp(jobs, [], 1).map((j) => j.id)).toEqual(["b"]);
-  });
-  it("maps paths to steps", () => {
-    expect(stepForPath("/", false)).toBe(0);
-    expect(stepForPath("/", true)).toBe(1);
-    expect(stepForPath("/profile", false)).toBe(0);
-    expect(stepForPath("/profile", true)).toBe(0);
-    expect(stepForPath("/packages", false)).toBe(2);
-    expect(stepForPath("/jobs/j/packages/p", false)).toBe(2);
-    expect(stepForPath("/pipeline", false)).toBe(3);
   });
   it("builds the flow prompt with needsReview > nextTailor > nextReview priority", () => {
     const tailorJob = base({ id: "z", best_fit: 72 });

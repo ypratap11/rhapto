@@ -13,7 +13,7 @@ vi.mock("@/lib/api/queries", async (importOriginal) => ({
   useTracks: () => ({ data: [{ id: "data-pm", name: "Data PM", resume_base: "data-pm", keywords: [], min_fit: 60, description: null }] }),
 }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn() }) }));
-vi.mock("@/components/queue/TaskProgress", () => ({ TaskProgress: () => <div>progress</div> }));
+vi.mock("@/components/jobs/TaskProgress", () => ({ TaskProgress: () => <div>progress</div> }));
 
 const job = { id: "j1" } as JobOut;
 const pkg = { id: "p1", track_id: "data-pm", version: 1, mode: "blocks" } as PackageOut;

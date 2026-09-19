@@ -13,7 +13,7 @@ vi.mock("next/navigation", () => ({
 // DidYouApplyPrompt.test.tsx) and pull in hooks (useTracks/useMe/useResumeDocument/useTailor,
 // useHideJob/useUnhideJob, useMarkApplied/useArchivePackage/useHideJob) unrelated to what this file
 // verifies: the job page's own state-driven wiring. Stubbed to a recognizable marker instead.
-vi.mock("@/components/queue/TailorButton", () => ({ TailorButton: () => <button type="button">Tailor</button> }));
+vi.mock("@/components/jobs/TailorButton", () => ({ TailorButton: () => <button type="button">Tailor</button> }));
 vi.mock("@/components/jobs/NotInterestedButton", () => ({ NotInterestedButton: () => <button type="button">Not interested</button> }));
 vi.mock("@/components/jobs/DidYouApplyPrompt", () => ({ DidYouApplyPrompt: () => <div data-testid="did-you-apply-prompt" /> }));
 

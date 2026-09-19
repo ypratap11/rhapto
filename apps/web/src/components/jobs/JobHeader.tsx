@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useMemo } from "react";
 import { toast } from "sonner";
-import { TailorButton } from "@/components/queue/TailorButton";
+import { TailorButton } from "@/components/jobs/TailorButton";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { FitRing } from "@/components/ui/fit-ring";
 import { StatusBadge } from "@/components/ui/StatusBadge";

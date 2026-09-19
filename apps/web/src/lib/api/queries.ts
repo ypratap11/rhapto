@@ -50,8 +50,8 @@ export const DEFAULT_REGION: JobRegion = "us";
 export const keys = {
   me: ["me"] as const,
   // New and Tailored share one cache entry: both fetch the same "fit" bucket from
-  // the API and differ only in client-side filtering (see JobList.tsx), so keying
-  // on the derived bucket avoids a refetch/skeleton flash when switching tabs.
+  // the API and differ only in client-side filtering, so keying on the derived
+  // bucket avoids a refetch/skeleton flash when switching tabs.
   jobs: (f: JobFilters) => ["jobs", f.search, f.track, f.tab === "low" ? "low" : "fit", f.region, f.sort] as const,
   job: (id: string) => ["job", id] as const,
   task: (id: string) => ["task", id] as const,
