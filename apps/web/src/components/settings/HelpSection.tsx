@@ -36,7 +36,7 @@ function DocList({ heading, docs, docsBase }: { heading: string; docs: HelpDoc[]
         {docs.map((doc) => (
           <li key={doc.slug} className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5 text-sm">
             {docsBase ? (
-              <a href={`${docsBase}/${doc.slug}.md`} target="_blank" rel="noreferrer" className="font-medium text-primary underline-offset-4 hover:underline">
+              <a href={`${docsBase}/${doc.path}`} target="_blank" rel="noreferrer" className="font-medium text-primary underline-offset-4 hover:underline">
                 {doc.title}
               </a>
             ) : (
