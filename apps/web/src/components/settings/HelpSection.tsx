@@ -17,14 +17,15 @@ const USER_GUIDE: HelpDoc[] = [
   { title: "Frequently asked questions", path: "docs/user-guide/faq.md", slug: "faq" },
 ];
 
-// Existing docs in this checkout (see docs/ and docs/superpowers/specs/).
+// The six product pages Task 13 also writes, under docs/product/. Same canonicality note as
+// USER_GUIDE above: this list must match Task 13's own dispatch exactly, filename for filename.
 const PRODUCT_DOCS: HelpDoc[] = [
-  { title: "Requirements & architecture", path: "docs/requirements-architecture.md", slug: "requirements-architecture" },
-  { title: "Portal design spec", path: "docs/superpowers/specs/2026-09-14-portal-design.md", slug: "2026-09-14-portal-design" },
-  { title: "Job portal design", path: "docs/superpowers/specs/2026-09-14-job-portal-design.md", slug: "2026-09-14-job-portal-design" },
-  { title: "Guided flow design", path: "docs/superpowers/specs/2026-09-11-guided-flow-design.md", slug: "2026-09-11-guided-flow-design" },
-  { title: "Tune mode design", path: "docs/superpowers/specs/2026-09-11-tune-mode-design.md", slug: "2026-09-11-tune-mode-design" },
-  { title: "Portal backend follow-ups", path: "docs/portal-backend-followups.md", slug: "portal-backend-followups" },
+  { title: "Overview", path: "docs/product/overview.md", slug: "overview" },
+  { title: "Concepts", path: "docs/product/concepts.md", slug: "concepts" },
+  { title: "Flow and stage actions", path: "docs/product/flow.md", slug: "flow" },
+  { title: "Job sources", path: "docs/product/sources.md", slug: "sources" },
+  { title: "Architecture", path: "docs/product/architecture.md", slug: "architecture" },
+  { title: "Privacy", path: "docs/product/privacy.md", slug: "privacy" },
 ];
 
 function DocList({ heading, docs, docsBase }: { heading: string; docs: HelpDoc[]; docsBase: string | undefined }) {

@@ -15,6 +15,8 @@ fact you own, guardrails block invented metrics, and quality beats volume.
 - Docs: `docs/requirements-architecture.md`
 - Build guide for AI agents: `CLAUDE.md`
 - Demo profile: `profile.example/` (your real data lives in gitignored `profile/`)
+- Product docs: [`docs/product/`](docs/product/overview.md) — what Rhapto is, the concepts, the flow, the sources, privacy
+- User guide: [`docs/user-guide/`](docs/user-guide/getting-started.md) — install, first search, tailor, review, apply
 
 License: AGPL-3.0-only
 
