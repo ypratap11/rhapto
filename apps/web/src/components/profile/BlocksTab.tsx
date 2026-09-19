@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { toast } from "sonner";
 import { ApiErrorBanner } from "@/components/shell/ApiErrorBanner";
 import { Button } from "@/components/ui/button";
@@ -26,6 +26,15 @@ export function BlocksTab() {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [advancedOpen, setAdvancedOpen] = useState(false);
 
+  // Inline "click to edit" state for the Period cell (spec item C). Only one row can be mid-edit
+  // at a time; Escape cancels without saving, Enter/blur save.
+  const [editingPeriodId, setEditingPeriodId] = useState<string | null>(null);
+  const [periodDraft, setPeriodDraft] = useState("");
+  const skipPeriodBlurRef = useRef(false);
+
+  // "N need a period" chip (spec item C): toggled on, the table shows only blocks with no period.
+  const [showOnlyMissingPeriod, setShowOnlyMissingPeriod] = useState(false);
+
   function open(block: Block | null) {
     setErrors({});
     setIsNew(block === null);
@@ -47,6 +56,50 @@ export function BlocksTab() {
     }
   }
 
+  async function toggleVerified(block: Block) {
+    const next: Block = { ...block, verified: !block.verified };
+    try {
+      await put.mutateAsync(next);
+      toast.success(`${next.verified ? "Verified" : "Unverified"} ${block.id}`, {
+        duration: 8000,
+        action: {
+          label: "Undo",
+          onClick: async () => {
+            try {
+              await put.mutateAsync(block);
+            } catch (e) {
+              toast.error(e instanceof ApiError ? e.message : "Could not undo the change");
+            }
+          },
+        },
+      });
+    } catch (e) {
+      toast.error(e instanceof ApiError ? e.message : "Could not update the block");
+    }
+  }
+
+  function startEditingPeriod(block: Block) {
+    setEditingPeriodId(block.id);
+    setPeriodDraft(block.period ?? "");
+  }
+
+  function cancelEditingPeriod() {
+    skipPeriodBlurRef.current = true;
+    setEditingPeriodId(null);
+  }
+
+  async function commitPeriod(block: Block) {
+    const period = periodDraft.trim() ? periodDraft.trim() : null;
+    setEditingPeriodId(null);
+    if (period === (block.period ?? null)) return;
+    try {
+      await put.mutateAsync({ ...block, period });
+      toast.success(`Saved ${block.id}`);
+    } catch (e) {
+      toast.error(e instanceof ApiError ? e.message : "Could not save the period");
+    }
+  }
+
   if (blocks.isLoading) return <Skeleton className="h-40 w-full" />;
   if (blocks.error) return <ApiErrorBanner error={blocks.error} />;
   const set = (patch: Partial<BlockForm>) => setForm((f) => (f ? { ...f, ...patch } : f));
@@ -58,13 +111,34 @@ export function BlocksTab() {
     </div>
   );
 
+  const allBlocks = blocks.data ?? [];
+  const missingPeriod = allBlocks.filter((b) => !b.period);
+  const rows = showOnlyMissingPeriod ? missingPeriod : allBlocks;
+
   return (
     <div className="space-y-3">
-      <div className="flex justify-end">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        {missingPeriod.length > 0 ? (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            aria-pressed={showOnlyMissingPeriod}
+            onClick={() => setShowOnlyMissingPeriod((v) => !v)}
+            className={showOnlyMissingPeriod ? "border-primary text-primary" : undefined}
+          >
+            {missingPeriod.length} {missingPeriod.length === 1 ? "needs" : "need"} a period
+          </Button>
+        ) : (
+          <span />
+        )}
         <Button onClick={() => open(null)}>Add block</Button>
       </div>
+      {showOnlyMissingPeriod && missingPeriod.length === 0 ? (
+        <p className="text-sm text-muted-foreground">Every block has a period.</p>
+      ) : null}
       <EntityTable<Block>
-        rows={blocks.data ?? []}
+        rows={rows}
         getKey={(b) => b.id}
         getLabel={(b) => b.id}
         emptyText="No blocks yet. Import your profile or add a block."
@@ -81,8 +155,62 @@ export function BlocksTab() {
           { key: "id", header: "Id", render: (b) => <span className="font-mono text-xs">{b.id}</span> },
           { key: "type", header: "Type", render: (b) => b.type },
           { key: "org", header: "Org / role", render: (b) => [b.org, b.role].filter(Boolean).join(" · ") },
-          { key: "period", header: "Period", render: (b) => b.period ?? "" },
-          { key: "verified", header: "Verified", render: (b) => <StatusBadge tone={b.verified ? "high" : "muted"}>{b.verified ? "yes" : "no"}</StatusBadge> },
+          {
+            key: "period",
+            header: "Period",
+            render: (b) =>
+              editingPeriodId === b.id ? (
+                <Input
+                  autoFocus
+                  aria-label={`Period ${b.id}`}
+                  value={periodDraft}
+                  onChange={(e) => setPeriodDraft(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      void commitPeriod(b);
+                    } else if (e.key === "Escape") {
+                      e.preventDefault();
+                      cancelEditingPeriod();
+                    }
+                  }}
+                  onBlur={() => {
+                    if (skipPeriodBlurRef.current) {
+                      skipPeriodBlurRef.current = false;
+                      return;
+                    }
+                    void commitPeriod(b);
+                  }}
+                  className="h-7 w-32"
+                />
+              ) : (
+                <button
+                  type="button"
+                  aria-label={`Edit period for ${b.id}`}
+                  onClick={() => startEditingPeriod(b)}
+                  className="rounded-sm px-1 -mx-1 text-left hover:bg-muted focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring"
+                >
+                  {b.period ?? <span className="text-muted-foreground">Add period</span>}
+                </button>
+              ),
+          },
+          {
+            key: "verified",
+            header: "Verified",
+            render: (b) => (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                aria-pressed={b.verified}
+                aria-label={`Toggle verified for ${b.id}`}
+                onClick={() => void toggleVerified(b)}
+                disabled={put.isPending}
+              >
+                <StatusBadge tone={b.verified ? "high" : "muted"}>{b.verified ? "yes" : "no"}</StatusBadge>
+              </Button>
+            ),
+          },
         ]}
       />
       <Dialog open={form !== null} onOpenChange={(o) => !o && setForm(null)}>
