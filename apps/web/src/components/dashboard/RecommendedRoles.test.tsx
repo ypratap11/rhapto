@@ -76,4 +76,41 @@ describe("RecommendedRoles", () => {
     render(<RecommendedRoles tracks={tracks} />);
     expect(screen.getByText(/nothing to recommend yet/i)).toBeInTheDocument();
   });
+
+  describe("when the API is unreachable or fails", () => {
+    it("shows the error banner and swaps the empty-state copy when a failed query has nothing cached", () => {
+      recommendedJobs.mockReturnValue({ data: undefined, isLoading: false, error: new Error("boom"), isPaused: false });
+      render(<RecommendedRoles tracks={tracks} />);
+      expect(screen.getByRole("alert")).toBeInTheDocument();
+      expect(screen.getByText(/couldn.t load recommended roles/i)).toBeInTheDocument();
+      expect(screen.queryByText(/nothing to recommend yet/i)).not.toBeInTheDocument();
+    });
+
+    it("shows the error banner when the query pauses instead of settling into an error", () => {
+      // TanStack Query v5's default networkMode "online": an unreachable query parks at
+      // fetchStatus "paused" rather than settling into `error` -- isLoading false, error null,
+      // data undefined, the same shape a genuinely empty page has.
+      recommendedJobs.mockReturnValue({ data: undefined, isLoading: false, error: null, isPaused: true });
+      render(<RecommendedRoles tracks={tracks} />);
+      expect(screen.getByRole("alert")).toBeInTheDocument();
+      expect(screen.getByText(/couldn.t load recommended roles/i)).toBeInTheDocument();
+      expect(screen.queryByText(/nothing to recommend yet/i)).not.toBeInTheDocument();
+    });
+
+    it("keeps showing cached jobs, with the error banner above them, when a background refetch settles into an error", () => {
+      recommendedJobs.mockReturnValue({ data: tenJobs, isLoading: false, error: new Error("boom"), isPaused: false });
+      render(<RecommendedRoles tracks={tracks} />);
+      expect(screen.getByRole("alert")).toBeInTheDocument();
+      expect(screen.getAllByRole("link", { name: /tailor/i })).toHaveLength(10);
+      expect(screen.queryByText(/couldn.t load recommended roles/i)).not.toBeInTheDocument();
+    });
+
+    it("keeps showing cached jobs, with the error banner above them, when a background refetch pauses instead", () => {
+      recommendedJobs.mockReturnValue({ data: tenJobs, isLoading: false, error: null, isPaused: true });
+      render(<RecommendedRoles tracks={tracks} />);
+      expect(screen.getByRole("alert")).toBeInTheDocument();
+      expect(screen.getAllByRole("link", { name: /tailor/i })).toHaveLength(10);
+      expect(screen.queryByText(/couldn.t load recommended roles/i)).not.toBeInTheDocument();
+    });
+  });
 });

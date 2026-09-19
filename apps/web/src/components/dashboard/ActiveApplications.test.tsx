@@ -144,4 +144,83 @@ describe("ActiveApplications", () => {
 
     expect(screen.queryByText(/nothing in flight yet/i)).not.toBeInTheDocument();
   });
+
+  describe("when the API is unreachable or fails", () => {
+    // These are three independent queries -- own queries separate from useDashboard, so any one
+    // of them can fail or pause while the others succeed.
+    const okApplications = { data: { columns: {} }, isLoading: false, error: null };
+    const okReady = { data: [], isLoading: false, error: null };
+    const okDashboard = { data: dashboardData([]), isLoading: false, error: null };
+
+    it("shows the error banner and swaps the empty-state copy when applications fails with nothing cached", () => {
+      useApplicationsMock.mockReturnValue({ data: undefined, isLoading: false, error: new Error("boom") });
+      usePackageListMock.mockReturnValue(okReady);
+      useDashboardMock.mockReturnValue(okDashboard);
+
+      render(<ActiveApplications />);
+
+      expect(screen.getByRole("alert")).toBeInTheDocument();
+      expect(screen.getByText(/couldn.t load active applications/i)).toBeInTheDocument();
+      expect(screen.queryByText(/nothing in flight yet/i)).not.toBeInTheDocument();
+    });
+
+    it("shows the error banner when the ready-packages query pauses instead of settling into an error", () => {
+      // TanStack Query v5's default networkMode "online": an unreachable query parks at
+      // fetchStatus "paused" rather than settling into `error` -- isLoading false, error null,
+      // data undefined, the same shape "nothing in flight" has.
+      useApplicationsMock.mockReturnValue(okApplications);
+      usePackageListMock.mockReturnValue({ data: undefined, isLoading: false, error: null, isPaused: true });
+      useDashboardMock.mockReturnValue(okDashboard);
+
+      render(<ActiveApplications />);
+
+      expect(screen.getByRole("alert")).toBeInTheDocument();
+      expect(screen.getByText(/couldn.t load active applications/i)).toBeInTheDocument();
+      expect(screen.queryByText(/nothing in flight yet/i)).not.toBeInTheDocument();
+    });
+
+    it("shows the error banner when only the dashboard call fails, even though applications and ready succeed", () => {
+      useApplicationsMock.mockReturnValue(okApplications);
+      usePackageListMock.mockReturnValue(okReady);
+      useDashboardMock.mockReturnValue({ data: undefined, isLoading: false, error: new Error("boom") });
+
+      render(<ActiveApplications />);
+
+      expect(screen.getByRole("alert")).toBeInTheDocument();
+      expect(screen.getByText(/couldn.t load active applications/i)).toBeInTheDocument();
+    });
+
+    it("keeps showing cached rows, with the error banner above them, when a background refetch settles into an error", () => {
+      useApplicationsMock.mockReturnValue({
+        data: { columns: { applied: [application({ id: "a1", updated_at: "2026-09-17T00:00:00Z", job: { id: "j1", company: "Acme", title: "PM" } })] } },
+        isLoading: false,
+        error: new Error("boom"),
+      });
+      usePackageListMock.mockReturnValue(okReady);
+      useDashboardMock.mockReturnValue(okDashboard);
+
+      render(<ActiveApplications />);
+
+      expect(screen.getByRole("alert")).toBeInTheDocument();
+      expect(screen.getByText("Acme")).toBeInTheDocument();
+      expect(screen.queryByText(/couldn.t load active applications/i)).not.toBeInTheDocument();
+    });
+
+    it("keeps showing cached rows, with the error banner above them, when a background refetch pauses instead", () => {
+      useApplicationsMock.mockReturnValue({
+        data: { columns: { applied: [application({ id: "a1", updated_at: "2026-09-17T00:00:00Z", job: { id: "j1", company: "Acme", title: "PM" } })] } },
+        isLoading: false,
+        error: null,
+        isPaused: true,
+      });
+      usePackageListMock.mockReturnValue(okReady);
+      useDashboardMock.mockReturnValue(okDashboard);
+
+      render(<ActiveApplications />);
+
+      expect(screen.getByRole("alert")).toBeInTheDocument();
+      expect(screen.getByText("Acme")).toBeInTheDocument();
+      expect(screen.queryByText(/couldn.t load active applications/i)).not.toBeInTheDocument();
+    });
+  });
 });

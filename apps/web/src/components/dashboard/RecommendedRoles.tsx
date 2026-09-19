@@ -4,6 +4,7 @@ import { Sparkles } from "lucide-react";
 import { useState } from "react";
 import type { TrackInfo } from "@/components/jobs/JobCard";
 import { JobGrid } from "@/components/jobs/JobGrid";
+import { ApiErrorBanner } from "@/components/shell/ApiErrorBanner";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { RECOMMENDED_MAX_PAGES, RECOMMENDED_PAGE_SIZE, useRecommendedJobs } from "@/lib/api/queries";
@@ -16,6 +17,11 @@ export function RecommendedRoles({ tracks }: { tracks: Record<string, TrackInfo>
   const onLastPage = page >= RECOMMENDED_MAX_PAGES - 1;
   // A page shorter than the page size is the last page of real data, hard cap or not.
   const morePagesLeft = jobs.length === RECOMMENDED_PAGE_SIZE;
+  // Same gap app/page.tsx's hasIssue/nothingToShow closes: a query that can't reach the network
+  // parks at fetchStatus "paused" (isLoading false, error null, data undefined) rather than
+  // settling into `error` — indistinguishable from a genuinely empty page without this.
+  const hasIssue = Boolean(query.error) || query.isPaused;
+  const nothingToShow = jobs.length === 0 && hasIssue;
 
   return (
     <section aria-labelledby="recommended-heading" className="space-y-3">
@@ -37,7 +43,19 @@ export function RecommendedRoles({ tracks }: { tracks: Record<string, TrackInfo>
           </Button>
         </div>
       </div>
-      <JobGrid jobs={jobs} tracks={tracks} loading={query.isLoading} empty={<EmptyState icon={Sparkles} title="Nothing to recommend yet" />} />
+      {hasIssue ? <ApiErrorBanner error={query.error ?? "Can't reach Rhapto's API."} /> : null}
+      <JobGrid
+        jobs={jobs}
+        tracks={tracks}
+        loading={query.isLoading}
+        empty={
+          nothingToShow ? (
+            <EmptyState icon={Sparkles} title="Couldn&rsquo;t load recommended roles" description="Try refreshing the page." />
+          ) : (
+            <EmptyState icon={Sparkles} title="Nothing to recommend yet" />
+          )
+        }
+      />
     </section>
   );
 }

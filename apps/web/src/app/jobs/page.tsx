@@ -92,6 +92,14 @@ function JobsPageInner() {
   const jobs = rawJobs.filter((j) => passesFit(j.best_fit ?? null, state.fit));
   const loading = live.status === "idle" ? browse.isLoading : live.status === "searching";
   const error = live.status === "idle" ? browse.error : live.status === "error" ? live.error : null;
+  // Same gap app/page.tsx's hasIssue/nothingToShow closes for the Dashboard: TanStack Query v5's
+  // default networkMode "online" parks an unreachable `browse` query at fetchStatus "paused" —
+  // isLoading false, error null, data undefined, the same shape a genuinely empty result set has.
+  // hasIssue always shows the banner; nothingToShow only swaps the grid's empty-state copy when
+  // there is truly nothing cached to fall back on (a background pause/error with jobs already on
+  // screen keeps showing them, banner and all).
+  const hasIssue = live.status === "idle" ? Boolean(browse.error) || browse.isPaused : live.status === "error";
+  const nothingToShow = jobs.length === 0 && hasIssue;
 
   // Client-side paging over the already-fetched, already-filtered set (Task 5b brief §3): no
   // server-side offset/limit. `pageCount` is clamped to at least 1 so an (unusual) stale `page` from
@@ -152,12 +160,18 @@ function JobsPageInner() {
         </div>
       </div>
       <SourceReport perSource={live.perSource} />
-      <ApiErrorBanner error={error} />
+      {hasIssue ? <ApiErrorBanner error={error ?? "Can't reach Rhapto's API."} /> : null}
       <JobGrid
         jobs={pageJobs}
         tracks={tracks}
         loading={loading}
-        empty={<EmptyState icon={Search} title="No jobs yet" description="Search above, or let your saved searches fill this in." />}
+        empty={
+          nothingToShow ? (
+            <EmptyState icon={Search} title="Couldn&rsquo;t load jobs" description="Try refreshing the page." />
+          ) : (
+            <EmptyState icon={Search} title="No jobs yet" description="Search above, or let your saved searches fill this in." />
+          )
+        }
       />
       {showPager ? (
         <nav aria-label="Browse jobs pages" className="flex items-center justify-center gap-3">

@@ -2,6 +2,7 @@
 
 import { Package } from "lucide-react";
 import Link from "next/link";
+import { ApiErrorBanner } from "@/components/shell/ApiErrorBanner";
 import { EmptyState } from "@/components/ui/empty-state";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { useApplications, useDashboard, usePackageList, type ApplicationOut, type DueFollowup, type PackageListItem } from "@/lib/api/queries";
@@ -102,18 +103,29 @@ export function ActiveApplications() {
   // settles, and starting the grid without it would flash cards in without their "Follow up today"
   // flag, then re-flag them a moment later.
   const loading = applications.isLoading || ready.isLoading || dashboard.isLoading;
+  // Three separate queries, each of which can fail or pause independently (dashboard's own call can
+  // succeed while these fail, or vice versa) — same gap app/page.tsx's hasIssue/nothingToShow closes.
+  // A paused query (unreachable network) settles into isLoading: false, error: null, data: undefined,
+  // indistinguishable from "nothing in flight" without checking isPaused too.
+  const hasIssue =
+    Boolean(applications.error) || applications.isPaused || Boolean(ready.error) || ready.isPaused || Boolean(dashboard.error) || dashboard.isPaused;
+  const bannerError = applications.error ?? ready.error ?? dashboard.error ?? (hasIssue ? "Can't reach Rhapto's API." : null);
+  const nothingToShow = rows.length === 0 && hasIssue;
 
   return (
     <section aria-labelledby="active-applications-heading" className="space-y-3">
       <h2 id="active-applications-heading" className="font-sans text-base font-semibold">
         Active applications
       </h2>
+      {!loading && hasIssue ? <ApiErrorBanner error={bannerError} /> : null}
       {loading ? (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3" aria-hidden="true">
           {Array.from({ length: 3 }).map((_, i) => (
             <div key={i} className="h-28 animate-pulse rounded-card bg-surface-muted" />
           ))}
         </div>
+      ) : nothingToShow ? (
+        <EmptyState icon={Package} title="Couldn&rsquo;t load active applications" description="Try refreshing the page." />
       ) : rows.length === 0 ? (
         <EmptyState icon={Package} title="Nothing in flight yet" description="Tailor a role from Recommended roles above to start your pipeline." />
       ) : (

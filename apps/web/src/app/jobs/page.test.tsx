@@ -211,4 +211,41 @@ describe("Jobs page", () => {
       expect(screen.getByRole("button", { name: "Next" })).toBeDisabled();
     });
   });
+
+  describe("when the API is unreachable or fails", () => {
+    it("shows the error banner and swaps the empty-state copy when a failed browse query has nothing cached", () => {
+      jobsQuery.mockReturnValue({ data: undefined, isLoading: false, error: new Error("boom"), isPaused: false });
+      render(<JobsPage />);
+      expect(screen.getByRole("alert")).toBeInTheDocument();
+      expect(screen.getByText(/couldn.t load jobs/i)).toBeInTheDocument();
+      expect(screen.queryByText(/no jobs yet/i)).not.toBeInTheDocument();
+    });
+
+    it("shows the error banner when a browse query pauses instead of settling into an error", () => {
+      // TanStack Query v5's default networkMode "online": an unreachable browse query parks at
+      // fetchStatus "paused" rather than settling into `error` -- isLoading false, error null,
+      // data undefined, the same shape a genuinely empty result set has.
+      jobsQuery.mockReturnValue({ data: undefined, isLoading: false, error: null, isPaused: true });
+      render(<JobsPage />);
+      expect(screen.getByRole("alert")).toBeInTheDocument();
+      expect(screen.getByText(/couldn.t load jobs/i)).toBeInTheDocument();
+      expect(screen.queryByText(/no jobs yet/i)).not.toBeInTheDocument();
+    });
+
+    it("keeps showing cached jobs, with the error banner above them, when a background refetch settles into an error", () => {
+      jobsQuery.mockReturnValue({ data: [job("cached")], isLoading: false, error: new Error("boom"), isPaused: false });
+      render(<JobsPage />);
+      expect(screen.getByRole("alert")).toBeInTheDocument();
+      expect(screen.getAllByRole("article")).toHaveLength(1);
+      expect(screen.queryByText(/couldn.t load jobs/i)).not.toBeInTheDocument();
+    });
+
+    it("keeps showing cached jobs, with the error banner above them, when a background refetch pauses instead", () => {
+      jobsQuery.mockReturnValue({ data: [job("cached")], isLoading: false, error: null, isPaused: true });
+      render(<JobsPage />);
+      expect(screen.getByRole("alert")).toBeInTheDocument();
+      expect(screen.getAllByRole("article")).toHaveLength(1);
+      expect(screen.queryByText(/couldn.t load jobs/i)).not.toBeInTheDocument();
+    });
+  });
 });
