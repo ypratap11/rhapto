@@ -60,7 +60,8 @@ async function tailorInBlocksMode(page: Page, jobId: string): Promise<void> {
   await page.getByRole("combobox", { name: "Mode" }).click();
   await page.getByRole("option", { name: "Build from blocks" }).click();
   await page.getByRole("button", { name: "Tailor" }).click();
-  await expect(page.getByRole("link", { name: "Review", exact: true })).toBeVisible({ timeout: 120_000 });
+  // Below playwright.config.ts's 120_000 test-level timeout — see dashboard.spec.ts.
+  await expect(page.getByRole("link", { name: "Review", exact: true })).toBeVisible({ timeout: 90_000 });
 }
 
 test("Skip archives the resume and the job disappears from Jobs", async ({ page }) => {

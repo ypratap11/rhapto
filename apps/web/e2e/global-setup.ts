@@ -94,6 +94,27 @@ export default async function globalSetup(): Promise<void> {
     );
   }
 
+  // The comment at the top of this file has said it since the first version of this suite: tailoring
+  // here must not call a real provider. Until now nothing actually checked that — a stack running its
+  // default (real) provider would silently tailor through the real Anthropic API on every `pnpm e2e`
+  // run: real latency, real cost, and non-deterministic output the specs' assertions were never
+  // written to tolerate. Fail loudly, before a single spec runs, instead of leaving that to be
+  // noticed in a bill or a flaky assertion.
+  const llmUrl = `${apiUrl}/api/v1/settings/llm`;
+  const llmRes = await fetch(llmUrl, { headers: auth });
+  if (!llmRes.ok) {
+    throw new Error(`GET ${llmUrl} -> ${llmRes.status} ${await llmRes.text()}`);
+  }
+  const llm = (await llmRes.json()) as { provider?: string | null };
+  if (llm.provider !== "fake") {
+    throw new Error(
+      `GET ${llmUrl} reports provider ${JSON.stringify(llm.provider)}, not "fake". This suite must never tailor ` +
+        "through a real LLM provider (real latency, real cost, non-deterministic output). Run the stack with " +
+        "RHAPTO_LLM_PROVIDER=fake, e.g. `docker compose -f docker-compose.yml -f docker-compose.e2e.yml up -d` " +
+        "from the repo root, before `pnpm e2e`.",
+    );
+  }
+
   // Saved searches are not reset by the profile import above (they are their own table, not part
   // of profile.example's YAML files) and jobs.spec.ts's "Save this search" step hides its button
   // once a search with the same name already exists — so a search left over from a previous run

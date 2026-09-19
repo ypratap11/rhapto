@@ -25,7 +25,8 @@ async function createApplication(page: Page, job: JobSummary): Promise<void> {
   await page.getByRole("option", { name: "Build from blocks" }).click();
   await page.getByRole("button", { name: "Tailor" }).click();
   const reviewLink = page.getByRole("link", { name: "Review", exact: true });
-  await expect(reviewLink).toBeVisible({ timeout: 120_000 });
+  // Below playwright.config.ts's 120_000 test-level timeout — see dashboard.spec.ts.
+  await expect(reviewLink).toBeVisible({ timeout: 90_000 });
 
   await page.goto("/resumes?tab=review");
   const row = page.getByRole("row", { name: job.title ?? "" }).filter({ hasText: job.company ?? "" });

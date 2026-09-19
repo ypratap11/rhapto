@@ -33,9 +33,11 @@ test("Search fills the grid with scored jobs, and Save this search surfaces on t
   await pollButton.click();
   // Poll now (worker/tasks.py poll_now) re-runs every saved search's own criteria and, unlike the
   // ad hoc live search above, tags newly-discovered postings with this search's id — that
-  // attribution is what makes "N new" possible at all. TaskProgress re-enables the button once the
-  // task reaches any terminal state.
-  await expect(pollButton).toBeEnabled({ timeout: 90_000 });
+  // attribution is what makes "N new" possible at all. TaskProgress only toasts "Poll finished…"
+  // on a genuine "done" event, so this is a real success assertion, not just "the button came
+  // back" (which a `poll_now` that failed after doing its work — see worker/tasks.py's
+  // `poll_now` and its JSON-safe "done" publish — would also produce).
+  await expect(page.getByText(/poll finished/i)).toBeVisible({ timeout: 90_000 });
 
   // SavedSearchesRail is not invalidated when a poll finishes (only tailoring is — see
   // TaskProgress.tsx), so a fresh load is the only way to see its updated count.
