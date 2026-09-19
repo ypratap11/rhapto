@@ -6,6 +6,7 @@ import { AnswersTab } from "@/components/profile/AnswersTab";
 import { BasesTab } from "@/components/profile/BasesTab";
 import { BlocksTab } from "@/components/profile/BlocksTab";
 import { GuardrailsTab } from "@/components/profile/GuardrailsTab";
+import { LocationTab } from "@/components/profile/LocationTab";
 import { ProfileSummaryCard, type ProfileCardId } from "@/components/profile/ProfileSummaryCard";
 import { ResumeDocumentTab } from "@/components/profile/ResumeDocumentTab";
 import { TracksTab } from "@/components/profile/TracksTab";
@@ -121,9 +122,7 @@ function ProfilePageInner() {
     bases: <BasesTab />,
     answers: <AnswersTab />,
     guardrails: <GuardrailsTab />,
-    // The location answers (location_home, location_preferred, remote_ok) live in Answers — there
-    // is no separate location editor.
-    location: <AnswersTab />,
+    location: <LocationTab />,
     watchlist: <WatchlistTab />,
   };
 
