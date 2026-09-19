@@ -18,6 +18,42 @@ async function pickRecommendedJob(skip: number): Promise<JobSummary> {
   return job;
 }
 
+/** This file's tailors need at least one track to select in the Mode/Track pickers
+ * (TailorButton's `selectedTrackId` falls back to `tracks.data?.[0]?.id`, and the tailor endpoint
+ * needs a real `track_id`). profile.example ships two, but profile.spec.ts deletes both of them
+ * partway through its own test before re-adding one via the field picker — so this file's tailors
+ * only have a track to use if profile.spec.ts already ran (and finished) first, which nothing
+ * beyond Playwright's default alphabetical file order actually guarantees (a shard split, a
+ * rename, or running this file alone would all break it, silently, several files away from the
+ * cause — exactly what happened once during this task's own development). Assert/create a track
+ * directly rather than depend on that ordering.
+ */
+async function ensureTrackExists(): Promise<void> {
+  const tracks = await fetchJson<{ id: string }[]>("/api/v1/profile/tracks");
+  if (tracks.length > 0) return;
+  const bases = await fetchJson<{ id: string }[]>("/api/v1/profile/bases");
+  const apiUrl = process.env.RHAPTO_PUBLIC_API_URL ?? "http://localhost:8000";
+  const token = process.env.RHAPTO_API_TOKEN ?? "";
+  const track = {
+    id: "e2e-resumes-fallback",
+    name: "E2E fallback track",
+    description: "Created by resumes.spec.ts because no track existed yet.",
+    keywords: [],
+    resume_base: bases[0]?.id ?? "default",
+    min_fit: 0,
+  };
+  const res = await fetch(`${apiUrl}/api/v1/profile/tracks/${track.id}`, {
+    method: "PUT",
+    headers: { Authorization: `Bearer ${token}`, "content-type": "application/json" },
+    body: JSON.stringify(track),
+  });
+  if (!res.ok) throw new Error(`Could not create a fallback track: ${res.status} ${await res.text()}`);
+}
+
+test.beforeAll(async () => {
+  await ensureTrackExists();
+});
+
 async function tailorInBlocksMode(page: Page, jobId: string): Promise<void> {
   await page.goto(`/jobs/${jobId}`);
   // Explicit "Build from blocks" — see dashboard.spec.ts for why the default must not be trusted.

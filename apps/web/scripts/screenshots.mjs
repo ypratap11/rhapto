@@ -51,6 +51,9 @@ const TOKEN = process.env.RHAPTO_API_TOKEN || env.RHAPTO_API_TOKEN || "";
 const API_URL = process.env.RHAPTO_PUBLIC_API_URL || env.RHAPTO_PUBLIC_API_URL || "http://localhost:8000";
 const WEB_URL = process.env.RHAPTO_WEB_ORIGIN || env.RHAPTO_WEB_ORIGIN || "http://localhost:3000";
 const EXPECTED_EMAIL = env.RHAPTO_USER_EMAIL || "";
+// The fictional fixture e2e/profile.spec.ts uploads too (see apps/api/tests/helpers_docx.py).
+const FIXTURE_DOCX = resolve(WEB_DIR, "e2e/fixtures/resume-template.docx");
+const FIXTURE_NAME = "MAYA CHEN";
 
 if (!TOKEN) {
   console.error("RHAPTO_API_TOKEN is empty in the root .env — set it before running this script.");
@@ -76,6 +79,44 @@ async function assertExampleProfile() {
       `GET /api/v1/me returned ${JSON.stringify(me.email)}, expected ${JSON.stringify(EXPECTED_EMAIL)} (.env's RHAPTO_USER_EMAIL). ` +
         "Refusing to screenshot what might be a real profile — re-import profile.example first (see e2e/global-setup.ts).",
     );
+    process.exit(1);
+  }
+}
+
+/** Guard #1b: `assertExampleProfile` above only confirms the account *identity* (blocks.yaml,
+ * tracks.yaml, answers.yaml, …) was re-imported to profile.example — `POST
+ * /profile/resume-document` (Profile > Resume template, the doc "tune" mode rewrites) is a
+ * separate resource a profile import never touches. It matters here specifically because this
+ * script never tailors anything; it only opens whatever "review" package already exists
+ * (findHref below), so it has no chance to route around a real document the way every e2e spec's
+ * explicit "Build from blocks" does. And picking "blocks" mode is not by itself a full guarantee
+ * even for a spec that does tailor: apps/api/src/rhapto/engine/compose.py's build_user_message
+ * redacts a previous resume's email/phone/location/links but deliberately keeps its header name
+ * (`ResumeHeader(name=previous.header.name)`) when composing against one — so a real document's
+ * name can still resurface through a regenerate/previous-resume path. The document's parsed name
+ * is therefore the one fact this guard checks directly, not just its filename: if the current
+ * document is missing or its name paragraph isn't the fixture's ("MAYA CHEN"), replace it with
+ * e2e/fixtures/resume-template.docx before capturing anything (the same fixture, the same way,
+ * profile.spec.ts uploads it) rather than silently capturing whatever is actually there. */
+async function ensureFixtureResumeDocument() {
+  const auth = { Authorization: `Bearer ${TOKEN}` };
+  const res = await fetch(`${API_URL}/api/v1/profile/resume-document`, { headers: auth });
+  if (res.ok) {
+    const doc = await res.json();
+    const name = doc.document?.paragraphs?.find((p) => p.role === "name")?.text;
+    if (name === FIXTURE_NAME) return; // already the known-safe fixture
+    console.warn(`Resume document's name is ${JSON.stringify(name)}, not the fixture's ${JSON.stringify(FIXTURE_NAME)} — replacing it.`);
+  } else if (res.status === 404) {
+    console.warn("No resume document uploaded — uploading the fixture.");
+  } else {
+    console.error(`GET /api/v1/profile/resume-document -> ${res.status} ${await res.text()}`);
+    process.exit(1);
+  }
+  const form = new FormData();
+  form.append("file", new Blob([readFileSync(FIXTURE_DOCX)]), "resume-template.docx");
+  const upload = await fetch(`${API_URL}/api/v1/profile/resume-document`, { method: "POST", headers: auth, body: form });
+  if (!upload.ok) {
+    console.error(`Could not upload the fixture resume document: ${upload.status} ${await upload.text()}`);
     process.exit(1);
   }
 }
@@ -145,6 +186,7 @@ async function capture(page, name, theme) {
 
 async function run() {
   await assertExampleProfile();
+  await ensureFixtureResumeDocument();
   await mkdir(OUT_DIR, { recursive: true });
   const browser = await chromium.launch();
   const saved = [];
