@@ -3,7 +3,7 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { toast } from "sonner";
 import { describe, expect, it, vi } from "vitest";
-import type { Block } from "@/lib/api/queries";
+import { packageKeys, type Block } from "@/lib/api/queries";
 import { BlocksTab } from "./BlocksTab";
 
 const blockWithPeriod: Block = {
@@ -52,11 +52,19 @@ vi.mock("@/lib/api/queries", async (importOriginal) => ({
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 
 function renderTab() {
-  return render(
-    <QueryClientProvider client={new QueryClient()}>
+  // Seed the cache at the same key BlocksTab reads from (readBlock/patchBlock prefer the query
+  // cache over the render-time `blocks.data` prop, precisely so a mutation can compose from the
+  // freshest known copy of a block instead of a stale closure — see BlocksTab.tsx). Without this
+  // seed, that cache-preferring read would silently fall through to the `blocks.data` fallback on
+  // every read, and a test exercising the fresh-read behavior itself couldn't fail.
+  const client = new QueryClient();
+  client.setQueryData(packageKeys.blocks, blocksData);
+  render(
+    <QueryClientProvider client={client}>
       <BlocksTab />
     </QueryClientProvider>,
   );
+  return client;
 }
 
 describe("BlocksTab", () => {
@@ -171,5 +179,35 @@ describe("BlocksTab", () => {
     blocksData = [blockWithPeriod];
     renderTab();
     expect(screen.queryByText(/need.* a period/i)).not.toBeInTheDocument();
+  });
+
+  it("Undo after a Verified toggle only reverts verified — an interleaved Period edit survives — CRITICAL", async () => {
+    // blockWithPeriod starts verified: true, period: "2023".
+    blocksData = [blockWithPeriod];
+    putMutate.mockClear();
+    renderTab();
+    const user = userEvent.setup();
+
+    // Toggle verified off. Undo, if implemented as "re-PUT the pre-toggle snapshot", would capture
+    // { ...blockWithPeriod, verified: true } here — including the *original* period.
+    await user.click(screen.getByRole("button", { name: /toggle verified for acme-migration/i }));
+    expect(putMutate).toHaveBeenLastCalledWith({ ...blockWithPeriod, verified: false });
+
+    // While that Undo toast is still up, edit Period on the *same* block.
+    await user.click(screen.getByRole("button", { name: /edit period for acme-migration/i }));
+    const input = screen.getByRole("textbox", { name: /period acme-migration/i });
+    await user.clear(input);
+    await user.type(input, "2030{Enter}");
+    expect(putMutate).toHaveBeenLastCalledWith({ ...blockWithPeriod, verified: false, period: "2030" });
+
+    // Now Undo the toggle. Correct behaviour: only `verified` flips back to true; the period edit
+    // made in between is untouched. The bug this guards against: Undo re-PUTting the stale
+    // pre-toggle snapshot, which would silently revert period back to "2023".
+    const toggleToast = (toast.success as ReturnType<typeof vi.fn>).mock.calls.find(
+      ([, opts]) => opts?.action?.label === "Undo",
+    )!;
+    await toggleToast[1].action.onClick();
+
+    expect(putMutate).toHaveBeenLastCalledWith({ ...blockWithPeriod, verified: true, period: "2030" });
   });
 });

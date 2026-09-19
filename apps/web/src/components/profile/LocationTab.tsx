@@ -20,12 +20,33 @@ import { SwitchField } from "./fields";
  */
 export function LocationTab() {
   const answers = useAnswers();
+  // The four query states (see app/page.tsx:39-49): loading gets a skeleton; a settled error *or*
+  // TanStack's paused fetchStatus (networkMode: "online" parks an unreachable query at
+  // isLoading: false, error: null, data: undefined — indistinguishable from "genuinely empty" by
+  // isLoading/error alone) both count as "an issue"; and "nothing to show" is specifically "no data
+  // was ever loaded", not "an issue happened".
+  //
+  // This distinction is load-bearing here, not cosmetic: `save()` below builds its PUT body by
+  // spreading `...initial` to preserve every other answer key. If `initial` were allowed to fall
+  // back to `{}` for a paused/errored fetch, an unaware user hitting Save would silently wipe every
+  // answer that spread was supposed to protect. So when there is no real data, LocationBody — and
+  // therefore its `save` closure and the only Save button that can call it — is never constructed at
+  // all. That's the guard on the *mutation*, not just on what gets rendered: there is no code path
+  // in the unloaded case where a Save button exists and is wired to a mutation.
+  const hasIssue = Boolean(answers.error) || answers.isPaused;
   if (answers.isLoading) return <Skeleton className="h-40 w-full" />;
-  if (answers.error) return <ApiErrorBanner error={answers.error} />;
-  // See AnswersTab: keyed by data identity so the editable copy is (re)initialized only when the
-  // server data actually changes (e.g. after a save), not on every render — avoids syncing props
-  // into state via an effect.
-  return <LocationBody key={JSON.stringify(answers.data ?? {})} initial={answers.data ?? {}} />;
+  if (answers.data === undefined) {
+    return <ApiErrorBanner error={answers.error ?? "Can't reach Rhapto's API — location preferences aren't available right now."} />;
+  }
+  return (
+    <div className="space-y-2">
+      {hasIssue ? <p className="text-xs text-fit-mid">Showing your last saved location preferences — the latest refresh failed.</p> : null}
+      {/* See AnswersTab: keyed by data identity so the editable copy is (re)initialized only when
+          the server data actually changes (e.g. after a save), not on every render — avoids syncing
+          props into state via an effect. */}
+      <LocationBody key={JSON.stringify(answers.data)} initial={answers.data} />
+    </div>
+  );
 }
 
 function LocationBody({ initial }: { initial: Record<string, string> }) {
