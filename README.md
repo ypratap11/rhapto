@@ -90,14 +90,23 @@ open http://localhost:3000
 ```
 
 On first visit the app asks for the API URL (`http://localhost:8000`) and the bearer token from your `.env`
-(`RHAPTO_API_TOKEN`). Then:
+(`RHAPTO_API_TOKEN`). The portal has six screens:
 
-1. **Profile**: import your five YAML files (or the demo `profile.example` to try it) and edit blocks, tracks, and rules.
-2. **Jobs** shows *Apply to these first*; press the action on the top row (Tailor, then Review, then Mark applied).
-   Progress streams live, and the review step highlights the exact block behind each bullet and lists anything
-   the guardrails blocked.
-3. **Packages** lists what needs review (switch the filter for blocked, applied, or all).
-4. **Pipeline** tracks what you submitted: drag applications across the board and keep notes and history.
+1. **Dashboard** (`/`) — where you land: new fits, resumes waiting for review, your profile checklist, saved
+   searches, and what's active in your pipeline.
+2. **Jobs** (`/jobs`) — search the whole market and browse everything Rhapto has found; Tailor kicks off a
+   package, with progress streaming live.
+3. **Resumes** (`/resumes`) — every tailored package and what it's waiting on (needs review, blocked by
+   guardrails, ready to apply); the review step highlights the exact block behind each bullet and lists
+   anything the guardrails blocked.
+4. **Pipeline** (`/pipeline`) — every application you've sent, independent of the resume behind it: drag
+   across stages and keep notes and history.
+5. **Profile** (`/profile`) — everything Rhapto needs to know about you: your blocks, tracks, guardrails, and
+   answers. Import your five YAML files (or the demo `profile.example` to try it).
+6. **Settings** (`/settings`) — your AI provider, job sources, saved searches, profile import/export, and the
+   browser's connection to the API.
+
+The user guide under `docs/user-guide/` covers each screen in detail; this is just the map.
 
 Downloads are named after you, not the job.
 
@@ -198,8 +207,8 @@ Rhapto polls two kinds of source: **company boards** on your watchlist (Greenhou
 Workday) and **aggregators** that search the market. Aggregators are driven by your *saved
 searches*, which are derived from your tracks the first time you poll — one search per track,
 using the track's first six keywords, your preferred location, and your `remote_ok` answer. Edit
-them through `GET/POST/PUT/DELETE /api/v1/searches` (the Searches screen arrives with the
-portal UI).
+them through `GET/POST/PUT/DELETE /api/v1/searches`, or from the portal: save one from the Jobs
+page's search bar, and manage the list from Settings → Saved searches.
 
 Zero-setup sources are on by default: **The Muse**, **Remotive**, **RemoteOK**, **HN Who's
 Hiring**. Three more need a free key, saved with `PUT /api/v1/settings/sources/{source}`
@@ -220,7 +229,8 @@ site → Mark applied.** Rhapto never submits an application for you.
 
 ### Try it from the command line
 
-Below is a curl-driven walkthrough of the API while the portal UI is pending.
+Below is a curl-driven walkthrough of the discovery API, useful for scripting or debugging outside
+the portal UI (see "Web app" above for the same flow through the browser).
 
 ```bash
 docker compose build api && docker compose build worker && docker compose up -d db redis api worker

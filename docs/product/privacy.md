@@ -28,9 +28,13 @@ key.
 `profile/` — your real profile — is gitignored and never committed. `profile.example/` is
 fictional demo data ("Maya Chen", an invented employer called ExampleCo) used throughout this
 documentation and the screenshot walkthrough; nothing under `profile.example/` describes a real
-person or company. CI runs a secret scan and `scripts/check-no-personal-data.py`, which fails the
-build if any organisation name from a real, local `profile/blocks.yaml` ever shows up in a
-tracked file.
+person or company. This repo has no CI workflow (no `.github/`) to enforce that automatically —
+`scripts/check-no-personal-data.py` is a script you run by hand (`python
+scripts/check-no-personal-data.py` from the repo root) that fails if any organisation name from a
+real, local `profile/blocks.yaml` shows up in a git-tracked file; it is a no-op if you have no
+`profile/` at all. It checks organisation names only — it is not a general secret scanner, and it
+cannot catch, for example, a real credential fragment rendered into a screenshot (see the
+screenshot walkthrough's own guards in `apps/web/scripts/screenshots.mjs` for that class of leak).
 
 ## Deleting
 

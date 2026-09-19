@@ -56,7 +56,7 @@ export function SearchForm({
           aria-label="Location"
           value={value.location}
           onChange={(e) => onChange({ ...value, location: e.target.value })}
-          placeholder="Anywhere — defaults to your home location"
+          placeholder="Anywhere"
         />
       </div>
       <div className="flex flex-col gap-1">
