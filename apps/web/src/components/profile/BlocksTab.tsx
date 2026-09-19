@@ -170,7 +170,13 @@ export function BlocksTab() {
                       e.preventDefault();
                       void commitPeriod(b);
                     } else if (e.key === "Escape") {
+                      // Also stop propagation: this table lives inside ProfileSummaryCard's own
+                      // Sheet, which closes itself on Escape via a bubbled/document-level keydown
+                      // handler. Without this, cancelling the inline edit closes that outer sheet
+                      // too — found by clicking through the real page, not caught by the RTL test
+                      // (jsdom doesn't reproduce base-ui's document-level Escape listener).
                       e.preventDefault();
+                      e.stopPropagation();
                       cancelEditingPeriod();
                     }
                   }}
