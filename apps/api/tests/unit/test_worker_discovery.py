@@ -1,3 +1,4 @@
+import json
 import uuid
 from datetime import UTC, datetime
 from typing import Any
@@ -6,9 +7,11 @@ import pytest
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from test_discovery_sources import fake_http_for
+from test_poller import FakeAggregator
 
-from rhapto.db.models import Job, JobScore, Task, User
+from rhapto.db.models import Aggregator, Job, JobScore, Task, User
 from rhapto.db.repositories import profile as profile_repo
+from rhapto.db.repositories import searches as searches_repo
 from rhapto.db.repositories import tasks as task_repo
 from rhapto.db.repositories.jobs import create_job
 from rhapto.db.repositories.users import get_or_create_user
@@ -16,11 +19,22 @@ from rhapto.engine.providers.fake import FakeEmbeddingProvider
 from rhapto.models.profile.tracks import Track
 from rhapto.models.profile.watchlist import WatchlistEntry
 from rhapto.services.discovery.poller import PollSummary
-from rhapto.services.eventbus import InMemoryEventBus, task_channel
+from rhapto.services.discovery.posting import Posting
+from rhapto.services.eventbus import Event, InMemoryEventBus, task_channel
 from rhapto.worker import main as worker_main
 from rhapto.worker import tasks as worker_tasks
 from rhapto.worker.main import cron_hours
 from rhapto.worker.tasks import TASKS, poll_all_sources, poll_now, rescore_jobs, score_jobs
+
+
+class JsonEncodingEventBus(InMemoryEventBus):
+    """`InMemoryEventBus` hands events straight to subscribers without serializing them, so it
+    would happily pass along a raw `uuid.UUID` that `RedisEventBus.publish` (a real `json.dumps`)
+    cannot. Encode-then-decode here so a payload that is not JSON-safe fails the same way it
+    would against Redis, instead of only failing in production."""
+
+    async def publish(self, channel: str, event: Event) -> None:
+        await super().publish(channel, json.loads(json.dumps(event)))
 
 
 async def seed(session: AsyncSession, user: User) -> None:
@@ -97,6 +111,52 @@ async def test_poll_now_records_failure(
     async with session_factory() as check:
         row = await check.get(Task, task.id)
         assert row is not None and row.status == "failed" and row.error
+
+
+async def test_poll_now_reports_success_for_a_result_tied_to_a_saved_search(
+    session_factory: async_sessionmaker[AsyncSession],
+    session: AsyncSession,
+    user: User,
+    fake_aggregators: None,
+) -> None:
+    """Regression test: a `RunResult` for a saved-search-driven aggregator carries a `uuid.UUID`
+    `search_id`, which `json.dumps` cannot encode on its own. Before the fix, the "done" publish
+    below raised, and the exception handler downgraded an already-succeeded task to "failed" and
+    published an "error" event instead -- so `poll_now` looked like it failed even though it did
+    not. See apps/web/src/components/jobs/TaskProgress.tsx, which turns any "error" event into a
+    toast for the "Poll now" button on the Dashboard."""
+    search = await searches_repo.create_search(
+        session, user.id, name="A", keywords=["alpha"], location=None, remote="include"
+    )
+    session.add(Aggregator(user_id=user.id, source="fake-agg", enabled=True, keywords=[]))
+    await session.commit()
+    FakeAggregator.postings = [
+        Posting(
+            external_id="1",
+            company="ExampleCo",
+            title="Alpha Engineer",
+            location="Denver, CO",
+            url="https://jobs.lever.co/exampleco/alpha",
+            jd_text="alpha " * 20,
+        )
+    ]
+    task = await task_repo.create_task(session, user.id, "poll_now", {})
+    await session.commit()
+    bus = JsonEncodingEventBus()
+    ctx = ctx_for(session_factory, bus)
+    events: list[dict[str, Any]] = []
+    async with bus.subscription(task_channel(str(task.id))) as stream:
+        await poll_now(ctx, str(task.id))
+        async for event in stream:
+            events.append(event)
+            if event["event"] in ("done", "error"):
+                break
+    assert events[-1]["event"] == "done", events[-1]
+    result = next(r for r in events[-1]["results"] if r["source"] == "fake-agg")
+    assert result["search_id"] == str(search.id)
+    async with session_factory() as check:
+        row = await check.get(Task, task.id)
+        assert row is not None and row.status == "succeeded"
 
 
 async def test_score_and_rescore_tasks(
