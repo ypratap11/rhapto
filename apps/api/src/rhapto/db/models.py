@@ -221,6 +221,14 @@ class Package(UserScopedMixin, TimestampMixin, Base):
         ARRAY(String), default=list, nullable=False
     )
     llm_calls: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    # Token usage summed across every LLM call in the run that produced this version, and the
+    # model that made them. NULL/0 on rows written before usage tracking existed -- the readers
+    # default rather than assume, same as `mode` above.
+    input_tokens: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    output_tokens: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    cache_read_tokens: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    cache_creation_tokens: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    llm_model: Mapped[str | None] = mapped_column(String(60))
     docx_path: Mapped[str | None] = mapped_column(Text)
     pdf_path: Mapped[str | None] = mapped_column(Text)
     parent_package_id: Mapped[uuid.UUID | None] = mapped_column(

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import uuid
+from dataclasses import dataclass
 from datetime import UTC, datetime
 
 from sqlalchemy import and_, func, or_, select
@@ -44,6 +45,11 @@ async def create_package(
         jd_extract_json=package.jd_extract.model_dump(mode="json"),
         selection_block_ids=list(selection_block_ids),
         llm_calls=package.llm_calls,
+        input_tokens=package.usage.input_tokens,
+        output_tokens=package.usage.output_tokens,
+        cache_read_tokens=package.usage.cache_read_input_tokens,
+        cache_creation_tokens=package.usage.cache_creation_input_tokens,
+        llm_model=package.model,
         docx_path=docx_path,
         pdf_path=pdf_path,
         parent_package_id=parent_package_id,
@@ -164,6 +170,13 @@ def package_row_to_model(
             "version": row.version,
             "status": row.status,
             "llm_calls": row.llm_calls,
+            "usage": {
+                "input_tokens": row.input_tokens,
+                "output_tokens": row.output_tokens,
+                "cache_read_input_tokens": row.cache_read_tokens,
+                "cache_creation_input_tokens": row.cache_creation_tokens,
+            },
+            "model": row.llm_model,
             "created_at": row.created_at,
             # Rows written before tune mode existed have NULL here; the defaults keep them
             # readable as what they were -- a blocks-mode package with no document.
@@ -172,3 +185,104 @@ def package_row_to_model(
             "source_document": row.source_document_json,
         }
     )
+
+
+@dataclass(frozen=True)
+class ModelUsageRow:
+    """One llm_model's totals across some set of packages (NULL model is its own group).
+
+    Raw sums only -- no pricing here. `rhapto.services.usage` prices each group at its own
+    model's rate and adds the results, because pricing the sum of tokens across models at one
+    rate would misreport as soon as a user switches models.
+    """
+
+    model: str | None
+    calls: int
+    input_tokens: int
+    output_tokens: int
+    cache_read_tokens: int
+    cache_creation_tokens: int
+
+
+async def usage_by_model(
+    session: AsyncSession, user_id: uuid.UUID, *, since: datetime | None = None
+) -> list[ModelUsageRow]:
+    """Token totals for this user, grouped by the model that produced them."""
+    query = (
+        select(
+            Package.llm_model,
+            func.coalesce(func.sum(Package.llm_calls), 0),
+            func.coalesce(func.sum(Package.input_tokens), 0),
+            func.coalesce(func.sum(Package.output_tokens), 0),
+            func.coalesce(func.sum(Package.cache_read_tokens), 0),
+            func.coalesce(func.sum(Package.cache_creation_tokens), 0),
+        )
+        .where(Package.user_id == user_id)
+        .group_by(Package.llm_model)
+    )
+    if since is not None:
+        query = query.where(Package.created_at >= since)
+    rows = (await session.execute(query)).all()
+    return [
+        ModelUsageRow(
+            model=model,
+            calls=calls,
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+            cache_read_tokens=cache_read_tokens,
+            cache_creation_tokens=cache_creation_tokens,
+        )
+        for (
+            model,
+            calls,
+            input_tokens,
+            output_tokens,
+            cache_read_tokens,
+            cache_creation_tokens,
+        ) in rows
+    ]
+
+
+@dataclass(frozen=True)
+class RecentPackageUsage:
+    package_id: uuid.UUID
+    job_id: uuid.UUID
+    company: str | None
+    job_title: str | None
+    model: str | None
+    calls: int
+    input_tokens: int
+    output_tokens: int
+    cache_read_tokens: int
+    cache_creation_tokens: int
+    created_at: datetime
+
+
+async def recent_usage(
+    session: AsyncSession, user_id: uuid.UUID, *, limit: int = 20
+) -> list[RecentPackageUsage]:
+    """The most recent packages with their job, newest first, for the Settings usage table."""
+    query = (
+        select(Package, Job.company, Job.title)
+        .join(Job, Job.id == Package.job_id)
+        .where(Package.user_id == user_id)
+        .order_by(Package.created_at.desc(), Package.id.desc())
+        .limit(limit)
+    )
+    rows = (await session.execute(query)).all()
+    return [
+        RecentPackageUsage(
+            package_id=package.id,
+            job_id=package.job_id,
+            company=company,
+            job_title=title,
+            model=package.llm_model,
+            calls=package.llm_calls,
+            input_tokens=package.input_tokens,
+            output_tokens=package.output_tokens,
+            cache_read_tokens=package.cache_read_tokens,
+            cache_creation_tokens=package.cache_creation_tokens,
+            created_at=package.created_at,
+        )
+        for package, company, title in rows
+    ]
