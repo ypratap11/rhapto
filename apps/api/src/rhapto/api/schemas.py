@@ -74,6 +74,39 @@ class LlmTestOut(BaseModel):
     error: str | None = None
 
 
+class UsageSummaryOut(BaseModel):
+    """Token usage over some window, priced per model then summed (see the usage endpoint)."""
+
+    calls: int
+    input_tokens: int
+    output_tokens: int
+    cache_read_tokens: int
+    cache_creation_tokens: int
+    cost_usd: float | None
+    #: Of `calls`, how many ran on a model with no price on file -- their tokens are counted
+    #: above but not `cost_usd`, so the UI can say the estimate excludes them.
+    unpriced_calls: int
+
+
+class UsageRecentOut(BaseModel):
+    package_id: uuid.UUID
+    job_id: uuid.UUID
+    company: str | None
+    job_title: str | None
+    model: str | None
+    calls: int
+    input_tokens: int
+    output_tokens: int
+    cost_usd: float | None
+    created_at: datetime
+
+
+class UsageOut(BaseModel):
+    totals: UsageSummaryOut
+    last_30_days: UsageSummaryOut
+    recent: list[UsageRecentOut]
+
+
 class ImportOut(BaseModel):
     blocks: int
     tracks: int
@@ -168,6 +201,12 @@ class PackageOut(BaseModel):
     guardrail_report: GuardrailReport
     jd_extract: JDExtract
     llm_calls: int
+    input_tokens: int
+    output_tokens: int
+    cache_read_tokens: int
+    cache_creation_tokens: int
+    llm_model: str | None
+    cost_usd: float | None
     parent_package_id: uuid.UUID | None
     has_docx: bool
     has_pdf: bool

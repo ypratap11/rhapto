@@ -19,6 +19,7 @@ from rhapto.engine.compose import build_header
 from rhapto.engine.document import apply_edits, to_resume_document
 from rhapto.engine.guardrails.registry import run_guardrails
 from rhapto.engine.guardrails.tune import run_tune_guardrails
+from rhapto.engine.providers.llm import TokenUsage
 from rhapto.engine.render.docx import OrphanBulletError, render_docx
 from rhapto.engine.render.tune_docx import render_tuned_docx
 from rhapto.engine.types import EngineError, Profile
@@ -30,6 +31,7 @@ from rhapto.services.documents import load_source
 from rhapto.services.enqueue import Enqueuer
 from rhapto.services.naming import download_basename
 from rhapto.services.packaging import persist_package
+from rhapto.services.pricing import estimate_cost
 from rhapto.services.profile_sync import load_profile_from_db
 from rhapto.services.storage import PackageStorage
 
@@ -46,6 +48,15 @@ EnqueuerDep = Annotated[Enqueuer, Depends(get_enqueuer)]
 
 
 def package_to_out(row: Package) -> PackageOut:
+    cost = estimate_cost(
+        row.llm_model,
+        TokenUsage(
+            input_tokens=row.input_tokens,
+            output_tokens=row.output_tokens,
+            cache_read_input_tokens=row.cache_read_tokens,
+            cache_creation_input_tokens=row.cache_creation_tokens,
+        ),
+    )
     return PackageOut(
         id=row.id,
         job_id=row.job_id,
@@ -59,6 +70,12 @@ def package_to_out(row: Package) -> PackageOut:
         guardrail_report=GuardrailReport.model_validate(row.guardrail_report_json),
         jd_extract=JDExtract.model_validate(row.jd_extract_json),
         llm_calls=row.llm_calls,
+        input_tokens=row.input_tokens,
+        output_tokens=row.output_tokens,
+        cache_read_tokens=row.cache_read_tokens,
+        cache_creation_tokens=row.cache_creation_tokens,
+        llm_model=row.llm_model,
+        cost_usd=float(cost) if cost is not None else None,
         parent_package_id=row.parent_package_id,
         has_docx=row.docx_path is not None,
         has_pdf=row.pdf_path is not None,

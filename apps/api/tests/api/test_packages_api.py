@@ -49,6 +49,28 @@ async def test_list_and_get(client: httpx.AsyncClient, fake_llm) -> None:  # typ
 
 
 @pytest.mark.usefixtures("imported_profile")
+async def test_package_out_carries_usage_and_cost(client: httpx.AsyncClient, fake_llm) -> None:  # type: ignore[no-untyped-def]
+    fake_llm.model = "claude-sonnet-5"
+    _, package_id = await _tailored(client, fake_llm)
+    package = (await client.get(f"/api/v1/packages/{package_id}")).json()
+    assert package["input_tokens"] == 20 and package["output_tokens"] == 10
+    assert package["cache_read_tokens"] == 0 and package["cache_creation_tokens"] == 0
+    assert package["llm_model"] == "claude-sonnet-5"
+    # 20 input + 10 output tokens at claude-sonnet-5 rates ($2/$10 per 1M).
+    assert package["cost_usd"] == pytest.approx((20 * 2.00 + 10 * 10.00) / 1_000_000)
+
+
+@pytest.mark.usefixtures("imported_profile")
+async def test_package_out_cost_is_null_for_an_unknown_model(
+    client: httpx.AsyncClient, fake_llm
+) -> None:  # type: ignore[no-untyped-def]
+    _, package_id = await _tailored(client, fake_llm)  # fake_llm.model defaults to None
+    package = (await client.get(f"/api/v1/packages/{package_id}")).json()
+    assert package["llm_model"] is None and package["cost_usd"] is None
+    assert package["input_tokens"] == 20
+
+
+@pytest.mark.usefixtures("imported_profile")
 async def test_patch_creates_new_validated_version(
     client: httpx.AsyncClient, fake_llm, enqueuer
 ) -> None:  # type: ignore[no-untyped-def]

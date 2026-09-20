@@ -1582,9 +1582,28 @@
             "title": "Answers",
             "type": "object"
           },
+          "cache_creation_tokens": {
+            "title": "Cache Creation Tokens",
+            "type": "integer"
+          },
+          "cache_read_tokens": {
+            "title": "Cache Read Tokens",
+            "type": "integer"
+          },
           "change_log": {
             "title": "Change Log",
             "type": "string"
+          },
+          "cost_usd": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cost Usd"
           },
           "cover_note": {
             "title": "Cover Note",
@@ -1618,6 +1637,10 @@
             "title": "Id",
             "type": "string"
           },
+          "input_tokens": {
+            "title": "Input Tokens",
+            "type": "integer"
+          },
           "jd_extract": {
             "$ref": "#/components/schemas/JDExtract"
           },
@@ -1630,6 +1653,17 @@
             "title": "Llm Calls",
             "type": "integer"
           },
+          "llm_model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Llm Model"
+          },
           "mode": {
             "enum": [
               "blocks",
@@ -1637,6 +1671,10 @@
             ],
             "title": "Mode",
             "type": "string"
+          },
+          "output_tokens": {
+            "title": "Output Tokens",
+            "type": "integer"
           },
           "parent_package_id": {
             "anyOf": [
@@ -1689,6 +1727,12 @@
           "guardrail_report",
           "jd_extract",
           "llm_calls",
+          "input_tokens",
+          "output_tokens",
+          "cache_read_tokens",
+          "cache_creation_tokens",
+          "llm_model",
+          "cost_usd",
           "parent_package_id",
           "has_docx",
           "has_pdf",
@@ -2895,6 +2939,170 @@
           "resume_base"
         ],
         "title": "Track",
+        "type": "object"
+      },
+      "UsageOut": {
+        "properties": {
+          "last_30_days": {
+            "$ref": "#/components/schemas/UsageSummaryOut"
+          },
+          "recent": {
+            "items": {
+              "$ref": "#/components/schemas/UsageRecentOut"
+            },
+            "title": "Recent",
+            "type": "array"
+          },
+          "totals": {
+            "$ref": "#/components/schemas/UsageSummaryOut"
+          }
+        },
+        "required": [
+          "totals",
+          "last_30_days",
+          "recent"
+        ],
+        "title": "UsageOut",
+        "type": "object"
+      },
+      "UsageRecentOut": {
+        "properties": {
+          "calls": {
+            "title": "Calls",
+            "type": "integer"
+          },
+          "company": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Company"
+          },
+          "cost_usd": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cost Usd"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "input_tokens": {
+            "title": "Input Tokens",
+            "type": "integer"
+          },
+          "job_id": {
+            "format": "uuid",
+            "title": "Job Id",
+            "type": "string"
+          },
+          "job_title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Job Title"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "output_tokens": {
+            "title": "Output Tokens",
+            "type": "integer"
+          },
+          "package_id": {
+            "format": "uuid",
+            "title": "Package Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "package_id",
+          "job_id",
+          "company",
+          "job_title",
+          "model",
+          "calls",
+          "input_tokens",
+          "output_tokens",
+          "cost_usd",
+          "created_at"
+        ],
+        "title": "UsageRecentOut",
+        "type": "object"
+      },
+      "UsageSummaryOut": {
+        "description": "Token usage over some window, priced per model then summed (see the usage endpoint).",
+        "properties": {
+          "cache_creation_tokens": {
+            "title": "Cache Creation Tokens",
+            "type": "integer"
+          },
+          "cache_read_tokens": {
+            "title": "Cache Read Tokens",
+            "type": "integer"
+          },
+          "calls": {
+            "title": "Calls",
+            "type": "integer"
+          },
+          "cost_usd": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cost Usd"
+          },
+          "input_tokens": {
+            "title": "Input Tokens",
+            "type": "integer"
+          },
+          "output_tokens": {
+            "title": "Output Tokens",
+            "type": "integer"
+          },
+          "unpriced_calls": {
+            "title": "Unpriced Calls",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "calls",
+          "input_tokens",
+          "output_tokens",
+          "cache_read_tokens",
+          "cache_creation_tokens",
+          "cost_usd",
+          "unpriced_calls"
+        ],
+        "title": "UsageSummaryOut",
         "type": "object"
       },
       "ValidationError": {
@@ -6884,6 +7092,56 @@
           }
         },
         "summary": "Test Source",
+        "tags": [
+          "settings"
+        ]
+      }
+    },
+    "/api/v1/settings/usage": {
+      "get": {
+        "description": "All-time and last-30-day token/cost totals, plus the 20 most recent runs.",
+        "operationId": "get_usage_api_v1_settings_usage_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UsageOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Usage",
         "tags": [
           "settings"
         ]

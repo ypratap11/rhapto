@@ -809,6 +809,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/settings/usage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Usage
+         * @description All-time and last-30-day token/cost totals, plus the 20 most recent runs.
+         */
+        get: operations["get_usage_api_v1_settings_usage_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/tasks/{task_id}": {
         parameters: {
             query?: never;
@@ -1443,8 +1463,14 @@ export interface components {
             answers: {
                 [key: string]: string;
             };
+            /** Cache Creation Tokens */
+            cache_creation_tokens: number;
+            /** Cache Read Tokens */
+            cache_read_tokens: number;
             /** Change Log */
             change_log: string;
+            /** Cost Usd */
+            cost_usd: number | null;
             /** Cover Note */
             cover_note: string;
             /**
@@ -1464,6 +1490,8 @@ export interface components {
              * Format: uuid
              */
             id: string;
+            /** Input Tokens */
+            input_tokens: number;
             jd_extract: components["schemas"]["JDExtract"];
             /**
              * Job Id
@@ -1472,11 +1500,15 @@ export interface components {
             job_id: string;
             /** Llm Calls */
             llm_calls: number;
+            /** Llm Model */
+            llm_model: string | null;
             /**
              * Mode
              * @enum {string}
              */
             mode: "blocks" | "tune";
+            /** Output Tokens */
+            output_tokens: number;
             /** Parent Package Id */
             parent_package_id: string | null;
             resume: components["schemas"]["ResumeDocument"];
@@ -1933,6 +1965,65 @@ export interface components {
             resume_base: string;
             /** Role */
             role?: string | null;
+        };
+        /** UsageOut */
+        UsageOut: {
+            last_30_days: components["schemas"]["UsageSummaryOut"];
+            /** Recent */
+            recent: components["schemas"]["UsageRecentOut"][];
+            totals: components["schemas"]["UsageSummaryOut"];
+        };
+        /** UsageRecentOut */
+        UsageRecentOut: {
+            /** Calls */
+            calls: number;
+            /** Company */
+            company: string | null;
+            /** Cost Usd */
+            cost_usd: number | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Input Tokens */
+            input_tokens: number;
+            /**
+             * Job Id
+             * Format: uuid
+             */
+            job_id: string;
+            /** Job Title */
+            job_title: string | null;
+            /** Model */
+            model: string | null;
+            /** Output Tokens */
+            output_tokens: number;
+            /**
+             * Package Id
+             * Format: uuid
+             */
+            package_id: string;
+        };
+        /**
+         * UsageSummaryOut
+         * @description Token usage over some window, priced per model then summed (see the usage endpoint).
+         */
+        UsageSummaryOut: {
+            /** Cache Creation Tokens */
+            cache_creation_tokens: number;
+            /** Cache Read Tokens */
+            cache_read_tokens: number;
+            /** Calls */
+            calls: number;
+            /** Cost Usd */
+            cost_usd: number | null;
+            /** Input Tokens */
+            input_tokens: number;
+            /** Output Tokens */
+            output_tokens: number;
+            /** Unpriced Calls */
+            unpriced_calls: number;
         };
         /** ValidationError */
         ValidationError: {
@@ -4152,6 +4243,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SourceTestOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_usage_api_v1_settings_usage_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UsageOut"];
                 };
             };
             /** @description Validation Error */

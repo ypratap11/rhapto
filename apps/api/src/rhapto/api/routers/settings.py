@@ -36,6 +36,9 @@ from rhapto.api.schemas import (
     SourceSettingIn,
     SourceSettingOut,
     SourceTestOut,
+    UsageOut,
+    UsageRecentOut,
+    UsageSummaryOut,
 )
 from rhapto.config import Settings
 from rhapto.db.models import Aggregator
@@ -48,6 +51,7 @@ from rhapto.services.discovery.search import SearchSpec
 from rhapto.services.discovery.sources import aggregator_sources, get_aggregator
 from rhapto.services.llm import env_llm_config, key_hint, redact, stored_llm_config
 from rhapto.services.secrets import encrypt, fernet_for
+from rhapto.services.usage import UsageSummary, usage_report
 
 router = APIRouter()
 
@@ -179,6 +183,43 @@ async def test_llm_settings(
         # provider's wall of text cannot flood the UI.
         return LlmTestOut(ok=False, error=redact(str(exc), api_key)[:300])
     return LlmTestOut(ok=True, model=model)
+
+
+def _summary_out(summary: UsageSummary) -> UsageSummaryOut:
+    return UsageSummaryOut(
+        calls=summary.calls,
+        input_tokens=summary.input_tokens,
+        output_tokens=summary.output_tokens,
+        cache_read_tokens=summary.cache_read_tokens,
+        cache_creation_tokens=summary.cache_creation_tokens,
+        cost_usd=float(summary.cost_usd) if summary.cost_usd is not None else None,
+        unpriced_calls=summary.unpriced_calls,
+    )
+
+
+@router.get("/settings/usage", response_model=UsageOut)
+async def get_usage(user_id: UserDep, session: SessionDep) -> UsageOut:
+    """All-time and last-30-day token/cost totals, plus the 20 most recent runs."""
+    report = await usage_report(session, user_id)
+    return UsageOut(
+        totals=_summary_out(report.totals),
+        last_30_days=_summary_out(report.last_30_days),
+        recent=[
+            UsageRecentOut(
+                package_id=row.package.package_id,
+                job_id=row.package.job_id,
+                company=row.package.company,
+                job_title=row.package.job_title,
+                model=row.package.model,
+                calls=row.package.calls,
+                input_tokens=row.package.input_tokens,
+                output_tokens=row.package.output_tokens,
+                cost_usd=float(row.cost_usd) if row.cost_usd is not None else None,
+                created_at=row.package.created_at,
+            )
+            for row in report.recent
+        ],
+    )
 
 
 #: A keyless source works out of the box, so it defaults to enabled; a keyed one needs the user
