@@ -18,7 +18,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { ApiError } from "@/lib/api/client";
 import { useApplications, useBlocks, useJob, usePackage, usePackageList, usePackages, usePatchPackage, usePatchPackageEdits, type Block, type EditPatch, type ResumeDocument } from "@/lib/api/queries";
-import { formatDate } from "@/lib/format";
+import { formatCostUsd, formatDate, formatTokens } from "@/lib/format";
 import { nextReviewPackage } from "@/lib/flow";
 import { parsePath } from "@/lib/resume-paths";
 import { PACKAGE_STATUS_TONE } from "@/lib/status";
@@ -110,6 +110,11 @@ function PackageReviewPageInner() {
             <p className="mt-1 flex items-center gap-2 text-sm text-muted-foreground">
               <StatusBadge tone={PACKAGE_STATUS_TONE[pkg.data.status] ?? "neutral"}>{`v${pkg.data.version} · ${pkg.data.status}`}</StatusBadge>
               created {formatDate(pkg.data.created_at)} · {pkg.data.llm_calls} LLM calls · track {pkg.data.track_id}
+            </p>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              {pkg.data.llm_calls} call{pkg.data.llm_calls === 1 ? "" : "s"} · {formatTokens(pkg.data.input_tokens ?? 0)} in /{" "}
+              {formatTokens(pkg.data.output_tokens ?? 0)} out
+              {pkg.data.cost_usd != null ? ` · ~${formatCostUsd(pkg.data.cost_usd)}` : ""}
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">

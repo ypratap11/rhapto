@@ -8,6 +8,7 @@ import { HelpSection } from "@/components/settings/HelpSection";
 import { LlmProviderSection } from "@/components/settings/LlmProviderSection";
 import { SavedSearchesSection } from "@/components/settings/SavedSearchesSection";
 import { SourcesSection } from "@/components/settings/SourcesSection";
+import { UsageSection } from "@/components/settings/UsageSection";
 import { Breadcrumbs } from "@/components/shell/Breadcrumbs";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -86,6 +87,7 @@ export default function SettingsPage() {
       <Breadcrumbs items={[{ label: "Settings" }]} />
       <h1 className="font-serif text-2xl font-medium">Settings</h1>
       <LlmProviderSection />
+      <UsageSection />
       <SourcesSection />
       <SavedSearchesSection />
       <Card>

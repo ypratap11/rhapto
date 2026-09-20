@@ -29,6 +29,7 @@ vi.mock("@/lib/api/queries", async (importOriginal) => ({
   useSavedSearches: () => ({ data: undefined, isLoading: true, error: null, isPaused: false }),
   useUpdateSavedSearch: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useDeleteSavedSearch: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useUsageSummary: () => ({ data: undefined, isLoading: true, error: null }),
 }));
 
 afterEach(() => {
@@ -100,7 +101,7 @@ describe("SettingsPage", () => {
     // Card titles only — the Help section's doc list legitimately repeats names like "Job sources"
     // and "Saved searches" in its body text, so a plain getByText(title) would be ambiguous.
     const cardTitles = Array.from(container.querySelectorAll('[data-slot="card-title"]')).map((el) => el.textContent);
-    expect(cardTitles).toEqual(["AI provider", "Job sources", "Saved searches", "Import and export", "API connection", "Help"]);
+    expect(cardTitles).toEqual(["AI provider", "Usage", "Job sources", "Saved searches", "Import and export", "API connection", "Help"]);
 
     const help = container.querySelector("#help");
     expect(help).not.toBeNull();

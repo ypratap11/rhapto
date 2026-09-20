@@ -17,6 +17,12 @@ const tunePackage = {
   mode: "tune",
   track_id: "platform",
   llm_calls: 1,
+  input_tokens: 1200,
+  output_tokens: 340,
+  cache_read_tokens: 0,
+  cache_creation_tokens: 0,
+  llm_model: "claude-sonnet-5",
+  cost_usd: 0.58,
   created_at: "2026-09-11T00:00:00Z",
   cover_note: "note",
   change_log: "log",
@@ -67,6 +73,21 @@ describe("PackageReviewPage", () => {
     expect(screen.getByRole("heading", { name: "Changes" })).toBeInTheDocument();
     expect(screen.getByLabelText("After")).toHaveValue("Led the payments rewrite across four services.");
     expect(screen.queryByText(/select a bullet to see the block/i)).not.toBeInTheDocument();
+  });
+
+  it("shows a muted usage line with calls, tokens and estimated cost", () => {
+    pkg.current = tunePackage;
+    render(<PackageReviewPage />);
+
+    expect(screen.getByText(/1 call · 1,200 in \/ 340 out · ~\$0\.58/)).toBeInTheDocument();
+  });
+
+  it("omits the cost segment of the usage line when cost_usd is null", () => {
+    pkg.current = { ...tunePackage, cost_usd: null };
+    render(<PackageReviewPage />);
+
+    expect(screen.getByText(/1 call · 1,200 in \/ 340 out/)).toBeInTheDocument();
+    expect(screen.queryByText(/\$/)).not.toBeInTheDocument();
   });
 
   it("scrolls the matching change card into view when a tune violation is selected", async () => {

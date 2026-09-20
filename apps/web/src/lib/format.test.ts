@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatDate, formatRelative, truncate } from "./format";
+import { formatCostUsd, formatDate, formatRelative, formatTokens, truncate } from "./format";
 
 describe("format", () => {
   it("formats dates", () => {
@@ -14,5 +14,14 @@ describe("format", () => {
   it("truncates", () => {
     expect(truncate("abcdef", 4)).toBe("abc…");
     expect(truncate("abc", 4)).toBe("abc");
+  });
+  it("formats token counts with thousands separators", () => {
+    expect(formatTokens(0)).toBe("0");
+    expect(formatTokens(1234567)).toBe("1,234,567");
+  });
+  it("formats a USD cost, flooring tiny non-zero amounts to a legible minimum", () => {
+    expect(formatCostUsd(0)).toBe("$0.00");
+    expect(formatCostUsd(12.3)).toBe("$12.30");
+    expect(formatCostUsd(0.0004)).toBe("<$0.01");
   });
 });

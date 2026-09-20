@@ -18,3 +18,16 @@ export function formatRelative(iso: string, now: Date = new Date()): string {
 export function truncate(text: string, max: number): string {
   return text.length > max ? `${text.slice(0, max - 1)}…` : text;
 }
+
+/** A token count with thousands separators (12,345), never abbreviated: this is a usage figure
+ * someone may want to reconcile against a bill, not a display headline. */
+export function formatTokens(n: number): string {
+  return new Intl.NumberFormat("en-US").format(n);
+}
+
+/** An estimated USD spend. A non-zero amount that would round to $0.00 (a handful of cache-read
+ * tokens, say) shows as "<$0.01" instead -- rounding it to zero would read as free, which it isn't. */
+export function formatCostUsd(usd: number): string {
+  if (usd > 0 && usd < 0.01) return "<$0.01";
+  return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(usd);
+}

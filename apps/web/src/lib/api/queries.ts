@@ -564,6 +564,22 @@ export function useDeleteLlmSettings() {
   });
 }
 
+export type UsageOut = Schemas["UsageOut"];
+export type UsageSummaryOut = Schemas["UsageSummaryOut"];
+export type UsageRecentOut = Schemas["UsageRecentOut"];
+
+export const usageKeys = {
+  summary: ["settings", "usage"] as const,
+};
+
+/** All-time and last-30-day token/cost totals, plus the 20 most recent tailoring runs. */
+export function useUsageSummary() {
+  return useQuery({
+    queryKey: usageKeys.summary,
+    queryFn: () => unwrap(apiClient().GET("/api/v1/settings/usage")),
+  });
+}
+
 // --- Portal: live market search, saved searches, dashboard, taxonomy, source settings ---
 
 export const portalKeys = {
