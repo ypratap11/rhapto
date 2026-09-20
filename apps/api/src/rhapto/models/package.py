@@ -24,6 +24,20 @@ class JobSnapshot(BaseModel):
     jd_text: str
 
 
+class TokenUsage(BaseModel):
+    """
+    LLM token usage for one call or the sum of several. Mirrors rhapto.engine.providers.llm.TokenUsage field for field; the pipeline sums the engine type into this one when it builds the package.
+    """
+
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    input_tokens: Annotated[int, Field(ge=0)] = 0
+    output_tokens: Annotated[int, Field(ge=0)] = 0
+    cache_read_input_tokens: Annotated[int, Field(ge=0)] = 0
+    cache_creation_input_tokens: Annotated[int, Field(ge=0)] = 0
+
+
 class ApplicationPackage(BaseModel):
     """
     Everything produced for one application, versioned.
@@ -33,6 +47,8 @@ class ApplicationPackage(BaseModel):
         extra='forbid',
     )
     job: JobSnapshot
+    usage: TokenUsage
+    model: str | None = None
     track_id: str
     jd_extract: jd_extract_1.JDExtract
     resume: resume_document.ResumeDocument

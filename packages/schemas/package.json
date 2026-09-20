@@ -5,9 +5,11 @@
   "description": "Everything produced for one application, versioned.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["job", "track_id", "jd_extract", "resume", "cover_note", "change_log", "answers", "guardrail_report", "version", "status", "llm_calls", "created_at"],
+  "required": ["job", "track_id", "jd_extract", "resume", "cover_note", "change_log", "answers", "guardrail_report", "version", "status", "llm_calls", "created_at", "usage"],
   "properties": {
     "job": { "$ref": "#/$defs/JobSnapshot" },
+    "usage": { "$ref": "#/$defs/TokenUsage" },
+    "model": { "oneOf": [{ "type": "string" }, { "type": "null" }], "default": null },
     "track_id": { "type": "string" },
     "jd_extract": { "$ref": "jd_extract.json" },
     "resume": { "$ref": "resume_document.json" },
@@ -35,6 +37,18 @@
         "location": { "type": "string" },
         "url": { "type": "string" },
         "jd_text": { "type": "string" }
+      }
+    },
+    "TokenUsage": {
+      "title": "TokenUsage",
+      "description": "LLM token usage for one call or the sum of several. Mirrors rhapto.engine.providers.llm.TokenUsage field for field; the pipeline sums the engine type into this one when it builds the package.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "input_tokens": { "type": "integer", "minimum": 0, "default": 0 },
+        "output_tokens": { "type": "integer", "minimum": 0, "default": 0 },
+        "cache_read_input_tokens": { "type": "integer", "minimum": 0, "default": 0 },
+        "cache_creation_input_tokens": { "type": "integer", "minimum": 0, "default": 0 }
       }
     }
   }

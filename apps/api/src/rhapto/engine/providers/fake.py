@@ -33,6 +33,7 @@ class FakeLLMProvider:
     """Returns scripted responses in order and records every call."""
 
     responses: Sequence[BaseModel | dict[str, Any]]
+    model: str | None = None
     calls: list[FakeCall] = field(default_factory=list)
 
     def __post_init__(self) -> None:

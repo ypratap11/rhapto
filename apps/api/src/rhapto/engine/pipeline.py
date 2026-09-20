@@ -22,6 +22,7 @@ from rhapto.engine.types import EngineError, Profile, TailorRequest
 from rhapto.models.guardrail_report import GuardrailReport
 from rhapto.models.jd_extract import JDExtract
 from rhapto.models.package import ApplicationPackage, JobSnapshot
+from rhapto.models.package import TokenUsage as PackageTokenUsage
 from rhapto.models.profile.tracks import Track
 from rhapto.models.resume_document import ResumeDocument
 from rhapto.models.source_document import Edit, SourceDocument
@@ -92,6 +93,7 @@ def _build_package(
     answers: dict[str, str],
     report: GuardrailReport,
     budget: CallBudget,
+    llm: LLMProvider,
     *,
     mode: Literal["blocks", "tune"] = "blocks",
     edits: list[Edit] | None = None,
@@ -112,6 +114,8 @@ def _build_package(
         version=(request.previous_package.version + 1) if request.previous_package else 1,
         status="draft" if report.passed else "blocked",
         llm_calls=budget.calls,
+        usage=PackageTokenUsage(**budget.usage.model_dump()),
+        model=getattr(llm, "model", None),
         created_at=datetime.now(UTC),
         mode=mode,
         edits=edits or [],
@@ -192,6 +196,7 @@ async def tailor(
         output.answers_dict(),
         report,
         budget,
+        llm,
     )
     return TailorResult(package=package, docx=docx, selection=selection)
 
@@ -264,6 +269,7 @@ async def _tune_branch(
         output.answers_dict(),
         report,
         budget,
+        llm,
         mode="tune",
         edits=edits,
         source_document=doc,

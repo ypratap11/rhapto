@@ -116,6 +116,35 @@ async def test_repair_path_uses_three_calls_and_passes(profile: Profile) -> None
     assert repair_call.system == llm.calls[1].system  # same cached system blocks as compose
 
 
+async def test_usage_reaches_the_package(profile: Profile) -> None:
+    """Every FakeLLMProvider call reports input=10/output=5; two calls should sum onto the package."""
+    llm = FakeLLMProvider([demo_extract(), good_output()])
+    result = await tailor(TailorRequest(jd_text=JD), profile, llm, FakeEmbeddingProvider())
+    assert result.package.llm_calls == 2
+    assert result.package.usage.input_tokens == 20
+    assert result.package.usage.output_tokens == 10
+
+
+async def test_usage_sums_across_a_repair_round(profile: Profile) -> None:
+    llm = FakeLLMProvider([demo_extract(), bad_output(), good_output()])
+    result = await tailor(TailorRequest(jd_text=JD), profile, llm, FakeEmbeddingProvider())
+    assert result.package.llm_calls == 3
+    assert result.package.usage.input_tokens == 30
+    assert result.package.usage.output_tokens == 15
+
+
+async def test_llm_model_is_recorded_on_the_package(profile: Profile) -> None:
+    llm = FakeLLMProvider([demo_extract(), good_output()], model="claude-sonnet-5")
+    result = await tailor(TailorRequest(jd_text=JD), profile, llm, FakeEmbeddingProvider())
+    assert result.package.model == "claude-sonnet-5"
+
+
+async def test_llm_model_defaults_to_none_without_a_model_attribute(profile: Profile) -> None:
+    llm = FakeLLMProvider([demo_extract(), good_output()])
+    result = await tailor(TailorRequest(jd_text=JD), profile, llm, FakeEmbeddingProvider())
+    assert result.package.model is None
+
+
 async def test_unrepairable_output_is_blocked(profile: Profile) -> None:
     llm = FakeLLMProvider([demo_extract(), bad_output(), bad_output()])
     result = await tailor(TailorRequest(jd_text=JD), profile, llm, FakeEmbeddingProvider())
@@ -233,6 +262,7 @@ async def test_tune_mode_happy_path_uses_two_calls(profile: Profile) -> None:
     assert package.mode == "tune"
     assert package.status == "draft" and package.guardrail_report.passed
     assert package.llm_calls == 2 and len(llm.calls) == 2
+    assert package.usage.input_tokens == 20 and package.usage.output_tokens == 10
     assert package.track_id == "data-pm"
     assert [e.paragraph_id for e in package.edits] == ["p9"]
     assert (

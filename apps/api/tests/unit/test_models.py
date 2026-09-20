@@ -6,7 +6,7 @@ from pydantic import ValidationError
 from rhapto.db.models import APPLICATION_STATUSES, APPLIED_STATUSES
 from rhapto.models.guardrail_report import GuardrailReport, Violation
 from rhapto.models.jd_extract import JDExtract
-from rhapto.models.package import ApplicationPackage, JobSnapshot
+from rhapto.models.package import ApplicationPackage, JobSnapshot, TokenUsage
 from rhapto.models.profile.answers import AnswersFile
 from rhapto.models.profile.bases import ResumeBase
 from rhapto.models.profile.blocks import Block, BlocksFile, Visibility
@@ -138,6 +138,7 @@ def test_resume_document_and_package() -> None:
         version=1,
         status="blocked",
         llm_calls=2,
+        usage=TokenUsage(input_tokens=10, output_tokens=5),
         created_at=datetime.now(UTC),
     )
     dumped = package.model_dump(mode="json")

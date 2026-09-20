@@ -5,7 +5,7 @@ import httpx
 from helpers import demo_extract, demo_resume
 
 from rhapto.models.guardrail_report import GuardrailReport
-from rhapto.models.package import ApplicationPackage, JobSnapshot
+from rhapto.models.package import ApplicationPackage, JobSnapshot, TokenUsage
 
 JD = "ExampleCo seeks a Data Platform Program Manager to lead our Snowflake migration. " * 3
 
@@ -95,6 +95,7 @@ def _other_package(jd_text: str) -> ApplicationPackage:
         version=1,
         status="draft",
         llm_calls=0,
+        usage=TokenUsage(),
         created_at=datetime.now(UTC),
     )
 
