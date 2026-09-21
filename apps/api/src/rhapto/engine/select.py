@@ -12,7 +12,12 @@ from rhapto.models.profile.blocks import Block
 from rhapto.models.profile.tracks import Track
 
 TYPE_ORDER = ["role", "achievement", "project", "skill", "credential"]
-DEFAULT_TOP_K = {"role": 4, "achievement": 8, "project": 3, "skill": 1, "credential": 3}
+#: Per-type selection caps. Sized for a library with grouped skill blocks, separate degree and
+#: certification credentials, and several client engagements -- the earlier `skill: 1` /
+#: `credential: 3` / `project: 3` were tuned against a library holding one skill block, so a richer
+#: profile left blocks visible to the composer but outside the selection, and every package citing
+#: one failed provenance.
+DEFAULT_TOP_K = {"role": 4, "achievement": 8, "project": 5, "skill": 4, "credential": 5}
 
 
 class SelectionConfig(BaseModel):

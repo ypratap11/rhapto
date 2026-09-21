@@ -4,6 +4,7 @@ import pytest
 
 from rhapto.engine.providers.fake import FakeEmbeddingProvider
 from rhapto.engine.select import (
+    DEFAULT_TOP_K,
     Selection,
     SelectionConfig,
     block_text,
@@ -90,6 +91,20 @@ async def test_top_k_limits_per_type(profile: Profile, extract: JDExtract) -> No
         extract, profile, profile.get_track("data-pm"), FakeEmbeddingProvider(), config
     )
     assert selection.block_ids == ["acme-data-pm"]
+
+
+async def test_default_top_k_admits_a_multi_entry_skills_and_credentials_section(
+    profile: Profile, extract: JDExtract
+) -> None:
+    """The defaults must fit a real library, not the one-skill-block one they were tuned on.
+
+    `skill: 1` and `credential: 3` were set when the library had a single skill block. A profile
+    with grouped skills and separate degrees then had them visible to the composer but absent from
+    the selection, so every package it wrote citing one failed provenance and was blocked.
+    """
+    assert DEFAULT_TOP_K["skill"] >= 3
+    assert DEFAULT_TOP_K["credential"] >= 5
+    assert DEFAULT_TOP_K["project"] >= 5
 
 
 async def test_visibility_hard_excludes_before_ranking(extract: JDExtract) -> None:
