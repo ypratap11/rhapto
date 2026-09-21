@@ -55,21 +55,27 @@ def application_answers(answers: dict[str, str]) -> dict[str, str]:
     return {k: v for k, v in answers.items() if k not in HEADER_KEYS and k not in SCORING_KEYS}
 
 
-def build_system_blocks(profile: Profile, track: Track) -> list[SystemBlock]:
-    """Cached block = rules + every block in the track's base (stable per track, so cache hits across JDs)."""
+def build_system_blocks(profile: Profile, track: Track, selection: Selection) -> list[SystemBlock]:
+    """Cached block = the rules alone; the uncached block carries the selected blocks and track.
+
+    Only the selected blocks are sent. Provenance permits a bullet to cite nothing else, so any
+    block visible here but absent from `selection` is an invitation to produce a package that
+    fails validation -- which is what happened while the prompt carried the track's whole base.
+    That base was what made this block cacheable per track; the rules are what stay stable now,
+    and the blocks move into the dynamic half.
+    """
     block_map = profile.block_map()
-    base = profile.base_for(track)
     blocks_json = json.dumps(
         [
             block_map[bid].model_dump(mode="json", exclude_none=True)
-            for bid in base.block_ids
+            for bid in selection.block_ids
             if bid in block_map
         ],
         indent=1,
     )
-    static = f"{COMPOSE_RULES}\n\n<blocks>\n{blocks_json}\n</blocks>"
-    dynamic = f"Track: {track.name}. {track.description or ''}".strip()
-    return [SystemBlock(text=static, cache=True), SystemBlock(text=dynamic)]
+    track_line = f"Track: {track.name}. {track.description or ''}".strip()
+    dynamic = f"{track_line}\n\n<blocks>\n{blocks_json}\n</blocks>"
+    return [SystemBlock(text=COMPOSE_RULES, cache=True), SystemBlock(text=dynamic)]
 
 
 def build_user_message(
@@ -107,7 +113,7 @@ async def compose(
 ) -> tuple[ComposeOutput, TokenUsage]:
     """LLM call 2: selected blocks + JD extract to resume sections, cover note, change log, answers."""
     result = await llm.complete_structured(
-        system=build_system_blocks(profile, track),
+        system=build_system_blocks(profile, track, selection),
         messages=[
             Message(
                 role="user",

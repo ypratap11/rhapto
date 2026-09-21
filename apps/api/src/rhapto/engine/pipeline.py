@@ -172,7 +172,9 @@ async def tailor(
         await _notify(on_step, "repair")
         budget.before_call()
         try:
-            repaired, usage = await repair(output, report, build_system_blocks(profile, track), llm)
+            repaired, usage = await repair(
+                output, report, build_system_blocks(profile, track, selection), llm
+            )
         except MalformedOutputError:
             # The retry budget is spent; keep the blocked draft so the human sees the report.
             budget.after_call(TokenUsage())

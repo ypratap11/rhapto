@@ -61,12 +61,32 @@ def test_application_answers_excludes_header_and_scoring_keys() -> None:
     assert answers == {"notice_period": "2 weeks"}
 
 
-def test_system_blocks_cache_rules_and_base_blocks(demo_profile_dir: Path) -> None:
+def test_system_blocks_cache_the_rules_and_carry_only_the_selected_blocks(
+    demo_profile_dir: Path,
+) -> None:
+    """The composer must not see a block it is forbidden to cite.
+
+    The prompt used to carry every block in the track's base while provenance permitted only the
+    selected ones, so the model could -- and did -- cite blocks outside the selection and the
+    package was rejected. Widening the selection cannot close that gap; removing the unselected
+    blocks from the prompt does. The rules stay in their own cached block, stable across runs.
+    """
     profile = load_profile(demo_profile_dir)
-    blocks = build_system_blocks(profile, profile.get_track("data-pm"))
+    track = profile.get_track("data-pm")
+    selection = Selection(
+        block_ids=["acme-migration"], scores={}, excluded_block_ids=[], requirements_text="Snowflake"
+    )
+    blocks = build_system_blocks(profile, track, selection)
+
     assert blocks[0].cache is True and "source_block_id" in blocks[0].text
-    assert '"id": "acme-migration"' in blocks[0].text
-    assert "Data Program Management" in blocks[1].text and blocks[1].cache is False
+    # The rules block is stable, so it must not carry any profile content.
+    assert "acme-migration" not in blocks[0].text
+
+    assert blocks[1].cache is False
+    assert '"id": "acme-migration"' in blocks[1].text
+    assert "Data Program Management" in blocks[1].text
+    # A base block that selection did not pick must not be visible at all.
+    assert "acme-data-pm" not in blocks[1].text
 
 
 def test_user_message_contains_job_selection_answers_feedback_previous() -> None:
