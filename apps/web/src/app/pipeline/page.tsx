@@ -58,14 +58,25 @@ export default function PipelinePage() {
   return (
     <>
       <HeroBand tone="sand">
-        <h1 className="font-serif text-2xl font-medium">Pipeline</h1>
-        <p className="text-sm text-muted-foreground">Every application you have sent, and what it is waiting on.</p>
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <h1 className="font-serif text-2xl font-medium">Pipeline</h1>
+            <p className="text-sm text-muted-foreground">Every application you have sent, and what it is waiting on.</p>
+          </div>
+          {/* A real view switch, rather than a bare underlined link floating above the content. */}
+          <nav aria-label="Pipeline view" className="flex items-center gap-1 rounded-lg border border-border bg-surface p-1">
+            <span aria-current="page" className="rounded-md bg-muted px-3 py-1 text-sm font-medium text-foreground">
+              List
+            </span>
+            <Link
+              href="/pipeline/board"
+              className="rounded-md px-3 py-1 text-sm text-muted-foreground hover:bg-muted hover:text-foreground"
+            >
+              Board
+            </Link>
+          </nav>
+        </div>
       </HeroBand>
-      <div className="mb-4">
-        <Link href="/pipeline/board" className="text-sm text-primary underline-offset-4 hover:underline">
-          Board view
-        </Link>
-      </div>
       {hasIssue ? (
         <div className="mb-4">
           <ApiErrorBanner error={applications.error ?? "Can't reach Rhapto's API."} />
@@ -79,17 +90,25 @@ export default function PipelinePage() {
           </div>
         )
       ) : (
-        <div className="grid gap-6 lg:grid-cols-[360px_1fr]">
-          <ApplicationList applications={rows} selectedId={selectedId} onSelect={setSelectedId} />
-          {selected ? (
-            <ApplicationDetail key={selected.id} application={selected} />
-          ) : (
-            <EmptyState
-              icon={Inbox}
-              title="Pick an application"
-              description="Choose one on the left to see its status, notes and history."
-            />
-          )}
+        // A master-detail pair: each pane owns its scroll from `lg` up, so reading a long JD no
+        // longer scrolls the application list away and the page itself stays one screen tall.
+        // `minmax(0,1fr)` and `min-w-0` are what stop a wide child from pushing its column open --
+        // the failure this page shipped with. Below `lg` the two stack and the page scrolls.
+        <div className="grid gap-6 lg:h-[calc(100vh-16rem)] lg:grid-cols-[360px_minmax(0,1fr)]">
+          <div className="min-w-0 lg:h-full lg:overflow-y-auto lg:pr-1">
+            <ApplicationList applications={rows} selectedId={selectedId} onSelect={setSelectedId} />
+          </div>
+          <div className="min-w-0 lg:h-full lg:overflow-y-auto lg:pr-1">
+            {selected ? (
+              <ApplicationDetail key={selected.id} application={selected} />
+            ) : (
+              <EmptyState
+                icon={Inbox}
+                title="Pick an application"
+                description="Choose one on the left to see its status, notes and history."
+              />
+            )}
+          </div>
         </div>
       )}
     </>

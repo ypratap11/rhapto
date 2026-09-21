@@ -58,6 +58,38 @@ async function selectApplication(page: Page, job: JobSummary, tab: string): Prom
   await search.fill("");
 }
 
+/** The list column and the detail pane are a master-detail pair, and both halves of that had
+ * shipped broken: the sort control overflowed the 360px list column by 61px and painted over the
+ * detail heading, and the detail pane rendered the whole JD inline so the page grew to ~4,900px
+ * and the two panes shared one scrollbar. jsdom cannot catch either -- both are pure layout. */
+test("the list column stays inside its own column and the panes scroll independently", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/pipeline");
+
+  const sort = page.getByLabel("Sort by");
+  await expect(sort).toBeVisible();
+  // The card list fills the column, so its right edge is the column's right edge -- the search
+  // input shares a row with the sort control and so spans only part of it.
+  const cards = page.getByRole("list").first();
+
+  const sortBox = await sort.boundingBox();
+  const cardsBox = await cards.boundingBox();
+  if (!sortBox || !cardsBox) throw new Error("list controls have no layout box");
+
+  const columnRight = cardsBox.x + cardsBox.width;
+  expect(sortBox.x + sortBox.width).toBeLessThanOrEqual(columnRight + 1);
+
+  // Nothing in the list column may reach into the detail pane.
+  const heading = page.getByRole("heading", { level: 2 }).first();
+  const headingBox = await heading.boundingBox();
+  if (!headingBox) throw new Error("detail heading has no layout box");
+  expect(sortBox.x + sortBox.width).toBeLessThanOrEqual(headingBox.x);
+
+  // The JD lives in its own scroll container, so the page itself no longer grows with it.
+  const pageHeight = await page.evaluate(() => document.documentElement.scrollHeight);
+  expect(pageHeight).toBeLessThan(2000);
+});
+
 test("Applied moves to Interview, a due follow-up leads the dashboard, then Closed records a reason", async ({ page }) => {
   const job = await pickApplyableJob();
   await createApplication(page, job);

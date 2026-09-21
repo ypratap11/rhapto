@@ -68,24 +68,19 @@ export function ApplicationList({
 
   return (
     <div className="space-y-3">
-      <Input
-        aria-label="Search applications"
-        placeholder="Search company or role"
-        value={search}
-        onChange={(e) => setSearch(e.target.value)}
-      />
-      <div className="flex items-center justify-between gap-2">
-        <Tabs value={tab} onValueChange={(value) => typeof value === "string" && isPipelineStatus(value) && setTab(value)}>
-          <TabsList aria-label="Pipeline status">
-            {PIPELINE_STATUSES.map((s) => (
-              <TabsTrigger key={s} value={s}>
-                {STATUS_LABEL[s]}
-              </TabsTrigger>
-            ))}
-          </TabsList>
-        </Tabs>
+      {/* Search and sort share a row and both shrink; the five tabs get a row of their own. They
+        * used to sit beside the tabs, which at 360px overflowed the column and painted over the
+        * detail pane -- `min-w-0` is what lets the input give way instead of pushing. */}
+      <div className="flex items-center gap-2">
+        <Input
+          aria-label="Search applications"
+          placeholder="Search company or role"
+          className="min-w-0 flex-1"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+        />
         <Select value={sort} onValueChange={(value) => typeof value === "string" && isSortKey(value) && setSort(value)}>
-          <SelectTrigger aria-label="Sort by" size="sm">
+          <SelectTrigger aria-label="Sort by" size="sm" className="shrink-0">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -97,6 +92,20 @@ export function ApplicationList({
           </SelectContent>
         </Select>
       </div>
+      <Tabs value={tab} onValueChange={(value) => typeof value === "string" && isPipelineStatus(value) && setTab(value)}>
+        {/* Scrolls rather than overflows when the five labels exceed a narrow column; the
+          * scrollbar chrome itself is hidden because it renders as a stub beside the last tab. */}
+        <TabsList
+          aria-label="Pipeline status"
+          className="w-full justify-start overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        >
+          {PIPELINE_STATUSES.map((s) => (
+            <TabsTrigger key={s} value={s}>
+              {STATUS_LABEL[s]}
+            </TabsTrigger>
+          ))}
+        </TabsList>
+      </Tabs>
       <ul className="space-y-2">
         {rows.length === 0 ? (
           <li className="rounded-card border border-dashed border-border px-3 py-6 text-center text-sm text-muted-foreground">
@@ -113,10 +122,15 @@ export function ApplicationList({
                   onClick={() => onSelect(a.id)}
                   className={`w-full text-left rounded-card border p-3 shadow-card hover-lift ${selected ? "border-primary" : "border-border"} bg-surface`}
                 >
-                  <p className="text-sm font-semibold text-foreground">{a.job.company ?? "Unknown company"}</p>
+                  <p className="truncate text-sm font-semibold text-foreground">{a.job.company ?? "Unknown company"}</p>
                   <p className="text-sm text-muted-foreground">{a.job.title ?? "Untitled role"}</p>
+                  {/* No status pill: every card here is already filtered to the active tab, so it
+                    * would repeat the tab's own name. Only a status the tab does not imply, and
+                    * the dates, earn a line. */}
                   <div className="mt-2 flex flex-wrap items-center gap-2">
-                    <StatusBadge tone={statusTone(a.status)}>{STATUS_LABEL[a.status as ApplicationStatus] ?? a.status}</StatusBadge>
+                    {a.status === tab ? null : (
+                      <StatusBadge tone={statusTone(a.status)}>{STATUS_LABEL[a.status as ApplicationStatus] ?? a.status}</StatusBadge>
+                    )}
                     {a.applied_at ? <span className="text-xs text-muted-foreground">Applied · {formatDate(a.applied_at)}</span> : null}
                     {a.follow_up_at ? <StatusBadge tone="mid">Follow up {formatDate(a.follow_up_at)}</StatusBadge> : null}
                   </div>

@@ -82,16 +82,39 @@ describe("ApplicationList", () => {
     expect(screen.queryByText("Zeta Corp")).not.toBeInTheDocument();
   });
 
-  it("shows the status pill, applied date, and a follow-up chip", () => {
+  it("shows the applied date and a follow-up chip", () => {
     render(<ApplicationList applications={applications} selectedId={null} onSelect={vi.fn()} />);
     const card = screen.getByText("Acme Inc").closest("button");
     if (!card) throw new Error("card not found");
-    expect(within(card).getByText("Applied")).toBeInTheDocument();
     expect(within(card).getByText("Applied · 5 Sep 2026")).toBeInTheDocument();
     expect(within(card).getByText("Follow up 21 Sep 2026")).toBeInTheDocument();
     const otherCard = screen.getByText("Zeta Corp").closest("button");
     if (!otherCard) throw new Error("card not found");
     expect(within(otherCard).queryByText(/Follow up/)).not.toBeInTheDocument();
+  });
+
+  // Every card in the list is already filtered to the active tab, so a status pill repeating that
+  // tab's own name is noise: "Applied" appeared twice per card (pill + date prefix), 12 times on a
+  // full screen. The pill stays only where it carries information the tab does not.
+  it("does not repeat the active tab's status as a pill on each card", () => {
+    render(<ApplicationList applications={applications} selectedId={null} onSelect={vi.fn()} />);
+    const card = screen.getByText("Acme Inc").closest("button");
+    if (!card) throw new Error("card not found");
+    expect(within(card).getAllByText(/Applied/)).toHaveLength(1);
+    expect(within(card).queryByText("Applied", { exact: true })).not.toBeInTheDocument();
+  });
+
+  // Regression guard for the layout break this page shipped with: the five tabs (317px) and the
+  // sort control (96px) shared one non-wrapping flex row inside a 360px grid column, so the sort
+  // control rendered 61px past the column's edge and painted over the detail pane's heading.
+  // jsdom has no layout, so the structural contract is the testable part -- they are not siblings
+  // in one row any more.
+  it("pairs the sort control with the search box, not with the tabs", () => {
+    render(<ApplicationList applications={applications} selectedId={null} onSelect={vi.fn()} />);
+    const searchRow = screen.getByLabelText("Search applications").parentElement;
+    if (!searchRow) throw new Error("search row not found");
+    expect(within(searchRow).getByLabelText("Sort by")).toBeInTheDocument();
+    expect(within(searchRow).queryByRole("tablist")).not.toBeInTheDocument();
   });
 
   it("re-sorts by company when Company is chosen", async () => {

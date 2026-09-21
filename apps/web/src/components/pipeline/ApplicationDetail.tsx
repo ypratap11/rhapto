@@ -35,49 +35,58 @@ export function ApplicationDetail({ application }: { application: ApplicationOut
   const title = application.job.title ?? "Untitled role";
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
+      {/* Both crumbs stay: Breadcrumbs is also the document title, and spec §3 requires the two to
+        * read the same, so trimming the trail would cost the tab title its company and role. */}
       <Breadcrumbs items={[{ label: "Pipeline", href: "/pipeline" }, { label: `${company} · ${title}` }]} />
 
-      <div className="flex flex-wrap items-center gap-2">
-        <div>
-          <h2 className="text-base font-semibold">{company}</h2>
+      <div className="flex flex-wrap items-start gap-x-3 gap-y-1">
+        <div className="min-w-0">
+          <h2 className="truncate text-base font-semibold">{company}</h2>
           <p className="text-sm text-muted-foreground">{title}</p>
         </div>
         <StatusBadge tone={statusTone(application.status)}>{STATUS_LABEL[application.status as ApplicationStatus] ?? application.status}</StatusBadge>
         {job.data?.unlisted_at ? <StatusBadge tone="muted">No longer listed</StatusBadge> : null}
       </div>
 
-      <StatusControl application={application} />
-
-      <div className="space-y-2 rounded-card border border-border bg-surface p-4">
-        <label htmlFor="application-notes" className="text-sm font-medium">
-          Notes
-        </label>
-        <Textarea id="application-notes" rows={4} value={notes} onChange={(e) => setNotes(e.target.value)} />
-        <Button type="button" size="sm" onClick={saveNotes} disabled={patch.isPending}>
-          Save notes
-        </Button>
+      {/* Status, follow-up and notes are one editing surface, not three stacked cards -- as three
+        * they pushed the JD, the thing you actually read here, ~900px down the page. */}
+      <div className="space-y-4 rounded-card border border-border bg-surface p-4">
+        <StatusControl application={application} />
+        <div className="space-y-2">
+          <label htmlFor="application-notes" className="text-sm font-medium">
+            Notes
+          </label>
+          <Textarea id="application-notes" rows={3} value={notes} onChange={(e) => setNotes(e.target.value)} />
+          <Button type="button" size="sm" onClick={saveNotes} disabled={patch.isPending}>
+            Save notes
+          </Button>
+        </div>
       </div>
 
-      <div className="rounded-card border border-border bg-surface p-4">
-        <h3 className="mb-2 text-sm font-semibold">Status history</h3>
-        <ol className="space-y-1 text-sm text-muted-foreground">
-          {application.status_history.map((h, i) => (
-            <li key={`${h.status}-${h.at}-${i}`}>
-              {STATUS_LABEL[h.status as ApplicationStatus] ?? h.status} · {formatDate(h.at)}
-            </li>
-          ))}
-        </ol>
-      </div>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <details className="text-sm">
+          <summary className="cursor-pointer text-muted-foreground hover:text-foreground">
+            Status history ({application.status_history.length})
+          </summary>
+          <ol className="mt-2 space-y-1 text-sm text-muted-foreground">
+            {application.status_history.map((h, i) => (
+              <li key={`${h.status}-${h.at}-${i}`}>
+                {STATUS_LABEL[h.status as ApplicationStatus] ?? h.status} · {formatDate(h.at)}
+              </li>
+            ))}
+          </ol>
+        </details>
 
-      {application.package_id ? (
-        <Link
-          href={`/jobs/${application.job.id}/packages/${application.package_id}`}
-          className="inline-block text-sm text-primary underline-offset-4 hover:underline"
-        >
-          Open the resume used →
-        </Link>
-      ) : null}
+        {application.package_id ? (
+          <Link
+            href={`/jobs/${application.job.id}/packages/${application.package_id}`}
+            className="text-sm text-primary underline-offset-4 hover:underline"
+          >
+            Open the resume used →
+          </Link>
+        ) : null}
+      </div>
 
       {job.data ? <JdPane job={job.data} /> : job.isLoading ? <Skeleton className="h-72 w-full rounded-card" /> : null}
     </div>
