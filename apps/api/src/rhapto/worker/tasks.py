@@ -7,6 +7,7 @@ from collections.abc import Awaitable, Callable
 from typing import Any, NotRequired, TypedDict
 
 from cryptography.fernet import Fernet
+from pydantic import ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from rhapto.config import Settings, get_settings
@@ -21,6 +22,7 @@ from rhapto.engine.providers.errors import ProviderAuthError
 from rhapto.engine.providers.llm import LLMProvider
 from rhapto.engine.select import block_text
 from rhapto.engine.types import TailorRequest
+from rhapto.models.jd_extract import JDExtract
 from rhapto.services.discovery.http import DiscoveryHttp
 from rhapto.services.discovery.poller import poll_sources
 from rhapto.services.documents import load_source
@@ -60,6 +62,21 @@ class WorkerContext(TypedDict):
     storage: PackageStorage
     soffice_binary: str
     discovery_http: DiscoveryHttp
+
+
+def _stored_extract(job: Job) -> JDExtract | None:
+    """The JD extract already on the job row, or None when there is nothing usable there.
+
+    A payload written by an older schema version would raise on validation; the run must not fail
+    over a cache, so it is dropped and the pipeline extracts again.
+    """
+    if not job.extracted_json:
+        return None
+    try:
+        return JDExtract.model_validate(job.extracted_json)
+    except ValidationError:
+        logger.warning("discarding unreadable extracted_json on job %s", job.id)
+        return None
 
 
 async def tailor_job(ctx: dict[str, Any], task_id: str) -> None:
@@ -131,6 +148,11 @@ async def tailor_job(ctx: dict[str, Any], task_id: str) -> None:
             result = await tailor(
                 TailorRequest(
                     jd_text=job.jd_text,
+                    # `jd_text` is written once, at job creation, and never mutated, so an extract
+                    # stored on the row cannot be stale -- reusing it saves one of the three LLM
+                    # calls on every regenerate. A payload from an older schema is discarded rather
+                    # than allowed to fail the run.
+                    jd_extract=_stored_extract(job),
                     # An unspecified track follows the scorer's pick for THIS job. Without the
                     # fallback the engine's `get_track(None)` returns `tracks[0]` -- whichever
                     # track happens to be written first in tracks.yaml -- so every run that did

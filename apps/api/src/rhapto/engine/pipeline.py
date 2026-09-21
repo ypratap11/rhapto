@@ -143,7 +143,11 @@ async def tailor(
     track = profile.get_track(request.track_id)
 
     await _notify(on_step, "extract")
-    jd_extract = await _structured_call(budget, lambda: extract(request.jd_text, llm))
+    # A caller holding the extract from a previous run of the same unchanged JD passes it in; the
+    # step is still announced so the UI's progress sequence does not change shape.
+    jd_extract = request.jd_extract
+    if jd_extract is None:
+        jd_extract = await _structured_call(budget, lambda: extract(request.jd_text, llm))
 
     if request.mode == "tune":
         return await _tune_branch(request, profile, track, jd_extract, llm, budget, on_step)

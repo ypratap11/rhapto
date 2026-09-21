@@ -174,6 +174,37 @@ async def test_tailor_job_without_a_track_uses_the_job_s_best_scoring_track(
         assert package is not None and package.track_id == "ai-pm"
 
 
+@pytest.mark.anyio
+async def test_tailor_job_reuses_the_stored_jd_extract(
+    session_factory, user: User, demo_profile_dir: Path, tmp_path: Path
+) -> None:  # type: ignore[no-untyped-def]
+    """A job already carrying an extract must not pay to extract the same JD again.
+
+    The first run stores `job.extracted_json`; every later run re-derived it from the unchanged
+    `jd_text`, spending one of the three LLM calls and ~20s for a result already on the row. The
+    fake provider below is primed with the composer output ONLY, so a second extract call would
+    exhaust it and fail the task.
+    """
+    job_id, task_id = await _setup(session_factory, user, demo_profile_dir)
+    async with session_factory() as session:
+        job = await session.get(Job, job_id)
+        assert job is not None
+        job.extracted_json = demo_extract().model_dump(mode="json")
+        await session.commit()
+
+    bus, storage = InMemoryEventBus(), PackageStorage(tmp_path / "pkg")
+    await tailor_job(
+        _ctx(session_factory, FakeLLMProvider([good_output()]), bus, storage),
+        task_id=str(task_id),
+    )
+
+    async with session_factory() as session:
+        task = await task_repo.get_task(session, user.id, task_id)
+        assert task is not None and task.status == "succeeded", task.error
+        package = await package_repo.get_package(session, user.id, uuid.UUID(task.result_ref or ""))
+        assert package is not None and package.llm_calls == 1
+
+
 async def test_tailor_job_blocked_still_creates_package(
     session_factory, user: User, demo_profile_dir: Path, tmp_path: Path
 ) -> None:  # type: ignore[no-untyped-def]

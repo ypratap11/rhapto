@@ -4,6 +4,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field, model_validator
 
+from rhapto.models.jd_extract import JDExtract
 from rhapto.models.package import ApplicationPackage
 from rhapto.models.profile.bases import ResumeBase
 from rhapto.models.profile.blocks import Block
@@ -63,6 +64,9 @@ class TailorRequest(BaseModel):
     """
 
     jd_text: str
+    # A JD extract the caller already holds, so a regenerate does not spend an LLM call deriving
+    # the same result from the same unchanged `jd_text`. None means "extract it".
+    jd_extract: JDExtract | None = None
     track_id: str | None = None
     feedback: str | None = None
     previous_package: ApplicationPackage | None = None
