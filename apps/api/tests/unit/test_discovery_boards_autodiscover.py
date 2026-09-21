@@ -23,6 +23,16 @@ from rhapto.services.discovery.search import derive_searches
             "https://acme.myworkdayjobs.com/wday/cxs/acme/External/jobs",
             ("workday", "acme/External"),
         ),
+        # Workday's own canonical posting URLs carry no language segment -- this is the exact
+        # shape NVIDIA's externalUrl uses. Reading segments[1] as the site here yielded the
+        # literal word "job", which added a `nvidia.wd5/job` watchlist row that 404s every poll.
+        (
+            "https://nvidia.wd5.myworkdayjobs.com/NVIDIAExternalCareerSite/job/US-CA-Santa-Clara/Some-Role_JR1",
+            ("workday", "nvidia.wd5/NVIDIAExternalCareerSite"),
+        ),
+        # The board root, with and without a language segment.
+        ("https://acme.myworkdayjobs.com/External", ("workday", "acme/External")),
+        ("https://acme.myworkdayjobs.com/fr-FR/External", ("workday", "acme/External")),
     ],
 )
 def test_board_from_url_matches_every_pattern(url: str, expected: tuple[str, str]) -> None:
