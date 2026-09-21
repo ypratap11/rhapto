@@ -134,6 +134,16 @@ async def test_default_posted_within_is_90d(
     }
 
 
+async def test_default_sort_is_newest_first(
+    client: httpx.AsyncClient, session_factory: async_sessionmaker[AsyncSession], user_id: uuid.UUID
+) -> None:
+    made = await _seed(session_factory, user_id)
+    # No `sort` on the request -- the endpoint's own default (newest) must apply and order the
+    # (default-90d-windowed) results most-recently-posted first.
+    rows = (await client.get("/api/v1/jobs")).json()
+    assert [j["id"] for j in rows] == [made["fresh"], made["week"], made["old"]]
+
+
 async def test_sources_filter(
     client: httpx.AsyncClient, session_factory: async_sessionmaker[AsyncSession], user_id: uuid.UUID
 ) -> None:
