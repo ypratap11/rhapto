@@ -66,7 +66,11 @@ def guardrail_row_to_model(row: db.Guardrail) -> GuardrailRule:
 
 def watchlist_row_to_model(row: db.WatchlistEntry) -> WatchlistEntry:
     return WatchlistEntry(
-        company=row.company, source=row.source, board=row.board, keywords=list(row.keywords)
+        company=row.company,
+        source=row.source,
+        board=row.board,
+        keywords=list(row.keywords),
+        discovered=row.discovered,
     )
 
 
@@ -109,6 +113,14 @@ async def load_profile_from_db(session: AsyncSession, user_id: uuid.UUID) -> Pro
 async def replace_profile_in_db(
     session: AsyncSession, user_id: uuid.UUID, profile: Profile
 ) -> None:
+    # Boards that auto-discovery found are not in any profile file, so a straight replace deletes
+    # them and they stop being polled -- silently, on every import. They are read before the wipe
+    # and re-added below, unless the incoming file names the same board itself.
+    discovered = [
+        watchlist_row_to_model(r)
+        for r in await repo.list_watchlist(session, user_id)
+        if r.discovered
+    ]
     await repo.delete_all_profile_rows(session, user_id)
     for index, block in enumerate(profile.blocks):
         await repo.upsert_block(session, user_id, block, position=index)
@@ -119,7 +131,9 @@ async def replace_profile_in_db(
     for index, rule in enumerate(profile.guardrails):
         await repo.upsert_guardrail(session, user_id, rule, position=index)
     await repo.set_answers(session, user_id, profile.answers)
-    await repo.replace_watchlist(session, user_id, profile.watchlist)
+    named = {(e.source, e.board) for e in profile.watchlist}
+    kept = [e for e in discovered if (e.source, e.board) not in named]
+    await repo.replace_watchlist(session, user_id, [*profile.watchlist, *kept])
     await repo.replace_aggregators(session, user_id, profile.aggregators)
 
 

@@ -280,6 +280,11 @@ async def list_watchlist(session: AsyncSession, user_id: uuid.UUID) -> list[Watc
 async def replace_watchlist(
     session: AsyncSession, user_id: uuid.UUID, entries: list[WatchlistEntryModel]
 ) -> None:
+    """Replace the watchlist with `entries`, `discovered` flag and all.
+
+    Callers that must not lose auto-discovered boards read them first and pass them back in --
+    see `profile_sync.replace_profile_in_db`, which has to do so before it wipes the profile.
+    """
     await session.execute(delete(WatchlistEntry).where(WatchlistEntry.user_id == user_id))
     now = datetime.now(UTC)
     for entry in entries:
@@ -290,6 +295,7 @@ async def replace_watchlist(
                 source=entry.source,
                 board=entry.board,
                 keywords=list(entry.keywords),
+                discovered=entry.discovered,
                 updated_at=now,
             )
         )

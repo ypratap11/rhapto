@@ -3,10 +3,11 @@ from pathlib import Path
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from rhapto.db.models import User
+from rhapto.db.models import User, WatchlistEntry
 from rhapto.db.repositories import profile as repo
 from rhapto.engine.types import ProfileError
 from rhapto.models.profile.blocks import Block, Visibility
+from rhapto.models.profile.watchlist import WatchlistEntry as WatchlistEntryModel
 from rhapto.profile.loader import load_profile
 from rhapto.services.profile_sync import (
     export_profile_dir,
@@ -123,3 +124,55 @@ async def test_order_is_explicit_not_timestamp_based(session: AsyncSession, user
         "alpha",
         "mid",
     ]
+
+
+async def test_import_keeps_auto_discovered_watchlist_rows(
+    session: AsyncSession, user: User, demo_profile_dir: Path
+) -> None:
+    """A profile import must not delete boards auto-discovery found.
+
+    `watchlist.yaml` cannot know about them -- they are created from poll results -- so replacing
+    the list from the file wiped every `discovered` row. That is how a Workday board added through
+    the UI disappeared and stopped being polled, silently, on the next import.
+    """
+    await import_profile_dir(session, user.id, demo_profile_dir)
+    await session.commit()
+    session.add(
+        WatchlistEntry(
+            user_id=user.id,
+            company="Found Co",
+            source="lever",
+            board="foundco",
+            keywords=[],
+            discovered=True,
+        )
+    )
+    await session.commit()
+
+    await import_profile_dir(session, user.id, demo_profile_dir)
+    await session.commit()
+
+    rows = await repo.list_watchlist(session, user.id)
+    discovered = [r for r in rows if r.discovered]
+    assert [r.board for r in discovered] == ["foundco"]
+    # The file's own rows are still replaced as before.
+    assert any(not r.discovered for r in rows)
+
+
+async def test_put_watchlist_round_trips_the_discovered_flag(
+    session: AsyncSession, user: User
+) -> None:
+    """replace_watchlist never wrote `discovered`, so saving from the UI reset it to false."""
+    await repo.replace_watchlist(
+        session,
+        user.id,
+        [
+            WatchlistEntryModel(
+                company="Found Co", source="lever", board="foundco", discovered=True
+            ),
+            WatchlistEntryModel(company="Typed Co", source="lever", board="typedco"),
+        ],
+    )
+    await session.commit()
+    rows = {r.board: r.discovered for r in await repo.list_watchlist(session, user.id)}
+    assert rows == {"foundco": True, "typedco": False}
