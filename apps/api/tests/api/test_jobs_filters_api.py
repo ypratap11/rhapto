@@ -112,14 +112,36 @@ async def test_posted_within_windows(
         made["week"],
     }
     assert len((await client.get("/api/v1/jobs?posted_within=30d")).json()) == 3
+    assert len((await client.get("/api/v1/jobs?posted_within=90d")).json()) == 3
     assert len((await client.get("/api/v1/jobs?posted_within=any")).json()) == 4
+
+
+async def test_default_posted_within_is_90d(
+    client: httpx.AsyncClient, session_factory: async_sessionmaker[AsyncSession], user_id: uuid.UUID
+) -> None:
+    made = await _seed(session_factory, user_id)
+    # No `posted_within` on the request at all -- the endpoint's own default (90d) must apply,
+    # the same as passing `posted_within=90d` explicitly, excluding the 200-day-old job.
+    rows = (await client.get("/api/v1/jobs")).json()
+    assert {j["id"] for j in rows} == {made["fresh"], made["week"], made["old"]}
+    # `posted_within=any` remains the escape hatch back to the older jobs.
+    any_rows = (await client.get("/api/v1/jobs?posted_within=any")).json()
+    assert {j["id"] for j in any_rows} == {
+        made["fresh"],
+        made["week"],
+        made["old"],
+        made["ancient"],
+    }
 
 
 async def test_sources_filter(
     client: httpx.AsyncClient, session_factory: async_sessionmaker[AsyncSession], user_id: uuid.UUID
 ) -> None:
     made = await _seed(session_factory, user_id)
-    rows = (await client.get("/api/v1/jobs?sources=remotive,greenhouse")).json()
+    # `posted_within=any` keeps this test about the sources filter, not the default 90d window --
+    # `ancient` is 200 days old and would otherwise be dropped by the default before sources even
+    # gets a say.
+    rows = (await client.get("/api/v1/jobs?sources=remotive,greenhouse&posted_within=any")).json()
     assert {j["id"] for j in rows} == {made["week"], made["ancient"]}
 
 

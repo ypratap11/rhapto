@@ -218,7 +218,7 @@ async def list_jobs(
     ids: str | None = Query(default=None, description="comma-separated job ids, at most 200"),
     hidden: bool = Query(default=False, description="show only hidden jobs"),
     search_id: Annotated[uuid.UUID | None, Query()] = None,
-    posted_within: Literal["24h", "7d", "30d", "any"] = Query(default="any"),
+    posted_within: Literal["24h", "7d", "30d", "90d", "any"] = Query(default="90d"),
     sources: str | None = Query(default=None, description="comma-separated source ids"),
     field: str | None = Query(default=None, description="taxonomy field id"),
     recommended: bool = Query(

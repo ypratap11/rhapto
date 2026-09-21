@@ -6,7 +6,7 @@ import logging
 import uuid
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
 from typing import cast
 
 from cryptography.fernet import Fernet
@@ -34,6 +34,13 @@ logger = logging.getLogger(__name__)
 PAUSED_MESSAGE = "paused after 3 failures; save the watchlist entry to retry"
 NO_API_KEY_MESSAGE = "no API key"
 StepCallback = Callable[[str], Awaitable[None]]
+
+#: A posting whose own `posted_at` is already older than this is skipped at ingest rather than
+#: stored -- it bounds how large the corpus grows and how much rescoring every poll costs. A
+#: posting with no date (`posted_at is None`) is exempt from this guard: silence is not evidence
+#: of age, and dropping every dateless posting would silently lose manual and dateless-source
+#: jobs that Rhapto has no other way to judge.
+INGEST_MAX_AGE_DAYS = 90
 
 
 @dataclass
@@ -196,7 +203,10 @@ async def _ingest(
     is."""
     created: list[Job] = []
     seen_hashes: set[str] = set()
+    cutoff = datetime.now(UTC) - timedelta(days=INGEST_MAX_AGE_DAYS)
     for posting in postings:
+        if posting.posted_at is not None and posting.posted_at < cutoff:
+            continue
         company = spec.company or posting.company
         if (
             await jobs_repo.find_by_external_id(session, user_id, spec.source, posting.external_id)

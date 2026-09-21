@@ -16,7 +16,7 @@ from rhapto.db.repositories import searches as searches_repo
 SEARCH_CAP = 100
 
 Remote = Literal["include", "only", "exclude"]
-PostedWithin = Literal["24h", "7d", "30d", "any"]
+PostedWithin = Literal["24h", "7d", "30d", "90d", "any"]
 
 _REMOTE_WORDS = ("remote", "anywhere", "flexible", "distributed", "work from home")
 _FALSEY = frozenset({"no", "false", "0", "never"})

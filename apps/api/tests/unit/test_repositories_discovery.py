@@ -1,3 +1,5 @@
+from datetime import UTC, datetime, timedelta
+
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from rhapto.db.models import User
@@ -92,6 +94,79 @@ async def test_list_jobs_filters_and_sort(session: AsyncSession, user: User) -> 
     assert low.id in [j.id for j, _ in await jobs_repo.list_jobs(session, user.id, bucket="fit")]
     newest = await jobs_repo.list_jobs(session, user.id, sort="newest")
     assert newest[0][0].id == other.id
+
+
+async def test_list_jobs_posted_within_90d_judges_dateless_jobs_by_discovered_at(
+    session: AsyncSession, user: User
+) -> None:
+    now = datetime.now(UTC)
+    dated_recent = await jobs_repo.create_discovered_job(
+        session,
+        user.id,
+        source="greenhouse",
+        external_id="dated-recent",
+        company="ExampleCo",
+        title="Dated Recent",
+        location=None,
+        url="https://example.com/dated-recent",
+        jd_text="dated recent role " * 10,
+        posted_at=now - timedelta(days=45),
+        identity_hash="h-dated-recent",
+        repost_of=None,
+    )
+    dated_old = await jobs_repo.create_discovered_job(
+        session,
+        user.id,
+        source="greenhouse",
+        external_id="dated-old",
+        company="ExampleCo",
+        title="Dated Old",
+        location=None,
+        url="https://example.com/dated-old",
+        jd_text="dated old role " * 10,
+        posted_at=now - timedelta(days=120),
+        identity_hash="h-dated-old",
+        repost_of=None,
+    )
+    # `posted_at=None` means the source gave no date -- `list_jobs` must fall back to
+    # `discovered_at` for the 90d window, exactly like it already does for 24h/7d/30d.
+    dateless_recent = await jobs_repo.create_discovered_job(
+        session,
+        user.id,
+        source="manual",
+        external_id="dateless-recent",
+        company="ExampleCo",
+        title="Dateless Recent",
+        location=None,
+        url="https://example.com/dateless-recent",
+        jd_text="dateless recent role " * 10,
+        posted_at=None,
+        identity_hash="h-dateless-recent",
+        repost_of=None,
+    )
+    dateless_recent.discovered_at = now - timedelta(days=45)
+    dateless_old = await jobs_repo.create_discovered_job(
+        session,
+        user.id,
+        source="manual",
+        external_id="dateless-old",
+        company="ExampleCo",
+        title="Dateless Old",
+        location=None,
+        url="https://example.com/dateless-old",
+        jd_text="dateless old role " * 10,
+        posted_at=None,
+        identity_hash="h-dateless-old",
+        repost_of=None,
+    )
+    dateless_old.discovered_at = now - timedelta(days=120)
+    await session.flush()
+
+    within_90d = {j.id for j, _ in await jobs_repo.list_jobs(session, user.id, posted_within="90d")}
+    assert within_90d == {dated_recent.id, dateless_recent.id}
+
+    everything = {j.id for j, _ in await jobs_repo.list_jobs(session, user.id, posted_within="any")}
+    assert everything == {dated_recent.id, dated_old.id, dateless_recent.id, dateless_old.id}
 
 
 async def test_list_jobs_bucket_covers_unscored_rescued_and_orphaned_track(

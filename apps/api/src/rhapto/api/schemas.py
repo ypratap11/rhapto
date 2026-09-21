@@ -443,7 +443,7 @@ class LiveSearchIn(BaseModel):
     location: str | None = Field(default=None, max_length=200)
     remote: RemoteValue = "include"
     field: str | None = Field(default=None, max_length=50)
-    posted_within: Literal["24h", "7d", "30d", "any"] = "any"
+    posted_within: Literal["24h", "7d", "30d", "90d", "any"] = "90d"
     #: None means every enabled source; a list narrows the fan-out to those source ids.
     sources: list[str] | None = None
 

@@ -305,7 +305,10 @@ async def poll_now(ctx: dict[str, Any], task_id: str) -> None:
             # this wrong doesn't just break the event: mark_succeeded and commit above have
             # already run, so the poll's side effects persist while the publish below raises and
             # the caller reports the whole thing as a failure.
-            results = [{**r.__dict__, "search_id": str(r.search_id) if r.search_id else None} for r in summary.results]
+            results = [
+                {**r.__dict__, "search_id": str(r.search_id) if r.search_id else None}
+                for r in summary.results
+            ]
             await bus.publish(
                 channel, {"event": "done", "new_jobs": summary.new_jobs, "results": results}
             )

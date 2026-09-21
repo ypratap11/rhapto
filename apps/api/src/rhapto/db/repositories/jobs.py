@@ -50,7 +50,7 @@ async def find_duplicate(
 
 
 #: How far back each `posted_within` value reaches.
-POSTED_WITHIN_DAYS = {"24h": 1, "7d": 7, "30d": 30}
+POSTED_WITHIN_DAYS = {"24h": 1, "7d": 7, "30d": 30, "90d": 90}
 
 
 async def list_jobs(

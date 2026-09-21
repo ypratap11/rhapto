@@ -161,6 +161,22 @@ async def test_posted_within_drops_old_postings_but_keeps_undated_ones(
     assert {j.external_id for j in result.jobs} == {"e2", "e3"}
 
 
+async def test_posted_within_90d_drops_old_postings_but_keeps_undated_ones(
+    session: AsyncSession, user: User
+) -> None:
+    from datetime import UTC, datetime, timedelta
+
+    old = _posting(1, posted_at=datetime.now(UTC) - timedelta(days=120))
+    fresh = _posting(2, posted_at=datetime.now(UTC) - timedelta(days=80))
+    undated = _posting(3)
+    Alpha.result = [old, fresh, undated]
+    spec = SearchSpec(keywords=("program manager",), posted_within="90d")
+    result = await live_search(
+        session, user.id, http=FakeDiscoveryHttp({}), spec=spec, targets=[TARGETS[0]]
+    )
+    assert {j.external_id for j in result.jobs} == {"e2", "e3"}
+
+
 async def test_results_are_ordered_scored_first(session: AsyncSession, user: User) -> None:
     scored = await jobs_repo.create_discovered_job(
         session,

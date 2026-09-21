@@ -149,6 +149,48 @@ async def test_repost_is_flagged_not_requeued(session: AsyncSession, user: User)
     assert new is not None and original is not None and new.repost_of == original.id
 
 
+async def test_ingest_skips_postings_older_than_90_days_but_keeps_dateless_ones(
+    session: AsyncSession, user: User
+) -> None:
+    """`_ingest`'s 90-day age guard bounds corpus growth: a posting whose own `posted_at` is
+    already stale must not be stored at all. A posting with no date is never judged by it --
+    silence is not evidence of age, and dropping dateless postings would silently lose manual
+    and dateless-source jobs."""
+    from rhapto.services.discovery.poller import _ingest
+
+    now = datetime.now(UTC)
+    old = Posting(
+        external_id="old",
+        company="ExampleCo",
+        title="Old Role",
+        location=None,
+        url="https://example.com/old",
+        jd_text="an old posting " * 10,
+        posted_at=now - timedelta(days=120),
+    )
+    recent = Posting(
+        external_id="recent",
+        company="ExampleCo",
+        title="Recent Role",
+        location=None,
+        url="https://example.com/recent",
+        jd_text="a recent posting " * 10,
+        posted_at=now - timedelta(days=10),
+    )
+    dateless = Posting(
+        external_id="dateless",
+        company="ExampleCo",
+        title="Dateless Role",
+        location=None,
+        url="https://example.com/dateless",
+        jd_text="a dateless posting " * 10,
+        posted_at=None,
+    )
+    spec = SourceSpec(source="greenhouse", board="exampleco", company="ExampleCo", keywords=[])
+    created = await _ingest(session, user.id, spec, [old, recent, dateless])
+    assert {j.external_id for j in created} == {"recent", "dateless"}
+
+
 async def test_failed_source_is_recorded_and_paused_after_three(
     session: AsyncSession, user: User
 ) -> None:

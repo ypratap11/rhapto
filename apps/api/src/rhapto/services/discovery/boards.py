@@ -49,7 +49,9 @@ def board_from_url(url: str) -> tuple[str, str] | None:
         elif segments:
             # A board root with no posting path: drop a leading language tag if one is present.
             tenant = prefix
-            site = segments[1] if len(segments) >= 2 and _LANGUAGE.match(segments[0]) else segments[0]
+            site = (
+                segments[1] if len(segments) >= 2 and _LANGUAGE.match(segments[0]) else segments[0]
+            )
         else:
             return None
         if SLUG.match(tenant) and SLUG.match(site):
