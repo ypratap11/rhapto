@@ -131,7 +131,13 @@ async def tailor_job(ctx: dict[str, Any], task_id: str) -> None:
             result = await tailor(
                 TailorRequest(
                     jd_text=job.jd_text,
-                    track_id=request.get("track_id"),
+                    # An unspecified track follows the scorer's pick for THIS job. Without the
+                    # fallback the engine's `get_track(None)` returns `tracks[0]` -- whichever
+                    # track happens to be written first in tracks.yaml -- so every run that did
+                    # not name a track silently used that one lens and the stored fit score was
+                    # computed for nothing. `best_track_id` is None only on an unscored job, which
+                    # still lands on the engine default.
+                    track_id=request.get("track_id") or job.best_track_id,
                     feedback=request.get("feedback"),
                     previous_package=previous,
                     mode=mode,

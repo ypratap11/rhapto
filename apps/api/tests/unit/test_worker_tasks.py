@@ -143,6 +143,37 @@ async def test_tailor_job_success_path(
     assert bus.published[-1][1]["event"] == "done" and bus.published[-1][1]["status"] == "draft"
 
 
+@pytest.mark.anyio
+async def test_tailor_job_without_a_track_uses_the_job_s_best_scoring_track(
+    session_factory, user: User, demo_profile_dir: Path, tmp_path: Path
+) -> None:  # type: ignore[no-untyped-def]
+    """A request with no track must follow the scorer, not the profile's file order.
+
+    `Profile.get_track(None)` falls back to `tracks[0]`, so every tailor run that did not name a
+    track was built on whichever track happens to be written first in tracks.yaml -- the fit score
+    that picked a different one was computed, stored on the job, and then ignored.
+    """
+    job_id, task_id = await _setup(session_factory, user, demo_profile_dir)
+    async with session_factory() as session:
+        job = await session.get(Job, job_id)
+        assert job is not None
+        # Not the profile's first track, so falling back to tracks[0] cannot accidentally pass.
+        job.best_track_id = "ai-pm"
+        await session.commit()
+
+    bus, storage = InMemoryEventBus(), PackageStorage(tmp_path / "pkg")
+    await tailor_job(
+        _ctx(session_factory, FakeLLMProvider([demo_extract(), good_output()]), bus, storage),
+        task_id=str(task_id),
+    )
+
+    async with session_factory() as session:
+        task = await task_repo.get_task(session, user.id, task_id)
+        assert task is not None and task.status == "succeeded"
+        package = await package_repo.get_package(session, user.id, uuid.UUID(task.result_ref or ""))
+        assert package is not None and package.track_id == "ai-pm"
+
+
 async def test_tailor_job_blocked_still_creates_package(
     session_factory, user: User, demo_profile_dir: Path, tmp_path: Path
 ) -> None:  # type: ignore[no-untyped-def]
