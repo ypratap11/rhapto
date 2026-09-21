@@ -42,18 +42,22 @@ function SummaryGrid({ title, summary }: { title: string; summary: UsageSummaryO
 function RecentRow({ row }: { row: UsageRecentOut }) {
   return (
     <TableRow>
-      <TableCell className="font-medium">
+      {/* Job titles here run to 50+ characters. Left unbounded they push Cost -- the column this
+        * section exists for -- off the right edge of the table's scroll panel. */}
+      <TableCell className="max-w-[18rem] font-medium">
         <Link
           href={`/jobs/${row.job_id}/packages/${row.package_id}`}
-          className="underline-offset-2 hover:underline"
+          className="block truncate underline-offset-2 hover:underline"
         >
           {row.company ?? "Unknown company"}
         </Link>
-        <div className="text-xs font-normal text-muted-foreground">{row.job_title ?? "Untitled role"}</div>
+        <div className="truncate text-xs font-normal text-muted-foreground" title={row.job_title ?? undefined}>
+          {row.job_title ?? "Untitled role"}
+        </div>
       </TableCell>
-      <TableCell>{row.model ?? "—"}</TableCell>
+      <TableCell className="whitespace-nowrap">{row.model ?? "—"}</TableCell>
       <TableCell className="tabular-nums">{row.calls}</TableCell>
-      <TableCell className="tabular-nums">
+      <TableCell className="tabular-nums whitespace-nowrap">
         {formatTokens(row.input_tokens)} in / {formatTokens(row.output_tokens)} out
       </TableCell>
       <TableCell className="tabular-nums">{row.cost_usd != null ? formatCostUsd(row.cost_usd) : "—"}</TableCell>
