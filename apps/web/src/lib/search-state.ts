@@ -1,7 +1,7 @@
 import type { SearchBody } from "./api/portal";
 
 export type Remote = "include" | "only" | "exclude";
-export type PostedWithin = "24h" | "7d" | "30d" | "any";
+export type PostedWithin = "24h" | "7d" | "30d" | "90d" | "any";
 export type FitFilter = "75" | "60" | "all";
 
 /** Everything the search form and the filter chips hold between them. One object so the Jobs page,
@@ -27,10 +27,10 @@ export const DEFAULT_SEARCH_STATE: SearchState = {
   location: "",
   remote: "include",
   field: null,
-  posted_within: "any",
+  posted_within: "90d",
   sources: [],
   fit: "all",
-  sort: "fit",
+  sort: "newest",
   hidden: false,
   page: 0,
 };
@@ -41,7 +41,7 @@ export function toSearchBody(s: SearchState): SearchBody {
     ...(s.location.trim() ? { location: s.location.trim() } : {}),
     remote: s.remote,
     ...(s.field ? { field: s.field } : {}),
-    ...(s.posted_within !== "any" ? { posted_within: s.posted_within } : {}),
+    ...(s.posted_within !== "90d" ? { posted_within: s.posted_within } : {}),
     ...(s.sources.length > 0 ? { sources: s.sources } : {}),
   } as SearchBody;
 }
@@ -51,7 +51,7 @@ export function toJobsQuery(s: SearchState, ids?: string[]): Record<string, stri
   return {
     sort: s.sort,
     ...(ids && ids.length > 0 ? { ids: ids.join(",") } : {}),
-    ...(s.posted_within !== "any" ? { posted_within: s.posted_within } : {}),
+    ...(s.posted_within !== "90d" ? { posted_within: s.posted_within } : {}),
     ...(s.sources.length > 0 ? { sources: s.sources.join(",") } : {}),
     ...(s.field ? { field: s.field } : {}),
     ...(s.hidden ? { hidden: "true" } : {}),
@@ -66,7 +66,7 @@ export function passesFit(fit: number | null, filter: FitFilter): boolean {
 }
 
 const REMOTE: Remote[] = ["include", "only", "exclude"];
-const POSTED: PostedWithin[] = ["24h", "7d", "30d", "any"];
+const POSTED: PostedWithin[] = ["24h", "7d", "30d", "90d", "any"];
 const FITS: FitFilter[] = ["75", "60", "all"];
 
 function pick<T extends string>(value: string | null, allowed: T[], fallback: T): T {
@@ -87,10 +87,10 @@ export function encodeSearchState(s: SearchState): URLSearchParams {
   if (s.location) p.set("location", s.location);
   if (s.remote !== "include") p.set("remote", s.remote);
   if (s.field) p.set("field", s.field);
-  if (s.posted_within !== "any") p.set("posted", s.posted_within);
+  if (s.posted_within !== "90d") p.set("posted", s.posted_within);
   if (s.sources.length > 0) p.set("sources", s.sources.join(","));
   if (s.fit !== "all") p.set("fit", s.fit);
-  if (s.sort !== "fit") p.set("sort", s.sort);
+  if (s.sort !== "newest") p.set("sort", s.sort);
   if (s.hidden) p.set("hidden", "true");
   if (s.page !== 0) p.set("page", String(s.page));
   return p;
@@ -103,10 +103,10 @@ export function decodeSearchState(p: URLSearchParams): SearchState {
     location: p.get("location") ?? "",
     remote: pick(p.get("remote"), REMOTE, "include"),
     field: p.get("field"),
-    posted_within: pick(p.get("posted"), POSTED, "any"),
+    posted_within: pick(p.get("posted"), POSTED, "90d"),
     sources: sources ? sources.split(",").filter(Boolean) : [],
     fit: pick(p.get("fit"), FITS, "all"),
-    sort: p.get("sort") === "newest" ? "newest" : "fit",
+    sort: p.get("sort") === "fit" ? "fit" : "newest",
     hidden: p.get("hidden") === "true",
     page: pickPage(p.get("page")),
   };

@@ -20,13 +20,25 @@ describe("search state", () => {
       field: "design",
       hidden: "true",
     });
-    expect(toJobsQuery(DEFAULT_SEARCH_STATE, ["j1", "j2"])).toEqual({ sort: "fit", ids: "j1,j2" });
+    expect(toJobsQuery(DEFAULT_SEARCH_STATE, ["j1", "j2"])).toEqual({ sort: "newest", ids: "j1,j2" });
   });
 
   it("round-trips through the URL", () => {
     const state = { ...DEFAULT_SEARCH_STATE, query: "data", location: "Remote", remote: "only" as const, fit: "60" as const, sources: ["jooble"] };
     expect(decodeSearchState(encodeSearchState(state))).toEqual(state);
     expect(decodeSearchState(new URLSearchParams())).toEqual(DEFAULT_SEARCH_STATE);
+  });
+
+  it("round-trips the new defaults (90d posted_within, newest sort) through the URL", () => {
+    expect(DEFAULT_SEARCH_STATE.posted_within).toBe("90d");
+    expect(DEFAULT_SEARCH_STATE.sort).toBe("newest");
+    // Both are the defaults, so encoding the untouched default state omits them from the URL,
+    // same as every other default field.
+    expect(encodeSearchState(DEFAULT_SEARCH_STATE).toString()).toBe("");
+    expect(decodeSearchState(new URLSearchParams())).toEqual(DEFAULT_SEARCH_STATE);
+    // An explicit choice of the *old* defaults still round-trips, now as a non-default value.
+    const explicitOld = { ...DEFAULT_SEARCH_STATE, posted_within: "any" as const, sort: "fit" as const };
+    expect(decodeSearchState(encodeSearchState(explicitOld))).toEqual(explicitOld);
   });
 
   it("filters fit client-side and keeps unscored jobs visible", () => {

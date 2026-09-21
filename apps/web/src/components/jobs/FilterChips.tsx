@@ -9,6 +9,7 @@ const DATE_OPTIONS: { value: PostedWithin; label: string }[] = [
   { value: "24h", label: "24h" },
   { value: "7d", label: "7d" },
   { value: "30d", label: "30d" },
+  { value: "90d", label: "90d" },
   { value: "any", label: "Any time" },
 ];
 

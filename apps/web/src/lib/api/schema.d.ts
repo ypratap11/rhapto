@@ -1333,10 +1333,10 @@ export interface components {
             location?: string | null;
             /**
              * Posted Within
-             * @default any
+             * @default 90d
              * @enum {string}
              */
-            posted_within: "24h" | "7d" | "30d" | "any";
+            posted_within: "24h" | "7d" | "30d" | "90d" | "any";
             /** Query */
             query: string;
             /**
@@ -2426,7 +2426,7 @@ export interface operations {
                 /** @description show only hidden jobs */
                 hidden?: boolean;
                 search_id?: string | null;
-                posted_within?: "24h" | "7d" | "30d" | "any";
+                posted_within?: "24h" | "7d" | "30d" | "90d" | "any";
                 /** @description comma-separated source ids */
                 sources?: string | null;
                 /** @description taxonomy field id */

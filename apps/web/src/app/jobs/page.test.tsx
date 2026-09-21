@@ -146,8 +146,11 @@ describe("Jobs page", () => {
       await user.click(screen.getByRole("button", { name: "Next" }));
       expect(screen.getByText("Page 2 of 2")).toBeInTheDocument();
 
+      // "Newest" is the default sort now, so picking it again would be a no-op change (and
+      // wouldn't exercise the reset-to-page-1 behaviour this test is about). "Fit" is a genuine
+      // change from the default.
       await user.click(screen.getByLabelText("Sort"));
-      await user.click(await screen.findByRole("option", { name: "Newest" }));
+      await user.click(await screen.findByRole("option", { name: "Fit" }));
 
       expect(screen.getByText("Page 1 of 2")).toBeInTheDocument();
       expect(screen.getAllByRole("article")).toHaveLength(BROWSE_PAGE_SIZE);

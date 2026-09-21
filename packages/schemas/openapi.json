@@ -1194,11 +1194,12 @@
             "title": "Location"
           },
           "posted_within": {
-            "default": "any",
+            "default": "90d",
             "enum": [
               "24h",
               "7d",
               "30d",
+              "90d",
               "any"
             ],
             "title": "Posted Within",
@@ -3846,7 +3847,7 @@
             "name": "sort",
             "required": false,
             "schema": {
-              "default": "fit",
+              "default": "newest",
               "enum": [
                 "fit",
                 "newest"
@@ -3907,11 +3908,12 @@
             "name": "posted_within",
             "required": false,
             "schema": {
-              "default": "any",
+              "default": "90d",
               "enum": [
                 "24h",
                 "7d",
                 "30d",
+                "90d",
                 "any"
               ],
               "title": "Posted Within",

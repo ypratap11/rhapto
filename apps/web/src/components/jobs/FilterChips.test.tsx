@@ -12,10 +12,10 @@ describe("FilterChips", () => {
     const onChange = vi.fn();
     render(<FilterChips value={DEFAULT_SEARCH_STATE} onChange={onChange} sources={sources} />);
 
-    for (const label of ["24h", "7d", "30d", "Any time", "75+", "60+", "All fits", "The Muse", "Adzuna"]) {
+    for (const label of ["24h", "7d", "30d", "90d", "Any time", "75+", "60+", "All fits", "The Muse", "Adzuna"]) {
       expect(screen.getByRole("button", { name: label })).toBeInTheDocument();
     }
-    expect(screen.getByRole("button", { name: "Any time" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "90d" })).toHaveAttribute("aria-pressed", "true");
 
     await user.click(screen.getByRole("button", { name: "7d" }));
     expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ posted_within: "7d" }));
