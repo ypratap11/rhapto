@@ -1,5 +1,6 @@
 "use client";
 
+import { cn } from "cn";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 
@@ -18,6 +19,7 @@ export function ProfileSummaryCard({
   summary,
   open,
   onOpenChange,
+  wide = false,
   children,
 }: {
   id: ProfileCardId;
@@ -25,6 +27,8 @@ export function ProfileSummaryCard({
   summary: React.ReactNode;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /** Set for editors built around a multi-column table, which 520px cannot hold. */
+  wide?: boolean;
   children: React.ReactNode;
 }) {
   return (
@@ -37,7 +41,20 @@ export function ProfileSummaryCard({
       </div>
       <div className="mt-2 text-sm text-muted-foreground">{summary}</div>
       <Sheet open={open} onOpenChange={onOpenChange}>
-        <SheetContent side="right" className="w-[520px] space-y-3 overflow-y-auto">
+        {/* SheetContent ships `data-[side=right]:sm:max-w-sm` (384px), and a max-width beats the
+          * `w-[520px]` this card asked for -- so every editor here has silently been 384px wide.
+          * The override has to carry the SAME `data-[side=right]:` variant: that compiles to an
+          * attribute selector, so a plain `sm:max-w-*` loses on specificity and tailwind-merge
+          * does not see the two as one key. Both are capped at 96vw for narrow screens. */}
+        <SheetContent
+          side="right"
+          className={cn(
+            "space-y-3 overflow-y-auto",
+            wide
+              ? "w-[min(96vw,920px)] data-[side=right]:sm:max-w-[min(96vw,920px)]"
+              : "w-[min(96vw,520px)] data-[side=right]:sm:max-w-[min(96vw,520px)]",
+          )}
+        >
           <SheetHeader>
             <SheetTitle>{title}</SheetTitle>
           </SheetHeader>

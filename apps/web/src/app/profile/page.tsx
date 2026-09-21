@@ -193,6 +193,10 @@ function ProfilePageInner() {
         summary={cardSummary[card.id]}
         open={openCard === card.id}
         onOpenChange={(open) => setOpenCard(open, card.id)}
+        // The watchlist editor is a six-column table (company, source, board, keywords,
+        // discovered, remove); in the default panel its inputs truncate to "Anthro"/"CoreW" and
+        // everything past Board hides behind a horizontal scrollbar.
+        wide={card.id === "watchlist"}
       >
         {cardContent[card.id]}
       </ProfileSummaryCard>
