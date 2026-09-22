@@ -7,6 +7,7 @@ import { StatusBadge } from "@/components/ui/StatusBadge";
 import { ApiError } from "@/lib/api/client";
 import { useAnswers, useBases, usePutAnswers, usePutBlock, usePutTrack, type Block, type ResumeImportOut } from "@/lib/api/queries";
 import { BLOCK_TYPES, joinList } from "@/lib/profile-forms";
+import { ConfirmMetrics } from "./ConfirmMetrics";
 
 const BLOCK_TYPE_LABEL: Record<(typeof BLOCK_TYPES)[number], string> = {
   achievement: "Achievements",
@@ -58,8 +59,11 @@ function ImportedBlockRow({ block }: { block: Block }) {
  * through the same `usePutBlock`/`usePutTrack`/`usePutAnswers` hooks the profile tabs use.
  *
  * `onConfirm` fires as soon as the user accepts, before the writes resolve — it is a hook for the
- * caller (e.g. to know a proposal was accepted), not a gate on saving. `onDone` fires once the
- * whole flow, including guided metric confirmation (Task 4), is finished.
+ * caller (e.g. to know a proposal was accepted), not a gate on saving. Once the blocks are
+ * written, any saved block that carries a `metric` is walked one at a time by `ConfirmMetrics`
+ * (spec §6): every imported block starts `verified: false`, so its number is stripped from
+ * generated resumes until the user asserts it themselves. `onDone` fires once that guided
+ * confirmation (or, when nothing needs confirming, the plain save) is finished.
  */
 export function ImportResume({
   proposal,
@@ -79,6 +83,7 @@ export function ImportResume({
   const putAnswers = usePutAnswers();
   const [saving, setSaving] = useState(false);
   const [savedBlocks, setSavedBlocks] = useState<Block[] | null>(null);
+  const [metricsDone, setMetricsDone] = useState(false);
 
   const groups = BLOCK_TYPES.map((type) => ({ type, blocks: proposal.blocks.filter((b) => b.type === type) })).filter((g) => g.blocks.length > 0);
 
@@ -130,7 +135,29 @@ export function ImportResume({
     }
   }
 
+  async function verifyMetric(id: string) {
+    const block = savedBlocks?.find((b) => b.id === id);
+    if (!block) return;
+    try {
+      const updated = await putBlock.mutateAsync({ ...block, verified: true });
+      setSavedBlocks((current) => current?.map((b) => (b.id === id ? updated : b)) ?? current);
+    } catch (e) {
+      toast.error(e instanceof ApiError ? e.message : `Could not verify ${id}`);
+    }
+  }
+
   if (savedBlocks) {
+    const withMetric = savedBlocks.filter((b) => b.metric);
+    if (withMetric.length > 0 && !metricsDone) {
+      return (
+        <ConfirmMetrics
+          blocks={withMetric}
+          onConfirm={(id) => void verifyMetric(id)}
+          onSkip={() => undefined}
+          onDone={() => setMetricsDone(true)}
+        />
+      );
+    }
     return (
       <div className="space-y-3">
         <p className="text-sm text-foreground">Added {savedBlocks.length} blocks to your profile.</p>
