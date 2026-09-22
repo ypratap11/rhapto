@@ -9,6 +9,16 @@ import { useAnswers, useBases, usePutAnswers, usePutBlock, usePutTrack, type Blo
 import { BLOCK_TYPES, joinList } from "@/lib/profile-forms";
 import { ConfirmMetrics } from "./ConfirmMetrics";
 
+/**
+ * The resume_base a proposed track falls back to when the profile has no bases yet (the
+ * fresh-install path). Must be a valid `ResumeBase.id`/`Track.id` slug (`^[a-z0-9][a-z0-9-]*$`):
+ * `synthesize_bases` (apps/api/src/rhapto/profile/loader.py) builds one `ResumeBase` per distinct
+ * `track.resume_base` the first time the profile is loaded with no bases in the database, so any
+ * fixed valid slug here becomes a real, resolvable base for tailoring, export and the rescore
+ * worker — an empty string is the one value that cannot, because `ResumeBase.id` rejects it.
+ */
+const DEFAULT_RESUME_BASE_ID = "imported-default";
+
 const BLOCK_TYPE_LABEL: Record<(typeof BLOCK_TYPES)[number], string> = {
   achievement: "Achievements",
   role: "Roles",
@@ -87,17 +97,46 @@ export function ImportResume({
 
   const groups = BLOCK_TYPES.map((type) => ({ type, blocks: proposal.blocks.filter((b) => b.type === type) })).filter((g) => g.blocks.length > 0);
 
+  // `handleAccept` merges `answers.data` (to preserve every other answer key — PUT replaces the
+  // whole map, see LocationTab) and reads `bases.data` to pick a track's resume base, so accepting
+  // before either query has resolved, or after either has errored, must not be possible: an
+  // unresolved `useAnswers()` would PUT a map containing only the two or three location keys this
+  // component knows about, wiping notice period, salary and everything else, and an unresolved
+  // `useBases()` would fall back to inventing a resume base. This mirrors the guard
+  // `LocationTab.tsx` already applies to the same `useAnswers()` query.
+  const answersReady = !answers.isLoading && answers.data !== undefined;
+  const basesReady = !bases.isLoading && bases.data !== undefined;
+  const notReady = !answersReady || !basesReady;
+
   async function handleAccept() {
+    // Re-read (rather than trust the `notReady` computed above) so TypeScript narrows `data` to
+    // defined within this closure, and so a stale click (e.g. a query that errored between render
+    // and click) is still caught here, not just by the disabled button.
+    const answersData = answers.data;
+    const basesData = bases.data;
+    if (answers.isLoading || answersData === undefined || bases.isLoading || basesData === undefined) {
+      return;
+    }
     onConfirm(proposal);
     setSaving(true);
+    // Blocks are written first and their result is kept even if a later step fails: `PUT` is an
+    // upsert, so every write here is safely retryable, and a track or answers failure after the
+    // blocks landed must not be reported as though nothing was saved (finding 3) — the block
+    // library really does exist now, and `ConfirmMetrics` still needs to run over it.
+    let written: Block[] = [];
     try {
-      const written = await Promise.all(proposal.blocks.map((b) => putBlock.mutateAsync(b)));
+      written = await Promise.all(proposal.blocks.map((b) => putBlock.mutateAsync(b)));
+      setSavedBlocks(written);
 
-      // A proposed track never carries a resume base (the import proposal has no concept of one),
-      // so fall back to whichever base already exists rather than inventing one; if the profile
-      // has none yet, the track is still saved and the user assigns a base afterwards in the
-      // Tracks tab, same as any track created with no base picked.
-      const fallbackBase = bases.data?.[0]?.id ?? "";
+      // A proposed track never carries a resume base (the import proposal has no concept of one).
+      // If the profile already has bases, fall back to whichever exists rather than inventing one
+      // — the user assigns a real base afterwards in the Tracks tab, same as any track created
+      // with no base picked. If it has none yet (the fresh-install path), an empty string is not
+      // an option: `ResumeBase.id` rejects it, so `synthesize_bases` would crash constructing the
+      // implied base the moment anything re-loads the profile (tailoring, export, the rescore
+      // worker `put_track` enqueues below). `DEFAULT_RESUME_BASE_ID` is a valid slug instead, which
+      // `synthesize_bases` turns into a real, resolvable base.
+      const fallbackBase = basesData.length > 0 ? basesData[0]!.id : DEFAULT_RESUME_BASE_ID;
       await Promise.all(
         proposal.tracks.map((t) =>
           putTrack.mutateAsync({
@@ -116,20 +155,26 @@ export function ImportResume({
       const { location_home, remote_ok } = proposal.location;
       const location_preferred = proposal.location.location_preferred ?? [];
       if (location_home || location_preferred.length > 0 || remote_ok) {
-        // PUT /profile/answers replaces the whole map (see LocationTab), so every other answer
-        // key has to be preserved explicitly.
         await putAnswers.mutateAsync({
-          ...(answers.data ?? {}),
+          ...answersData,
           ...(location_home ? { location_home } : {}),
           ...(location_preferred.length > 0 ? { location_preferred: joinList(location_preferred) } : {}),
           ...(remote_ok ? { remote_ok } : {}),
         });
       }
 
-      setSavedBlocks(written);
       toast.success(`Added ${written.length} blocks to your profile.`);
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "Could not save the imported profile");
+      if (written.length > 0) {
+        // Blocks are already saved (savedBlocks is set above) — say so, and that retrying is
+        // safe, rather than the old blanket "could not save" that read as a total failure.
+        const reason = e instanceof ApiError ? e.message : "an unexpected error";
+        toast.error(
+          `Saved ${written.length} block${written.length === 1 ? "" : "s"} to your profile, but could not finish the import (${reason}). It is safe to try again.`,
+        );
+      } else {
+        toast.error(e instanceof ApiError ? e.message : "Could not save the imported profile");
+      }
     } finally {
       setSaving(false);
     }
@@ -207,11 +252,14 @@ export function ImportResume({
         </div>
       ) : null}
       {proposal.location.location_home ? <p className="text-sm text-muted-foreground">Home location: {proposal.location.location_home}</p> : null}
+      {notReady ? (
+        <p className="text-xs text-muted-foreground">Loading the rest of your profile before this can be saved safely&hellip;</p>
+      ) : null}
       <div className="flex justify-end gap-2">
         <Button variant="outline" onClick={() => onCancel?.()} disabled={saving}>
           Cancel
         </Button>
-        <Button onClick={() => void handleAccept()} disabled={saving}>
+        <Button onClick={() => void handleAccept()} disabled={saving || notReady}>
           Add {proposal.blocks.length} blocks to my profile
         </Button>
       </div>
