@@ -21,7 +21,7 @@ from rhapto.db.models import ResumeDocumentRow
 from rhapto.db.repositories import documents as documents_repo
 from rhapto.db.repositories import profile as repo
 from rhapto.engine.document import parse_docx
-from rhapto.engine.import_resume import import_resume, to_blocks
+from rhapto.engine.import_resume import import_resume, to_blocks, to_tracks
 from rhapto.engine.scoring import SCORING_KEYS
 from rhapto.models.profile.bases import ResumeBase
 from rhapto.models.profile.blocks import Block
@@ -30,7 +30,12 @@ from rhapto.models.profile.tracks import Track
 from rhapto.models.profile.watchlist import AggregatorEntry, WatchlistEntry
 from rhapto.models.source_document import SourceDocument
 from rhapto.profile.loader import dump_profile
-from rhapto.services.documents import DocumentError, delete_resume_document, store_resume_document
+from rhapto.services.documents import (
+    MAX_BYTES,
+    DocumentError,
+    delete_resume_document,
+    store_resume_document,
+)
 from rhapto.services.enqueue import Enqueuer
 from rhapto.services.llm import resolve_llm
 from rhapto.services.profile_sync import (
@@ -321,6 +326,9 @@ async def import_resume_endpoint(
     if not (file.filename or "").lower().endswith(".docx"):
         raise HTTPException(status_code=422, detail="upload a .docx file")
     data = await file.read()
+    if len(data) > MAX_BYTES:
+        # Same cap the resume-document tune mode enforces (`services.documents.store_resume_document`).
+        raise HTTPException(status_code=422, detail="the document must be 5 MB or smaller")
     try:
         document = await asyncio.to_thread(parse_docx, data, file.filename or "resume.docx")
     except Exception as exc:
@@ -337,7 +345,7 @@ async def import_resume_endpoint(
     blocks = to_blocks(proposal.blocks)
     tracks = [
         t
-        for t in proposal.tracks
+        for t in to_tracks(proposal.tracks)
         if find_field(t.field) is not None and find_role(t.field, t.role) is not None
     ]
     return ResumeImportOut(
