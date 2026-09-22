@@ -444,6 +444,35 @@ export function useImportProfile() {
   });
 }
 
+export type ResumeImportOut = Schemas["ResumeImportOut"];
+export type ImportedTrack = Schemas["ImportedTrack"];
+export type ImportedLocation = Schemas["ImportedLocation"];
+
+/**
+ * `POST /profile/import-resume`: parses an uploaded `.docx` into a proposed profile and writes
+ * nothing (spec §9). Same raw-`fetch` shape as `useImportProfile`/`useUploadResumeDocument` above
+ * — openapi-fetch's typed client does not carry a multipart body, so file uploads bypass it.
+ */
+export function useImportResume() {
+  return useMutation({
+    mutationFn: async (file: File): Promise<ResumeImportOut> => {
+      const form = new FormData();
+      form.append("file", file, file.name);
+      const response = await fetch(apiUrl("/api/v1/profile/import-resume"), { method: "POST", body: form, headers: authHeaders() });
+      if (!response.ok) {
+        let problem: Problem | null = null;
+        try {
+          problem = (await response.json()) as Problem;
+        } catch {
+          problem = null;
+        }
+        throw new ApiError(response.status, problem, `HTTP ${response.status}`);
+      }
+      return (await response.json()) as ResumeImportOut;
+    },
+  });
+}
+
 export function useResumeDocument() {
   return useQuery({
     queryKey: profileKeys.resumeDocument,
