@@ -75,7 +75,10 @@ def test_system_blocks_cache_the_rules_and_carry_only_the_selected_blocks(
     profile = load_profile(demo_profile_dir)
     track = profile.get_track("data-pm")
     selection = Selection(
-        block_ids=["acme-migration"], scores={}, excluded_block_ids=[], requirements_text="Snowflake"
+        block_ids=["acme-migration"],
+        scores={},
+        excluded_block_ids=[],
+        requirements_text="Snowflake",
     )
     blocks = build_system_blocks(profile, track, selection)
 
