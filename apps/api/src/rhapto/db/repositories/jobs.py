@@ -189,6 +189,20 @@ async def find_by_identity(
     return result
 
 
+def _clamp(value: str | None, limit: int) -> str | None:
+    """Cut a source-supplied string to what its column holds, keeping the head.
+
+    A feed is free to return a title of any length -- Hacker News "Who's Hiring" posts are whole
+    paragraphs -- and Postgres answers an over-long value with StringDataRightTruncationError.
+    That does not merely lose the posting: it fails the transaction mid-poll, and in `poll_sources`
+    every source after it in the same run failed too. Clamping keeps the informative start of the
+    value and lets the run continue.
+    """
+    if value is None:
+        return None
+    return value[:limit]
+
+
 async def create_discovered_job(
     session: AsyncSession,
     user_id: uuid.UUID,
@@ -209,10 +223,10 @@ async def create_discovered_job(
     job = Job(
         user_id=user_id,
         source=source,
-        external_id=external_id,
-        company=company,
-        title=title,
-        location=location,
+        external_id=_clamp(external_id, 200),
+        company=_clamp(company, 200),
+        title=_clamp(title, 300),
+        location=_clamp(location, 200),
         url=url,
         jd_text=jd_text,
         dedupe_hash=compute_dedupe_hash(jd_text),
