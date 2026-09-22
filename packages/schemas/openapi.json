@@ -365,6 +365,20 @@
         "title": "Body_import_profile_api_v1_profile_import_post",
         "type": "object"
       },
+      "Body_import_resume_endpoint_api_v1_profile_import_resume_post": {
+        "properties": {
+          "file": {
+            "contentMediaType": "application/octet-stream",
+            "title": "File",
+            "type": "string"
+          }
+        },
+        "required": [
+          "file"
+        ],
+        "title": "Body_import_resume_endpoint_api_v1_profile_import_resume_post",
+        "type": "object"
+      },
       "Body_upload_resume_document_api_v1_profile_resume_document_post": {
         "properties": {
           "file": {
@@ -721,6 +735,76 @@
           "guardrails"
         ],
         "title": "ImportOut",
+        "type": "object"
+      },
+      "ImportedLocation": {
+        "properties": {
+          "location_home": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Location Home"
+          },
+          "location_preferred": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Location Preferred",
+            "type": "array"
+          },
+          "remote_ok": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Remote Ok"
+          }
+        },
+        "title": "ImportedLocation",
+        "type": "object"
+      },
+      "ImportedTrack": {
+        "properties": {
+          "field": {
+            "title": "Field",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "keywords": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Keywords",
+            "type": "array"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "role": {
+            "title": "Role",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "field",
+          "role"
+        ],
+        "title": "ImportedTrack",
         "type": "object"
       },
       "JDExtract": {
@@ -2214,6 +2298,45 @@
           "name"
         ],
         "title": "ResumeHeader",
+        "type": "object"
+      },
+      "ResumeImportOut": {
+        "description": "A proposed profile the user has not yet accepted.",
+        "properties": {
+          "blocks": {
+            "items": {
+              "$ref": "#/components/schemas/Block"
+            },
+            "title": "Blocks",
+            "type": "array"
+          },
+          "dropped_periods": {
+            "title": "Dropped Periods",
+            "type": "integer"
+          },
+          "location": {
+            "$ref": "#/components/schemas/ImportedLocation"
+          },
+          "metrics_to_confirm": {
+            "title": "Metrics To Confirm",
+            "type": "integer"
+          },
+          "tracks": {
+            "items": {
+              "$ref": "#/components/schemas/ImportedTrack"
+            },
+            "title": "Tracks",
+            "type": "array"
+          }
+        },
+        "required": [
+          "blocks",
+          "tracks",
+          "location",
+          "dropped_periods",
+          "metrics_to_confirm"
+        ],
+        "title": "ResumeImportOut",
         "type": "object"
       },
       "ResumeSection": {
@@ -5861,6 +5984,66 @@
           }
         },
         "summary": "Import Profile",
+        "tags": [
+          "profile"
+        ]
+      }
+    },
+    "/api/v1/profile/import-resume": {
+      "post": {
+        "description": "Parse an uploaded resume into a proposed profile. Writes nothing.\n\nThe user reviews the proposal and accepts it through the existing block, track and answer\nendpoints, so there is exactly one code path that writes a profile.",
+        "operationId": "import_resume_endpoint_api_v1_profile_import_resume_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_import_resume_endpoint_api_v1_profile_import_resume_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResumeImportOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Import Resume Endpoint",
         "tags": [
           "profile"
         ]

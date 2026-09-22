@@ -545,6 +545,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/profile/import-resume": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Import Resume Endpoint
+         * @description Parse an uploaded resume into a proposed profile. Writes nothing.
+         *
+         *     The user reviews the proposal and accepts it through the existing block, track and answer
+         *     endpoints, so there is exactly one code path that writes a profile.
+         */
+        post: operations["import_resume_endpoint_api_v1_profile_import_resume_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/profile/resume-document": {
         parameters: {
             query?: never;
@@ -1037,6 +1060,11 @@ export interface components {
             /** Files */
             files: string[];
         };
+        /** Body_import_resume_endpoint_api_v1_profile_import_resume_post */
+        Body_import_resume_endpoint_api_v1_profile_import_resume_post: {
+            /** File */
+            file: string;
+        };
         /** Body_upload_resume_document_api_v1_profile_resume_document_post */
         Body_upload_resume_document_api_v1_profile_resume_document_post: {
             /** File */
@@ -1181,6 +1209,28 @@ export interface components {
             guardrails: number;
             /** Tracks */
             tracks: number;
+        };
+        /** ImportedLocation */
+        ImportedLocation: {
+            /** Location Home */
+            location_home?: string | null;
+            /** Location Preferred */
+            location_preferred?: string[];
+            /** Remote Ok */
+            remote_ok?: string | null;
+        };
+        /** ImportedTrack */
+        ImportedTrack: {
+            /** Field */
+            field: string;
+            /** Id */
+            id: string;
+            /** Keywords */
+            keywords?: string[];
+            /** Name */
+            name: string;
+            /** Role */
+            role: string;
         };
         /**
          * JDExtract
@@ -1702,6 +1752,21 @@ export interface components {
             name: string;
             /** Phone */
             phone?: string | null;
+        };
+        /**
+         * ResumeImportOut
+         * @description A proposed profile the user has not yet accepted.
+         */
+        ResumeImportOut: {
+            /** Blocks */
+            blocks: components["schemas"]["Block"][];
+            /** Dropped Periods */
+            dropped_periods: number;
+            location: components["schemas"]["ImportedLocation"];
+            /** Metrics To Confirm */
+            metrics_to_confirm: number;
+            /** Tracks */
+            tracks: components["schemas"]["ImportedTrack"][];
         };
         /** ResumeSection */
         ResumeSection: {
@@ -3510,6 +3575,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ImportOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    import_resume_endpoint_api_v1_profile_import_resume_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_import_resume_endpoint_api_v1_profile_import_resume_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResumeImportOut"];
                 };
             };
             /** @description Validation Error */

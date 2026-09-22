@@ -7,9 +7,11 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from rhapto.db.models import APPLICATION_STATUSES, CLOSED_REASONS
+from rhapto.engine.import_resume import ImportedLocation, ImportedTrack
 from rhapto.engine.scoring import LocationTier
 from rhapto.models.guardrail_report import GuardrailReport
 from rhapto.models.jd_extract import JDExtract
+from rhapto.models.profile.blocks import Block
 from rhapto.models.resume_document import ResumeDocument
 from rhapto.models.source_document import Edit, SourceDocument
 
@@ -112,6 +114,18 @@ class ImportOut(BaseModel):
     tracks: int
     bases: int
     guardrails: int
+
+
+class ResumeImportOut(BaseModel):
+    """A proposed profile the user has not yet accepted."""
+
+    blocks: list[Block]
+    tracks: list[ImportedTrack]
+    location: ImportedLocation
+    #: Blocks whose date could not be read and was deliberately left empty.
+    dropped_periods: int
+    #: Blocks carrying a number, which the confirmation step will walk through.
+    metrics_to_confirm: int
 
 
 class JobCreate(BaseModel):
