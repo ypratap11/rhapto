@@ -7,16 +7,22 @@ from rhapto.engine.providers.registry import PROVIDERS, build_llm, model_for, pr
 from rhapto.engine.types import EngineError
 
 
-def test_provider_ids_lists_the_three_supported_providers() -> None:
-    assert provider_ids() == ["anthropic", "openai", "gemini"]
+def test_provider_ids_lists_the_supported_providers() -> None:
+    assert provider_ids() == ["anthropic", "openai", "gemini", "groq"]
 
 
 def test_registry_entries_carry_labels_env_keys_and_a_default_in_models() -> None:
-    assert [PROVIDERS[p].label for p in provider_ids()] == ["Anthropic", "OpenAI", "Google Gemini"]
+    assert [PROVIDERS[p].label for p in provider_ids()] == [
+        "Anthropic",
+        "OpenAI",
+        "Google Gemini",
+        "Groq (free tier)",
+    ]
     assert [PROVIDERS[p].env_key for p in provider_ids()] == [
         "ANTHROPIC_API_KEY",
         "OPENAI_API_KEY",
         "GEMINI_API_KEY",
+        "GROQ_API_KEY",
     ]
     for provider_id, info in PROVIDERS.items():
         assert info.id == provider_id
@@ -30,6 +36,7 @@ def test_registry_entries_carry_labels_env_keys_and_a_default_in_models() -> Non
         ("anthropic", "claude-sonnet-5", AnthropicProvider),
         ("openai", "gpt-5", OpenAIProvider),
         ("gemini", "gemini-2.5-pro", GeminiProvider),
+        ("groq", "llama-3.3-70b-versatile", OpenAIProvider),
     ],
 )
 def test_build_llm_returns_the_adapter_for_each_provider(
@@ -38,6 +45,20 @@ def test_build_llm_returns_the_adapter_for_each_provider(
     provider = build_llm(provider_id, model, "sk-test-1234")
     assert isinstance(provider, expected)
     assert provider.model == model
+
+
+def test_an_openai_compatible_provider_is_pointed_at_its_own_host() -> None:
+    """Groq reuses the OpenAI adapter, so the ONLY thing separating them is the base URL. If it
+    does not reach the SDK client, every Groq run silently bills OpenAI instead — with a Groq key,
+    which fails as an auth error and sends the user hunting in the wrong place entirely."""
+    groq = build_llm("groq", "llama-3.3-70b-versatile", "gsk-test-1234")
+    assert "api.groq.com" in str(groq._client.base_url)
+
+
+def test_openai_itself_keeps_the_sdk_default_host() -> None:
+    """The base_url parameter must be invisible to the path that existed before it."""
+    openai_provider = build_llm("openai", "gpt-5", "sk-test-1234")
+    assert "api.openai.com" in str(openai_provider._client.base_url)
 
 
 def test_build_llm_passes_unlisted_model_ids_through_unchanged() -> None:

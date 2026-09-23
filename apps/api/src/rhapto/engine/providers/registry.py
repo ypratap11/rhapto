@@ -19,6 +19,10 @@ class ProviderInfo:
     models: tuple[str, ...]
     default: str
     env_key: str
+    #: For an OpenAI-compatible endpoint that is not OpenAI itself, the API root to talk to.
+    #: `None` means the SDK's own default. This is the whole of what separates Groq (and, later, a
+    #: local Ollama or vLLM server) from OpenAI: same wire protocol, same adapter, different host.
+    base_url: str | None = None
 
 
 PROVIDERS: dict[str, ProviderInfo] = {
@@ -43,7 +47,30 @@ PROVIDERS: dict[str, ProviderInfo] = {
         default="gemini-2.5-pro",
         env_key="GEMINI_API_KEY",
     ),
+    # Groq serves open-weight models behind OpenAI's own wire protocol, and its free tier is real:
+    # it is the cheapest honest answer for someone who cannot put a card down, which is most of the
+    # people this tool exists for. The model ids below are suggestions for the picker, not a
+    # whitelist (see `model_for`), because Groq's catalogue turns over faster than this file does.
+    #
+    # Caveat worth knowing before trusting it: `OpenAIProvider` sends a STRICT `json_schema`
+    # response format, and support for that is per-model on Groq rather than universal. A model
+    # that only honours `json_object` will come back as MalformedOutputError, not as a silently
+    # wrong resume — the guardrails still hold — but it will fail. Measure a model before relying
+    # on it.
+    "groq": ProviderInfo(
+        id="groq",
+        label="Groq (free tier)",
+        models=("llama-3.3-70b-versatile", "moonshotai/kimi-k2-instruct"),
+        default="llama-3.3-70b-versatile",
+        env_key="GROQ_API_KEY",
+        base_url="https://api.groq.com/openai/v1",
+    ),
 }
+
+#: Providers spoken to with the OpenAI adapter. Membership, not the provider id, is what picks the
+#: adapter in `build_llm`, so adding an OpenAI-compatible host is one PROVIDERS entry and one name
+#: here — no new adapter, no new error mapping, no new tests of the wire format.
+OPENAI_COMPATIBLE = frozenset({"openai", "groq"})
 
 
 FAKE_PROVIDER_ID = "fake"
@@ -110,6 +137,6 @@ def build_llm(provider: str, model: str, api_key: str) -> LLMProvider:
         raise EngineError(f"unknown provider {provider!r}")
     if provider == "anthropic":
         return AnthropicProvider(model=model, api_key=api_key)
-    if provider == "openai":
-        return OpenAIProvider(model=model, api_key=api_key)
+    if provider in OPENAI_COMPATIBLE:
+        return OpenAIProvider(model=model, api_key=api_key, base_url=PROVIDERS[provider].base_url)
     return GeminiProvider(model=model, api_key=api_key)

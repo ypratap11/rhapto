@@ -49,9 +49,13 @@ const STEPS = [
     body: "Point Rhapto at your own instance and add one LLM provider key. It runs on your machine — your resume and your key stay there.",
   },
   {
+    // Describes what `main` does TODAY. Resume -> block library is the `resume-import` branch; when
+    // that merges, this becomes "Upload a .docx and Rhapto breaks it into blocks you own, every
+    // number unverified until you confirm it." Promising it before it ships would make this page
+    // the one thing on the site that overstates what Rhapto does.
     icon: FileUp,
     title: "Bring your resume",
-    body: "Upload a .docx. Rhapto breaks it into blocks — roles, projects, achievements, skills — that you own and can edit. Every number arrives unverified until you confirm it.",
+    body: "Upload a .docx and Rhapto tailors that document in place, editing your own wording rather than writing over it. Or build a library of blocks — roles, projects, achievements — and let it compose from those.",
   },
   {
     icon: Compass,

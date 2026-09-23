@@ -109,12 +109,21 @@ class OpenAIProvider:
     the reasoning models this registry offers, and it covers reasoning tokens as well as the answer.
     """
 
-    def __init__(self, model: str, api_key: str | None = None, client: Any | None = None) -> None:
+    def __init__(
+        self,
+        model: str,
+        api_key: str | None = None,
+        client: Any | None = None,
+        base_url: str | None = None,
+    ) -> None:
+        """`base_url` points this adapter at an OpenAI-compatible host that is not OpenAI (Groq
+        today; a local Ollama or vLLM server later). `None` keeps the SDK's own default, so the
+        OpenAI path is byte-for-byte what it was before this parameter existed."""
         self.model = model
         if client is None:
             import openai  # imported lazily so tests never need the SDK configured
 
-            client = openai.AsyncOpenAI(api_key=api_key or None)
+            client = openai.AsyncOpenAI(api_key=api_key or None, base_url=base_url or None)
         self._client: Any = client
 
     async def complete_structured(
