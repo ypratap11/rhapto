@@ -188,7 +188,7 @@ async def tailor(
 
     await _notify(on_step, "render")
     try:
-        docx = render_docx(resume, profile.block_map())
+        docx = render_docx(resume, profile.block_map(), profile.base_for(track).style)
     except OrphanBulletError:
         docx = b""  # provenance violation is already in the report; nothing safe to render
 

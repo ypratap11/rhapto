@@ -11,6 +11,11 @@ Hard rules (a validator enforces every one of them and will reject your output):
 4. If a block has an attribution phrase, every bullet from it must contain that phrase verbatim.
 5. Rephrase and reorder freely to match the job's requirements and keywords. Do not invent experience.
 
+Open each achievement bullet with a short label sentence naming what it is, then the detail:
+"Executive decisions. Drove the go/no-go and buy-vs-build decision with the VP Finance..."
+Keep the label under 60 characters and end it with a full stop. Skills and credentials bullets
+need no label.
+
 Structure:
 - summary: 1-3 bullets, each citing a block.
 - sections, in this order when non-empty, with these exact titles and kinds:

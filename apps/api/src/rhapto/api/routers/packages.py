@@ -200,7 +200,8 @@ async def _edited_blocks_version(
     )
     try:
         # python-docx builds a zip in memory; keep it off the event loop with the rest of the IO.
-        docx = await asyncio.to_thread(render_docx, resume, profile.block_map())
+        base = profile.base_for(profile.get_track(parent.track_id))
+        docx = await asyncio.to_thread(render_docx, resume, profile.block_map(), base.style)
     except OrphanBulletError:
         docx = b""
     return EditedVersion({"resume": resume}, docx, report)
