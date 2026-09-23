@@ -23,10 +23,15 @@ function getServerSnapshot(): boolean | null {
   return null;
 }
 
+// Routes that render without a token. `/settings` is where the token is entered, so gating it
+// would lock a new user out of the only screen that can unlock the rest; `/about` explains what
+// Rhapto is, which is precisely what someone who has no token yet needs to read first.
+const PUBLIC_ROUTES = new Set(["/settings", "/about"]);
+
 export function TokenGate({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const connected = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
-  if (pathname === "/settings") return <>{children}</>;
+  if (PUBLIC_ROUTES.has(pathname)) return <>{children}</>;
   if (connected === null) return null;
   if (connected) return <>{children}</>;
   return (
@@ -41,6 +46,13 @@ export function TokenGate({ children }: { children: React.ReactNode }) {
         <Link href="/settings" className="text-accent underline">
           Open settings
         </Link>
+        <p>
+          New here?{" "}
+          <Link href="/about" className="text-accent underline">
+            See what Rhapto does
+          </Link>{" "}
+          first.
+        </p>
       </CardContent>
     </Card>
   );

@@ -41,6 +41,15 @@ export function TopBar() {
           })}
         </nav>
         <div className="flex items-center gap-1">
+          {/* Deliberately outside the Primary nav: "About" is the pitch, not a place you work.
+              Hidden below `sm` because the five primary tabs already overflow this bar at phone
+              widths; a newcomer on a phone reaches /about from the TokenGate card instead. */}
+          <Link
+            href="/about"
+            className="hidden px-1.5 text-sm text-muted-foreground hover:text-foreground sm:inline"
+          >
+            About
+          </Link>
           <ThemeToggle />
           <Link href="/settings" aria-label="Settings" title="Settings" className="rounded-control p-1.5 text-muted-foreground hover:text-foreground">
             <Settings className="size-4" aria-hidden />
