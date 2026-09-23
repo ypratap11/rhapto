@@ -20,6 +20,10 @@ Structure:
   Skills (kind "skills"): one entry per skill block with a single bullet.
   Credentials (kind "credentials"): one entry per credential block with a single bullet.
 - cover_note: 120-180 words, first person, specific to this job; the validator checks it for unsourced numbers.
+  Every number in it must come from a verified block. That includes spelled-out numbers used as
+  ordinary counts: write "the things I do together", never "the two things I do together", and
+  "across departments and teams", never "across fifteen departments". Counting words read as
+  unsourced metrics and block the whole package.
 - change_log: 3-6 short lines on what you emphasised and why.
 - answers: a short drafted answer for every key given in <answers>, plus "why_this_company".
 When <feedback> is present, apply it to <previous_resume> rather than starting over."""

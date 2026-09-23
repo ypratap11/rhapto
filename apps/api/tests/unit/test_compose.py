@@ -13,6 +13,7 @@ from rhapto.engine.compose import (
     build_user_message,
     compose,
 )
+from rhapto.engine.prompts.compose import COMPOSE_RULES
 from rhapto.engine.providers.fake import FakeLLMProvider
 from rhapto.engine.select import Selection
 from rhapto.profile.loader import load_profile
@@ -87,6 +88,20 @@ def test_system_blocks_cache_the_rules_and_carry_only_the_selected_blocks(
     assert "Data Program Management" in blocks[1].text
     # A base block that selection did not pick must not be visible at all.
     assert "acme-data-pm" not in blocks[1].text
+
+
+def test_compose_rules_forbid_counting_words_in_the_cover_note() -> None:
+    """The cover note must not spend a number on ordinary prose.
+
+    `no-unverified-metrics` checks the cover note with the same detector it uses on bullets, and
+    `CARDINAL_RE` matches a bare spelled cardinal -- so "the two things I do together" reads as an
+    unsourced metric and blocks the whole package. The rule is right to be strict; the writer is
+    the layer that should avoid the construction. The `one` carve-out already in `metrics.py`
+    exists for exactly this class of false positive, and the prompt closes the rest of it: three
+    consecutive regenerations of a real application were lost to this before the guidance existed.
+    """
+    assert "spelled-out numbers" in COMPOSE_RULES
+    assert "cover_note" in COMPOSE_RULES
 
 
 def test_user_message_contains_job_selection_answers_feedback_previous() -> None:
