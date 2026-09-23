@@ -16,6 +16,9 @@ from rhapto.engine.compose import (
 from rhapto.engine.prompts.compose import COMPOSE_RULES
 from rhapto.engine.providers.fake import FakeLLMProvider
 from rhapto.engine.select import Selection
+from rhapto.engine.types import Profile
+from rhapto.models.profile.blocks import Block
+from rhapto.models.resume_document import ResumeEntry, ResumeSection
 from rhapto.profile.loader import load_profile
 
 
@@ -75,7 +78,10 @@ def test_system_blocks_cache_the_rules_and_carry_only_the_selected_blocks(
     profile = load_profile(demo_profile_dir)
     track = profile.get_track("data-pm")
     selection = Selection(
-        block_ids=["acme-migration"], scores={}, excluded_block_ids=[], requirements_text="Snowflake"
+        block_ids=["acme-migration"],
+        scores={},
+        excluded_block_ids=[],
+        requirements_text="Snowflake",
     )
     blocks = build_system_blocks(profile, track, selection)
 
@@ -88,6 +94,93 @@ def test_system_blocks_cache_the_rules_and_carry_only_the_selected_blocks(
     assert "Data Program Management" in blocks[1].text
     # A base block that selection did not pick must not be visible at all.
     assert "acme-data-pm" not in blocks[1].text
+
+
+def _experience(*entries: tuple[str, str | None, bool]) -> ResumeSection:
+    return ResumeSection(
+        title="Experience",
+        kind="experience",
+        entries=[
+            ResumeEntry(source_block_id=f"b{i}", org=org, period=period, bullets=[])
+            for i, (org, period, _c) in enumerate(entries)
+        ],
+    )
+
+
+def _profile_for(*entries: tuple[str, str | None, bool]) -> Profile:
+    """A profile whose blocks carry the `concurrent` flag each entry needs."""
+    return Profile(
+        blocks=[
+            Block(id=f"b{i}", type="role", content=org, concurrent=c)
+            for i, (org, _p, c) in enumerate(entries)
+        ],
+        tracks=[],
+        bases=[],
+        guardrails=[],
+        answers={},
+        watchlist=[],
+        aggregators=[],
+    )
+
+
+def test_experience_is_ordered_newest_first_whatever_the_model_returned() -> None:
+    """Experience must be reverse-chronological, and that cannot be left to the model.
+
+    The composer orders entries by relevance, so on an AI-weighted track a side studio started in
+    2024 floated above the day job held since 2023 -- a real resume produced "Founder, Northwind Labs"
+    above "Senior Manager, Acme Analytics". Sorting here makes the order a property of the document rather
+    than of whichever track happened to rank highest on the day.
+    """
+    rows = (
+        ("Northwind Labs", "2024-present", True),
+        ("Acme Analytics", "2023-Present", False),
+        ("Contoso Systems", "2012-2023", False),
+        ("Globex", "2004-2007", False),
+    )
+    out = ComposeOutput(summary=[], sections=[_experience(*rows)], cover_note="x", change_log="y")
+    profile = _profile_for(*rows)
+    doc = assemble_resume(out, profile)
+    assert [e.org for e in doc.sections[0].entries] == [
+        "Acme Analytics",
+        "Northwind Labs",
+        "Contoso Systems",
+        "Globex",
+    ]
+
+
+def test_an_entry_without_a_period_keeps_its_relative_place_at_the_end() -> None:
+    """A dateless entry must not be invented a date, nor silently jump the queue."""
+    rows = (("NoDate", None, False), ("Acme Analytics", "2023-Present", False), ("Contoso Systems", "2012-2023", False))
+    out = ComposeOutput(summary=[], sections=[_experience(*rows)], cover_note="x", change_log="y")
+    profile = _profile_for(*rows)
+    doc = assemble_resume(out, profile)
+    orgs = [e.org for e in doc.sections[0].entries]
+    assert orgs[:2] == ["Acme Analytics", "Contoso Systems"]
+    assert orgs[-1] == "NoDate"
+
+
+def test_only_experience_is_reordered() -> None:
+    """Projects and Skills keep the composer's relevance order -- that ordering is the point."""
+    out = ComposeOutput(
+        summary=[],
+        sections=[
+            ResumeSection(
+                title="Projects",
+                kind="projects",
+                entries=[
+                    ResumeEntry(source_block_id="p1", org="B", period="2010-2011", bullets=[]),
+                    ResumeEntry(source_block_id="p2", org="A", period="2020-2021", bullets=[]),
+                ],
+            )
+        ],
+        cover_note="x",
+        change_log="y",
+    )
+    profile = Profile(
+        blocks=[], tracks=[], bases=[], guardrails=[], answers={}, watchlist=[], aggregators=[]
+    )
+    doc = assemble_resume(out, profile)
+    assert [e.org for e in doc.sections[0].entries] == ["B", "A"]
 
 
 def test_compose_rules_forbid_counting_words_in_the_cover_note() -> None:

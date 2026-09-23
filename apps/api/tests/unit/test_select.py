@@ -107,6 +107,16 @@ async def test_default_top_k_admits_a_multi_entry_skills_and_credentials_section
     assert DEFAULT_TOP_K["project"] >= 5
 
 
+def test_default_top_k_fits_a_whole_career_of_roles() -> None:
+    """The role cap must not silently truncate employment history.
+
+    At 4, adding a concurrent side venture to a four-employer history pushed the oldest employer
+    out of the resume entirely -- a real run lost Globex (2004-2007) the moment Northwind Labs
+    was selected. A gap in employment dates is worse than a longer resume.
+    """
+    assert DEFAULT_TOP_K["role"] >= 6
+
+
 async def test_visibility_hard_excludes_before_ranking(extract: JDExtract) -> None:
     hidden = Block(
         id="agency-secret",

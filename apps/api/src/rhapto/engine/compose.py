@@ -4,6 +4,7 @@ import json
 
 from pydantic import BaseModel, Field
 
+from rhapto.engine.guardrails.dates import parse_period
 from rhapto.engine.prompts.compose import COMPOSE_RULES
 from rhapto.engine.providers.llm import LLMProvider, Message, SystemBlock, TokenUsage
 from rhapto.engine.scoring import SCORING_KEYS
@@ -11,7 +12,13 @@ from rhapto.engine.select import Selection
 from rhapto.engine.types import Profile
 from rhapto.models.jd_extract import JDExtract
 from rhapto.models.profile.tracks import Track
-from rhapto.models.resume_document import ResumeBullet, ResumeDocument, ResumeHeader, ResumeSection
+from rhapto.models.resume_document import (
+    ResumeBullet,
+    ResumeDocument,
+    ResumeEntry,
+    ResumeHeader,
+    ResumeSection,
+)
 
 HEADER_KEYS = frozenset({"name", "email", "phone", "location", "links"})
 
@@ -126,7 +133,41 @@ async def compose(
     return result.value, result.usage
 
 
+def _experience_sorted(section: ResumeSection, profile: Profile) -> ResumeSection:
+    """Experience in resume order: current roles first, then by how recently each ended.
+
+    The composer orders entries by relevance to the job, which is right for Projects and Skills
+    and wrong for Experience: on an AI-weighted track a side studio started in 2024 outranked the
+    day job held since 2023 and was printed above it. Order is a property of a resume, not a
+    judgement call, so it is applied here rather than asked of the model.
+
+    Within the same end date a `concurrent` block sorts after a non-concurrent one, so a side
+    venture never displaces the employment it runs alongside -- that flag already exists to tell
+    the date rules an overlap is deliberate, and it answers this question too.
+
+    An entry whose period does not parse keeps a stable place at the end: it has no date to sort
+    on, and inventing one is what the date rules exist to prevent.
+    """
+    blocks = profile.block_map()
+
+    def key(item: tuple[int, ResumeEntry]) -> tuple[int, int, int, int]:
+        index, entry = item
+        parsed = parse_period(entry.period or "")
+        if parsed is None:
+            return (1, 0, 0, index)
+        start, end = parsed
+        block = blocks.get(entry.source_block_id or "")
+        concurrent = 1 if (block and block.concurrent) else 0
+        return (0, -end, concurrent, -start)
+
+    ordered = [entry for _, entry in sorted(enumerate(section.entries), key=key)]
+    return section.model_copy(update={"entries": ordered})
+
+
 def assemble_resume(output: ComposeOutput, profile: Profile) -> ResumeDocument:
+    sections = [
+        _experience_sorted(s, profile) if s.kind == "experience" else s for s in output.sections
+    ]
     return ResumeDocument(
-        header=build_header(profile.answers), summary=output.summary, sections=output.sections
+        header=build_header(profile.answers), summary=output.summary, sections=sections
     )
