@@ -5,7 +5,7 @@ from io import BytesIO
 from typing import Any
 
 from docx import Document
-from docx.shared import Inches, Pt
+from docx.shared import Pt
 
 from rhapto.engine.guardrails.base import iter_bullets, iter_entries
 from rhapto.engine.render.templates import template_for
@@ -54,10 +54,6 @@ def render_docx(
     normal = doc.styles["Normal"]
     normal.font.name = FONT_NAME
     normal.font.size = FONT_SIZE
-    for section in doc.sections:
-        section.top_margin = section.bottom_margin = Inches(0.7)
-        section.left_margin = section.right_margin = Inches(0.8)
-
     template_for(style)(doc, resume)
 
     buffer = BytesIO()

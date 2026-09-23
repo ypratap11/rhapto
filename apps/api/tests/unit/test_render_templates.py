@@ -99,3 +99,59 @@ def test_a_bullet_without_a_label_is_not_arbitrarily_bolded() -> None:
     x = zipfile.ZipFile(BytesIO(data)).read("word/document.xml").decode("utf-8")
     para = next(p for p in re.findall(r"<w:p[ >].*?</w:p>", x, re.S) if "very long opening" in p)
     assert "<w:b/>" not in para
+
+
+def test_executive_keeps_skills_and_credentials_to_one_line_each() -> None:
+    """Density is the difference between a two-page resume and a four-page one.
+
+    Rendering every skill and degree as a bold header plus a bulleted body doubled the paragraph
+    count -- 8 paragraphs for 4 skills, 10 for 5 credentials -- while the character count stayed
+    the same as a two-page reference document. A skill is one fact and gets one line.
+    """
+    resume = demo_resume()
+    skills = next((s for s in resume.sections if s.kind == "skills"), None)
+    if skills is None:
+        return
+    paras = _paragraphs(render_docx(resume, _blocks(), {"template": "executive"}))
+    titles = {"Areas of Depth", "Education & Certifications"}
+    start = next(i for i, (t, _a, _b) in enumerate(paras) if t in titles)
+    following = [t for t, _a, _b in paras[start + 1 :] if t not in titles]
+    assert len(following) <= len(skills.entries) + 2
+
+
+def test_a_compact_entry_is_exactly_one_paragraph() -> None:
+    """Regression guard on the thing that actually mattered: paragraph count.
+
+    Under the header-plus-bullet layout, 4 skills cost 8 paragraphs and 5 credentials cost 10 --
+    a real resume hit 71 paragraphs against a 49-paragraph reference document with the SAME
+    character count. Paragraph spacing, not words, was the extra two pages.
+    """
+    resume = demo_resume()
+    creds = next(s for s in resume.sections if s.kind == "credentials")
+    paras = _paragraphs(render_docx(resume, _blocks(), {"template": "executive"}))
+    heading = next(i for i, (t, _a, _b) in enumerate(paras) if t == "Education & Certifications")
+    after = paras[heading + 1 :]
+    assert len(after) == len(creds.entries), "one line per credential, header and body inline"
+    first = creds.entries[0]
+    label = first.title or first.role or first.org
+    _text, _align, bold = after[0]
+    # A label is bold; an entry that has none renders as plain body rather than bolding the text.
+    assert bold == bool(label)
+
+
+def test_a_credential_that_is_only_its_own_name_renders_without_a_trailing_colon() -> None:
+    """ "AWS Certified Solutions Architect - Associate: ." is worse than no body at all.
+
+    Stripping a label the body repeats can leave nothing but punctuation, which then printed as a
+    bare full stop after the colon.
+    """
+    resume = demo_resume()
+    creds = next(s for s in resume.sections if s.kind == "credentials")
+    entry = creds.entries[0]
+    entry.title = "AWS Certified Solutions Architect"
+    for b in entry.bullets:
+        b.text = "AWS Certified Solutions Architect."
+    paras = _paragraphs(render_docx(resume, _blocks(), {"template": "executive"}))
+    line = next(t for t, _a, _b in paras if "AWS Certified" in t)
+    assert line == "AWS Certified Solutions Architect"
+    assert ":" not in line

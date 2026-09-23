@@ -35,13 +35,33 @@ EXECUTIVE_HEADINGS = {
     "credentials": "Education & Certifications",
 }
 
-#: Where the right-aligned date tab sits, in inches from the left margin. Page width less the
-#: 0.8in margins on a US Letter page.
-_RIGHT_TAB = Inches(6.9)
+#: Page margins per template, in inches. The executive layout runs 0.5in like the reference
+#: document it reproduces: at 0.7/0.8in the usable area is 13% smaller, which is a whole extra
+#: page on a resume that is otherwise paragraph-for-paragraph identical.
+CLASSIC_MARGINS = (0.7, 0.8)
+EXECUTIVE_MARGINS = (0.5, 0.5)
+
+#: Where the right-aligned date tab sits: page width less the template's left and right margins.
+_CLASSIC_RIGHT_TAB = Inches(8.5 - 2 * 0.8)
+_RIGHT_TAB = Inches(8.5 - 2 * 0.5)
+
+
+def set_margins(doc: Any, vertical: float, horizontal: float) -> None:
+    for section in doc.sections:
+        section.top_margin = section.bottom_margin = Inches(vertical)
+        section.left_margin = section.right_margin = Inches(horizontal)
 
 
 def _entry_head(entry: ResumeEntry) -> str:
     return " | ".join(filter(None, [entry.role or entry.title, entry.org, entry.period]))
+
+
+def _tighten(paragraph: Any, *, before: int = 0, after: int = 0) -> None:
+    """Squeeze vertical space. A resume is judged on fitting two pages as much as on content,
+    and paragraph spacing -- not words -- was what made this layout run to four."""
+    paragraph.paragraph_format.space_before = Pt(before)
+    paragraph.paragraph_format.space_after = Pt(after)
+    paragraph.paragraph_format.line_spacing = 1.0
 
 
 def _bullet(doc: Any, text: str, *, bold_lead: bool) -> None:
@@ -52,6 +72,8 @@ def _bullet(doc: Any, text: str, *, bold_lead: bool) -> None:
     A bullet without a label renders plain rather than bolding an arbitrary prefix.
     """
     paragraph = doc.add_paragraph(style="List Bullet")
+    if bold_lead:
+        _tighten(paragraph)
     head, sep, rest = text.partition(". ")
     if bold_lead and sep and 0 < len(head) <= 60:
         paragraph.add_run(head + ".").bold = True
@@ -62,6 +84,7 @@ def _bullet(doc: Any, text: str, *, bold_lead: bool) -> None:
 
 def render_classic(doc: Any, resume: ResumeDocument) -> None:
     """The original layout: left-aligned name, uppercase headings, one combined entry line."""
+    set_margins(doc, *CLASSIC_MARGINS)
     name = doc.add_paragraph()
     name_run = name.add_run(resume.header.name)
     name_run.bold = True
@@ -101,12 +124,41 @@ def _executive_heading(doc: Any, text: str) -> None:
     run = paragraph.add_run(text)
     run.bold = True
     run.font.size = Pt(12)
-    paragraph.paragraph_format.space_before = Pt(12)
-    paragraph.paragraph_format.space_after = Pt(3)
+    paragraph.paragraph_format.space_before = Pt(8)
+    paragraph.paragraph_format.space_after = Pt(1)
+    paragraph.paragraph_format.line_spacing = 1.0
+
+
+#: Sections whose entries are one line each, not a heading plus bullets. A skill or a degree is a
+#: single fact; giving each one a bold header and a bulleted body doubled the paragraph count and
+#: was what pushed a two-page resume to four without adding any content.
+_COMPACT_KINDS = frozenset({"skills", "credentials"})
+
+
+def _compact_entry(doc: Any, entry: ResumeEntry) -> None:
+    """One line: a bold label, then the entry's text inline."""
+    label = entry.title or entry.role or entry.org
+    body = " ".join(b.text for b in entry.bullets).strip()
+    if not label and not body:
+        return
+    paragraph = doc.add_paragraph()
+    _tighten(paragraph, after=1)
+    if label:
+        # A body that already opens with the label would print it twice. Stripping it can leave
+        # nothing but punctuation -- a credential whose whole text IS its name -- and "AWS
+        # Certified Solutions Architect: ." is worse than no body at all.
+        if body.lower().startswith(label.lower()):
+            body = body[len(label) :].lstrip(" ,;:-—")
+        if not body.strip(" .,;:-—"):
+            body = ""
+        paragraph.add_run(f"{label}: " if body else label).bold = True
+    if body:
+        paragraph.add_run(body)
 
 
 def render_executive(doc: Any, resume: ResumeDocument) -> None:
     """Centred name, Title Case headings, dates right-tabbed, bold bullet lead-ins."""
+    set_margins(doc, *EXECUTIVE_MARGINS)
     name = doc.add_paragraph()
     name.alignment = WD_ALIGN_PARAGRAPH.CENTER
     name_run = name.add_run(resume.header.name.upper())
@@ -128,17 +180,27 @@ def render_executive(doc: Any, resume: ResumeDocument) -> None:
     for section in resume.sections:
         _executive_heading(doc, EXECUTIVE_HEADINGS.get(section.kind, section.kind))
         for entry in section.entries:
+            if section.kind in _COMPACT_KINDS:
+                _compact_entry(doc, entry)
+                continue
+
             title = entry.role or entry.title
+            # Experience gives the organisation its own line, as a resume does. Projects put it
+            # beside the title: a separate line per project is what turned a two-page document
+            # into four without adding a word of content.
+            if title and section.kind != "experience" and entry.org:
+                title = f"{title} — {entry.org}"
             if title:
                 paragraph = doc.add_paragraph()
+                _tighten(paragraph, before=5)
                 paragraph.paragraph_format.tab_stops.add_tab_stop(
                     _RIGHT_TAB, WD_TAB_ALIGNMENT.RIGHT
                 )
                 paragraph.add_run(title).bold = True
                 if entry.period:
                     paragraph.add_run("\t" + entry.period)
-            if entry.org:
-                doc.add_paragraph(entry.org)
+            if entry.org and section.kind == "experience":
+                _tighten(doc.add_paragraph(entry.org))
             for bullet in entry.bullets:
                 _bullet(doc, bullet.text, bold_lead=True)
 

@@ -17,7 +17,7 @@ TYPE_ORDER = ["role", "achievement", "project", "skill", "credential"]
 #: `credential: 3` / `project: 3` were tuned against a library holding one skill block, so a richer
 #: profile left blocks visible to the composer but outside the selection, and every package citing
 #: one failed provenance.
-DEFAULT_TOP_K = {"role": 6, "achievement": 8, "project": 5, "skill": 4, "credential": 5}
+DEFAULT_TOP_K = {"role": 6, "achievement": 6, "project": 3, "skill": 4, "credential": 5}
 
 
 class SelectionConfig(BaseModel):

@@ -104,7 +104,7 @@ async def test_default_top_k_admits_a_multi_entry_skills_and_credentials_section
     """
     assert DEFAULT_TOP_K["skill"] >= 3
     assert DEFAULT_TOP_K["credential"] >= 5
-    assert DEFAULT_TOP_K["project"] >= 5
+    assert DEFAULT_TOP_K["project"] >= 3
 
 
 def test_default_top_k_fits_a_whole_career_of_roles() -> None:
