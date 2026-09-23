@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useSyncExternalStore } from "react";
+import { Landing } from "@/components/landing/Landing";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { hasToken } from "@/lib/api/client";
 
@@ -34,6 +35,10 @@ export function TokenGate({ children }: { children: React.ReactNode }) {
   if (PUBLIC_ROUTES.has(pathname)) return <>{children}</>;
   if (connected === null) return null;
   if (connected) return <>{children}</>;
+  // The root is the one route a stranger reaches without being sent there, so it answers "what is
+  // this?" rather than demanding a bearer token. Every other route keeps the short Connect card:
+  // someone who navigated to /jobs already knows what Rhapto is and just needs to be let in.
+  if (pathname === "/") return <Landing />;
   return (
     <Card className="mx-auto max-w-md">
       <CardHeader>

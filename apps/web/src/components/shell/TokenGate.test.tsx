@@ -13,10 +13,22 @@ afterEach(() => window.localStorage.clear());
 
 describe("TokenGate", () => {
   it("blocks content without a token and links to settings", () => {
-    pathname.current = "/";
+    pathname.current = "/jobs";
     render(<TokenGate><p>secret content</p></TokenGate>);
     expect(screen.queryByText("secret content")).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: /open settings/i })).toHaveAttribute("href", "/settings");
+  });
+
+  it("answers 'what is this?' at the root rather than demanding a token", () => {
+    // The root is the one route a stranger reaches without being sent there. A bearer-token field
+    // is a dead end for someone who has never heard of Rhapto.
+    pathname.current = "/";
+    render(<TokenGate><p>secret content</p></TokenGate>);
+    expect(screen.queryByText("secret content")).not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(
+      "Every application, stitched to fit.",
+    );
+    expect(screen.getByRole("link", { name: /get started/i })).toHaveAttribute("href", "/settings");
   });
 
   it("always renders the settings page", () => {

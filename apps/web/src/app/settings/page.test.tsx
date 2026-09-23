@@ -60,7 +60,9 @@ describe("SettingsPage", () => {
 
     expect(getSettings().token).toBe("");
     expect(screen.queryByText("secret content")).not.toBeInTheDocument();
-    expect(screen.getByText(/connect to your rhapto api/i)).toBeInTheDocument();
+    // `usePathname` is mocked to "/" here, and the gate answers the root with the landing page
+    // rather than the Connect card -- so this is what "the gate is back" looks like at "/".
+    expect(screen.getByText("Why not just ask a chatbot?")).toBeInTheDocument();
     expect(screen.getByLabelText(/bearer token/i)).toHaveValue("");
     expect(toast.success).toHaveBeenCalledWith("Disconnected");
   });
