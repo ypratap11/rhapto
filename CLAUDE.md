@@ -57,3 +57,32 @@ See the roadmap table in the requirements doc for full scope per phase.
   `profile.example/`.
 - Add a CI secret-scan step and a check that no string from
   `profile/blocks.yaml` orgs appears in committed files.
+
+## Working agreement (set by the owner, 2026-09-24)
+
+**Nothing ships unreviewed.** Every unit of work — a design, a plan, a code change — is checked by an
+independent agent before it reaches the owner, not after. A plan gets a plan review before execution
+begins; code gets a task review against its diff; anything architectural gets an architect's explicit
+APPROVED / APPROVED WITH CONDITIONS / NOT APPROVED before the owner is asked to look at it. Self-review
+is not review. This rule exists because a plan the owner approved turned out to carry 8 Critical
+defects, and an architecture audit then reversed its central design decision.
+
+**Verify, never assert.** Claims about the schema, a signature or a constraint are checked against the
+code or the database in the same breath they are made. The failure that produced this rule was writing
+"job_scores already keys on (user_id, job_id, track_id)" minutes after printing the constraint that
+said `UNIQUE (job_id, track_id)`.
+
+**Guardrails are unconditional, not preferences.** Provenance and `no-unverified-metrics` are both
+non-negotiable; neither is a user-toggleable rule. A package whose guardrail report fails must not
+persist a DOCX, in any mode. The truthfulness guarantee is the product — an off-switch makes it a
+claim the code does not keep.
+
+**Spend tokens and time like they are the owner's, because they are.**
+- Agent reports go to files under `.superpowers/sdd/<plan>/`; only status, findings and decisions
+  come back into the conversation.
+- Hand reviewers a generated diff file, never a pasted diff.
+- Batch same-shape work into one dispatch; never one agent per one-line change.
+- Use the cheapest model that can do the job, and always name it explicitly.
+- Do not re-run an 11-minute suite per commit when the change is scoped; run it once before the work
+  is handed over, and say which suites did and did not run.
+- No progress narration. The ledger is the record.
