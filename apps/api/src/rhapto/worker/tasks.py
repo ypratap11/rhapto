@@ -360,12 +360,20 @@ async def poll_now(ctx: dict[str, Any], task_id: str) -> None:
 
 
 async def poll_all_sources(ctx: dict[str, Any]) -> None:
-    """Cron entry point: poll every user's sources; failures are recorded per source."""
+    """Cron entry point: poll every user's sources; failures are recorded per source.
+
+    Each user gets their own session: sharing one `AsyncSession` (and therefore one
+    transaction and one identity map) across every user in the loop meant one user's
+    failure rolled back another's already-flushed work, and the identity map grew for the
+    whole run instead of being released between users.
+    """
     factory: async_sessionmaker[AsyncSession] = ctx["session_factory"]
     bus: EventBus = ctx["event_bus"]
     async with factory() as session:
-        for user_id in await list_user_ids(session):
-            try:
+        user_ids = await list_user_ids(session)
+    for user_id in user_ids:
+        try:
+            async with factory() as session:
                 summary = await poll_sources(
                     session,
                     user_id,
@@ -373,12 +381,11 @@ async def poll_all_sources(ctx: dict[str, Any]) -> None:
                     embedder=ctx["embedder"],
                     fernet=_poll_fernet(),
                 )
-                await bus.publish(
-                    DISCOVERY_CHANNEL, {"event": "discovery", "new_jobs": summary.new_jobs}
-                )
-            except Exception:
-                logger.exception("scheduled poll failed for user %s", user_id)
-                await session.rollback()
+            await bus.publish(
+                DISCOVERY_CHANNEL, {"event": "discovery", "new_jobs": summary.new_jobs}
+            )
+        except Exception:
+            logger.exception("scheduled poll failed for user %s", user_id)
 
 
 async def score_jobs(ctx: dict[str, Any], user_id: str, job_ids: list[str]) -> None:

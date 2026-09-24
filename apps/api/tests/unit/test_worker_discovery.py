@@ -231,6 +231,42 @@ async def test_poll_all_sources_never_raises_and_continues_after_failure(
     assert set(calls) == {user.id, other.id}
 
 
+async def test_poll_all_sources_gives_each_user_their_own_session(
+    session_factory: async_sessionmaker[AsyncSession],
+    session: AsyncSession,
+    user: User,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """One shared `AsyncSession` across every user in the loop coupled their commits and
+    rollbacks -- a failure for one user rolled back another's already-flushed work in the same
+    transaction -- and let the identity map grow for the whole run instead of being released
+    between users. Each user must get a session of its own."""
+    await seed(session, user)
+    await get_or_create_user(session, "other@example.com")
+    await session.commit()
+
+    sessions: list[int] = []
+
+    async def fake_poll_sources(
+        session: AsyncSession,
+        user_id: uuid.UUID,
+        *,
+        http: Any,
+        embedder: Any,
+        specs: Any = None,
+        on_step: Any = None,
+        fernet: Any = None,
+    ) -> PollSummary:
+        sessions.append(id(session))
+        return PollSummary(results=[], new_jobs=0, new_job_ids=[])
+
+    monkeypatch.setattr(worker_tasks, "poll_sources", fake_poll_sources)
+    ctx = ctx_for(session_factory, InMemoryEventBus())
+    await poll_all_sources(ctx)
+    assert len(sessions) == 2
+    assert len(set(sessions)) == 2, "each user's poll must run on its own session"
+
+
 def test_cron_hours_from_interval() -> None:
     assert cron_hours(6) == {0, 6, 12, 18}
     assert cron_hours(24) == {0}
