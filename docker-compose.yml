@@ -1,6 +1,7 @@
 services:
   db:
     image: pgvector/pgvector:pg16
+    restart: unless-stopped
     environment:
       POSTGRES_USER: rhapto
       POSTGRES_PASSWORD: rhapto
@@ -17,6 +18,7 @@ services:
 
   redis:
     image: redis:7-alpine
+    restart: unless-stopped
     ports:
       - "127.0.0.1:6379:6379"
     healthcheck:
@@ -30,6 +32,7 @@ services:
       context: .
       dockerfile: apps/api/Dockerfile
       target: api
+    restart: unless-stopped
     env_file: .env
     environment:
       DATABASE_URL: postgresql+asyncpg://rhapto:rhapto@db:5432/rhapto
@@ -56,6 +59,11 @@ services:
       context: .
       dockerfile: apps/api/Dockerfile
       target: worker
+    restart: unless-stopped
+    # The worker embeds documents (FastEmbed) and holds a poll's identity map in memory; without a
+    # cap a runaway batch can take down the host instead of just the container. arq itself restarts
+    # a killed worker process, so an OOM here is a contained, visible failure, not silent data loss.
+    mem_limit: 2g
     env_file: .env
     environment:
       DATABASE_URL: postgresql+asyncpg://rhapto:rhapto@db:5432/rhapto
@@ -79,6 +87,7 @@ services:
       dockerfile: Dockerfile
       args:
         NEXT_PUBLIC_API_URL: ${RHAPTO_PUBLIC_API_URL:-http://localhost:8000}
+    restart: unless-stopped
     ports:
       - "127.0.0.1:3000:3000"
     depends_on:
