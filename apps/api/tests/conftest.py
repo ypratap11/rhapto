@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import asyncio
+import base64
+import hashlib
 import logging
 import os
 from collections.abc import AsyncIterator, Iterator
@@ -19,6 +21,19 @@ from rhapto.db.base import Base
 from rhapto.db.models import User
 from rhapto.db.repositories.users import get_or_create_user
 from rhapto.db.session import make_engine, make_session_factory
+
+# `get_settings()` (rhapto.config) now refuses to run with no RHAPTO_SECRET_KEY, and some test
+# modules import `rhapto.worker.main` / `rhapto.api.app`, both of which call it at *import* time
+# (a cron schedule and the module-level `app`, respectively) -- before any fixture, including
+# `_no_provider_env` below, gets a chance to run. A bare test environment has no `.env` and no
+# such variable, so collection itself would fail without a value seeded here first, before any of
+# those test modules are imported. This value is never used to encrypt anything real; the tests
+# that care about the derive-from-token fallback or an unset key construct `Settings(...)`
+# directly and are unaffected by it.
+os.environ.setdefault(
+    "RHAPTO_SECRET_KEY",
+    base64.urlsafe_b64encode(hashlib.sha256(b"rhapto-test-suite-secret-key").digest()).decode(),
+)
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 DEMO_PROFILE = REPO_ROOT / "profile.example"

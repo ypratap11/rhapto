@@ -25,11 +25,23 @@ def _real_env_says_fake(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
     below) means the real environment variable has to be set and `get_settings`'s cache dropped,
     not just this test's own `Settings` object built in isolation."""
     monkeypatch.setenv("RHAPTO_LLM_PROVIDER", "fake")
+    # `_no_provider_env` (autouse, tests/conftest.py) deletes RHAPTO_SECRET_KEY for every test;
+    # `get_settings()` now refuses to construct at all without one, so the real call this
+    # fixture forces (via `tailor_job` below) needs a value present for the test body, not just
+    # at teardown.
+    monkeypatch.setenv("RHAPTO_SECRET_KEY", "test-fake-provider-real-env-secret")
     get_settings.cache_clear()
     try:
         yield
     finally:
+        # `get_settings` is a process-wide singleton (`@lru_cache`): leaving it cleared here
+        # would make whichever test runs next -- with RHAPTO_SECRET_KEY deleted by
+        # `_no_provider_env` for its own duration, same as this one -- hit
+        # `MissingSecretKeyError` the first time anything calls `get_settings()` for real.
+        # RHAPTO_SECRET_KEY (set above) is still in effect here, before monkeypatch unwinds it,
+        # so this reseeds the cache with a working value before handing back control.
         get_settings.cache_clear()
+        get_settings()
 
 
 @pytest.fixture

@@ -18,8 +18,12 @@ class Settings(BaseSettings):
     # Empty means "whatever the chosen provider's default model is" (see engine.providers.registry),
     # so switching RHAPTO_LLM_PROVIDER alone is enough.
     rhapto_llm_model: str = ""
-    # Fernet secret for stored provider keys. Empty derives one from rhapto_api_token; see
-    # services.secrets.
+    # Fernet secret for stored provider keys. `Settings` itself still accepts an empty value --
+    # `services.secrets.fernet_for` falls back to one derived from rhapto_api_token, and tests for
+    # that fallback construct `Settings` directly -- but `get_settings()`, the singleton every real
+    # entrypoint uses, refuses to start without it. See `MissingSecretKeyError` below: with one
+    # user in production and a second account close behind, a deployment must not run on a key
+    # implicitly derived from its API token.
     rhapto_secret_key: str = ""
     rhapto_embedding_model: str = "BAAI/bge-small-en-v1.5"
     rhapto_soffice_binary: str = "soffice"
@@ -35,6 +39,21 @@ class Settings(BaseSettings):
     rhapto_discovery_base_override: str = ""
 
 
+class MissingSecretKeyError(RuntimeError):
+    """RHAPTO_SECRET_KEY is unset. Raised by `get_settings()`, not by `Settings` itself, so a
+    caller that needs a bare `Settings` for something else (a test, a one-off script reading only
+    `database_url`) is not forced to supply a Fernet key it will never use -- only the real
+    process entrypoints, which all resolve their settings through `get_settings()`, are stopped
+    from starting without one."""
+
+
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
-    return Settings()
+    settings = Settings()
+    if not settings.rhapto_secret_key:
+        raise MissingSecretKeyError(
+            "RHAPTO_SECRET_KEY is not set. Rhapto refuses to start without it -- generate one "
+            'with: python -c "from cryptography.fernet import Fernet; '
+            'print(Fernet.generate_key().decode())" and set it in your environment or .env file.'
+        )
+    return settings
