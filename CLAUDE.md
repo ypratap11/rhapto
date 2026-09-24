@@ -86,3 +86,34 @@ claim the code does not keep.
 - Do not re-run an 11-minute suite per commit when the change is scoped; run it once before the work
   is handed over, and say which suites did and did not run.
 - No progress narration. The ledger is the record.
+
+## Delivery pipeline (set by the owner, 2026-09-24)
+
+Every project runs through these roles, in order. Each produces a written artifact under
+`.superpowers/sdd/<project>/` and each gate must pass before the next role starts. No role reviews
+its own output, and no role is skipped because the work "looks small" — what scales is the depth of
+each pass, not whether it happens.
+
+| # | Role | Owns | Artifact | Gate |
+|---|---|---|---|---|
+| 1 | **Functional architect** | The *what*: the user outcome, scope, acceptance criteria, what is explicitly not being built | `functional-spec.md` | Owner confirms it solves the right problem |
+| 2 | **Architect** | The *how*: system design, data model, tenancy, interfaces, failure modes, migration safety | `architecture.md` | Explicit APPROVED / APPROVED WITH CONDITIONS / NOT APPROVED |
+| 3 | **Senior developer** | Decomposition: tasks, sequencing, interfaces between tasks, what each task must prove | `plan.md` | Independent plan review — findings resolved before any code |
+| 4 | **Coder** | Implementation, task by task, tests first | commits + `task-N-report.md` | Task review against the diff |
+| 5 | **QA** | Independent verification of *behaviour*, not the diff: adversarial cases, the suites, the guardrail contract | `qa-report.md` | No Critical or Important open |
+| 6 | **Final manager** | Whole-branch integration: scope creep, cross-task consistency, docs, migrations, deferred-minor triage | `final-review.md` | Sign-off to deliver |
+| 7 | **Delivery** | Backup, deploy, verify live, rollback plan, record what shipped | `delivery.md` + ledger | Owner sees it working |
+
+Rules that bind the pipeline:
+
+- **Roles 2, 3, 5 and 6 are independent agents.** The session that wrote a thing never reviews it.
+- **An architect's NOT APPROVED stops the pipeline.** It is not advisory and is not overridden without
+  the owner's explicit decision, recorded in the ledger.
+- **QA tests behaviour, the task reviewer tests the diff.** They are different passes and neither
+  replaces the other.
+- **Delivery never runs unprompted** for anything irreversible — migrations, schema drops, production
+  deploys. The owner is asked, every time.
+- **Scale the depth, never the sequence.** A one-line fix still gets an architect's read; it is just a
+  short one. A schema change gets a long one.
+- Model per role: architect and final manager on the most capable; functional architect, senior
+  developer and QA mid-tier; coder the cheapest that fits the task. Always named explicitly.
