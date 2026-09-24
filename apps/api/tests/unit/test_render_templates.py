@@ -8,7 +8,13 @@ from io import BytesIO
 from helpers import demo_resume
 
 from rhapto.engine.render.docx import render_docx
-from rhapto.engine.render.templates import DEFAULT_TEMPLATE, TEMPLATES, template_for
+from rhapto.engine.render.templates import (
+    CLASSIC_HEADINGS,
+    DEFAULT_TEMPLATE,
+    EXECUTIVE_HEADINGS,
+    TEMPLATES,
+    template_for,
+)
 from rhapto.models.profile.blocks import Block
 
 
@@ -45,6 +51,21 @@ def test_an_unknown_template_falls_back_rather_than_failing_the_run() -> None:
     assert template_for({"template": "no-such-layout"}) is TEMPLATES[DEFAULT_TEMPLATE]
     assert template_for(None) is TEMPLATES[DEFAULT_TEMPLATE]
     assert template_for({"template": 7}) is TEMPLATES[DEFAULT_TEMPLATE]
+
+
+def test_every_heading_carries_a_token_an_ats_can_classify() -> None:
+    """The constraint that makes a resume readable by the thing that reads it first.
+
+    An ATS segments a resume by matching headings against a known vocabulary; a heading it cannot
+    classify takes the whole block under it out of the index. "Areas of Depth" shipped in the
+    executive layout and parses as nothing, so a real skills section was invisible to exactly the
+    keyword screen it existed to pass. A layout may vary the wording; it may not drop the token.
+    """
+    tokens = ("experience", "project", "skill", "education", "certification")
+    for name, headings in (("classic", CLASSIC_HEADINGS), ("executive", EXECUTIVE_HEADINGS)):
+        for kind, heading in headings.items():
+            low = heading.lower()
+            assert any(t in low for t in tokens), f"{name}/{kind}: {heading!r} matches no ATS token"
 
 
 def test_classic_headings_are_uppercase_and_left_aligned() -> None:
@@ -113,7 +134,7 @@ def test_executive_keeps_skills_and_credentials_to_one_line_each() -> None:
     if skills is None:
         return
     paras = _paragraphs(render_docx(resume, _blocks(), {"template": "executive"}))
-    titles = {"Areas of Depth", "Education & Certifications"}
+    titles = {"Core Skills", "Education & Certifications"}
     start = next(i for i, (t, _a, _b) in enumerate(paras) if t in titles)
     following = [t for t, _a, _b in paras[start + 1 :] if t not in titles]
     assert len(following) <= len(skills.entries) + 2

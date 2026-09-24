@@ -21,17 +21,26 @@ from rhapto.models.resume_document import ResumeDocument, ResumeEntry
 
 #: ATS-safe headings per section kind. The section title the LLM wrote is ignored; `kind` is a
 #: validated Literal, so a heading can never be a fabricated label.
+#:
+#: "ATS-safe" is a hard constraint, not a style preference. Applicant tracking systems segment a
+#: resume by matching its headings against a known vocabulary, and a heading they cannot classify
+#: means the whole block under it goes unindexed. A skills section an ATS does not recognise AS
+#: skills is invisible to exactly the keyword screen it exists to pass. So every heading below
+#: carries a recognised token -- Experience, Projects, Skills, Education, Certifications -- and a
+#: layout may vary the wording around them but never drop the token.
 CLASSIC_HEADINGS = {
     "experience": "Experience",
     "projects": "Projects",
     "skills": "Skills",
-    "credentials": "Credentials",
+    # Was "Credentials", which carries no token any parser looks for.
+    "credentials": "Education & Certifications",
 }
 
 EXECUTIVE_HEADINGS = {
     "experience": "Professional Experience",
     "projects": "Selected Projects",
-    "skills": "Areas of Depth",
+    # Was "Areas of Depth" -- it reads well and parses as nothing.
+    "skills": "Core Skills",
     "credentials": "Education & Certifications",
 }
 

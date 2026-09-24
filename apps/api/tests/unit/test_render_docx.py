@@ -16,11 +16,13 @@ def test_renders_single_column_ats_safe_docx(demo_profile_dir: Path) -> None:
     texts = [p.text for p in doc.paragraphs]
     assert texts[0] == "Maya Chen"
     assert "maya.chen@example.com | Denver, CO" in texts
+    # Headings an ATS can classify. "CREDENTIALS" used to be here and carries no token any parser
+    # looks for, so the block under it went unindexed; see test_render_templates.py for the rule.
     assert (
         "SUMMARY" in texts
         and "EXPERIENCE" in texts
         and "PROJECTS" in texts
-        and "CREDENTIALS" in texts
+        and "EDUCATION & CERTIFICATIONS" in texts
     )
     assert "Senior Data Program Manager | Acme Analytics | 2019-2025" in texts
     assert any("cutting warehouse cost 18%" in t for t in texts)
