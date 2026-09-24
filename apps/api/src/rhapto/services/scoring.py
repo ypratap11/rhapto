@@ -66,6 +66,8 @@ async def _score_chunk(
     tracks: list[Track],
     track_vectors: dict[str, list[float]],
     embedder: EmbeddingProvider,
+    *,
+    has_location_preference: bool,
 ) -> None:
     unembedded = [job for job, _ in chunk if job.jd_embedding is None]
     if unembedded:
@@ -77,7 +79,13 @@ async def _score_chunk(
             job.best_track_id, job.best_fit = None, None
             continue
         scores = score_job(
-            job.title, job.jd_text, list(job.jd_embedding), tracks, track_vectors, tier
+            job.title,
+            job.jd_text,
+            list(job.jd_embedding),
+            tracks,
+            track_vectors,
+            tier,
+            has_location_preference=has_location_preference,
         )
         best = best_track(scores, tracks)
         job.best_track_id = best.track_id if best else None
@@ -121,7 +129,15 @@ async def score_and_store(
     for index, start in enumerate(range(0, total, SCORE_CHUNK), start=1):
         chunk = tiered[start : start + SCORE_CHUNK]
         try:
-            await _score_chunk(session, user_id, chunk, tracks, track_vectors, embedder)
+            await _score_chunk(
+                session,
+                user_id,
+                chunk,
+                tracks,
+                track_vectors,
+                embedder,
+                has_location_preference=bool(preference.terms),
+            )
         except Exception:
             if not commit_each_chunk:
                 # All-or-nothing callers (the poller, score_jobs) own the transaction: let the

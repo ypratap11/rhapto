@@ -375,6 +375,10 @@ class TrackScore(BaseModel):
     keywords: int
     matched: list[str]
     location_tier: LocationTier = "unknown"
+    #: The multiplier actually applied to reach `fit_score` -- not always `LOCATION_MULTIPLIER
+    #: [location_tier]`; see `_location_multiplier`. Recorded here so `rationale` reports what
+    #: happened rather than recomputing it from the tier alone.
+    location_multiplier: float = 1.0
 
 
 def track_text(track: Track) -> str:
@@ -406,6 +410,28 @@ def keyword_score(track: Track, title: str | None, text: str) -> tuple[int, list
     return int(round(fraction * 100)), matched
 
 
+#: Tiers a posting can only land in through the *absence* of location information (`unknown`)
+#: or a US-but-not-preferred read (`country`) -- as opposed to `abroad` (the posting itself says
+#: another country) and `remote` (a separate preference, `remote_ok`). Penalising either of these
+#: two for a user who never said where they want to work punishes silence as if it were a
+#: rejection.
+_PREFERENCE_ONLY_PENALTY_TIERS = frozenset({"unknown", "country"})
+
+
+def _location_multiplier(tier: LocationTier, *, has_location_preference: bool) -> float:
+    """The multiplier to apply for `tier`, given whether this user expressed any preference.
+
+    `pref.terms` empty means "no preference at all" (`LocationPreference`'s own docstring).
+    Spec §8: 99 of 122 matches lost fit to a location the user never said they cared about, so a
+    user with no preference pays no `unknown`/`country` penalty -- `abroad` and `remote` are
+    unaffected, since those reflect the posting's own location or the separate `remote_ok`
+    answer, not the (empty) preferred-locations list.
+    """
+    if not has_location_preference and tier in _PREFERENCE_ONLY_PENALTY_TIERS:
+        return 1.0
+    return LOCATION_MULTIPLIER[tier]
+
+
 def score_job(
     title: str | None,
     jd_text: str,
@@ -413,8 +439,12 @@ def score_job(
     tracks: list[Track],
     track_embeddings: dict[str, list[float]],
     location_tier: LocationTier = "unknown",
+    *,
+    has_location_preference: bool = True,
 ) -> list[TrackScore]:
-    multiplier = LOCATION_MULTIPLIER[location_tier]
+    multiplier = _location_multiplier(
+        location_tier, has_location_preference=has_location_preference
+    )
     scores: list[TrackScore] = []
     for track in tracks:
         vector = track_embeddings.get(track.id)
@@ -429,6 +459,7 @@ def score_job(
                 keywords=keywords,
                 matched=matched,
                 location_tier=location_tier,
+                location_multiplier=multiplier,
             )
         )
     return scores
@@ -460,5 +491,5 @@ def rationale(score: TrackScore) -> dict[str, Any]:
         "matched": score.matched,
         "weights": {"semantic": SEMANTIC_WEIGHT, "keywords": KEYWORD_WEIGHT},
         "location_tier": score.location_tier,
-        "location_multiplier": LOCATION_MULTIPLIER[score.location_tier],
+        "location_multiplier": score.location_multiplier,
     }

@@ -79,6 +79,45 @@ async def test_score_and_store_stores_the_location_tier_and_applies_it(
     assert scores[far.id][0].rationale_json["location_tier"] == "abroad"
 
 
+async def test_score_and_store_does_not_penalise_location_with_no_preference_set(
+    session: AsyncSession, user: User
+) -> None:
+    """No `location_home`/`location_preferred` answer at all means no preference, not a
+    penalty: a US posting scored with no preference expressed must land at the same fit as one
+    explicitly tiered `preferred`."""
+    await profile_repo.upsert_track(session, user.id, DATA)
+    jd = "Own the data platform and ETL roadmap for analytics " * 5
+    no_pref_job = await jobs_repo.create_job(
+        session, user.id, jd_text=jd, title="Data PM", location="Denver, CO"
+    )
+    embedder = FakeEmbeddingProvider(dimensions=384)
+    await score_and_store(session, user.id, [no_pref_job], embedder)
+    assert no_pref_job.location_tier == "country"
+    assert no_pref_job.best_fit is not None
+
+    from rhapto.db.repositories.users import get_or_create_user
+
+    other_user = await get_or_create_user(session, "other-pref@example.com")
+    await profile_repo.upsert_track(session, other_user.id, DATA)
+    await profile_repo.set_answers(session, other_user.id, {"location_preferred": "Boulder, CO"})
+    preferred_job = await jobs_repo.create_job(
+        session, other_user.id, jd_text=jd, title="Data PM", location="Denver, CO"
+    )
+    await score_and_store(session, other_user.id, [preferred_job], embedder)
+    assert preferred_job.location_tier == "country"
+
+    with_pref_job = await jobs_repo.create_job(
+        session, other_user.id, jd_text=jd, title="Data PM", location="Boulder, CO"
+    )
+    await score_and_store(session, other_user.id, [with_pref_job], embedder)
+    assert with_pref_job.location_tier == "preferred"
+
+    # No preference at all: the "country" tier costs nothing, same fit as "preferred".
+    assert no_pref_job.best_fit == with_pref_job.best_fit
+    # A user who *did* express a preference still pays the usual "country" penalty.
+    assert preferred_job.best_fit < with_pref_job.best_fit
+
+
 async def test_rescore_user_picks_up_a_changed_location_preference(
     session: AsyncSession, user: User
 ) -> None:

@@ -342,7 +342,15 @@ async def _score_postings(
     rows: list[dict[str, Any]] = []
     for (source, posting), vector in zip(postings, vectors[len(tracks) :], strict=True):
         tier = location_tier(posting.location, preference)
-        scores = score_job(posting.title, posting.jd_text, vector, tracks, track_vectors, tier)
+        scores = score_job(
+            posting.title,
+            posting.jd_text,
+            vector,
+            tracks,
+            track_vectors,
+            tier,
+            has_location_preference=bool(preference.terms),
+        )
         best = best_track(scores, tracks)
         rows.append(
             {

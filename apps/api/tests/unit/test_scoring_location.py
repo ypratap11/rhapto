@@ -197,3 +197,44 @@ async def test_rationale_carries_the_tier_and_multiplier() -> None:
 
 def test_score_job_defaults_to_unknown() -> None:
     assert LOCATION_MULTIPLIER["unknown"] == 0.90
+
+
+NO_PREFERENCE = location_preference_from_answers({})
+
+
+def test_no_preference_means_no_preference() -> None:
+    assert NO_PREFERENCE.terms == ()
+
+
+async def test_no_location_preference_is_not_penalised() -> None:
+    """A user who never said where they want to work must not pay the `unknown`/`country`
+    penalty -- spec §8 measured this costing 99 of 122 matches. `abroad` and `remote` are
+    unaffected: those come from the posting's own location and the separate `remote_ok`
+    answer, not from an empty preferred-locations list."""
+    embedder = FakeEmbeddingProvider()
+    jd = "Own the data platform and ETL roadmap for analytics " * 5
+    vectors = await embedder.embed([jd, track_text(TRACK)])
+    args = (jd, jd, vectors[0], [TRACK], {"data-pm": vectors[1]})
+
+    preferred = score_job(*args, location_tier="preferred")[0].fit_score
+    unknown_tier = location_tier(None, NO_PREFERENCE)
+    country_tier = location_tier("Denver, CO", NO_PREFERENCE)
+    assert unknown_tier == "unknown"
+    assert country_tier == "country"
+
+    unknown_score = score_job(*args, location_tier=unknown_tier, has_location_preference=False)[0]
+    country_score = score_job(*args, location_tier=country_tier, has_location_preference=False)[0]
+    assert unknown_score.fit_score == preferred
+    assert unknown_score.location_multiplier == 1.0
+    assert country_score.fit_score == preferred
+    assert country_score.location_multiplier == 1.0
+
+    # abroad and remote still carry their usual penalty even with no preference expressed.
+    abroad_tier = location_tier("Dublin, Ireland", NO_PREFERENCE)
+    assert abroad_tier == "abroad"
+    abroad_score = score_job(*args, location_tier=abroad_tier, has_location_preference=False)[0]
+    assert abroad_score.fit_score == round(preferred * 0.60)
+
+    # Passing has_location_preference=False has no effect once a preference exists.
+    with_pref = score_job(*args, location_tier="country", has_location_preference=True)[0].fit_score
+    assert with_pref == round(preferred * LOCATION_MULTIPLIER["country"])
