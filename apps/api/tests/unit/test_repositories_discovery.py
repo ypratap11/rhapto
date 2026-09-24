@@ -55,6 +55,37 @@ async def test_scores_upsert_and_list(session: AsyncSession, user: User) -> None
     assert by_track == {"data-pm": 75, "ai-pm": 20}
 
 
+async def test_upsert_scores_never_touches_another_users_row_on_the_same_job(
+    session: AsyncSession, user: User
+) -> None:
+    """`existing` used to key only on `job_id`; since `jobs.id` is globally unique that is a
+    no-op today, but a stray `job_scores` row for another user on this job -- a bug, or a shared
+    job pool -- would otherwise be found and overwritten instead of this user getting their own
+    row."""
+    from rhapto.db.models import JobScore
+    from rhapto.db.repositories.users import get_or_create_user
+
+    other = await get_or_create_user(session, "other-scores@example.com")
+    job = await jobs_repo.create_job(session, user.id, jd_text="x " * 60)
+    session.add(
+        JobScore(
+            user_id=other.id,
+            job_id=job.id,
+            track_id="data-pm",
+            fit_score=5,
+            scored_at=datetime.now(UTC),
+        )
+    )
+    await session.flush()
+
+    await disc.upsert_scores(session, user.id, job, [("data-pm", 90, {})])
+
+    other_scores = await disc.scores_for_jobs(session, other.id, [job.id])
+    assert [s.fit_score for s in other_scores[job.id]] == [5], "another user's row must survive"
+    mine = await disc.scores_for_jobs(session, user.id, [job.id])
+    assert [s.fit_score for s in mine[job.id]] == [90]
+
+
 async def test_poll_runs_latest_and_consecutive_failures(session: AsyncSession, user: User) -> None:
     for error in ("boom", "boom", None, "boom", "boom", "boom"):
         run = await disc.start_run(session, user.id, "lever", "acme")

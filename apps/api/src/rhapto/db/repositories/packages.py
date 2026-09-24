@@ -13,9 +13,11 @@ from rhapto.models.package import ApplicationPackage
 NOT_APPLIED_STATUSES = tuple(s for s in APPLICATION_STATUSES if s not in APPLIED_STATUSES)
 
 
-async def next_version(session: AsyncSession, job_id: uuid.UUID) -> int:
+async def next_version(session: AsyncSession, user_id: uuid.UUID, job_id: uuid.UUID) -> int:
     current = await session.scalar(
-        select(func.max(Package.version)).where(Package.job_id == job_id)
+        select(func.max(Package.version)).where(
+            Package.user_id == user_id, Package.job_id == job_id
+        )
     )
     return (current or 0) + 1
 
@@ -121,7 +123,10 @@ async def list_packages(
         select(Package, Job, Application)
         .join(latest, and_(Package.job_id == latest.c.job_id, Package.version == latest.c.version))
         .join(Job, Job.id == Package.job_id)
-        .outerjoin(Application, Application.job_id == Package.job_id)
+        .outerjoin(
+            Application,
+            and_(Application.job_id == Package.job_id, Application.user_id == user_id),
+        )
         .where(Package.user_id == user_id)
         .order_by(Package.created_at.desc(), Package.id)
     )

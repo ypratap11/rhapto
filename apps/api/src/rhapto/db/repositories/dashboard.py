@@ -81,7 +81,10 @@ async def needs_review_count(session: AsyncSession, user_id: uuid.UUID) -> int:
         select(func.count(Package.id))
         .join(latest, and_(Package.job_id == latest.c.job_id, Package.version == latest.c.version))
         .join(Job, Job.id == Package.job_id)
-        .outerjoin(Application, Application.job_id == Package.job_id)
+        .outerjoin(
+            Application,
+            and_(Application.job_id == Package.job_id, Application.user_id == user_id),
+        )
         .where(
             Package.user_id == user_id,
             # Exactly "draft": a ready package has been reviewed (the human pressed Mark ready)

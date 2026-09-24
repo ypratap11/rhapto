@@ -468,6 +468,45 @@ async def test_a_result_on_a_lever_board_joins_the_watchlist_once(
     assert len(rows) == 1
 
 
+async def test_discover_boards_survives_a_board_missed_by_the_in_memory_check(
+    session: AsyncSession, user: User, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`_discover_boards`' `existing` set only catches a board already on the watchlist when
+    `list_watchlist` was called; a board added between that read and this insert (another spec in
+    the same poll, or a concurrent poll) is missed by it. `ON CONFLICT DO NOTHING` against the
+    `(user_id, source, board)` unique constraint is the real guard -- proven here by forcing
+    `list_watchlist` to miss a board that is, in fact, already there."""
+    from rhapto.services.discovery.poller import SourceSpec, _discover_boards
+
+    await profile_repo.replace_watchlist(
+        session,
+        user.id,
+        [WatchlistModel(company="ExampleCo", source="lever", board="exampleco", discovered=True)],
+    )
+    await session.commit()
+
+    async def empty_watchlist(*args: object, **kwargs: object) -> list[WatchlistEntry]:
+        return []
+
+    monkeypatch.setattr(poller_module.profile_repo, "list_watchlist", empty_watchlist)
+
+    job = await jobs_repo.create_job(
+        session,
+        user.id,
+        jd_text="alpha " * 20,
+        company="ExampleCo",
+        url="https://jobs.lever.co/exampleco/abc",
+    )
+    spec = SourceSpec(source="lever", board=None, company="ExampleCo", keywords=[])
+    await _discover_boards(session, user.id, spec, [job])  # must not raise IntegrityError
+    await session.commit()
+
+    rows = list(
+        await session.scalars(select(WatchlistEntry).where(WatchlistEntry.user_id == user.id))
+    )
+    assert [(r.source, r.board) for r in rows] == [("lever", "exampleco")]
+
+
 async def test_several_failing_searches_in_one_cycle_do_not_pause_each_other(
     session: AsyncSession, user: User, fake_aggregators: None
 ) -> None:

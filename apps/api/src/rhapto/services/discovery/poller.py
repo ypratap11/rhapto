@@ -10,8 +10,10 @@ from datetime import UTC, datetime, timedelta
 from typing import cast
 
 from cryptography.fernet import Fernet
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from rhapto.db.base import new_uuid
 from rhapto.db.hashing import dedupe_hash
 from rhapto.db.models import Job, WatchlistEntry
 from rhapto.db.repositories import discovery as disc_repo
@@ -244,25 +246,45 @@ async def _ingest(
 async def _discover_boards(
     session: AsyncSession, user_id: uuid.UUID, spec: SourceSpec, created: list[Job]
 ) -> None:
-    """Add a watchlist row for every ATS board a new job's URL points at."""
+    """Add a watchlist row for every ATS board a new job's URL points at.
+
+    `ON CONFLICT DO NOTHING` against the `(user_id, source, board)` unique constraint is the
+    real guard: the in-memory `existing` set only catches a board already on the watchlist when
+    this call started, not one another spec in the same poll (or a concurrent poll) just added.
+    """
     existing = {
         (row.source, row.board) for row in await profile_repo.list_watchlist(session, user_id)
     }
+    rows: list[dict[str, object]] = []
     for job in created:
         match = board_from_url(job.url or "")
         if match is None or match in existing:
             continue
         existing.add(match)
-        session.add(
-            WatchlistEntry(
-                user_id=user_id,
-                company=job.company or match[1],
-                source=match[0],
-                board=match[1],
-                keywords=list(spec.keywords),
-                discovered=True,
-            )
+        rows.append(
+            {
+                "id": new_uuid(),
+                "user_id": user_id,
+                "company": job.company or match[1],
+                "source": match[0],
+                "board": match[1],
+                "keywords": list(spec.keywords),
+                "discovered": True,
+            }
         )
+    if not rows:
+        return
+    await session.execute(
+        pg_insert(WatchlistEntry)
+        .values(rows)
+        .on_conflict_do_nothing(
+            index_elements=[
+                WatchlistEntry.user_id,
+                WatchlistEntry.source,
+                WatchlistEntry.board,
+            ]
+        )
+    )
     await session.flush()
 
 

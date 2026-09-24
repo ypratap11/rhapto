@@ -144,6 +144,9 @@ class LlmSettingsRow(UserScopedMixin, TimestampMixin, Base):
 
 class WatchlistEntry(UserScopedMixin, TimestampMixin, Base):
     __tablename__ = "watchlist"
+    __table_args__ = (
+        UniqueConstraint("user_id", "source", "board", name="uq_watchlist_user_id_source_board"),
+    )
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=new_uuid)
     company: Mapped[str] = mapped_column(String(200), nullable=False)
     source: Mapped[str] = mapped_column(String(50), nullable=False)
@@ -203,7 +206,9 @@ class Job(UserScopedMixin, TimestampMixin, Base):
 
 class Package(UserScopedMixin, TimestampMixin, Base):
     __tablename__ = "packages"
-    __table_args__ = (UniqueConstraint("job_id", "version"),)
+    __table_args__ = (
+        UniqueConstraint("user_id", "job_id", "version", name="uq_packages_user_id_job_id_version"),
+    )
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=new_uuid)
     job_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("jobs.id", ondelete="CASCADE"), index=True, nullable=False
@@ -254,6 +259,11 @@ class Application(UserScopedMixin, TimestampMixin, Base):
         CheckConstraint(
             "closed_reason IS NULL OR status = 'closed'", name="ck_applications_closed_reason"
         ),
+        # A second application for the same job is what fanned out the outer join in
+        # dashboard.needs_review_count and packages.list_packages into a double-count; the
+        # router already checks for one before inserting, but only the database can make it
+        # impossible under a race.
+        UniqueConstraint("user_id", "job_id", name="uq_applications_user_id_job_id"),
     )
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=new_uuid)
     job_id: Mapped[uuid.UUID] = mapped_column(
@@ -298,7 +308,11 @@ class Aggregator(UserScopedMixin, TimestampMixin, Base):
 
 class JobScore(UserScopedMixin, TimestampMixin, Base):
     __tablename__ = "job_scores"
-    __table_args__ = (UniqueConstraint("job_id", "track_id"),)
+    __table_args__ = (
+        UniqueConstraint(
+            "user_id", "job_id", "track_id", name="uq_job_scores_user_id_job_id_track_id"
+        ),
+    )
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=new_uuid)
     job_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("jobs.id", ondelete="CASCADE"), index=True, nullable=False

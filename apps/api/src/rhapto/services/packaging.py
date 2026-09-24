@@ -36,7 +36,7 @@ async def persist_package(
     (the renderer refused the resume) leaves `docx_path` NULL, which `has_docx: false`
     reports faithfully.
     """
-    version = await package_repo.next_version(session, job.id)
+    version = await package_repo.next_version(session, user_id, job.id)
     row = await package_repo.create_package(
         session,
         user_id,

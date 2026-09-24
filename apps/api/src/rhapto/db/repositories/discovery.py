@@ -101,7 +101,9 @@ async def upsert_scores(
 ) -> None:
     existing = {
         s.track_id: s
-        for s in await session.scalars(select(JobScore).where(JobScore.job_id == job.id))
+        for s in await session.scalars(
+            select(JobScore).where(JobScore.user_id == user_id, JobScore.job_id == job.id)
+        )
     }
     now = datetime.now(UTC)
     for track_id, fit, rationale in scores:
