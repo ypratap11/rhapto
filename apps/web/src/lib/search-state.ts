@@ -16,7 +16,7 @@ export type SearchState = {
   sources: string[];
   /** Client-side only: the API has no fit filter, and an unscored job must stay visible. */
   fit: FitFilter;
-  sort: "fit" | "newest";
+  sort: "fit" | "newest" | "relevance";
   hidden: boolean;
   /** 0-based Browse grid page (Task 5b). Omitted from the URL when 0, same as the other defaults. */
   page: number;
@@ -30,7 +30,7 @@ export const DEFAULT_SEARCH_STATE: SearchState = {
   posted_within: "90d",
   sources: [],
   fit: "all",
-  sort: "newest",
+  sort: "relevance",
   hidden: false,
   page: 0,
 };
@@ -90,7 +90,7 @@ export function encodeSearchState(s: SearchState): URLSearchParams {
   if (s.posted_within !== "90d") p.set("posted", s.posted_within);
   if (s.sources.length > 0) p.set("sources", s.sources.join(","));
   if (s.fit !== "all") p.set("fit", s.fit);
-  if (s.sort !== "newest") p.set("sort", s.sort);
+  if (s.sort !== "relevance") p.set("sort", s.sort);
   if (s.hidden) p.set("hidden", "true");
   if (s.page !== 0) p.set("page", String(s.page));
   return p;
@@ -106,7 +106,7 @@ export function decodeSearchState(p: URLSearchParams): SearchState {
     posted_within: pick(p.get("posted"), POSTED, "90d"),
     sources: sources ? sources.split(",").filter(Boolean) : [],
     fit: pick(p.get("fit"), FITS, "all"),
-    sort: p.get("sort") === "fit" ? "fit" : "newest",
+    sort: p.get("sort") === "fit" ? "fit" : p.get("sort") === "newest" ? "newest" : "relevance",
     hidden: p.get("hidden") === "true",
     page: pickPage(p.get("page")),
   };

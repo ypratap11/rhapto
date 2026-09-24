@@ -134,14 +134,83 @@ async def test_default_posted_within_is_90d(
     }
 
 
-async def test_default_sort_is_newest_first(
+async def test_newest_sort_orders_by_posting_date(
     client: httpx.AsyncClient, session_factory: async_sessionmaker[AsyncSession], user_id: uuid.UUID
 ) -> None:
     made = await _seed(session_factory, user_id)
-    # No `sort` on the request -- the endpoint's own default (newest) must apply and order the
-    # (default-90d-windowed) results most-recently-posted first.
-    rows = (await client.get("/api/v1/jobs")).json()
+    rows = (await client.get("/api/v1/jobs?sort=newest")).json()
     assert [j["id"] for j in rows] == [made["fresh"], made["week"], made["old"]]
+
+
+async def _seed_fit_vs_age(
+    session_factory: async_sessionmaker[AsyncSession], user_id: uuid.UUID
+) -> dict[str, str]:
+    """Four jobs where fit and recency actively disagree, so the three sorts give three orders."""
+    async with session_factory() as session:
+        await profile_repo.upsert_track(
+            session,
+            user_id,
+            Track(
+                id="tpm",
+                name="TPM",
+                resume_base="b",
+                min_fit=60,
+                keywords=["tpm"],
+                field="program-project-management",
+                role="technical-program-manager",
+            ),
+        )
+        now = datetime.now(UTC)
+        made: dict[str, str] = {}
+        for key, fit, age_days in [
+            ("today_weak", 60, 0),
+            ("recent_ok", 70, 5),
+            ("older_strong", 90, 30),
+            ("stale_ok", 71, 60),
+        ]:
+            job = await jobs_repo.create_discovered_job(
+                session,
+                user_id,
+                source="themuse",
+                external_id=key,
+                company="ExampleCo",
+                title=f"{key} role",
+                location=None,
+                url=f"https://example.com/{key}",
+                jd_text="x" * 80,
+                posted_at=now - timedelta(days=age_days),
+                identity_hash=f"fa-{key}",
+                repost_of=None,
+                search_id=None,
+            )
+            job.best_track_id = "tpm"
+            job.best_fit = fit
+            made[key] = str(job.id)
+        await session.commit()
+        return made
+
+
+async def test_default_sort_weighs_fit_against_age(
+    client: httpx.AsyncClient, session_factory: async_sessionmaker[AsyncSession], user_id: uuid.UUID
+) -> None:
+    """The default must be neither pure fit nor pure recency, and this seed proves it is neither.
+
+    At 0.2 points per day: today_weak 60, recent_ok 69, older_strong 84, stale_ok 59. So a strong
+    month-old posting still leads (pure recency would bury it last but one), while a marginally
+    better two-month-old one falls behind a fresher weaker one (pure fit would put it second).
+    """
+    made = await _seed_fit_vs_age(session_factory, user_id)
+    rows = [j["id"] for j in (await client.get("/api/v1/jobs")).json()]
+    assert rows == [
+        made["older_strong"],
+        made["recent_ok"],
+        made["today_weak"],
+        made["stale_ok"],
+    ]
+    # And it genuinely differs from both of the sorts it replaces.
+    by_fit = [j["id"] for j in (await client.get("/api/v1/jobs?sort=fit")).json()]
+    by_new = [j["id"] for j in (await client.get("/api/v1/jobs?sort=newest")).json()]
+    assert by_fit != rows and by_new != rows
 
 
 async def test_sources_filter(

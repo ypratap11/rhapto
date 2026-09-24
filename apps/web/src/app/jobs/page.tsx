@@ -17,9 +17,14 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { useJobsQuery, useLiveSearch, useSavedSearches, useSourceSettings, useTaxonomy, useTracks } from "@/lib/api/queries";
+import { fieldsWithTracks } from "@/lib/fields";
 import { decodeSearchState, encodeSearchState, passesFit, type SearchState } from "@/lib/search-state";
 
-const SORT_LABEL: Record<SearchState["sort"], string> = { fit: "Fit", newest: "Newest" };
+const SORT_LABEL: Record<SearchState["sort"], string> = {
+  relevance: "Best match",
+  fit: "Fit",
+  newest: "Newest",
+};
 
 /** Three columns x eight rows at desktop width (Task 5b brief §1). Unlike Recommended Roles, Browse
  * has no page cap — every job the filters match must stay reachable. */
@@ -80,7 +85,15 @@ function JobsPageInner() {
     return map;
   }, [tracksQuery.data]);
 
-  const fields = useMemo(() => (taxonomy.data?.fields ?? []).map((f) => ({ id: f.id, name: f.name })), [taxonomy.data]);
+  // Only fields the user has a track in: the rest can only ever return an empty list.
+  const fields = useMemo(
+    () =>
+      fieldsWithTracks(
+        (taxonomy.data?.fields ?? []).map((f) => ({ id: f.id, name: f.name })),
+        tracksQuery.data,
+      ),
+    [taxonomy.data, tracksQuery.data],
+  );
 
   // Controller ruling: FilterChips takes { source, label }, but SourceSettingOut names the field
   // `id`, not `source` — mapped here rather than changing FilterChips's decoupled prop shape.
@@ -140,9 +153,12 @@ function JobsPageInner() {
         <div className="flex flex-wrap items-center gap-4">
           <Select value={state.sort} onValueChange={(v) => v && updateState({ ...state, sort: v as SearchState["sort"] })}>
             <SelectTrigger aria-label="Sort" size="sm">
-              <SelectValue>{(v: string | null) => SORT_LABEL[(v as SearchState["sort"]) ?? "fit"]}</SelectValue>
+              <SelectValue>{(v: string | null) => SORT_LABEL[(v as SearchState["sort"]) ?? "relevance"]}</SelectValue>
             </SelectTrigger>
             <SelectContent>
+              {/* Default: fit decayed by age, so a strong match posted today leads a stronger
+                  one from three months ago. "Fit" and "Newest" remain for either alone. */}
+              <SelectItem value="relevance">Best match</SelectItem>
               <SelectItem value="fit">Fit</SelectItem>
               <SelectItem value="newest">Newest</SelectItem>
             </SelectContent>

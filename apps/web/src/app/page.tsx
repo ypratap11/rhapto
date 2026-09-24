@@ -12,6 +12,7 @@ import { SearchForm } from "@/components/jobs/SearchForm";
 import { ApiErrorBanner } from "@/components/shell/ApiErrorBanner";
 import { HeroBand } from "@/components/shell/HeroBand";
 import { useDashboard, useTaxonomy, useTracks } from "@/lib/api/queries";
+import { fieldsWithTracks } from "@/lib/fields";
 import { DEFAULT_SEARCH_STATE, encodeSearchState, type SearchState } from "@/lib/search-state";
 
 // Layout: hero band, then a two-column body — 2fr of work, 1fr of context (spec §3.1). No
@@ -29,7 +30,15 @@ export default function DashboardPage() {
     return map;
   }, [tracksQuery.data]);
 
-  const fields = useMemo(() => (taxonomy.data?.fields ?? []).map((f) => ({ id: f.id, name: f.name })), [taxonomy.data]);
+  // Only fields the user has a track in: the rest can only ever return an empty list.
+  const fields = useMemo(
+    () =>
+      fieldsWithTracks(
+        (taxonomy.data?.fields ?? []).map((f) => ({ id: f.id, name: f.name })),
+        tracksQuery.data,
+      ),
+    [taxonomy.data, tracksQuery.data],
+  );
 
   // A settled error (`dashboard.error`) isn't the only way this call never produces data: with no
   // network reachable, TanStack Query v5's default `networkMode: "online"` parks the query in

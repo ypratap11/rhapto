@@ -214,7 +214,7 @@ async def list_jobs(
     track: str | None = Query(default=None),
     bucket: Literal["fit", "low"] | None = Query(default=None),
     region: Literal["preferred", "us", "any"] = Query(default="any"),
-    sort: Literal["fit", "newest"] = Query(default="newest"),
+    sort: Literal["fit", "newest", "relevance"] = Query(default="relevance"),
     ids: str | None = Query(default=None, description="comma-separated job ids, at most 200"),
     hidden: bool = Query(default=False, description="show only hidden jobs"),
     search_id: Annotated[uuid.UUID | None, Query()] = None,

@@ -52,6 +52,13 @@ async def find_duplicate(
 #: How far back each `posted_within` value reaches.
 POSTED_WITHIN_DAYS = {"24h": 1, "7d": 7, "30d": 30, "90d": 90}
 
+#: `sort="relevance"` subtracts this many fit points per day of age, capped. 0.2/day over a 90-day
+#: cap costs an old posting at most 18 points -- enough that a fresh 60 outranks a stale 70, and
+#: small enough that a genuinely strong old match is not buried by a weak new one. The cap matters:
+#: without it the oldest rows sort below jobs with no score at all.
+RECENCY_DECAY = 0.2
+RECENCY_DECAY_CAP_DAYS = 90.0
+
 
 async def list_jobs(
     session: AsyncSession,
@@ -142,7 +149,26 @@ async def list_jobs(
         )  # unscored jobs stay visible
     elif bucket == "low":
         query = query.where(Job.best_fit.is_not(None), not_(fit_condition))
-    if sort == "newest":
+    if sort == "relevance":
+        # Fit and recency together, because either alone is wrong: sorting by fit buries a strong
+        # match posted today under one from three months ago, and sorting by date buries the job
+        # worth applying to under fifty that are not. Fit decays with age rather than being
+        # bucketed, so a great older posting can still outrank a mediocre new one instead of being
+        # cut off at an arbitrary boundary.
+        age_days = (
+            func.extract("epoch", func.now() - func.coalesce(Job.posted_at, Job.discovered_at))
+            / 86400.0
+        )
+        decayed = Job.best_fit - func.least(age_days, RECENCY_DECAY_CAP_DAYS) * RECENCY_DECAY
+        # Recency breaks ties AND orders the unscored. A job with no `best_fit` yet decays to NULL
+        # and sorts last; without this second key those rows would fall through to `Job.id`, which
+        # is a random UUID -- so a freshly added job could land anywhere among its peers.
+        query = query.order_by(
+            nulls_last(decayed.desc()),
+            func.coalesce(Job.posted_at, Job.discovered_at).desc(),
+            Job.id,
+        )
+    elif sort == "newest":
         # A posting with its own date sorts by that; a manual or dateless one falls back to when
         # Rhapto discovered it -- the same coalesce `posted_within` judges recency by above.
         query = query.order_by(
