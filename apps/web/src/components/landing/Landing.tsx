@@ -103,6 +103,36 @@ export function Landing() {
         </div>
       </HeroBand>
 
+      {/* The human reason, before any mechanism. Everything below this explains HOW Rhapto works;
+          without this, nothing on the page says why it should exist. Deliberately prose in a single
+          block rather than the card grids used elsewhere -- it is meant to be read, not scanned. */}
+      <section aria-labelledby="why-this" className="mb-12">
+        <div className="rounded-card border-l-4 border-primary bg-surface-muted px-6 py-6 sm:px-8 sm:py-7">
+          <h2 id="why-this" className="font-heading text-2xl font-medium">
+            Why this exists
+          </h2>
+          <div className="mt-3 max-w-3xl space-y-3 text-base leading-relaxed text-muted-foreground">
+            <p>
+              Looking for work is tedious in a way that wears people down. The same job description
+              read for the fourth time. The same bullet rewritten to match slightly different words.
+              Evenings spent on applications that go nowhere, with no way to tell which ones were
+              worth it.
+            </p>
+            <p>
+              Most of that effort is real work — a resume genuinely should match the role it is sent
+              to. It just should not cost you an evening every time.
+            </p>
+            <p>
+              Rhapto takes that weight off. It finds the roles worth your time and writes a resume
+              that is true to what you have actually done. It will not apply on your behalf, and it
+              will not invent anything to make you look better — it refuses to do either. What is
+              left is the part that needs a person: deciding where to apply, and what to say when
+              someone answers.
+            </p>
+          </div>
+        </div>
+      </section>
+
       <section aria-labelledby="why" className="mb-12">
         <h2 id="why" className="font-heading text-2xl font-medium">
           Why not just ask a chatbot?
