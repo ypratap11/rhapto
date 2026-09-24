@@ -4,7 +4,7 @@
 
 **Goal:** Store each job posting once, shared by every user, with everything derived from it — fit, hiding, search attribution — kept per user.
 
-**Architecture:** `jobs` loses `user_id` and its six per-user columns and gains `owner_user_id` (NULL = pool, set = a private manual paste). A new sparse `user_jobs` table carries per-user state; a row exists only when a user has state for that job. `job_scores` is unchanged — it already keys on `(user_id, job_id, track_id)`. The jobs list becomes `jobs LEFT JOIN user_jobs LEFT JOIN searches`.
+**Architecture:** `jobs` loses `user_id` and its six per-user columns and gains `owner_user_id` (NULL = pool, set = a private manual paste). A new **dense** `user_jobs` table carries per-user state — one row per (user, job) the user can see — so every read is an INNER JOIN and membership itself is the visibility rule. `job_scores` is unchanged; it already keys on `(user_id, job_id, track_id)`.
 
 **Tech Stack:** Python 3.12, SQLAlchemy 2 async, Alembic, Postgres 16 + pgvector, pytest.
 
@@ -105,8 +105,14 @@ Add after `Job`:
 
 ```python
 class UserJob(UserScopedMixin, TimestampMixin, Base):
-    """One user's state for one posting. Sparse: a row exists only once there is state to keep,
-    so the common case -- a pool job nobody has touched -- costs nothing."""
+    """One user's state for one posting, one row per (user, job) they can see.
+
+    Dense, not sparse. A sparse table would store fewer rows but force every read through a LEFT
+    JOIN whose `user_id` predicate must stay in the ON clause -- move it to WHERE and the outer
+    join silently becomes inner, emptying the whole list. Dense keeps reads an inner join, and the
+    row is narrow enough (no jd_text, no embedding, no extract) that the storage is a rounding
+    error. It also means a private posting simply has no row for anyone but its owner, so reads
+    need no ownership predicate at all."""
 
     __tablename__ = "user_jobs"
     job_id: Mapped[uuid.UUID] = mapped_column(
@@ -234,6 +240,8 @@ git commit -m "feat(db): split jobs into a shared pool and per-user state"
   - `async def get_state(session, user_id: uuid.UUID, job_id: uuid.UUID) -> UserJob | None`
   - `async def upsert_state(session, user_id: uuid.UUID, job_id: uuid.UUID, **fields) -> UserJob` — creates the row if absent, sets only the keyword fields given.
   - `async def set_best(session, user_id: uuid.UUID, job_id: uuid.UUID, track_id: str | None, fit: int | None) -> None`
+  - `async def fan_out(session, job_id: uuid.UUID, *, search_id: uuid.UUID | None = None, finder_user_id: uuid.UUID | None = None) -> None` — create the missing `user_jobs` row for every user, setting `search_id` only on the finder's row. Used when a pool posting is ingested.
+  - `async def backfill_user(session, user_id: uuid.UUID) -> int` — create the missing rows for one user across the whole pool, returning how many. Used by a new account (Phase 2) and by the migration's verification.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -284,9 +292,10 @@ Expected: FAIL with `ModuleNotFoundError: rhapto.db.repositories.user_jobs`
 # apps/api/src/rhapto/db/repositories/user_jobs.py
 """One user's state for one posting.
 
-Sparse by design: no row until there is something to remember, so the common case -- a pool job
-nobody has hidden, scored or found through a saved search -- costs nothing. Every write is an
-upsert for that reason; a caller can never assume the row is already there.
+Dense: a row per (user, job) the user can see, created when a posting is ingested or when a new
+account backfills the pool. Writes are still upserts -- ingest and scoring race, and neither can
+assume the other got there first -- and each write sets only the fields it owns, so scoring never
+erases a user's "not interested" and hiding never erases their score.
 """
 
 from __future__ import annotations
@@ -504,22 +513,18 @@ Replace the `tracks` subquery and `select(...)` at the top of `list_jobs` with:
 
 ```python
     tracks = select(Track.track_id, Track.min_fit).where(Track.user_id == user_id).subquery()
-    state = (
-        select(UserJob)
-        .where(UserJob.user_id == user_id)
-        .subquery()
-    )
     query = (
         select(Job, SearchRow.name, UserJob)
-        .outerjoin(UserJob, (UserJob.job_id == Job.id) & (UserJob.user_id == user_id))
+        # INNER join: a user_jobs row exists for exactly the postings this user can see, so
+        # membership IS the visibility rule and no owner_user_id predicate is needed here.
+        .join(UserJob, UserJob.job_id == Job.id)
+        .where(UserJob.user_id == user_id)
         .outerjoin(tracks, tracks.c.track_id == UserJob.best_track_id)
         .outerjoin(SearchRow, SearchRow.id == UserJob.search_id)
-        # The pool is everyone's; an owned row is only its owner's.
-        .where(or_(Job.owner_user_id.is_(None), Job.owner_user_id == user_id))
     )
 ```
 
-Then, throughout the body, replace `Job.best_fit` with `UserJob.best_fit`, `Job.best_track_id` with `UserJob.best_track_id`, `Job.hidden_at` with `UserJob.hidden_at`, `Job.rescued` with `UserJob.rescued` and `Job.search_id` with `UserJob.search_id`. The `hidden` filter becomes `UserJob.hidden_at.is_not(None)` / `UserJob.hidden_at.is_(None)` — and because the join is outer, "not hidden" must also accept a missing row: `or_(UserJob.hidden_at.is_(None), UserJob.user_id.is_(None))`.
+Then, throughout the body, replace `Job.best_fit` with `UserJob.best_fit`, `Job.best_track_id` with `UserJob.best_track_id`, `Job.hidden_at` with `UserJob.hidden_at`, `Job.rescued` with `UserJob.rescued` and `Job.search_id` with `UserJob.search_id`. Because the join is inner, these are plain substitutions with no NULL handling: `hidden` is `UserJob.hidden_at.is_not(None)` and "not hidden" is `UserJob.hidden_at.is_(None)`, exactly as they read against `Job` today.
 
 Change the return to `return [(job, name, st) for job, name, st in (await session.execute(query)).all()]`.
 
@@ -696,7 +701,31 @@ async def upsert_pool_job(
     return job
 ```
 
-In `poller._ingest`, call `upsert_pool_job` for the posting and then `user_jobs.upsert_state(session, user_id, job.id, search_id=..., first_seen_at=now)` for the user whose search or watchlist found it.
+In `poller._ingest`, call `upsert_pool_job` for the posting, then `user_jobs.fan_out(session, job.id, search_id=search_id, finder_user_id=user_id)`. Fan-out is what makes the pool visible: without a row the posting exists but nobody sees it. Only the finder's row carries `search_id`, because "this came from your Platform search" is true for one user and false for everyone else.
+
+```python
+async def fan_out(
+    session: AsyncSession, job_id: uuid.UUID, *, search_id: uuid.UUID | None = None,
+    finder_user_id: uuid.UUID | None = None,
+) -> None:
+    existing = set(
+        (await session.scalars(
+            select(UserJob.user_id).where(UserJob.job_id == job_id)
+        )).all()
+    )
+    for uid in await list_user_ids(session):
+        if uid in existing:
+            continue
+        session.add(
+            UserJob(
+                user_id=uid,
+                job_id=job_id,
+                first_seen_at=datetime.now(UTC),
+                search_id=search_id if uid == finder_user_id else None,
+            )
+        )
+    await session.flush()
+```
 
 - [ ] **Step 4: Run the tests**
 

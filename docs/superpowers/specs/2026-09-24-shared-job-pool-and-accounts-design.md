@@ -70,15 +70,33 @@ Only six columns move. `job_scores` already holds what most of them represent â€
 
 - `owner_user_id UUID NULL` â€” `NULL` means pool; set means private to that user.
 
-`user_jobs` is new and **sparse**: a row exists only when a user has state for that job.
+`user_jobs` is new and **dense**: one row per (user, job) for every posting that user can see.
 
 ```
-user_jobs(user_id, job_id, hidden_at, rescued, search_id, first_seen_at)
+user_jobs(user_id, job_id, best_fit, best_track_id, search_id, hidden_at, rescued, first_seen_at)
   primary key (user_id, job_id)
 ```
 
-Most jobs need no row. The list query becomes
-`jobs LEFT JOIN user_jobs LEFT JOIN job_scores`.
+Dense rather than sparse, deliberately. A sparse table -- a row only once a user has touched a job
+-- stores fewer rows but forces every read through a LEFT JOIN with NULL semantics, where moving
+the `user_id` predicate out of the ON clause and into the WHERE clause silently turns it into an
+inner join and empties the entire job list. Dense keeps every read an **inner join**: harder to get
+wrong, and a better plan, because it filters the narrow table by an indexed `user_id` and then
+joins to `jobs` by primary key. It also makes the change mechanical -- every query that says
+`Job.user_id == user_id` today says `UserJob.user_id == user_id` after, and the rest of the filter
+logic is untouched.
+
+The cost is rows, and it is a rounding error: the state row carries no `jd_text`, no embedding and
+no extract, so 1,430 jobs across 100 users is ~143,000 rows and roughly 14 MB. What sharing
+protects is the heavy columns, and those stay shared either way.
+
+**Membership is the visibility rule.** Because a row exists only for jobs a user can see, read
+queries need no `owner_user_id` predicate at all: a private manual paste simply never gets a row
+for anyone but its owner. `owner_user_id` stays on `jobs` and is consulted at *write* time, when
+deciding whether to fan a posting out to everyone or to one person.
+
+The remaining cost is write-side and bounded: ingesting a posting fans out to one narrow insert per
+user, and a new account backfills rows for the existing pool.
 
 `job_scores` is unchanged: it already keys on `(user_id, job_id, track_id)`.
 
