@@ -17,6 +17,6 @@ async def extract(jd_text: str, llm: LLMProvider) -> tuple[JDExtract, TokenUsage
             )
         ],
         output_schema=JDExtract,
-        max_tokens=2048,
+        max_tokens=8192,  # headroom for a model that reasons before answering
     )
     return result.value, result.usage

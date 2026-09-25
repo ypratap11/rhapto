@@ -20,6 +20,17 @@ from rhapto.models.resume_document import (
     ResumeSection,
 )
 
+#: Output ceiling for the compose call. This is a CAP, not a reservation -- a run is billed for the
+#: tokens it actually produces -- so the only cost of headroom is a longer worst case.
+#:
+#: 8192 was enough for a model that answers directly (Opus composes a full resume in about 8k), and
+#: too small for one that reasons first: a reasoning model spends part of the same budget thinking,
+#: then runs out mid-document and fails as MalformedOutputError. That ruled out an entire class of
+#: cheap models -- Gemini 3.8 Flash is a third of Haiku's price -- for a reason that had nothing to
+#: do with their ability to do the work.
+COMPOSE_MAX_TOKENS = 24576
+
+
 HEADER_KEYS = frozenset({"name", "email", "phone", "location", "links"})
 
 
@@ -128,7 +139,7 @@ async def compose(
             )
         ],
         output_schema=ComposeOutput,
-        max_tokens=8192,
+        max_tokens=COMPOSE_MAX_TOKENS,
     )
     return result.value, result.usage
 
