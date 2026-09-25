@@ -125,8 +125,8 @@ async function ensureFixtureResumeDocument() {
  * screenshot renders the AI-provider section, and `GET /settings/llm`'s `key_hint` is the last
  * four characters of whatever key resolved — a stored row, or (just as leaky, and easy to forget)
  * the deployment's own `.env` key via the env fallback (`services/llm.py`'s `env_llm_config`).
- * Four characters of a real key is a real secret fragment once it is a PNG committed to an
- * AGPL-3.0 repo's docs/, so this checks the same way `assertExampleProfile` does: fail loudly
+ * Four characters of a real key is a real secret fragment once it is a PNG committed to a
+ * public repo's docs/, so this checks the same way `assertExampleProfile` does: fail loudly
  * before anything is captured, not just warn. There is no in-script fix — clear the key (stored
  * row and/or environment) or point this script at a stack where no provider key resolves at all,
  * e.g. one running the deterministic fake provider with nothing else configured. */

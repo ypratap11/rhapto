@@ -18,7 +18,14 @@ fact you own, guardrails block invented metrics, and quality beats volume.
 - Product docs: [`docs/product/`](docs/product/overview.md) — what Rhapto is, the concepts, the flow, the sources, privacy
 - User guide: [`docs/user-guide/`](docs/user-guide/getting-started.md) — install, first search, tailor, review, apply
 
-License: AGPL-3.0-only
+## License
+
+AGPL-3.0-only — see [`LICENSE`](LICENSE).
+
+Run it for yourself and this costs you nothing: the AGPL's obligations attach to
+*distributing* Rhapto or *offering it to others over a network*, not to using it. If you do
+either of those, you must offer your users the corresponding source of your version, under
+this same licence.
 
 ## Quick start (CLI, phase 0.1)
 

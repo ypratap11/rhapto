@@ -73,7 +73,10 @@ An open-source tool that watches job boards, classifies each role against the us
 - **NFR-3 Scalability**: poller and tailoring run as async workers off a queue; a single user needs one worker, but architecture supports multi-user hosted deployment later (row-level tenancy from day one: every table keyed by `user_id`).
 - **NFR-4 Cost control**: tailoring only on user request or above fit threshold; token budget per day configurable; prompt caching for the static resume-block context.
 - **NFR-5 Testability**: golden-set tests — 20 sample JDs with expected track classification; guardrail unit tests (inject a fabricated metric → must be caught).
-- **NFR-6 License**: AGPL-3.0-only (copyleft, network clause; a closed fork cannot quietly remove the guardrails).
+- **NFR-6 License**: AGPL-3.0-only (copyleft, network clause). Chosen so that anyone who offers
+  Rhapto to others over a network must publish their modifications under the same terms — the
+  truthfulness guarantee is the product, and a closed fork could quietly remove it. Using or
+  self-hosting it for yourself carries no obligation.
 
 ---
 
