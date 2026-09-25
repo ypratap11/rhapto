@@ -108,6 +108,8 @@ not change).
 - Modify: `apps/api/src/rhapto/api/schemas.py` (`MeOut.auth_mode`)
 - Modify: `apps/api/src/rhapto/api/routers/meta.py` (`me()` returns `auth_mode`)
 - Modify: `packages/schemas/openapi.json`, `apps/web/src/lib/api/schema.d.ts` (regenerated, Step 11)
+- Modify: `apps/web/src/components/jobs/TailorButton.test.tsx` (two `MeOut` literals gain `auth_mode`
+  — re-review finding 1, `pnpm typecheck` would otherwise fail)
 - Test: `apps/api/tests/api/test_auth_principal.py`
 - Test: `apps/api/tests/db/test_migrations_0011.py`
 - Test: `apps/api/tests/api/test_meta.py` (extend, one new test)
@@ -148,8 +150,13 @@ not change).
 # apps/api/tests/db/test_migrations_0011.py
 from __future__ import annotations
 
-from sqlalchemy import inspect
+import os
+import uuid
+
+from sqlalchemy import inspect, text
 from sqlalchemy.ext.asyncio import AsyncEngine
+
+from rhapto.db.session import make_engine
 
 
 async def test_0011_adds_user_lifecycle_columns(engine: AsyncEngine) -> None:
@@ -165,14 +172,91 @@ async def test_0011_adds_user_lifecycle_columns(engine: AsyncEngine) -> None:
         cols, uniques = await conn.run_sync(inspect_users)
     assert {"idp_subject", "last_seen_at", "exempt_from_pruning", "seeded_at"} <= cols
     assert ("idp_subject",) in uniques
+
+
+async def test_0011_backfills_seeded_at_for_pre_existing_rows() -> None:
+    """This is the specific assertion that stops Task 5's bootstrap endpoint from running a
+    backfill over the owner's live account: migration 0011 must not just add `seeded_at`, it must
+    stamp every row that existed before it ran, so `seeded_at IS NULL` never means "the owner,
+    pre-migration" -- only "a genuinely new account". The shared `migrated_db` fixture upgrades
+    straight to head and can't exercise "insert a row, then run 0011", so this test drives Alembic
+    against its own scratch database: create it, upgrade to 0010, insert a row directly, upgrade to
+    0011, assert its seeded_at is no longer NULL, then drop the scratch database. Verified against
+    the actual migration file, not assumed: `0011_user_lifecycle_columns.py`'s `upgrade()` ends with
+    exactly `UPDATE users SET seeded_at = now() WHERE seeded_at IS NULL` (Step 3, this task).
+    """
+    import asyncpg
+
+    from alembic.config import Config
+
+    from alembic import command
+
+    base_url = os.environ.get("RHAPTO_TEST_DATABASE_URL", DEFAULT_TEST_URL)
+    admin_dsn = _dsn(base_url).rsplit("/", 1)[0] + "/postgres"
+    scratch_name = f"rhapto_test_0011_backfill_{uuid.uuid4().hex[:8]}"
+    scratch_url_asyncpg = _dsn(base_url).rsplit("/", 1)[0] + f"/{scratch_name}"
+    scratch_url = base_url.rsplit("/", 1)[0] + f"/{scratch_name}"
+
+    admin = await asyncpg.connect(admin_dsn)
+    try:
+        await admin.execute(f'CREATE DATABASE "{scratch_name}"')
+    finally:
+        await admin.close()
+
+    try:
+        cfg = Config(str(API_DIR / "alembic.ini"))
+        os.environ["DATABASE_URL"] = scratch_url
+        command.upgrade(cfg, "0010")
+
+        scratch_engine = make_engine(scratch_url)
+        pre_existing_id = uuid.uuid4()
+        try:
+            async with scratch_engine.begin() as conn:
+                await conn.execute(
+                    text(
+                        "INSERT INTO users (id, email, settings_json, created_at, updated_at) "
+                        "VALUES (:id, :email, '{}'::jsonb, now(), now())"
+                    ),
+                    {"id": str(pre_existing_id), "email": "owner-pre-0011@example.com"},
+                )
+            command.upgrade(cfg, "0011")
+            async with scratch_engine.connect() as conn:
+                row = (
+                    await conn.execute(
+                        text("SELECT seeded_at FROM users WHERE id = :id"),
+                        {"id": str(pre_existing_id)},
+                    )
+                ).first()
+            assert row is not None
+            assert row[0] is not None
+        finally:
+            await scratch_engine.dispose()
+    finally:
+        admin = await asyncpg.connect(admin_dsn)
+        try:
+            await admin.execute(f'DROP DATABASE IF EXISTS "{scratch_name}" WITH (FORCE)')
+        finally:
+            await admin.close()
+        os.environ["DATABASE_URL"] = _dsn(base_url).replace("postgresql://", "postgresql+asyncpg://")
 ```
+
+`_dsn` and `DEFAULT_TEST_URL` mirror the helpers already in `apps/api/tests/conftest.py` (same
+`postgresql+asyncpg://` ↔ `postgresql://` conversion, same env var); import them from there
+(`from conftest import _dsn, DEFAULT_TEST_URL`) rather than duplicating the logic, if the test
+runner's import layout allows it — `apps/api/tests/` has no top-level package `__init__.py`
+(verified), so `tests/db/` importing a name from the root `tests/conftest.py` module needs
+`pythonpath = ["tests", "tests/unit"]` (already set in `pyproject.toml`) to resolve `conftest` as a
+bare module; confirm this resolves before relying on it, and inline the two-line helpers locally in
+this test file otherwise.
 
 - [ ] **Step 2: Run it to see it fail**
 
 Run (from `apps/api`): `pytest tests/db/test_migrations_0011.py -v`
-Expected: FAIL — `migrated_db` fixture upgrades to `head`, which is still `0010`; the new columns
-don't exist, so the `assert` fails (or `command.upgrade` errors if the file is entirely absent —
-either way, not a pass).
+Expected: FAIL on both tests — `migrated_db` fixture upgrades to `head`, which is still `0010`, so
+`test_0011_adds_user_lifecycle_columns`'s columns don't exist; `test_0011_backfills_seeded_at_for_pre_existing_rows`
+fails at `command.upgrade(cfg, "0010")` finding no such revision file, or at the later `0011` upgrade
+finding no `seeded_at` column to select (or `command.upgrade` errors outright if the migration file
+is entirely absent — either way, not a pass).
 
 - [ ] **Step 3: Write the migration**
 
@@ -231,6 +315,13 @@ def upgrade() -> None:
         ),
     )
     op.add_column("users", sa.Column("seeded_at", sa.DateTime(timezone=True), nullable=True))
+    # Fixes re-review finding 5: without this, every pre-existing row (the owner's account, on
+    # this branch) has seeded_at IS NULL, and Task 5's POST /me/bootstrap treats NULL as "not yet
+    # seeded" -- so the owner's first authenticated request after this migration would run
+    # backfill_public_jobs *against his own account*, an unplanned write to exactly the data AC 15
+    # exists to protect. Backfilling every existing row to "already seeded" is correct: an
+    # already-populated account has nothing this backfill would add anyway.
+    op.execute("UPDATE users SET seeded_at = now() WHERE seeded_at IS NULL")
 
 
 def downgrade() -> None:
@@ -250,7 +341,8 @@ apps/api/alembic/versions/__pycache__/0010_shared_job_pool.cpython-312.pyc` if t
 - [ ] **Step 4: Run the migration test again**
 
 Run: `pytest tests/db/test_migrations_0011.py -v`
-Expected: PASS.
+Expected: both `test_0011_adds_user_lifecycle_columns` and
+`test_0011_backfills_seeded_at_for_pre_existing_rows` PASS.
 
 - [ ] **Step 5: Add the columns to the ORM model**
 
@@ -461,6 +553,24 @@ Both files are committed as part of this task (Step 14), so `apps/web`'s `MeOut`
 `apps/web/src/lib/api/queries.ts:37`, `export type MeOut = Schemas["MeOut"]`) picks up `auth_mode`
 before Task 2 needs it.
 
+**Fixes re-review breakage item 1 — `MeOut` becoming stricter breaks `apps/web`'s typecheck.**
+`apps/web/src/components/jobs/TailorButton.test.tsx:16` declares `let meData: MeOut | undefined`, and
+two literals build it without the new field: line 72
+(`meData = { user_id: "u1", email: "dev@example.com", llm_configured: true }`) and line 245 (the same
+shape with `llm_configured: false`). `apps/web/tsconfig.json` includes `**/*.tsx` and excludes only
+`node_modules`, so `pnpm typecheck` type-checks test files too — once `auth_mode` is required, both
+literals fail `tsc --noEmit`. Fix both in this task:
+
+```typescript
+// apps/web/src/components/jobs/TailorButton.test.tsx:72 and :245 — add auth_mode to both literals
+meData = { user_id: "u1", email: "dev@example.com", llm_configured: true, auth_mode: "token" };
+// ...and, at line 245:
+meData = { user_id: "u1", email: "dev@example.com", llm_configured: false, auth_mode: "token" };
+```
+
+(Task 6 adds `deletion_due_at` to `MeOut` and must extend these same two literals again — noted in
+Task 6's own steps.)
+
 - [ ] **Step 12: Run the full existing auth suite plus the new tests**
 
 Run: `pytest tests/api/test_meta.py tests/api/test_auth_principal.py -v`
@@ -479,6 +589,9 @@ typed; `Annotated[Principal, Depends(resolve_principal)]` matches the pattern
 `Annotated[uuid.UUID, Depends(current_user)]` already used throughout the routers; `_state`'s
 `# type: ignore[no-any-return]` is the only suppressed check in this task, scoped to the one line
 that reads an untyped `Starlette` `State` attribute).
+Run (from `apps/web`): `pnpm typecheck` — expect green, including `TailorButton.test.tsx` after
+Step 11's two-literal fix. This task commits `schema.d.ts`, so this is the first task where an
+`apps/web` typecheck is part of its own gate, not just a later web-touching task's.
 
 - [ ] **Step 14: Commit**
 
@@ -488,6 +601,7 @@ git add apps/api/src/rhapto/api/auth.py apps/api/src/rhapto/api/deps.py \
   apps/api/src/rhapto/api/schemas.py apps/api/src/rhapto/api/routers/meta.py \
   apps/api/alembic/versions/0011_user_lifecycle_columns.py \
   packages/schemas/openapi.json apps/web/src/lib/api/schema.d.ts \
+  apps/web/src/components/jobs/TailorButton.test.tsx \
   apps/api/tests/api/test_auth_principal.py apps/api/tests/api/test_meta.py \
   apps/api/tests/db/test_migrations_0011.py
 git commit -m "$(cat <<'EOF'
@@ -498,8 +612,11 @@ is touched. token mode is re-expressed on top of the new Principal type with byt
 behaviour (same compare_digest check, same 401/503 bodies). access mode is a defined 501 stub,
 replaced by Task 3. auth.py reads request.app.state.rhapto directly instead of importing deps.get_state,
 so the two modules do not import each other (plan-review C1). Migration 0011 adds users.idp_subject,
-users.last_seen_at, users.exempt_from_pruning and users.seeded_at -- additive, no reader changes yet.
-MeOut gains auth_mode so the web app (Task 2) can tell modes apart.
+users.last_seen_at, users.exempt_from_pruning and users.seeded_at -- additive, and backfills
+seeded_at on every pre-existing row so Task 5's bootstrap endpoint never runs against the owner's
+own account (re-review finding 5). MeOut gains auth_mode so the web app (Task 2) can tell modes
+apart; TailorButton.test.tsx's two MeOut literals updated so apps/web's typecheck stays green
+(re-review finding 1).
 
 Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_013CTBNZrgo9dpYW6vRs2TC2
@@ -526,7 +643,7 @@ of how they were found:
 - **C3 — `TokenGate` gated every route on a `localStorage` bearer token that access-mode users never
   have.** Verified: `apps/web/src/components/shell/TokenGate.tsx:22-24,32-41` — `hasToken()` is the
   only signal it reads. An invited person authenticated by Cloudflare would see the landing page or
-  the "Connect to your Rhapto API" card forever. Fixed in Step 6-8 by making `TokenGate` unlock on
+  the "Connect to your Rhapto API" card forever. Fixed in Steps 12-13 by making `TokenGate` unlock on
   `useMe()` succeeding when the deployment is same-origin (access mode), and leaving the existing
   token-mode gate untouched otherwise.
 - **I4 — the planned `localStorage` namespacing targeted dead code.** Verified: `apps/web/src/lib/skipped.ts`
@@ -811,7 +928,10 @@ describe("api proxy route", () => {
     });
     const response = await GET(request, { params: Promise.resolve({ path: ["health"] }) });
     expect(response.status).toBe(200);
-    const forwardedHeaders = fetchSpy.mock.calls[0][1]?.headers as Headers;
+    // fetchSpy.mock.calls[0] is `unknown[] | undefined` under noUncheckedIndexedAccess
+    // (tsconfig.json:8) -- chain the optional access rather than indexing calls[0] directly
+    // (re-review breakage item 4).
+    const forwardedHeaders = fetchSpy.mock.calls[0]?.[1]?.headers as Headers;
     expect(forwardedHeaders.get("Cf-Access-Jwt-Assertion")).toBe("edge-issued-token");
     expect(forwardedHeaders.has("authorization")).toBe(false);
     fetchSpy.mockRestore();
@@ -938,15 +1058,26 @@ export function TokenGate({ children }: { children: React.ReactNode }) {
 `@/lib/api/queries` so token-mode tests (which never consult `useMe`'s value) don't need a real
 network call, then add the access-mode cases:
 
+**Fixes re-review breakage item 8.** Reassigning a property directly on a `vi.mock`-returned ESM
+namespace object is read-only in several vitest/module-registry versions, which would leave the
+coder to discover which fallback compiles. Use a mutable flag the mock factory closes over instead —
+deterministic in every vitest version, no reassignment of the mocked namespace itself:
+
 ```typescript
 // apps/web/src/components/shell/TokenGate.test.tsx — additions at the top of the file
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { vi } from "vitest";
 
-vi.mock("@/lib/api/client", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@/lib/api/client")>()),
-  SAME_ORIGIN_DEPLOYMENT: false,
-}));
+const sameOriginFlag = { value: false };
+vi.mock("@/lib/api/client", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/api/client")>();
+  return {
+    ...actual,
+    get SAME_ORIGIN_DEPLOYMENT() {
+      return sameOriginFlag.value;
+    },
+  };
+});
 vi.mock("@/lib/api/queries", () => ({ useMe: vi.fn(() => ({ isPending: true, isSuccess: false })) }));
 
 function renderGate(children: React.ReactNode) {
@@ -956,21 +1087,20 @@ function renderGate(children: React.ReactNode) {
 ```
 
 Every existing `render(<TokenGate>...)` call in this file becomes `renderGate(<TokenGate>...)`; their
-assertions are otherwise unchanged, since `vi.mock("@/lib/api/client", ...)` pins
-`SAME_ORIGIN_DEPLOYMENT` to `false` for all of them, exercising the same token-mode branch they always
-did. Add a new `describe` block for the access-mode branch, overriding both mocks per test:
+assertions are otherwise unchanged, since `sameOriginFlag.value` starts `false`, exercising the same
+token-mode branch they always did. Add a new `describe` block for the access-mode branch, flipping the
+flag rather than the mocked module:
 
 ```typescript
 // apps/web/src/components/shell/TokenGate.test.tsx — new describe block
 import { useMe } from "@/lib/api/queries";
-import * as clientModule from "@/lib/api/client";
 
 describe("TokenGate in access mode", () => {
   beforeEach(() => {
-    vi.mocked(clientModule).SAME_ORIGIN_DEPLOYMENT = true;
+    sameOriginFlag.value = true;
   });
   afterEach(() => {
-    vi.mocked(clientModule).SAME_ORIGIN_DEPLOYMENT = false;
+    sameOriginFlag.value = false;
   });
 
   it("renders nothing while /me is pending", () => {
@@ -1074,7 +1204,9 @@ is already present and is what `pyjwt[crypto]` uses for RS256).
 - Test: `apps/api/tests/api/test_access_mode.py`
 - Test: `apps/api/tests/unit/test_accounts_set_email.py` (not `tests/cli/`, which does not exist —
   plan-review I11)
-- Test: `apps/api/tests/unit/test_users_repo.py` (extend; concurrent get-or-create regression)
+- Test: concurrent get-or-create regression, added to whichever existing `tests/unit/`/`tests/db/`
+  module already covers `get_or_create_user` (grep for it first — no `test_users_repo.py` exists
+  today; re-review item 9)
 
 **Interfaces:**
 - Consumes: `Principal`/`resolve_principal` (Task 1), `Settings.rhapto_auth_mode` (Task 1),
@@ -1397,12 +1529,28 @@ to the `fastapi` import, as in Task 1 Step 8.)
 
 - [ ] **Step 10: Suppress the token-mode bootstrap and add the startup assertion**
 
+**Fixes re-review finding I9 (previously claimed fixed but the check was absent from the code — the
+resolution log described an assertion the lifespan body never actually contained).**
+`RHAPTO_ACCESS_TEAM=""` produces a JWKS URL of `https://.cloudflareaccess.com/...` (every request
+503s, since the fetch fails and no key is ever retained) and `RHAPTO_ACCESS_AUD=""` makes every
+`jwt.decode(..., audience="")` call fail its audience check (every request 401s) — both fail closed,
+which is directionally right, but with no actionable startup error telling the operator why. The
+non-empty check below must be a real, separate `raise` in the lifespan body, checked **before** the
+allowlist query (an empty team/aud makes that query meaningless anyway):
+
 ```python
 # apps/api/src/rhapto/api/app.py — replace the lifespan body's bootstrap block (lines 74-78)
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         warn_if_fake_llm(settings)
         if settings.rhapto_auth_mode == "access":
+            if not settings.rhapto_access_team or not settings.rhapto_access_aud:
+                raise RuntimeError(
+                    "RHAPTO_AUTH_MODE=access requires RHAPTO_ACCESS_TEAM and RHAPTO_ACCESS_AUD to "
+                    "both be set; refusing to start with either empty, since every request would "
+                    "otherwise fail with no actionable error (503 from an unreachable JWKS host, or "
+                    "401 from an audience check that can never pass)."
+                )
             async with state.session_factory() as session:
                 allowed = await _any_allowed_user_exists(session, settings)
             if not allowed:
@@ -1639,6 +1787,26 @@ async def test_a_list_valued_aud_claim_is_accepted_when_it_contains_the_configur
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as c:
         response = await c.get("/api/v1/me", headers={"Cf-Access-Jwt-Assertion": token})
     assert response.status_code == 200
+
+
+async def test_startup_refuses_empty_access_team_or_aud(
+    api_settings: Settings, session_factory, storage
+) -> None:
+    """Fixes re-review I9: this is the actual code-level regression test the earlier resolution log
+    claimed existed. Builds its own app (the `app` fixture's lifespan already ran with token-mode
+    defaults before this test body runs) and asserts the lifespan itself refuses to start."""
+    from asgi_lifespan import LifespanManager
+
+    from rhapto.api.app import create_app
+
+    api_settings.rhapto_auth_mode = "access"
+    api_settings.rhapto_access_team = ""
+    api_settings.rhapto_access_aud = ""
+    api_settings.rhapto_allowed_emails = "wife@example.com"
+    application = create_app(api_settings, session_factory=session_factory, storage=storage)
+    with pytest.raises(RuntimeError, match="RHAPTO_ACCESS_TEAM and RHAPTO_ACCESS_AUD"):
+        async with LifespanManager(application):
+            pass
 ```
 
 **Fixes plan-review I11.** Put the new CLI tests in `apps/api/tests/unit/`, alongside the existing
@@ -1767,7 +1935,17 @@ bus)` helper at that file's line ~61, which has no `engine` key); `poll_all_sour
 `test_poll_all_sources_gives_each_user_their_own_session` (same file, same helper, no `redis` key —
 and both tests also assert the inline per-user loop this task deletes); and adding `"poll_user"` to
 `TASKS` breaks `test_worker_tasks.py::test_registry`'s exact-set assertion (`apps/api/tests/unit/test_worker_tasks.py:102-112`,
-`assert set(TASKS) == {...}` with seven names, not eight). Step 9 below fixes all four files.
+`assert set(TASKS) == {...}` with seven names, not eight). Step 7 below fixes all four files.
+
+**Also fixes re-review breakage item 2 — the dead-code deletion (Step 9) itself was not green as
+written.** The earlier version asserted "the only caller was `worker/main.py`" without grepping for
+one; verified false. `users_needing_location_backfill` is imported at module level by
+`apps/api/tests/unit/test_scoring_service.py:15` (so deleting the function fails collection of that
+whole file) and asserted against in five places at `:235-251`.
+`enqueue_location_backfill`/`_location_backfill_done` are exercised directly by
+`test_startup_backfills_users_whose_jobs_predate_location_priority` (`test_worker_discovery.py:287`)
+and `test_startup_backfill_never_fails_the_worker` (`:304`). Step 9 below deletes these tests too, not
+just the code.
 
 **Files:**
 - Modify: `apps/api/src/rhapto/worker/tasks.py` (new `poll_user` task; `poll_all_sources` becomes a
@@ -1779,16 +1957,20 @@ and both tests also assert the inline per-user loop this task deletes); and addi
   unused)
 - Modify: `apps/api/tests/api/conftest.py` (`worker_ctx` gains `engine`/`redis`)
 - Modify: `apps/api/tests/unit/test_worker_discovery.py` (`ctx_for` gains `engine`/`redis`; the two
-  `poll_all_sources` tests are replaced by `poll_user`-targeted equivalents)
+  `poll_all_sources` tests are replaced by `poll_user`-targeted equivalents; the two
+  location-backfill tests at `:287`/`:304` are deleted — re-review item 2)
 - Modify: `apps/api/tests/unit/test_worker_tasks.py` (`test_registry`'s expected set gains `"poll_user"`)
+- Modify: `apps/api/tests/unit/test_scoring_service.py` (delete the `users_needing_location_backfill`
+  import and its five assertions at `:235-251` — re-review item 2)
 - Test: `apps/api/tests/unit/test_poll_fan_out.py`
-- Test: `apps/api/tests/unit/test_pdf_concurrency_gate.py`
+- Test: `apps/api/tests/api/test_pdf_concurrency_gate.py` (in `tests/api/`, not `tests/unit/` — see
+  Step 10, re-review breakage item 3)
 
 **Interfaces:**
 - Consumes: `ctx["session_factory"]`, `ctx["engine"]` (set in the *real* worker's `on_startup`,
   `worker/main.py:75-76` — but verified **absent** from the test doubles `worker_ctx`
   (`tests/api/conftest.py`) and `ctx_for` (`tests/unit/test_worker_discovery.py`) before this task,
-  which is exactly plan-review finding C4; Step 9 adds it to both), `list_user_ids` (unchanged,
+  which is exactly plan-review finding C4; Step 7 adds it to both), `list_user_ids` (unchanged,
   `db/repositories/users.py`), `poll_sources` (unchanged, `services/discovery/poller.py:291`).
 - Produces:
   ```python
@@ -2085,20 +2267,37 @@ async def test_poll_user_records_failure_without_raising(
     await worker_tasks.poll_user(ctx, str(user.id))  # must not raise despite the fetch failing
 
 
-async def test_poll_user_uses_its_own_session(
+async def test_poll_user_opens_a_fresh_session_per_call(
     session_factory: async_sessionmaker[AsyncSession],
     session: AsyncSession,
     user: User,
     engine: AsyncEngine,
 ) -> None:
-    """Regression guard for the shared-session bug Phase 0 already fixed: poll_user must open its
-    own session via session_factory() rather than reusing one passed in from outside."""
+    """Regression guard for the shared-session bug Phase 0 already fixed: poll_user must call
+    session_factory() fresh on every invocation, not hold one open across calls for different
+    users. Fixes re-review item 7: the earlier version of this test only counted rows afterwards,
+    which proves nothing about session identity -- this counts factory() invocations instead,
+    which is what the Phase 0 bug (one shared AsyncSession, and therefore one identity map, across
+    a whole per-user loop) was actually about.
+    """
+    other = await get_or_create_user(session, "other@example.com")
     await seed(session, user)
-    ctx = ctx_for(session_factory, InMemoryEventBus(), engine)
+    await seed(session, other)
+    await session.commit()
+
+    call_count = 0
+    real_factory = session_factory
+
+    def counting_factory() -> Any:
+        nonlocal call_count
+        call_count += 1
+        return real_factory()
+
+    ctx = ctx_for(counting_factory, InMemoryEventBus(), engine)
     await worker_tasks.poll_user(ctx, str(user.id))
-    async with session_factory() as check:
-        rows = list(await check.scalars(select(Job).where(Job.user_id == user.id)))
-        assert len(rows) == 2  # the seeded watchlist board's fake fetch, same as poll_now's test
+    await worker_tasks.poll_user(ctx, str(other.id))
+
+    assert call_count == 2  # one fresh session per call, never reused across users
 ```
 
 **(d) `apps/api/tests/unit/test_worker_tasks.py` — `test_registry`'s expected set:**
@@ -2157,7 +2356,15 @@ Apply the same `async with _PDF_RENDER_LOCK:` wrap around the `storage.render_pd
 around what is today `tailor_job`'s line 191-193) — the same LibreOffice invocation, reached from a
 second call site.
 
-- [ ] **Step 9: Delete the dead location-backfill code**
+- [ ] **Step 9: Delete the dead location-backfill code — and the tests that exercise it (re-review item 2)**
+
+Deleting the code alone reds two files, verified in this revision by actually grepping rather than
+asserting: `users_needing_location_backfill` is imported at module level by
+`apps/api/tests/unit/test_scoring_service.py:15` and asserted against at `:235,238,242,246,251`;
+`enqueue_location_backfill`/`_location_backfill_done` are exercised by
+`test_startup_backfills_users_whose_jobs_predate_location_priority` (`test_worker_discovery.py:287-297`)
+and `test_startup_backfill_never_fails_the_worker` (`:304-306`). All of this is deleted in the same
+commit as the production code, not left for a later task to discover red.
 
 ```python
 # apps/api/src/rhapto/worker/main.py — delete enqueue_location_backfill,
@@ -2167,11 +2374,31 @@ second call site.
 
 ```python
 # apps/api/src/rhapto/services/scoring.py — delete users_needing_location_backfill entirely
-# (verify with `grep -rn users_needing_location_backfill apps/api/src apps/api/tests` that no
-# other caller remains before deleting; the only caller was worker/main.py, just removed).
 ```
 
-- [ ] **Step 10: Write the concurrency-gate test — with real `Package` rows (plan-review I3)**
+```python
+# apps/api/tests/unit/test_worker_discovery.py — delete these two tests in full:
+#   test_startup_backfills_users_whose_jobs_predate_location_priority (lines ~287-297)
+#   test_startup_backfill_never_fails_the_worker (lines ~304-306)
+# and the `RecordingRedis` class immediately above them if (and only if) grepping this file confirms
+# no other test in it still uses that name — the new C4 fixture work (Step 7) added its own
+# `RecordingRedis` inside `ctx_for`'s module, so check for a naming collision before assuming this
+# one is safe to remove outright.
+```
+
+```python
+# apps/api/tests/unit/test_scoring_service.py — delete `users_needing_location_backfill` from the
+# `from rhapto.services.scoring import (...)` import block (lines ~9-15), and delete the five
+# assertion lines at ~235,238,242,246,251 (and any test function whose body becomes empty as a
+# result — confirm by reading the surrounding test bodies before deleting, since this plan has not
+# reproduced them in full here).
+```
+
+Run: `grep -rn users_needing_location_backfill apps/api/src apps/api/tests` after all four edits
+above — expect zero matches, confirming nothing was missed (the exact verification step the earlier
+draft skipped).
+
+- [ ] **Step 10: Write the concurrency-gate test — with real `Package` rows, in `tests/api/` (plan-review I3, re-review item 3)**
 
 The earlier version of this test passed with or without the lock: `worker_ctx` has no `Package` rows,
 so `render_package_pdf` returns at `row is None`, `fake_render_pdf` is never called, `max_concurrent`
@@ -2179,10 +2406,13 @@ stays `0`, and `assert max_concurrent <= 1` is trivially true before the lock ex
 inserting two real `Package` rows (each needing a `Job` row for its `job_id` FK — verified
 `Package.job_id` is `ForeignKey("jobs.id", ondelete="CASCADE")`, `db/models.py:213-215`) and by
 asserting `== 1`, not `<= 1`, so a regression that removes the lock fails this test rather than
-passing it by accident:
+passing it by accident. **Placed in `apps/api/tests/api/`, not `tests/unit/`**: `worker_ctx` is
+defined in `apps/api/tests/api/conftest.py:121` and is invisible to `tests/unit/` (pytest fixtures do
+not cross directories) — the previous placement would have errored on fixture lookup before ever
+exercising the lock, the same defect class the PDF gate's whole point is to catch:
 
 ```python
-# apps/api/tests/unit/test_pdf_concurrency_gate.py
+# apps/api/tests/api/test_pdf_concurrency_gate.py
 from __future__ import annotations
 
 import asyncio
@@ -2236,7 +2466,15 @@ async def test_two_concurrent_renders_never_overlap(
         concurrent -= 1
         return None
 
-    monkeypatch.setattr(PackageStorage, "render_pdf", fake_render_pdf)
+    # Patch the *instance*, not the class. `render_package_pdf` calls `storage.render_pdf(...)`;
+    # patching PackageStorage.render_pdf at the class level makes that attribute lookup go through
+    # the descriptor protocol, so Python binds `storage` as an implicit `self` and the call arrives
+    # with three positional arguments against fake_render_pdf's two -- confirmed by actually running
+    # it: `TypeError: fake_render_pdf() takes 2 positional arguments but 3 were given` (this test
+    # failed to execute across three review rounds for exactly this reason). Assigning the plain
+    # function directly to the instance's own `__dict__` skips the descriptor protocol entirely, so
+    # the call reaches fake_render_pdf with exactly the two arguments it declares.
+    monkeypatch.setattr(storage, "render_pdf", fake_render_pdf)
     await asyncio.gather(
         render_package_pdf(worker_ctx, package_id_a),
         render_package_pdf(worker_ctx, package_id_b),
@@ -2250,7 +2488,7 @@ TDD convention, then restore the lock and confirm it passes.
 
 - [ ] **Step 11: Run the new tests, then the full suite**
 
-Run: `pytest tests/unit/test_poll_fan_out.py tests/unit/test_pdf_concurrency_gate.py tests/unit/test_worker_discovery.py tests/unit/test_worker_tasks.py -v` — expect PASS, including every pre-existing test in the last two files.
+Run: `pytest tests/unit/test_poll_fan_out.py tests/api/test_pdf_concurrency_gate.py tests/unit/test_worker_discovery.py tests/unit/test_worker_tasks.py tests/unit/test_scoring_service.py -v` — expect PASS, including every pre-existing test in the last three files.
 Run: `pytest` — expect the full suite green.
 Run: `ruff check .` and `mypy src` — expect clean.
 
@@ -2261,7 +2499,8 @@ git add apps/api/src/rhapto/worker/tasks.py apps/api/src/rhapto/worker/main.py \
   apps/api/src/rhapto/services/scoring.py \
   apps/api/tests/api/conftest.py \
   apps/api/tests/unit/test_worker_discovery.py apps/api/tests/unit/test_worker_tasks.py \
-  apps/api/tests/unit/test_poll_fan_out.py apps/api/tests/unit/test_pdf_concurrency_gate.py
+  apps/api/tests/unit/test_scoring_service.py \
+  apps/api/tests/unit/test_poll_fan_out.py apps/api/tests/api/test_pdf_concurrency_gate.py
 git commit -m "$(cat <<'EOF'
 Per-user poll fan-out, advisory lock, PDF concurrency-1 gate (A4)
 
@@ -2271,8 +2510,10 @@ second user's poll was killed mid-run. poll_user and poll_now both take a per-us
 advisory lock so a cron poll and a hand-triggered poll can never interleave for the same account.
 render_package_pdf and tailor_job's PDF step share a process-wide asyncio.Lock, since two
 concurrent LibreOffice renders can exceed the worker's 2GB cap, proven this time with real Package
-rows rather than a vacuously-passing test (plan-review I3). Deleted the location-tier backfill
-one-shot, five migrations past its usefulness.
+rows in tests/api/ (where the worker_ctx fixture it needs actually lives -- re-review item 3)
+rather than a vacuously-passing test in the wrong directory (plan-review I3). Deleted the
+location-tier backfill one-shot, five migrations past its usefulness, along with the four tests
+across two files that exercised it (re-review item 2 -- verified by grep, not asserted).
 
 worker_ctx and ctx_for now carry engine/redis doubles so the new ctx["engine"]/ctx["redis"] reads
 don't break every existing poll_now/poll_all_sources test (plan-review C4); the two
@@ -2678,6 +2919,8 @@ class BootstrapOut(BaseModel):
 
 ```python
 # apps/api/src/rhapto/api/routers/meta.py — new endpoint
+from sqlalchemy import text
+
 from rhapto.db.repositories.jobs import backfill_public_jobs
 from rhapto.services.discovery.sources import SOURCES
 
@@ -2691,32 +2934,28 @@ async def bootstrap(
     (Step 7), and it only ever does real work the one time `users.seeded_at` is still NULL. Kept
     entirely out of `current_user` (plan-review C6) so no other endpoint's request pays for it and
     no failure here can present as an auth failure.
+
+    The claim is a single atomic `UPDATE ... WHERE seeded_at IS NULL RETURNING id`, not a read-then-
+    write (re-review's adopted recommendation, replacing this plan's earlier "no lock needed"
+    argument): Postgres's row-level locking means at most one of two concurrent callers ever gets a
+    row back, so the backfill runs exactly once per account even under a real race -- no advisory
+    lock, no new engine-access plumbing, and no residual "cosmetic duplicate" risk for
+    `external_id IS NULL` rows, which is what the check-then-write version could not close.
     """
-    user = await session.get(User, user_id)
-    if user is None or user.seeded_at is not None:
+    claim = await session.execute(
+        text("UPDATE users SET seeded_at = now() WHERE id = :uid AND seeded_at IS NULL RETURNING id"),
+        {"uid": str(user_id)},
+    )
+    if claim.first() is None:
+        await session.rollback()
         return BootstrapOut(seeded=False)
     await backfill_public_jobs(session, user_id, public_sources=list(SOURCES.keys()))
-    user.seeded_at = datetime.now(UTC)
     await session.commit()
     return BootstrapOut(seeded=True)
 ```
 
-Add `import uuid`, `from datetime import UTC, datetime` to `meta.py`'s imports if not already present
-(verified `meta.py` currently imports `uuid` already for `current_user`'s return type but not
-`datetime`).
-
-**Why no advisory lock, unlike Task 4's `with_user_poll_lock`:** two concurrent bootstrap calls for
-the same brand-new account (the web app could plausibly fire this from two mounted components) could
-both read `seeded_at IS NULL` before either commits and both run `backfill_public_jobs`. This is
-**not** a correctness risk, only a wasted-work one: the backfill's own three-layer idempotency (Step
-3) makes a second concurrent run insert at most a handful of rows the first one raced past, never a
-duplicate or an error. Adding a real advisory lock here would need `ctx["engine"]`-equivalent
-plumbing at the API layer that the test `app` fixture does not currently provide (`create_app` never
-receives an `engine` when `session_factory` is supplied directly, as every test does) — real, but
-separate, infrastructure work. Given the underlying operation is already idempotent, the plan accepts
-the small, one-time, per-account cost of a possible double-run rather than building that plumbing for
-this. **Cost if this call turns out to be wrong:** at most one extra near-duplicate `INSERT ... SELECT`
-pass per account, ever, on the exact first sign-in — no data corruption, no user-visible error.
+Add `import uuid` to `meta.py`'s imports if not already present (verified `meta.py` currently imports
+`uuid` already for `current_user`'s return type).
 
 - [ ] **Step 6: Write the endpoint test**
 
@@ -2777,6 +3016,55 @@ async def test_bootstrap_seeds_a_new_accounts_first_screen_exactly_once(
 
 (`import httpx`, `from rhapto.api.deps import AppState`, and `import time` are already imported
 earlier in this test file, per Task 3.)
+
+Closes the remaining gap: nothing yet proves the claim itself is atomic under a real race, only that
+sequential calls behave correctly. This test drives the exact `UPDATE ... RETURNING` statement from
+two concurrent sessions on the same row and asserts exactly one of them claims it:
+
+```python
+# apps/api/tests/db/test_backfill_public_jobs.py — append (co-located with the other seed-related
+# tests, since it exercises the same idempotency marker `backfill_public_jobs`'s caller relies on)
+async def test_concurrent_seed_claims_result_in_exactly_one_claim(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    """This is the statement Task 5 Step 5's POST /me/bootstrap runs to decide whether to seed.
+    Proves it directly, at the SQL level, under a real race: two concurrent transactions racing on
+    the same row's `seeded_at IS NULL` claim must not both succeed. Postgres's row lock makes the
+    loser's UPDATE block until the winner commits, then re-evaluate WHERE against the now-non-NULL
+    value and match zero rows -- this is what makes first sign-in race-safe rather than merely
+    idempotent.
+    """
+    import asyncio
+
+    from rhapto.db.repositories.users import get_or_create_user
+
+    async with session_factory() as setup:
+        user = await get_or_create_user(setup, "racer@example.com")
+        await setup.commit()
+        user_id = user.id
+
+    async def claim() -> bool:
+        async with session_factory() as session:
+            result = await session.execute(
+                text(
+                    "UPDATE users SET seeded_at = now() WHERE id = :uid AND seeded_at IS NULL "
+                    "RETURNING id"
+                ),
+                {"uid": str(user_id)},
+            )
+            got = result.first() is not None
+            await session.commit()
+            return got
+
+    results = await asyncio.gather(claim(), claim())
+    assert sorted(results) == [False, True]
+```
+
+Add `from sqlalchemy import text` and `from sqlalchemy.ext.asyncio import async_sessionmaker` to
+`test_backfill_public_jobs.py`'s imports if not already present. Run:
+`pytest tests/db/test_backfill_public_jobs.py -k concurrent_seed -v` — expect PASS; run it a few
+times locally if flaky-under-load is a concern, since it depends on Postgres actually serialising
+the two `UPDATE`s rather than on any Python-side synchronisation.
 
 - [ ] **Step 7: Wire the web app to call `/me/bootstrap` once per session**
 
@@ -2887,6 +3175,8 @@ account is pruned).
 - Modify: `apps/api/src/rhapto/api/routers/meta.py` (`me()` computes it)
 - Modify: `packages/schemas/openapi.json`, `apps/web/src/lib/api/schema.d.ts` (regenerated)
 - Create: `apps/web/src/components/shell/DeletionBanner.tsx` (the day-60 warning)
+- Modify: `apps/web/src/components/jobs/TailorButton.test.tsx` (its two `MeOut` literals gain
+  `deletion_due_at`, alongside the `auth_mode` Task 1 already added — re-review finding 1)
 - Test: `apps/api/tests/unit/test_accounts_lifecycle.py`
 - Test: `apps/api/tests/unit/test_accounts_prune.py` (not `tests/cli/` — plan-review I11, same fix as
   Task 3)
@@ -3030,30 +3320,64 @@ Expected: PASS.
 
 - [ ] **Step 5: Wire `mark_seen` into `current_user`, fire-and-forget**
 
+**Fixes a stale cross-reference from the last revision** (it pointed at "Task 5's version of
+`current_user`" and a `return existing.id` that exist in no version of the function — Task 5
+deliberately never touches `current_user`; that was the whole point of the C6 fix). The function this
+step edits is exactly the one Task 3 Step 9 wrote: token branch returns `state.user_id`, access branch
+ends `return user.id`, and there is no other return in it. **Also fixes re-review breakage item 6**:
+the earlier `except` swallowed the error with no `rollback()`, which leaves the request-scoped session
+in an aborted transaction after any failed `UPDATE` — the handler's *own* queries then fail too,
+turning a should-be-invisible side-effect failure into a 500 on the path C6 exists to keep safe.
+
 ```python
-# apps/api/src/rhapto/api/deps.py — current_user, both branches, right before each `return`
+# apps/api/src/rhapto/api/deps.py — current_user (Task 3 Step 9's version), both returns
 from rhapto.services.accounts import mark_seen
-...
+
+
+async def current_user(
+    request: Request,
+    principal: Annotated[Principal, Depends(resolve_principal)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> uuid.UUID:
+    state = get_state(request)
     if principal.mode == "token":
         if state.user_id is None:
             raise HTTPException(status_code=503, detail="server not ready")
-        try:
-            await mark_seen(session, state.user_id)
-            await session.commit()
-        except Exception:
-            logger.exception("mark_seen failed for user %s; continuing the request", state.user_id)
+        await _mark_seen_best_effort(session, state.user_id)
         return state.user_id
+    settings = state.settings
+    if not is_allowed_email(
+        principal.email, settings.rhapto_allowed_emails, settings.rhapto_allowed_email_domains
+    ):
+        raise HTTPException(status_code=403, detail="this instance is invite-only")
+    user = await get_or_create_user(session, principal.email)
+    await session.commit()
+    await _mark_seen_best_effort(session, user.id)
+    return user.id
+
+
+async def _mark_seen_best_effort(session: AsyncSession, user_id: uuid.UUID) -> None:
+    """mark_seen must never fail the request it rides along with (architecture.md §4.1). On
+    failure it must also roll back -- an uncommitted, unrolled-back UPDATE leaves the session in an
+    aborted transaction, and every query the actual endpoint handler runs afterwards would then
+    fail too (re-review item 6)."""
+    try:
+        await mark_seen(session, user_id)
+        await session.commit()
+    except Exception:
+        logger.exception("mark_seen failed for user %s; continuing the request", user_id)
+        await session.rollback()
 ```
 
 (token mode's `current_user` did not previously take a `session` parameter — add
 `session: Annotated[AsyncSession, Depends(get_session)]` to its signature; this is additive to the
 signature Task 1 wrote, harmless since `Depends(current_user)` callers never see the parameter list.
-Apply the same try/except-wrapped `mark_seen` + commit immediately before the access-mode branch's
-final `return existing.id` and `return user.id` in Task 5's version of the function; the "new
-account" path already commits after seeding, so `mark_seen` there is a no-op against a `last_seen_at`
-that `server_default=now()` just set — call it anyway, before that commit, for one code path rather
-than two.) Add `import logging` and a module `logger = logging.getLogger("rhapto.api.deps")` to
-`deps.py` if it does not already have one (verified it does not).
+The access branch's `mark_seen` call is a no-op the very first time — `last_seen_at` was just set by
+`server_default=now()` on that row's creation, still within the throttle window — but calling it
+unconditionally on this one return, rather than special-casing "except on first sign-in", keeps the
+function to one code path.) Add `import logging` and a module `logger =
+logging.getLogger("rhapto.api.deps")` to `deps.py` if it does not already have one (verified it does
+not).
 
 - [ ] **Step 6: Add `rhapto_inactive_days` and the CLI prune command**
 
@@ -3171,6 +3495,17 @@ async def me(
         auth_mode=settings.rhapto_auth_mode,
         deletion_due_at=due_at,
     )
+```
+
+**`MeOut` gaining a second required field breaks `apps/web`'s typecheck again** (the same class of
+break as Task 1's `auth_mode` — re-review breakage item 1's other half). Task 1 already updated
+`TailorButton.test.tsx`'s two `meData` literals to include `auth_mode`; extend both again here:
+
+```typescript
+// apps/web/src/components/jobs/TailorButton.test.tsx:72 and :245 — add deletion_due_at to both
+meData = { user_id: "u1", email: "dev@example.com", llm_configured: true, auth_mode: "token", deletion_due_at: null };
+// ...and, at line 245:
+meData = { user_id: "u1", email: "dev@example.com", llm_configured: false, auth_mode: "token", deletion_due_at: null };
 ```
 
 ```typescript
@@ -3329,17 +3664,20 @@ git add apps/api/src/rhapto/services/accounts.py apps/api/src/rhapto/api/deps.py
   apps/api/src/rhapto/api/schemas.py apps/api/src/rhapto/api/routers/meta.py \
   packages/schemas/openapi.json apps/web/src/lib/api/schema.d.ts \
   apps/web/src/components/shell/DeletionBanner.tsx apps/web/src/components/shell/DeletionBanner.test.tsx \
+  apps/web/src/components/jobs/TailorButton.test.tsx \
   apps/api/tests/unit/test_accounts_lifecycle.py apps/api/tests/unit/test_accounts_prune.py
 git commit -m "$(cat <<'EOF'
 last_seen_at throttling, inactive_accounts query, prune --dry-run, exempt CLI, day-60 banner (B1a)
 
-mark_seen is now a single atomic UPDATE with no preceding SELECT (plan-review I5), throttled to
+mark_seen is now a single atomic UPDATE with no preceding SELECT (plan-review I5), rolls back on
+failure so a swallowed error can't poison the request's session (re-review item 6), throttled to
 once per hour, and never fails the request it rides along with. inactive_accounts finds every
 non-exempt account past RHAPTO_INACTIVE_DAYS (default 90). `rhapto accounts prune` lists them;
 --yes is a defined, not-yet-wired error until Task 7 adds the real deletion path. `rhapto accounts
 exempt` sets/clears exempt_from_pruning, which nothing could previously reach (plan-review I6).
 MeOut.deletion_due_at and a new DeletionBanner give a returning user the day-60 warning the
 architecture calls for, before Task 7's cron can ever delete anything unattended.
+TailorButton.test.tsx's MeOut literals updated again so apps/web's typecheck stays green.
 
 Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_013CTBNZrgo9dpYW6vRs2TC2
@@ -3610,7 +3948,7 @@ Expected: PASS.
 - [ ] **Step 5: Wire `--yes` into the CLI, and add `accounts delete`**
 
 ```python
-# apps/api/src/rhapto/cli/main.py — replace the accounts_prune body's `else` branch (Step 6 above)
+# apps/api/src/rhapto/cli/main.py — replace the accounts_prune body's `else` branch (Task 6 Step 6)
     else:
         async def run_deletions() -> int | None:
             engine = make_engine(settings.database_url)
@@ -4233,6 +4571,22 @@ An independent plan review of the previous version of this document returned NOT
 Critical, 11 Important, 8 Minor). Every finding was either fixed in place or answered explicitly
 below; none was silently dropped.
 
+**A scoped re-review of that fix pass then found: I9's claimed fix was absent from the actual code
+(the lifespan body never contained the non-empty check the resolution log described — now added for
+real, Task 3 Step 10); and the fixes themselves introduced six new blockers, all now fixed:**
+`MeOut` gaining two required fields broke `apps/web`'s typecheck at `TailorButton.test.tsx:72,245`
+(fixed in Task 1 and Task 6, each extending both literals); Task 4's dead-code deletion reds
+`test_scoring_service.py` and two `test_worker_discovery.py` tests because "the only caller was
+`worker/main.py`" was asserted rather than grepped (fixed — Task 4 Step 9 now deletes the tests too);
+`test_pdf_concurrency_gate.py` requested the `worker_ctx` fixture from a directory it isn't defined in
+(fixed — moved to `tests/api/`); `route.test.ts` indexed `calls[0][1]` under
+`noUncheckedIndexedAccess` (fixed with `calls[0]?.[1]`); `mark_seen`'s `except` had no `rollback()`
+(fixed); and migration `0011` left the owner's `seeded_at` NULL, so the bootstrap endpoint would have
+run a backfill over the owner's live account the first time he signed in post-migration (fixed —
+`0011` now backfills `seeded_at = now()` for every pre-existing row). Four stale cross-references left
+by the first renumbering pass were also corrected, and the A5 seed's idempotency marker was upgraded
+from a check-then-write to an atomic `UPDATE ... RETURNING`, per the re-review's recommendation.
+
 **Critical — all fixed:**
 
 | # | Finding | Fix | Where |
@@ -4257,7 +4611,7 @@ below; none was silently dropped.
 | I6 | Prune cron had no exemption path, no last-account guard, no user-facing notice | `rhapto accounts exempt`, `would_delete_everyone` guard (CLI and cron), `MeOut.deletion_due_at` + `DeletionBanner` | Task 6 Steps 6-7, Task 7 Steps 5-6 |
 | I7 | Nothing checked that the backup cron actually ran | `rhapto backups check`, exit 1 if no dump newer than 48h | Task 8 Step 5 |
 | I8 | JWKS cache reset its TTL on a failed fetch and never evicted a rotated key | `_last_attempt_at` separated from `_fetched_at`; key set replaced (not merged) on success, previous set retained as fallback; dead `PyJWKClient` removed | Task 3 Step 5 |
-| I9 | No startup check that `RHAPTO_ACCESS_TEAM`/`_AUD` are non-empty | Startup assertion extended; regression test for a list-valued `aud` claim added | Task 3 Step 10, Step 12 |
+| I9 | No startup check that `RHAPTO_ACCESS_TEAM`/`_AUD` are non-empty (a prior fix pass claimed this in prose without the code containing it — caught by re-review) | A real `if not settings.rhapto_access_team or not settings.rhapto_access_aud: raise RuntimeError(...)` in the lifespan body, plus `test_startup_refuses_empty_access_team_or_aud`; the list-valued-`aud` regression test added separately | Task 3 Step 10, Step 12 |
 | I10 | `db/repositories/jobs.py` imported the whole discovery stack via `SOURCES` | `backfill_public_jobs` takes `public_sources: Sequence[str]`; caller supplies `list(SOURCES.keys())` | Task 5 Step 3 |
 | I11 | Tests planned for a non-existent `tests/cli/` directory | Moved to `tests/unit/`, alongside the existing `test_cli.py` | Tasks 3, 6, 7 |
 
@@ -4277,11 +4631,15 @@ Cloudflare Access login page in `access` mode, not `Landing.tsx`, which never re
 1. **A5's trigger point** — the reviewer agreed identity-first-without-Phase-D was right, but ruled
    putting the seed inside `current_user` was wrong on three counts (turns a data bug into "cannot
    sign in", races, and orphans `derive_searches`). **Adopted in full**: the seed is now
-   `POST /api/v1/me/bootstrap`, gated behind `users.seeded_at` with no advisory lock (a deliberate,
-   stated departure from the reviewer's suggested lock — see Task 5 Step 5's own reasoning: the
-   underlying operation is already idempotent three ways, so the lock would buy negligible safety
-   over real new engine-access plumbing the test fixtures do not currently support; cost if wrong is
-   one extra idempotent pass on one account's first sign-in, never a correctness failure).
+   `POST /api/v1/me/bootstrap`. On the no-advisory-lock departure specifically, the re-review
+   accepted the plumbing argument (`AppState.engine` really is `None` whenever `session_factory` is
+   injected, which every test does) but corrected the "never a duplicate" claim: a `check-then-write`
+   version could still double-insert rows with `external_id IS NULL`, which fall outside the partial
+   unique index. **Adopted the re-review's cheaper alternative**: the marker is now claimed
+   atomically, `UPDATE users SET seeded_at = now() WHERE id = :u AND seeded_at IS NULL RETURNING id`,
+   and the backfill runs only if a row comes back. This closes the race completely — Postgres's
+   row-level lock on the `UPDATE` means at most one of two concurrent callers ever gets the row —
+   with no new engine-access plumbing and no lock. Nothing to accept as residual risk here anymore.
 2. **`NOT EXISTS` vs `ON CONFLICT`** — the reviewer ruled the premise correct but the conclusion
    incomplete: both are needed, plus the `DISTINCT ON` grouping fix. **Adopted in full**, Task 5 Step 3.
 3. **Files-before-rows over arq cancellation** — accepted as right, with one caveat: the orphan sweep
