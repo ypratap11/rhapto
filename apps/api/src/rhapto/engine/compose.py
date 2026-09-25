@@ -28,7 +28,12 @@ from rhapto.models.resume_document import (
 #: then runs out mid-document and fails as MalformedOutputError. That ruled out an entire class of
 #: cheap models -- Gemini 3.8 Flash is a third of Haiku's price -- for a reason that had nothing to
 #: do with their ability to do the work.
-COMPOSE_MAX_TOKENS = 24576
+#:
+#: Ceiling on the ceiling: an SDK refuses a NON-streaming request whose max_tokens implies it could
+#: run past ten minutes, so this cannot simply be set very high. 24576 tripped that guard outright.
+#: 16384 leaves roughly 8k of thinking headroom above the ~8k a full resume needs, and stays inside
+#: it. Going higher means implementing streaming first.
+COMPOSE_MAX_TOKENS = 16384
 
 
 HEADER_KEYS = frozenset({"name", "email", "phone", "location", "links"})
