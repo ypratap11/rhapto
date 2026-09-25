@@ -36,3 +36,7 @@ apps/web/.screenshots/
 
 # Business/company material belongs in the private augaster repo, never here
 docs/one-pager.md
+
+# Internal review trail: audits, plan reviews and the SDD ledger. Useful to us,
+# not part of the product, and it names defects found during development.
+.superpowers/
