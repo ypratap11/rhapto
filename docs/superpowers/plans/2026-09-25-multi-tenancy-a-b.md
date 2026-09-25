@@ -1069,9 +1069,12 @@ is already present and is what `pyjwt[crypto]` uses for RS256).
 - Modify: `apps/api/src/rhapto/config.py` (`rhapto_access_team`, `rhapto_access_aud`,
   `rhapto_allowed_emails`, `rhapto_allowed_email_domains`)
 - Modify: `apps/api/src/rhapto/cli/main.py` (new `accounts` Typer sub-app: `set-email`)
+- Modify: `apps/api/src/rhapto/db/repositories/users.py` (`get_or_create_user`: `ON CONFLICT` — C6)
 - Modify: `apps/api/pyproject.toml` (add `pyjwt[crypto]>=2.9`)
 - Test: `apps/api/tests/api/test_access_mode.py`
-- Test: `apps/api/tests/cli/test_accounts_set_email.py`
+- Test: `apps/api/tests/unit/test_accounts_set_email.py` (not `tests/cli/`, which does not exist —
+  plan-review I11)
+- Test: `apps/api/tests/unit/test_users_repo.py` (extend; concurrent get-or-create regression)
 
 **Interfaces:**
 - Consumes: `Principal`/`resolve_principal` (Task 1), `Settings.rhapto_auth_mode` (Task 1),
@@ -1442,7 +1445,12 @@ async def _any_allowed_user_exists(session: AsyncSession, settings: Settings) ->
     )
 ```
 
-- [ ] **Step 10: Add `rhapto accounts set-email`**
+- [ ] **Step 11: Add `rhapto accounts set-email` — fixing plan-review minor 3**
+
+The lookup now casefolds `old_email` (every stored email is casefolded already, via
+`is_allowed_email`/`Principal.email` in access mode; an un-casefolded lookup here would silently find
+nothing for `Wife@Example.com` even though the stored row is `wife@example.com`), and checks that
+`new_email` isn't already taken before writing, raising a clear error instead of a raw `IntegrityError`.
 
 ```python
 # apps/api/src/rhapto/cli/main.py — new sub-app, following the existing db_app/profile_app pattern
@@ -1455,8 +1463,9 @@ def accounts_set_email(old_email: str = typer.Argument(...), new_email: str = ty
     """Rename an account's email -- run before flipping RHAPTO_AUTH_MODE to access, so the owner's
     bootstrapped account matches his Cloudflare Access email exactly."""
     settings = Settings()
+    new_casefolded = new_email.casefold()
 
-    async def rename() -> bool:
+    async def rename() -> str:
         engine = make_engine(settings.database_url)
         try:
             async with make_session_factory(engine)() as session:
@@ -1464,22 +1473,38 @@ def accounts_set_email(old_email: str = typer.Argument(...), new_email: str = ty
 
                 from rhapto.db.models import User
 
-                user = await session.scalar(sa_select(User).where(User.email == old_email))
+                user = await session.scalar(
+                    sa_select(User).where(User.email == old_email.casefold())
+                )
                 if user is None:
-                    return False
-                user.email = new_email.casefold()
+                    return "not_found"
+                taken = await session.scalar(
+                    sa_select(User).where(User.email == new_casefolded, User.id != user.id)
+                )
+                if taken is not None:
+                    return "taken"
+                user.email = new_casefolded
                 await session.commit()
-                return True
+                return "ok"
         finally:
             await engine.dispose()
 
-    if not asyncio.run(rename()):
+    result = asyncio.run(rename())
+    if result == "not_found":
         typer.echo(f"error: no account found with email {old_email!r}", err=True)
+        raise typer.Exit(1)
+    if result == "taken":
+        typer.echo(f"error: {new_email!r} is already in use by another account", err=True)
         raise typer.Exit(1)
     typer.echo(f"renamed {old_email} -> {new_email}")
 ```
 
-- [ ] **Step 11: Write the access-mode integration tests**
+- [ ] **Step 12: Write the access-mode integration tests**
+
+Every test below mutates `state.settings` directly rather than restoring it afterwards. This is safe
+only because `app`/`api_settings` are function-scoped fixtures (`tests/api/conftest.py:109,145`, per
+Task 1's verification), so each test gets its own fresh `Settings` and there is nothing to leak into
+the next test (plan-review minor 2).
 
 ```python
 # apps/api/tests/api/test_access_mode.py — append
@@ -1565,8 +1590,8 @@ async def test_non_allowlisted_email_gets_403_and_no_account(
         response = await c.get("/api/v1/me", headers={"Cf-Access-Jwt-Assertion": token})
     assert response.status_code == 403
     async with session_factory() as session:
-        count = await session.scalar(select(User).where(User.email == "stranger@gmail.com"))
-    assert count is None
+        existing = await session.scalar(select(User).where(User.email == "stranger@gmail.com"))
+    assert existing is None
 
 
 async def test_duplicate_assertion_headers_is_400(app: FastAPI, signed_assertion) -> None:
@@ -1579,15 +1604,58 @@ async def test_duplicate_assertion_headers_is_400(app: FastAPI, signed_assertion
         )
         response = await c.send(request)
     assert response.status_code == 400
+
+
+async def test_a_list_valued_aud_claim_is_accepted_when_it_contains_the_configured_aud(
+    app: FastAPI, rsa_keypair, monkeypatch
+) -> None:
+    """Fixes plan-review I9: architecture.md §1.2 specifies 'aud contains RHAPTO_ACCESS_AUD', not
+    'aud equals it' -- Cloudflare can issue a token whose aud is a list when an Access application
+    is shared across more than one AUD tag. PyJWT's decode(audience=...) already checks membership
+    against a list or scalar aud claim; this pins that behaviour rather than adding new logic."""
+    state: AppState = app.state.rhapto
+    state.settings.rhapto_auth_mode = "access"
+    state.settings.rhapto_access_team = "test-team"
+    state.settings.rhapto_access_aud = "test-aud"
+    state.settings.rhapto_allowed_emails = "wife@example.com"
+
+    from rhapto.api import auth as auth_module
+
+    private_key, public_key = rsa_keypair
+    cache = auth_module.JwksCache("http://unused")
+    cache._keys["test-kid"] = public_key
+    cache._fetched_at = time.monotonic()
+    monkeypatch.setitem(auth_module._jwks_caches, "test-team", cache)
+
+    now = int(time.time())
+    token = pyjwt.encode(
+        {
+            "email": "wife@example.com", "sub": "idp-sub-1",
+            "aud": ["test-aud", "some-other-aud"],
+            "iss": "https://test-team.cloudflareaccess.com", "iat": now, "exp": now + 300,
+        },
+        private_key, algorithm="RS256", headers={"kid": "test-kid"},
+    )
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as c:
+        response = await c.get("/api/v1/me", headers={"Cf-Access-Jwt-Assertion": token})
+    assert response.status_code == 200
 ```
 
+**Fixes plan-review I11.** Put the new CLI tests in `apps/api/tests/unit/`, alongside the existing
+`test_cli.py` — there is no `apps/api/tests/cli/` directory today, and `tests/unit/` carries no
+`__init__.py` (matching `test_cli.py`'s own location):
+
 ```python
-# apps/api/tests/cli/test_accounts_set_email.py
+# apps/api/tests/unit/test_accounts_set_email.py
 from __future__ import annotations
+
+import asyncio
 
 from typer.testing import CliRunner
 
 from rhapto.cli.main import app
+from rhapto.db.repositories.users import get_or_create_user
+from rhapto.db.session import make_engine, make_session_factory
 
 runner = CliRunner()
 
@@ -1595,11 +1663,6 @@ runner = CliRunner()
 def test_set_email_renames_an_existing_account(migrated_db, monkeypatch) -> None:
     monkeypatch.setenv("DATABASE_URL", migrated_db)
     monkeypatch.setenv("RHAPTO_SECRET_KEY", "irrelevant-for-this-command")
-    # seed the owner account this command will rename
-    import asyncio
-
-    from rhapto.db.repositories.users import get_or_create_user
-    from rhapto.db.session import make_engine, make_session_factory
 
     async def seed() -> None:
         engine = make_engine(migrated_db)
@@ -1619,33 +1682,56 @@ def test_set_email_unknown_account_exits_1(migrated_db, monkeypatch) -> None:
     monkeypatch.setenv("RHAPTO_SECRET_KEY", "irrelevant-for-this-command")
     result = runner.invoke(app, ["accounts", "set-email", "nobody@example.com", "x@example.com"])
     assert result.exit_code == 1
+
+
+def test_set_email_refuses_a_taken_target(migrated_db, monkeypatch) -> None:
+    monkeypatch.setenv("DATABASE_URL", migrated_db)
+    monkeypatch.setenv("RHAPTO_SECRET_KEY", "irrelevant-for-this-command")
+
+    async def seed() -> None:
+        engine = make_engine(migrated_db)
+        async with make_session_factory(engine)() as session:
+            await get_or_create_user(session, "one@example.com")
+            await get_or_create_user(session, "two@example.com")
+            await session.commit()
+        await engine.dispose()
+
+    asyncio.run(seed())
+    result = runner.invoke(app, ["accounts", "set-email", "one@example.com", "two@example.com"])
+    assert result.exit_code == 1
+    assert "already in use" in result.output
 ```
 
-- [ ] **Step 12: Run the new tests, then the full suite**
+- [ ] **Step 13: Run the new tests, then the full suite**
 
-Run: `pytest tests/api/test_access_mode.py tests/cli/test_accounts_set_email.py -v` — expect PASS.
+Run: `pytest tests/api/test_access_mode.py tests/unit/test_accounts_set_email.py -v` — expect PASS.
 Run: `pytest` — expect green, including the four A1-listed token-mode tests unmodified.
 Run: `ruff check .` and `mypy src` — expect clean (add `pyjwt` to the mypy override list in
 `pyproject.toml` only if `mypy src` reports missing stubs for it; PyJWT ships inline types, so this
 is likely unnecessary — verify against the actual `mypy src` output rather than pre-emptively adding
 an override).
 
-- [ ] **Step 13: Commit**
+- [ ] **Step 14: Commit**
 
 ```bash
 git add apps/api/src/rhapto/api/auth.py apps/api/src/rhapto/api/deps.py apps/api/src/rhapto/api/app.py \
   apps/api/src/rhapto/config.py apps/api/src/rhapto/cli/main.py apps/api/pyproject.toml \
-  apps/api/tests/api/test_access_mode.py apps/api/tests/cli/test_accounts_set_email.py
+  apps/api/src/rhapto/db/repositories/users.py \
+  apps/api/tests/api/test_access_mode.py apps/api/tests/unit/test_accounts_set_email.py
 git commit -m "$(cat <<'EOF'
 Implement Cloudflare Access mode: JWKS verification, invite allowlist, bootstrap suppression (A3)
 
-Access mode verifies the Cf-Access-Jwt-Assertion RS256 against a last-good-cached JWKS, rejects a
-duplicated assertion header with 400, and enforces RHAPTO_ALLOWED_EMAILS/_DOMAINS a second time in
-the API (403, no users row created, if the email is not on the list -- non-membership must not
-create an account shell). The token-mode bootstrap that would otherwise create a second, empty
-owner account is suppressed in access mode, replaced by a startup assertion that refuses to start
-unless an allowed users row already exists. `rhapto accounts set-email` lets the owner correct
-RHAPTO_USER_EMAIL before the mode flip.
+Access mode verifies the Cf-Access-Jwt-Assertion RS256 against a last-good-cached JWKS (replacing
+the key set on a successful refresh and falling back to the previous one only when a refresh fails,
+plan-review I8), rejects a duplicated assertion header with 400, and enforces
+RHAPTO_ALLOWED_EMAILS/_DOMAINS a second time in the API (403, no users row created, if the email is
+not on the list). The token-mode bootstrap that would otherwise create a second, empty owner
+account is suppressed in access mode, replaced by a startup assertion requiring RHAPTO_ACCESS_TEAM/
+_AUD to be set (plan-review I9) and that an allowed users row already exists. get_or_create_user now
+uses ON CONFLICT DO NOTHING so two concurrent first-sign-in requests for the same new email cannot
+raise an IntegrityError (plan-review C6, the account-duplication half). `rhapto accounts set-email`
+lets the owner correct RHAPTO_USER_EMAIL before the mode flip, now casefolding its lookup and
+refusing a taken target (plan-review minor 3).
 
 Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_013CTBNZrgo9dpYW6vRs2TC2
@@ -1671,6 +1757,18 @@ user-triggered path, has no lock); `apps/api/src/rhapto/worker/tasks.py:224-235`
 (`max_jobs = 2`, `job_timeout = 600`); no `advisory` lock usage exists anywhere in
 `apps/api/src/rhapto` today (grepped).
 
+**This task's fixture fix is not optional decoration — plan-review finding C4 showed the earlier
+version of this task left at least six existing tests red while claiming green:** `poll_user`/`poll_now`
+reading `ctx["engine"]` breaks `test_poll_now_runs_and_publishes`,
+`test_poll_now_records_failure`, `test_poll_now_reports_success_for_a_result_tied_to_a_saved_search`
+(all in `apps/api/tests/unit/test_worker_discovery.py`, all built on the module-level `ctx_for(factory,
+bus)` helper at that file's line ~61, which has no `engine` key); `poll_all_sources` reading
+`ctx["redis"]` breaks `test_poll_all_sources_never_raises_and_continues_after_failure` and
+`test_poll_all_sources_gives_each_user_their_own_session` (same file, same helper, no `redis` key —
+and both tests also assert the inline per-user loop this task deletes); and adding `"poll_user"` to
+`TASKS` breaks `test_worker_tasks.py::test_registry`'s exact-set assertion (`apps/api/tests/unit/test_worker_tasks.py:102-112`,
+`assert set(TASKS) == {...}` with seven names, not eight). Step 9 below fixes all four files.
+
 **Files:**
 - Modify: `apps/api/src/rhapto/worker/tasks.py` (new `poll_user` task; `poll_all_sources` becomes a
   thin dispatcher; advisory lock in `poll_user` and `poll_now`; concurrency-1 gate in
@@ -1679,12 +1777,18 @@ user-triggered path, has no lock); `apps/api/src/rhapto/worker/tasks.py:224-235`
   `enqueue_location_backfill`/`_location_backfill_done`/the `on_startup` call to it)
 - Modify: `apps/api/src/rhapto/services/scoring.py` (delete `users_needing_location_backfill`, now
   unused)
+- Modify: `apps/api/tests/api/conftest.py` (`worker_ctx` gains `engine`/`redis`)
+- Modify: `apps/api/tests/unit/test_worker_discovery.py` (`ctx_for` gains `engine`/`redis`; the two
+  `poll_all_sources` tests are replaced by `poll_user`-targeted equivalents)
+- Modify: `apps/api/tests/unit/test_worker_tasks.py` (`test_registry`'s expected set gains `"poll_user"`)
 - Test: `apps/api/tests/unit/test_poll_fan_out.py`
 - Test: `apps/api/tests/unit/test_pdf_concurrency_gate.py`
 
 **Interfaces:**
-- Consumes: `ctx["session_factory"]`, `ctx["engine"]` (set in `on_startup`, `worker/main.py:75-76`,
-  already present on every task's `ctx: dict[str, Any]`), `list_user_ids` (unchanged,
+- Consumes: `ctx["session_factory"]`, `ctx["engine"]` (set in the *real* worker's `on_startup`,
+  `worker/main.py:75-76` — but verified **absent** from the test doubles `worker_ctx`
+  (`tests/api/conftest.py`) and `ctx_for` (`tests/unit/test_worker_discovery.py`) before this task,
+  which is exactly plan-review finding C4; Step 9 adds it to both), `list_user_ids` (unchanged,
   `db/repositories/users.py`), `poll_sources` (unchanged, `services/discovery/poller.py:291`).
 - Produces:
   ```python
@@ -1886,7 +1990,137 @@ Add `poll_user` to `worker/main.py`'s import from `rhapto.worker.tasks`.
             # ... rest of the function body is unchanged from here (the results/publish block)
 ```
 
-- [ ] **Step 7: Add the PDF concurrency-1 gate**
+- [ ] **Step 7: Fix the four existing test files `ctx["engine"]`/`ctx["redis"]` break — plan-review C4**
+
+**(a) `apps/api/tests/api/conftest.py` — `worker_ctx` gains `engine`:**
+
+```python
+# apps/api/tests/api/conftest.py — worker_ctx fixture, add the `engine` parameter and key
+@pytest.fixture
+def worker_ctx(
+    session_factory: async_sessionmaker[AsyncSession],
+    engine: AsyncEngine,
+    llm_resolver: RecordingResolver,
+    event_bus: InMemoryEventBus,
+    storage: PackageStorage,
+    api_settings: Settings,
+) -> dict[str, Any]:
+    return {
+        "session_factory": session_factory,
+        "engine": engine,
+        "llm_resolver": llm_resolver,
+        "embedder": FakeEmbeddingProvider(dimensions=384),
+        "event_bus": event_bus,
+        "storage": storage,
+        "soffice_binary": api_settings.rhapto_soffice_binary,
+        "discovery_http": FakeDiscoveryHttp({}),
+    }
+```
+
+`engine` is already defined as a fixture in `apps/api/tests/conftest.py` (the parent conftest), so
+`worker_ctx` can depend on it directly with no new import beyond `AsyncEngine` from
+`sqlalchemy.ext.asyncio` (already imported in this file for `async_sessionmaker[AsyncSession]`
+annotations). `worker_ctx` never calls `poll_all_sources`, so it does not need a `redis` key.
+
+**(b) `apps/api/tests/unit/test_worker_discovery.py` — `ctx_for` gains `engine` and `redis`:**
+
+```python
+# apps/api/tests/unit/test_worker_discovery.py — replace ctx_for
+class RecordingRedis:
+    """A minimal arq-pool double: records every enqueue_job call, does not run anything."""
+
+    def __init__(self) -> None:
+        self.enqueued: list[tuple[str, dict[str, Any]]] = []
+
+    async def enqueue_job(self, task: str, **kwargs: Any) -> None:
+        self.enqueued.append((task, kwargs))
+
+
+def ctx_for(
+    factory: async_sessionmaker[AsyncSession], bus: InMemoryEventBus, engine: AsyncEngine
+) -> dict[str, Any]:
+    return {
+        "session_factory": factory,
+        "engine": engine,
+        "redis": RecordingRedis(),
+        "embedder": FakeEmbeddingProvider(dimensions=384),
+        "event_bus": bus,
+        "discovery_http": fake_http_for("greenhouse"),
+        "allow_dimension_mismatch": False,
+    }
+```
+
+Add `from sqlalchemy.ext.asyncio import AsyncEngine` to this file's existing
+`sqlalchemy.ext.asyncio` import line. Every test in this file that calls `ctx_for(session_factory,
+bus)` now needs the `engine: AsyncEngine` fixture added to its own parameter list and threaded
+through: `ctx_for(session_factory, bus, engine)`. Grep this file for `ctx_for(` to find every call
+site — `test_poll_now_runs_and_publishes`, `test_poll_now_records_failure`,
+`test_poll_now_reports_success_for_a_result_tied_to_a_saved_search`, and both `poll_all_sources`
+tests replaced below are the ones this session verified exist.
+
+**(c) Replace the two `poll_all_sources` tests with `poll_user`-targeted equivalents** — the fan-out
+behaviour they no longer exercise (`poll_all_sources` used to poll inline; it now only enqueues) is
+already proven by `test_poll_fan_out.py` (Step 1); what they were *actually* protecting — one user's
+failure not affecting another, and each user getting its own session — is a property of `poll_user`
+now, since the cron no longer loops in-process at all:
+
+```python
+# apps/api/tests/unit/test_worker_discovery.py — replace
+# test_poll_all_sources_never_raises_and_continues_after_failure and
+# test_poll_all_sources_gives_each_user_their_own_session with:
+async def test_poll_user_records_failure_without_raising(
+    session_factory: async_sessionmaker[AsyncSession],
+    session: AsyncSession,
+    user: User,
+    engine: AsyncEngine,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    await seed(session, user)
+
+    async def fake_poll_sources(*args: Any, **kwargs: Any) -> PollSummary:
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(worker_tasks, "poll_sources", fake_poll_sources)
+    ctx = ctx_for(session_factory, InMemoryEventBus(), engine)
+    await worker_tasks.poll_user(ctx, str(user.id))  # must not raise despite the fetch failing
+
+
+async def test_poll_user_uses_its_own_session(
+    session_factory: async_sessionmaker[AsyncSession],
+    session: AsyncSession,
+    user: User,
+    engine: AsyncEngine,
+) -> None:
+    """Regression guard for the shared-session bug Phase 0 already fixed: poll_user must open its
+    own session via session_factory() rather than reusing one passed in from outside."""
+    await seed(session, user)
+    ctx = ctx_for(session_factory, InMemoryEventBus(), engine)
+    await worker_tasks.poll_user(ctx, str(user.id))
+    async with session_factory() as check:
+        rows = list(await check.scalars(select(Job).where(Job.user_id == user.id)))
+        assert len(rows) == 2  # the seeded watchlist board's fake fetch, same as poll_now's test
+```
+
+**(d) `apps/api/tests/unit/test_worker_tasks.py` — `test_registry`'s expected set:**
+
+```python
+# apps/api/tests/unit/test_worker_tasks.py — replace the set(TASKS) assertion
+async def test_registry() -> None:
+    assert set(TASKS) == {
+        "tailor_job",
+        "embed_blocks",
+        "render_package_pdf",
+        "poll_now",
+        "poll_all_sources",
+        "poll_user",
+        "score_jobs",
+        "rescore_jobs",
+    }
+    assert TASKS["tailor_job"] is tailor_job
+    assert TASKS["render_package_pdf"] is render_package_pdf
+```
+
+- [ ] **Step 8: Add the PDF concurrency-1 gate**
 
 ```python
 # apps/api/src/rhapto/worker/tasks.py — module-level, near the other module-level state
@@ -1923,7 +2157,7 @@ Apply the same `async with _PDF_RENDER_LOCK:` wrap around the `storage.render_pd
 around what is today `tailor_job`'s line 191-193) — the same LibreOffice invocation, reached from a
 second call site.
 
-- [ ] **Step 8: Delete the dead location-backfill code**
+- [ ] **Step 9: Delete the dead location-backfill code**
 
 ```python
 # apps/api/src/rhapto/worker/main.py — delete enqueue_location_backfill,
@@ -1937,20 +2171,60 @@ second call site.
 # other caller remains before deleting; the only caller was worker/main.py, just removed).
 ```
 
-- [ ] **Step 9: Write the concurrency-gate test**
+- [ ] **Step 10: Write the concurrency-gate test — with real `Package` rows (plan-review I3)**
+
+The earlier version of this test passed with or without the lock: `worker_ctx` has no `Package` rows,
+so `render_package_pdf` returns at `row is None`, `fake_render_pdf` is never called, `max_concurrent`
+stays `0`, and `assert max_concurrent <= 1` is trivially true before the lock exists. Fixed by
+inserting two real `Package` rows (each needing a `Job` row for its `job_id` FK — verified
+`Package.job_id` is `ForeignKey("jobs.id", ondelete="CASCADE")`, `db/models.py:213-215`) and by
+asserting `== 1`, not `<= 1`, so a regression that removes the lock fails this test rather than
+passing it by accident:
 
 ```python
 # apps/api/tests/unit/test_pdf_concurrency_gate.py
 from __future__ import annotations
 
 import asyncio
+import time
+import uuid
+from datetime import UTC, datetime
 from typing import Any
 
-from rhapto.worker import tasks as tasks_module
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+
+from rhapto.db.models import Job, Package, User
+from rhapto.services.storage import PackageStorage
 from rhapto.worker.tasks import render_package_pdf
 
 
-async def test_two_concurrent_renders_never_overlap(worker_ctx: dict[str, Any], monkeypatch) -> None:
+async def _make_package(session: AsyncSession, user: User, storage: PackageStorage, tag: str) -> str:
+    job = Job(
+        user_id=user.id, source="manual", jd_text="A real job description. " * 6,
+        dedupe_hash=f"hash-{tag}-{uuid.uuid4()}", discovered_at=datetime.now(UTC),
+    )
+    session.add(job)
+    await session.flush()
+    package = Package(
+        user_id=user.id, job_id=job.id, track_id="pm", version=1, status="draft",
+        resume_json={}, cover_note="", change_log="", guardrail_report_json={}, jd_extract_json={},
+    )
+    session.add(package)
+    await session.flush()
+    package.docx_path = str(storage.write_docx(str(package.id), b"fake docx bytes"))
+    await session.commit()
+    return str(package.id)
+
+
+async def test_two_concurrent_renders_never_overlap(
+    worker_ctx: dict[str, Any], user: User, session: AsyncSession, monkeypatch
+) -> None:
+    storage: PackageStorage = worker_ctx["storage"]
+    session_factory: async_sessionmaker[AsyncSession] = worker_ctx["session_factory"]
+    package_id_a = await _make_package(session, user, storage, "a")
+    async with session_factory() as second_session:
+        package_id_b = await _make_package(second_session, user, storage, "b")
+
     concurrent = 0
     max_concurrent = 0
 
@@ -1958,39 +2232,35 @@ async def test_two_concurrent_renders_never_overlap(worker_ctx: dict[str, Any], 
         nonlocal concurrent, max_concurrent
         concurrent += 1
         max_concurrent = max(max_concurrent, concurrent)
-        import time
-
         time.sleep(0.05)
         concurrent -= 1
         return None
 
-    monkeypatch.setattr(tasks_module.PackageStorage, "render_pdf", staticmethod(fake_render_pdf))
+    monkeypatch.setattr(PackageStorage, "render_pdf", fake_render_pdf)
     await asyncio.gather(
-        render_package_pdf(worker_ctx, "00000000-0000-0000-0000-000000000000"),
-        render_package_pdf(worker_ctx, "00000000-0000-0000-0000-000000000001"),
+        render_package_pdf(worker_ctx, package_id_a),
+        render_package_pdf(worker_ctx, package_id_b),
     )
-    assert max_concurrent <= 1
+    assert max_concurrent == 1
 ```
 
-This test needs two real `Package` rows with `docx_path` set to exercise the lock past the early
-`return`; the implementer adds a small fixture inserting two packages via the existing
-`persist_package`/`package_repo` helpers used elsewhere in the suite (e.g. mirroring the setup in
-`apps/api/tests/unit/test_worker_tasks.py`, if that file exists — confirm the exact existing helper
-by grepping `apps/api/tests` for `docx_path=` before duplicating one).
+Run this test once against the code from *before* Step 8's `_PDF_RENDER_LOCK` is added (temporarily
+revert that one change) to confirm it fails first — `max_concurrent` should read `2` — per this plan's
+TDD convention, then restore the lock and confirm it passes.
 
-- [ ] **Step 10: Run the new tests, then the full suite**
+- [ ] **Step 11: Run the new tests, then the full suite**
 
-Run: `pytest tests/unit/test_poll_fan_out.py tests/unit/test_pdf_concurrency_gate.py -v` — expect PASS.
-Run: `pytest` — expect green. Existing `poll_now`/`poll_all_sources` tests (search
-`apps/api/tests` for `poll_now\|poll_all_sources` to find and update any test that asserted the old
-inline-loop behaviour of `poll_all_sources`, since it now only enqueues rather than polling).
+Run: `pytest tests/unit/test_poll_fan_out.py tests/unit/test_pdf_concurrency_gate.py tests/unit/test_worker_discovery.py tests/unit/test_worker_tasks.py -v` — expect PASS, including every pre-existing test in the last two files.
+Run: `pytest` — expect the full suite green.
 Run: `ruff check .` and `mypy src` — expect clean.
 
-- [ ] **Step 11: Commit**
+- [ ] **Step 12: Commit**
 
 ```bash
 git add apps/api/src/rhapto/worker/tasks.py apps/api/src/rhapto/worker/main.py \
   apps/api/src/rhapto/services/scoring.py \
+  apps/api/tests/api/conftest.py \
+  apps/api/tests/unit/test_worker_discovery.py apps/api/tests/unit/test_worker_tasks.py \
   apps/api/tests/unit/test_poll_fan_out.py apps/api/tests/unit/test_pdf_concurrency_gate.py
 git commit -m "$(cat <<'EOF'
 Per-user poll fan-out, advisory lock, PDF concurrency-1 gate (A4)
@@ -2000,8 +2270,14 @@ polling every user inline inside one 600s task -- two users used to exceed job_t
 second user's poll was killed mid-run. poll_user and poll_now both take a per-user Postgres
 advisory lock so a cron poll and a hand-triggered poll can never interleave for the same account.
 render_package_pdf and tailor_job's PDF step share a process-wide asyncio.Lock, since two
-concurrent LibreOffice renders can exceed the worker's 2GB cap. Deleted the location-tier backfill
+concurrent LibreOffice renders can exceed the worker's 2GB cap, proven this time with real Package
+rows rather than a vacuously-passing test (plan-review I3). Deleted the location-tier backfill
 one-shot, five migrations past its usefulness.
+
+worker_ctx and ctx_for now carry engine/redis doubles so the new ctx["engine"]/ctx["redis"] reads
+don't break every existing poll_now/poll_all_sources test (plan-review C4); the two
+poll_all_sources-level failure/session tests moved to poll_user, since the cron no longer polls
+in-process at all.
 
 Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_013CTBNZrgo9dpYW6vRs2TC2
@@ -2014,52 +2290,93 @@ account #1's), 10 (contained cost per user is meaningless if one user's poll sta
 
 ---
 
-## Task 5 (A5): The full first screen — synchronous backfill on first sign-in
+## Task 5 (A5): The full first screen — an idempotent seed, triggered once per session, never inside `current_user`
 
-**Scope decision, stated explicitly:** the architecture's §2.4 describes the backfill running
-"inside the onboarding request that completes setup" — but the onboarding wizard is Phase D, owned by
-a separate, unbuilt spec, and is out of scope here. Wiring A5 to a not-yet-built endpoint would leave
-Phase A incomplete on its own, contradicting the architecture's own "Ships" criterion for Phase A
-("an invited account reaches a full, live job list in under a second"). This task instead wires the
-backfill into the exact moment functional-spec §3 calls "signup" — **the first successful sign-in**,
-i.e. Task 3's `current_user` access-mode branch, at the point a `users` row is newly created. This
-keeps Phase A fully self-contained; Phase D's onboarding wizard (when built) simply lands on an
-already-full grid rather than triggering the fill itself.
+**This task changed shape after plan review rejected the earlier version outright**, on three
+findings, all fixed below:
+
+- **C5 — the backfill could violate `uq_jobs_user_source_external`, permanently bricking sign-in.**
+  Verified: `apps/api/alembic/versions/0002_discovery.py:33-40` creates a **partial unique index**
+  `uq_jobs_user_source_external (user_id, source, external_id) WHERE external_id IS NOT NULL` — a
+  constraint the previous draft of this task checked for `(user_id, dedupe_hash)` but never checked
+  for this one. `SELECT DISTINCT ON (dedupe_hash)` collapses by *text hash*, not by source identity:
+  two rows for the same `(source, external_id)` whose JD text changed between polls have two different
+  `dedupe_hash` values, both survive that `DISTINCT ON`, and inserting both for one new account raises
+  a unique violation. Fixed in Step 3 by deduping on `(source, COALESCE(external_id, dedupe_hash))`
+  instead, plus a second `NOT EXISTS` guard on `(user_id, source, external_id)` and a bare `ON CONFLICT
+  DO NOTHING` as a last-resort race guard — the plan reviewer's ruling was explicit that these three
+  are not alternatives to each other.
+- **C6 — the seed must never run inside `current_user`.** The previous draft ran the backfill (and a
+  second `get_or_create_user`-style read) inside the dependency every single endpoint in the API
+  depends on: any endpoint could pay for a multi-hundred-row `INSERT ... SELECT`, and any failure in
+  it presented as an auth failure. Fixed by leaving `current_user` exactly as Task 3 wrote it (get-
+  or-create, nothing else) and adding a **separate, dedicated `POST /api/v1/me/bootstrap` endpoint**
+  the web app calls once per session, gated by `Depends(current_user)` like any other endpoint rather
+  than living inside the dependency itself.
+- **I1 — `derive_searches` at first sign-in was guaranteed to be a no-op.** Verified:
+  `services/discovery/search.py:62-92` creates one saved search *per track*
+  (`for track in await profile_repo.list_tracks(...)`), and a brand-new account has zero tracks. The
+  previous draft called it from the seed step anyway, which did nothing and implied a promise
+  ("the cron picks the account up on its next interval") that wasn't actually kept. This task **does
+  not call `derive_searches`**; Phase D's onboarding flow (out of scope, owned elsewhere) is the
+  correct place to call it, once the user has tracks to derive searches from — stated here so Role 4
+  and Phase D's author both see the gap named rather than silently absent.
+
+Also fixes **I10** — the earlier draft's `backfill_public_jobs` imported `SOURCES` directly
+(`from rhapto.services.discovery.sources import SOURCES`), and that package's `__init__.py:53-65`
+imports eleven concrete source modules at import time purely for `@register` side effects, dragging
+the whole discovery stack into the DB repository layer. Fixed by having the repository function accept
+`public_sources: Sequence[str]` as a parameter; the caller (the new router endpoint) supplies
+`list(SOURCES.keys())`. And **I2** — the previous draft's own test called `list_jobs(...)` as if it
+returned bare `Job` rows; verified `apps/api/src/rhapto/db/repositories/jobs.py:63` declares
+`list_jobs(...) -> list[tuple[Job, str | None]]` (job, search name), so the fixed test below indexes
+`rows[0][0]`.
 
 Verified before writing: `apps/api/src/rhapto/db/models.py:164-205` (`Job` has 27 columns total,
 counting `UserScopedMixin.user_id` and `TimestampMixin`'s two columns; no unique constraint on
-`(user_id, dedupe_hash)` exists, so idempotency in Step 3's SQL is via `NOT EXISTS`, not `ON CONFLICT`);
-`apps/api/src/rhapto/services/discovery/sources/__init__.py:16` (`SOURCES: dict[str, SourceClass] =
-{}`, the positive-allowlist registry); `apps/api/src/rhapto/services/discovery/poller.py:45`
+`(user_id, dedupe_hash)` exists); `apps/api/src/rhapto/services/discovery/sources/__init__.py:16`
+(`SOURCES: dict[str, SourceClass] = {}`, the positive-allowlist registry); `apps/api/src/rhapto/services/discovery/poller.py:45`
 (`INGEST_MAX_AGE_DAYS = 90`); `apps/api/src/rhapto/db/repositories/jobs.py:16-40` (`create_job`
-defaults `source="manual"`, confirming `"manual"` is never in `SOURCES`); `apps/api/src/rhapto/services/discovery/search.py:62-89`
-(`derive_searches(session, user_id) -> list[SearchRow]`, already idempotent — returns `[]` if the
-user already has searches); `apps/api/src/rhapto/db/repositories/jobs.py:146-148,180`
-(`list_jobs`'s default `bucket == "fit"` **already** includes `Job.best_fit.is_(None)` rows and
-orders them `nulls_last` rather than hiding them); `apps/api/src/rhapto/components` — verified
-`apps/web/src/components/ui/fit-ring.tsx:42-56` **already** renders a `null` fit as a dashed ring with
-`title="Not scored yet"` rather than hiding the card. **Both of the architecture's "must not
-silently no-op" first-screen requirements are already satisfied by existing code** — this task adds
-a regression test pinning that behaviour for newly backfilled rows, rather than new product code.
+defaults `source="manual"`, confirming `"manual"` is never in `SOURCES`); `apps/api/src/rhapto/db/repositories/jobs.py:63,144-151,180`
+(`list_jobs`'s signature and its default `bucket == "fit"` **already** including `Job.best_fit.is_(None)`
+rows, ordered `nulls_last` rather than hidden); `apps/web/src/components/ui/fit-ring.tsx:42-56`
+(**already** renders a `null` fit as a dashed ring with `title="Not scored yet"` rather than hiding
+the card) — **both of the architecture's "must not silently no-op" first-screen requirements are
+already satisfied by existing code**, confirmed here with a regression test rather than new product
+code; `apps/api/src/rhapto/api/routers/meta.py` (the router `POST /api/v1/me/bootstrap` is added to);
+`User.seeded_at` (added by Task 1's migration `0011`, unused until now).
 
 **Files:**
-- Modify: `apps/api/src/rhapto/db/repositories/jobs.py` (new `backfill_public_jobs`)
-- Modify: `apps/api/src/rhapto/api/deps.py` (`current_user`'s access-mode branch: seed a newly
-  created account)
+- Modify: `apps/api/src/rhapto/db/repositories/jobs.py` (new `backfill_public_jobs`, takes
+  `public_sources` as a parameter — I10)
+- Modify: `apps/api/src/rhapto/api/routers/meta.py` (new `POST /me/bootstrap` endpoint)
+- Modify: `apps/api/src/rhapto/api/schemas.py` (`BootstrapOut`)
+- Modify: `apps/web/src/lib/api/queries.ts` (a `useBootstrap` mutation)
+- Modify: `apps/web/src/app/providers.tsx` (or wherever the app-wide query client lives — call the
+  bootstrap mutation once per authenticated session; the implementer confirms the exact file by
+  reading `apps/web/src/app/providers.tsx` and `apps/web/src/app/layout.tsx` before choosing)
+- Modify: `packages/schemas/openapi.json`, `apps/web/src/lib/api/schema.d.ts` (regenerated)
 - Test: `apps/api/tests/db/test_backfill_public_jobs.py`
-- Test: `apps/api/tests/api/test_access_mode.py` (extend: new-account seeding, end-to-end)
+- Test: `apps/api/tests/api/test_access_mode.py` (extend: the bootstrap endpoint, end-to-end)
 
 **Interfaces:**
-- Consumes: `SOURCES` (`services/discovery/sources`, unchanged), `derive_searches` (unchanged,
-  `services/discovery/search.py`), `is_allowed_email`/`get_or_create_user` (Task 3).
+- Consumes: `is_allowed_email`/`get_or_create_user` (Task 3, unchanged by this task), `User.seeded_at`
+  (Task 1).
 - Produces:
   ```python
   # rhapto/db/repositories/jobs.py
-  async def backfill_public_jobs(session: AsyncSession, user_id: uuid.UUID) -> int:
-      """Row count inserted. Idempotent: safe to call more than once for the same user."""
+  async def backfill_public_jobs(
+      session: AsyncSession, user_id: uuid.UUID, *, public_sources: Sequence[str]
+  ) -> int:
+      """Row count inserted. Idempotent: safe to call more than once for the same user, and safe
+      under concurrent callers (bare ON CONFLICT DO NOTHING)."""
+
+  # rhapto/api/schemas.py
+  class BootstrapOut(BaseModel):
+      seeded: bool  # True the one time this call actually ran the backfill; False every other time
   ```
-  No other task in this plan calls `backfill_public_jobs`; Phase D (out of scope) is free to call it
-  again from its own onboarding-completion step with no behaviour change, since it is idempotent.
+  `POST /api/v1/me/bootstrap` is the only caller of `backfill_public_jobs` in this plan. No other
+  task depends on either.
 
 - [ ] **Step 1: Write the failing backfill tests**
 
@@ -2102,13 +2419,17 @@ async def _seed_job(session: AsyncSession, owner_id: uuid.UUID, **overrides) -> 
     return job
 
 
+PUBLIC_SOURCES = ["greenhouse", "lever"]  # real SOURCES keys used only as test fixtures here (I10:
+                                           # the repository function itself never imports SOURCES)
+
+
 async def test_copies_a_public_job_into_the_new_account(session: AsyncSession) -> None:
     owner = await get_or_create_user(session, "owner@example.com")
     newcomer = await get_or_create_user(session, "newcomer@example.com")
     await _seed_job(session, owner.id)
     await session.commit()
 
-    count = await backfill_public_jobs(session, newcomer.id)
+    count = await backfill_public_jobs(session, newcomer.id, public_sources=PUBLIC_SOURCES)
     await session.commit()
 
     assert count == 1
@@ -2125,7 +2446,7 @@ async def test_never_copies_a_manual_job(session: AsyncSession) -> None:
     await _seed_job(session, owner.id, source="manual", external_id=None, url=None)
     await session.commit()
 
-    count = await backfill_public_jobs(session, newcomer.id)
+    count = await backfill_public_jobs(session, newcomer.id, public_sources=PUBLIC_SOURCES)
     await session.commit()
 
     assert count == 0
@@ -2153,7 +2474,7 @@ async def test_excluded_columns_are_never_copied(session: AsyncSession) -> None:
     )
     await session.commit()
 
-    await backfill_public_jobs(session, newcomer.id)
+    await backfill_public_jobs(session, newcomer.id, public_sources=PUBLIC_SOURCES)
     await session.commit()
 
     rows = list(await session.scalars(select(Job).where(Job.user_id == newcomer.id)))
@@ -2182,7 +2503,7 @@ async def test_excludes_unlisted_and_stale_jobs(session: AsyncSession) -> None:
     )
     await session.commit()
 
-    count = await backfill_public_jobs(session, newcomer.id)
+    count = await backfill_public_jobs(session, newcomer.id, public_sources=PUBLIC_SOURCES)
     await session.commit()
     assert count == 0
 
@@ -2193,9 +2514,9 @@ async def test_is_idempotent(session: AsyncSession) -> None:
     await _seed_job(session, owner.id, source="greenhouse")
     await session.commit()
 
-    first = await backfill_public_jobs(session, newcomer.id)
+    first = await backfill_public_jobs(session, newcomer.id, public_sources=PUBLIC_SOURCES)
     await session.commit()
-    second = await backfill_public_jobs(session, newcomer.id)
+    second = await backfill_public_jobs(session, newcomer.id, public_sources=PUBLIC_SOURCES)
     await session.commit()
 
     assert first == 1
@@ -2204,59 +2525,98 @@ async def test_is_idempotent(session: AsyncSession) -> None:
     assert len(rows) == 1
 
 
+async def test_two_rows_sharing_source_and_external_id_with_different_dedupe_hash_do_not_collide(
+    session: AsyncSession,
+) -> None:
+    """Fixes plan-review C5: a JD whose text (and therefore dedupe_hash) changed between two polls
+    of the same posting used to survive `DISTINCT ON (dedupe_hash)` as two rows, both sharing
+    (source, external_id) -- violating uq_jobs_user_source_external the moment both were inserted
+    for one new account and 500ing the request that was supposed to create it."""
+    owner = await get_or_create_user(session, "owner@example.com")
+    newcomer = await get_or_create_user(session, "newcomer@example.com")
+    await _seed_job(
+        session, owner.id, source="greenhouse", external_id="shared-ext",
+        dedupe_hash=f"hash-old-{uuid.uuid4()}", discovered_at=datetime.now(UTC) - timedelta(days=2),
+    )
+    await _seed_job(
+        session, owner.id, source="greenhouse", external_id="shared-ext",
+        dedupe_hash=f"hash-new-{uuid.uuid4()}", discovered_at=datetime.now(UTC),
+    )
+    await session.commit()
+
+    count = await backfill_public_jobs(session, newcomer.id, public_sources=PUBLIC_SOURCES)
+    await session.commit()
+
+    assert count == 1  # never raises, and collapses to exactly one row for the shared external_id
+    rows = list(await session.scalars(select(Job).where(Job.user_id == newcomer.id)))
+    assert len(rows) == 1
+
+
 async def test_unscored_backfilled_rows_stay_in_the_default_fit_bucket(session: AsyncSession) -> None:
     """Pins the existing (pre-A5) behaviour this task relies on rather than reimplementing:
-    best_fit IS NULL rows are not filtered out of the default grid view."""
+    best_fit IS NULL rows are not filtered out of the default grid view. Fixes plan-review I2:
+    list_jobs returns list[tuple[Job, str | None]] (job, search name), verified against
+    db/repositories/jobs.py:63 -- the earlier draft of this test indexed it as if it returned bare
+    Job rows."""
     from rhapto.db.repositories.jobs import list_jobs
 
     owner = await get_or_create_user(session, "owner@example.com")
     newcomer = await get_or_create_user(session, "newcomer@example.com")
     await _seed_job(session, owner.id, source="greenhouse")
     await session.commit()
-    await backfill_public_jobs(session, newcomer.id)
+    await backfill_public_jobs(session, newcomer.id, public_sources=PUBLIC_SOURCES)
     await session.commit()
 
     rows = await list_jobs(session, newcomer.id, bucket="fit")
     assert len(rows) == 1
-    assert rows[0].best_fit is None
+    job, _search_name = rows[0]
+    assert job.best_fit is None
 ```
-
-(`list_jobs`'s exact return type/signature must be confirmed against
-`apps/api/src/rhapto/db/repositories/jobs.py` by the implementer before writing this last test —
-verified in this session that `list_jobs(session, user_id, *, search=None, track=None, bucket=None,
-...)` exists at line 63 and returns rows filtered by the `bucket` logic at lines 144-151; adjust the
-call/assertion to match its actual return shape (a list of `Job` ORM rows or a mapped result) as read
-directly from the function body.)
 
 - [ ] **Step 2: Run the tests to see them fail**
 
 Run: `pytest tests/db/test_backfill_public_jobs.py -v`
 Expected: FAIL — `backfill_public_jobs` does not exist yet (import error).
 
-- [ ] **Step 3: Implement `backfill_public_jobs`**
+- [ ] **Step 3: Implement `backfill_public_jobs` — fixing plan-review C5 and I10**
 
 ```python
 # apps/api/src/rhapto/db/repositories/jobs.py — new function
-from rhapto.services.discovery.sources import SOURCES
+from collections.abc import Sequence
 
 PUBLIC_BACKFILL_MAX_AGE_DAYS = 90  # matches services.discovery.poller.INGEST_MAX_AGE_DAYS
 
 
-async def backfill_public_jobs(session: AsyncSession, user_id: uuid.UUID) -> int:
+async def backfill_public_jobs(
+    session: AsyncSession, user_id: uuid.UUID, *, public_sources: Sequence[str]
+) -> int:
     """Seed a brand-new account's first screen with every live public-source job already
     discovered on this instance, cached embedding included, at zero LLM/embedding cost.
 
-    Positive allowlist only (`SOURCES.keys()`) -- never a denylist -- so `manual` (never
-    registered in SOURCES) and any future private-ingest source are excluded structurally, not by
-    name. Does not copy: extracted_json (another user's ungoverned LLM output), repost_of/
-    search_id (foreign keys into another user's own rows -- copying them would violate the FK or
-    leak another user's job id), best_fit/best_track_id/location_tier/hidden_at/rescued (another
-    user's opinions, meaningless for a new account). Idempotent via NOT EXISTS on
-    (user_id, dedupe_hash): there is no unique constraint enforcing that pair today (verified
-    against db/models.py), so a retried call is made safe here rather than by a migration this
-    task deliberately does not need.
+    `public_sources` is supplied by the caller as `list(SOURCES.keys())` -- this module takes no
+    import on `rhapto.services.discovery.sources`, whose `__init__.py` imports eleven concrete
+    source modules purely for `@register` side effects (plan-review I10); the positive allowlist
+    is still enforced, just constructed one layer up.
+
+    Does not copy: extracted_json (another user's ungoverned LLM output), repost_of/search_id
+    (foreign keys into another user's own rows), best_fit/best_track_id/location_tier/hidden_at/
+    rescued (another user's opinions, meaningless for a new account).
+
+    Idempotent three ways, none of them optional (plan-review C5 -- the reviewer's ruling was that
+    these are not alternatives to each other):
+    1. The inner `DISTINCT ON (source, COALESCE(external_id, dedupe_hash))` collapses by *source
+       identity* first, not by text hash -- two rows for the same (source, external_id) whose JD
+       text changed between polls (and therefore have different dedupe_hash values) collapse to
+       one, rather than both surviving and violating `uq_jobs_user_source_external`
+       (`(user_id, source, external_id) WHERE external_id IS NOT NULL`,
+       `alembic/versions/0002_discovery.py:33-40`) the moment both are inserted for the new user.
+    2. `NOT EXISTS` guards both `(user_id, dedupe_hash)` and `(user_id, source, external_id)`, so a
+       retried call -- or a second call whose source data has since changed hash -- inserts nothing
+       already present under either key.
+    3. A bare `ON CONFLICT DO NOTHING` (no target needed) is the last-resort guard against two
+       concurrent callers both passing the `NOT EXISTS` checks before either commits -- the
+       classic idempotency race a `NOT EXISTS` clause alone cannot close.
     """
-    public_sources = list(SOURCES.keys())
     if not public_sources:
         return 0
     cutoff = datetime.now(UTC) - timedelta(days=PUBLIC_BACKFILL_MAX_AGE_DAYS)
@@ -2272,88 +2632,106 @@ async def backfill_public_jobs(session: AsyncSession, user_id: uuid.UUID) -> int
                    j.title, j.location, j.posted_at, j.salary_text, j.jd_text, j.jd_embedding,
                    j.dedupe_hash, j.identity_hash, now(), 0, now(), now()
             FROM (
-                SELECT DISTINCT ON (dedupe_hash) *
+                SELECT DISTINCT ON (source, COALESCE(external_id, dedupe_hash)) *
                 FROM jobs
                 WHERE source = ANY(:public_sources)
                   AND unlisted_at IS NULL
                   AND (posted_at IS NULL OR posted_at > :cutoff)
-                ORDER BY dedupe_hash, discovered_at ASC
+                ORDER BY source, COALESCE(external_id, dedupe_hash), discovered_at ASC
             ) j
             WHERE NOT EXISTS (
                 SELECT 1 FROM jobs existing
                 WHERE existing.user_id = :user_id AND existing.dedupe_hash = j.dedupe_hash
             )
+            AND NOT EXISTS (
+                SELECT 1 FROM jobs existing2
+                WHERE existing2.user_id = :user_id AND existing2.source = j.source
+                  AND j.external_id IS NOT NULL AND existing2.external_id = j.external_id
+            )
+            ON CONFLICT DO NOTHING
             """
         ),
-        {"user_id": str(user_id), "public_sources": public_sources, "cutoff": cutoff},
+        {"user_id": str(user_id), "public_sources": list(public_sources), "cutoff": cutoff},
     )
     return result.rowcount or 0
 ```
 
-Add `from sqlalchemy import text` and `from datetime import UTC, datetime, timedelta` to
-`jobs.py`'s imports if not already present (verified `datetime`, `UTC`, `timedelta` are already
-imported at the top of the file; `text` is not — add it to the existing `from sqlalchemy import
-CursorResult, and_, delete, func, not_, nulls_last, or_, select` line).
+Add `from sqlalchemy import text` and `from collections.abc import Sequence` to `jobs.py`'s imports
+(verified `datetime`, `UTC`, `timedelta` are already imported at the top of the file; `text` is not —
+add it to the existing `from sqlalchemy import CursorResult, and_, delete, func, not_, nulls_last,
+or_, select` line).
 
 - [ ] **Step 4: Run the backfill tests again**
 
 Run: `pytest tests/db/test_backfill_public_jobs.py -v`
-Expected: all six PASS.
+Expected: all eight PASS, including the new `uq_jobs_user_source_external` regression test.
 
-- [ ] **Step 5: Wire the seed into new-account creation**
+- [ ] **Step 5: Add `POST /api/v1/me/bootstrap` — fixing plan-review C6**
+
+`current_user` is not touched by this step at all; it stays exactly as Task 3 left it.
 
 ```python
-# apps/api/src/rhapto/api/deps.py — current_user's access-mode branch (from Task 3 Step 8)
-from rhapto.db.repositories.jobs import backfill_public_jobs
-from rhapto.services.discovery.search import derive_searches
-
-
-async def current_user(
-    request: Request,
-    principal: Annotated[Principal, Depends(resolve_principal)],
-    session: Annotated[AsyncSession, Depends(get_session)],
-) -> uuid.UUID:
-    state = get_state(request)
-    if principal.mode == "token":
-        if state.user_id is None:
-            raise HTTPException(status_code=503, detail="server not ready")
-        return state.user_id
-    settings = state.settings
-    if not is_allowed_email(
-        principal.email, settings.rhapto_allowed_emails, settings.rhapto_allowed_email_domains
-    ):
-        raise HTTPException(status_code=403, detail="this instance is invite-only")
-    existing = await session.scalar(select(User).where(User.email == principal.email))
-    if existing is not None:
-        await session.commit()
-        return existing.id
-    user = await get_or_create_user(session, principal.email)
-    # First sign-in for this email: this *is* signup (functional-spec.md §3). Fill the screen
-    # synchronously, in this same request/transaction -- sub-second, zero LLM calls, zero new
-    # embeddings (architecture.md §2.4) -- rather than waiting on the cron's first poll.
-    await backfill_public_jobs(session, user.id)
-    await derive_searches(session, user.id)
-    await session.commit()
-    return user.id
+# apps/api/src/rhapto/api/schemas.py — new response model
+class BootstrapOut(BaseModel):
+    seeded: bool
 ```
 
-Add `from sqlalchemy import select` and `from rhapto.db.models import User` to `deps.py`'s imports.
+```python
+# apps/api/src/rhapto/api/routers/meta.py — new endpoint
+from rhapto.db.repositories.jobs import backfill_public_jobs
+from rhapto.services.discovery.sources import SOURCES
 
-- [ ] **Step 6: Write the end-to-end seeding test**
+
+@router.post("/me/bootstrap", response_model=BootstrapOut)
+async def bootstrap(
+    user_id: Annotated[uuid.UUID, Depends(current_user)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> BootstrapOut:
+    """Idempotent, cheap on every call after the first: the web app calls this once per session
+    (Step 7), and it only ever does real work the one time `users.seeded_at` is still NULL. Kept
+    entirely out of `current_user` (plan-review C6) so no other endpoint's request pays for it and
+    no failure here can present as an auth failure.
+    """
+    user = await session.get(User, user_id)
+    if user is None or user.seeded_at is not None:
+        return BootstrapOut(seeded=False)
+    await backfill_public_jobs(session, user_id, public_sources=list(SOURCES.keys()))
+    user.seeded_at = datetime.now(UTC)
+    await session.commit()
+    return BootstrapOut(seeded=True)
+```
+
+Add `import uuid`, `from datetime import UTC, datetime` to `meta.py`'s imports if not already present
+(verified `meta.py` currently imports `uuid` already for `current_user`'s return type but not
+`datetime`).
+
+**Why no advisory lock, unlike Task 4's `with_user_poll_lock`:** two concurrent bootstrap calls for
+the same brand-new account (the web app could plausibly fire this from two mounted components) could
+both read `seeded_at IS NULL` before either commits and both run `backfill_public_jobs`. This is
+**not** a correctness risk, only a wasted-work one: the backfill's own three-layer idempotency (Step
+3) makes a second concurrent run insert at most a handful of rows the first one raced past, never a
+duplicate or an error. Adding a real advisory lock here would need `ctx["engine"]`-equivalent
+plumbing at the API layer that the test `app` fixture does not currently provide (`create_app` never
+receives an `engine` when `session_factory` is supplied directly, as every test does) — real, but
+separate, infrastructure work. Given the underlying operation is already idempotent, the plan accepts
+the small, one-time, per-account cost of a possible double-run rather than building that plumbing for
+this. **Cost if this call turns out to be wrong:** at most one extra near-duplicate `INSERT ... SELECT`
+pass per account, ever, on the exact first sign-in — no data corruption, no user-visible error.
+
+- [ ] **Step 6: Write the endpoint test**
 
 ```python
 # apps/api/tests/api/test_access_mode.py — append
-async def test_first_sign_in_backfills_the_new_accounts_first_screen(
+async def test_bootstrap_seeds_a_new_accounts_first_screen_exactly_once(
     app: FastAPI, rsa_keypair, signed_assertion, monkeypatch, session_factory
 ) -> None:
-    from rhapto.db.repositories.jobs import backfill_public_jobs
+    from datetime import UTC, datetime
+
+    from rhapto.db.models import Job
     from rhapto.db.repositories.users import get_or_create_user
 
     async with session_factory() as session:
         owner = await get_or_create_user(session, "owner@example.com")
-        from rhapto.db.models import Job
-        from datetime import UTC, datetime
-
         session.add(
             Job(
                 user_id=owner.id, source="greenhouse", external_id="e1", url="https://x/1",
@@ -2375,48 +2753,106 @@ async def test_first_sign_in_backfills_the_new_accounts_first_screen(
     _, public_key = rsa_keypair
     cache = auth_module.JwksCache("http://unused")
     cache._keys["test-kid"] = public_key
-    cache._fetched_at = __import__("time").monotonic()
+    cache._fetched_at = time.monotonic()
     monkeypatch.setitem(auth_module._jwks_caches, "test-team", cache)
 
     token = signed_assertion("newcomer@example.com")
+    headers = {"Cf-Access-Jwt-Assertion": token}
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as c:
-        me_response = await c.get("/api/v1/me", headers={"Cf-Access-Jwt-Assertion": token})
+        me_response = await c.get("/api/v1/me", headers=headers)
         assert me_response.status_code == 200
-        new_user_id = me_response.json()["user_id"]
-        jobs_response = await c.get(
-            "/api/v1/jobs", headers={"Cf-Access-Jwt-Assertion": token}
-        )
-    assert jobs_response.status_code == 200
-    jobs = jobs_response.json()
-    assert len(jobs) == 1
-    assert jobs[0]["best_fit"] is None
+        jobs_before = await c.get("/api/v1/jobs", headers=headers)
+        assert jobs_before.json() == []  # not seeded yet -- current_user alone never seeds
+
+        first = await c.post("/api/v1/me/bootstrap", headers=headers)
+        assert first.status_code == 200 and first.json()["seeded"] is True
+
+        jobs_after = await c.get("/api/v1/jobs", headers=headers)
+        assert len(jobs_after.json()) == 1
+        assert jobs_after.json()[0]["best_fit"] is None
+
+        second = await c.post("/api/v1/me/bootstrap", headers=headers)
+        assert second.status_code == 200 and second.json()["seeded"] is False
 ```
 
-(`import httpx` and `from rhapto.api.deps import AppState` are already imported earlier in this test
-file, per Task 3 Step 11.)
+(`import httpx`, `from rhapto.api.deps import AppState`, and `import time` are already imported
+earlier in this test file, per Task 3.)
 
-- [ ] **Step 7: Run it, then the full suite**
+- [ ] **Step 7: Wire the web app to call `/me/bootstrap` once per session**
 
-Run: `pytest tests/api/test_access_mode.py -v` — expect PASS including the new test.
+```typescript
+// apps/web/src/lib/api/queries.ts — new mutation
+export function useBootstrap() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => unwrap(apiClient().POST("/api/v1/me/bootstrap")),
+    onSuccess: (data) => {
+      if (data.seeded) {
+        void queryClient.invalidateQueries({ queryKey: ["jobs"] });
+      }
+    },
+  });
+}
+```
+
+```typescript
+// apps/web/src/app/providers.tsx (or the file the implementer confirms holds the top-level
+// QueryClientProvider, by reading providers.tsx and layout.tsx first) — call it once per mount
+// when /me has succeeded:
+"use client";
+import { useEffect } from "react";
+import { useMe, useBootstrap } from "@/lib/api/queries";
+
+function Bootstrapper() {
+  const me = useMe();
+  const bootstrap = useBootstrap();
+  useEffect(() => {
+    if (me.isSuccess && bootstrap.isIdle) {
+      bootstrap.mutate();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- fire once per successful /me, not on every render
+  }, [me.isSuccess]);
+  return null;
+}
+```
+
+Mount `<Bootstrapper />` once, inside the existing top-level providers tree, alongside (not replacing)
+whatever `QueryClientProvider` already wraps the app — the implementer locates the exact insertion
+point by reading `apps/web/src/app/providers.tsx` before adding it, since this plan has not read that
+file's current contents in full and must not guess its structure.
+
+- [ ] **Step 8: Regenerate the OpenAPI document and the web client's types**
+
+Run (from `apps/api`): `python scripts/export_openapi.py`.
+Run (from `apps/web`): `pnpm gen:api`.
+
+- [ ] **Step 9: Run the new tests, then the full suites**
+
+Run: `pytest tests/db/test_backfill_public_jobs.py tests/api/test_access_mode.py -v` — expect PASS.
 Run: `pytest` — expect green.
 Run: `ruff check .` and `mypy src` — expect clean.
+Run (apps/web): `pnpm test`, `pnpm lint`, `pnpm typecheck` — expect green.
 
-- [ ] **Step 8: Commit**
+- [ ] **Step 10: Commit**
 
 ```bash
-git add apps/api/src/rhapto/db/repositories/jobs.py apps/api/src/rhapto/api/deps.py \
+git add apps/api/src/rhapto/db/repositories/jobs.py apps/api/src/rhapto/api/routers/meta.py \
+  apps/api/src/rhapto/api/schemas.py packages/schemas/openapi.json \
+  apps/web/src/lib/api/schema.d.ts apps/web/src/lib/api/queries.ts apps/web/src/app/providers.tsx \
   apps/api/tests/db/test_backfill_public_jobs.py apps/api/tests/api/test_access_mode.py
 git commit -m "$(cat <<'EOF'
-Seed a new account's first screen synchronously on first sign-in (A5)
+Seed a new account's first screen via an idempotent, dedicated bootstrap endpoint (A5)
 
-backfill_public_jobs copies every live public-source job (positive SOURCES allowlist, never a
-denylist) into a newly created account in one INSERT ... SELECT, cached jd_embedding included, at
-zero LLM/embedding cost -- and never copies extracted_json, repost_of, search_id, or another
-user's fit/track/hidden/rescued opinions. Wired into current_user's access-mode branch at the
-moment a users row is first created, which is what functional-spec.md calls signup, rather than
-into the not-yet-built onboarding wizard (Phase D, out of scope) -- keeping Phase A a complete,
-self-contained ship. Confirmed (with a regression test) that list_jobs and FitRing already surface
-best_fit IS NULL rows rather than hiding them; no product change was needed there.
+backfill_public_jobs copies every live public-source job (positive SOURCES allowlist supplied by
+the caller, never imported by the DB layer -- plan-review I10) into a new account in one
+INSERT ... SELECT, cached jd_embedding included, at zero LLM/embedding cost -- deduping on source
+identity rather than text hash so a JD that changed between polls can never violate
+uq_jobs_user_source_external (plan-review C5), with NOT EXISTS plus a bare ON CONFLICT DO NOTHING
+as defense in depth against concurrent callers. Triggered by a new POST /api/v1/me/bootstrap
+endpoint the web app calls once per session, never from inside current_user (plan-review C6) --
+so no other endpoint pays for it and no failure here can look like an auth failure. Does not call
+derive_searches (plan-review I1): a brand-new account has zero tracks, so that call was
+provably a no-op; Phase D's onboarding flow is the correct place for it once tracks exist.
 
 Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_013CTBNZrgo9dpYW6vRs2TC2
@@ -2437,13 +2873,24 @@ Verified before writing: `users.last_seen_at`/`users.exempt_from_pruning` exist 
 has no `accounts` sub-app before Task 3 adds `set-email` — this task adds `prune` to that same
 sub-app.
 
+This task also fixes two plan-review findings: **I5** (`mark_seen` must not add a `SELECT` to every
+request — a single atomic `UPDATE` replaces the read-then-write) and part of **I6** (nothing set
+`exempt_from_pruning`, and `MeOut` had no way for the web app to warn a returning user before their
+account is pruned).
+
 **Files:**
 - Create: `apps/api/src/rhapto/services/accounts.py`
 - Modify: `apps/api/src/rhapto/api/deps.py` (`current_user`: fire-and-forget `mark_seen` call)
 - Modify: `apps/api/src/rhapto/config.py` (`rhapto_inactive_days`)
-- Modify: `apps/api/src/rhapto/cli/main.py` (`accounts prune --dry-run`)
+- Modify: `apps/api/src/rhapto/cli/main.py` (`accounts prune --dry-run`, `accounts exempt`)
+- Modify: `apps/api/src/rhapto/api/schemas.py` (`MeOut.deletion_due_at`)
+- Modify: `apps/api/src/rhapto/api/routers/meta.py` (`me()` computes it)
+- Modify: `packages/schemas/openapi.json`, `apps/web/src/lib/api/schema.d.ts` (regenerated)
+- Create: `apps/web/src/components/shell/DeletionBanner.tsx` (the day-60 warning)
 - Test: `apps/api/tests/unit/test_accounts_lifecycle.py`
-- Test: `apps/api/tests/cli/test_accounts_prune.py`
+- Test: `apps/api/tests/unit/test_accounts_prune.py` (not `tests/cli/` — plan-review I11, same fix as
+  Task 3)
+- Test: `apps/web/src/components/shell/DeletionBanner.test.tsx`
 
 **Interfaces:**
 - Consumes: `User.last_seen_at`, `User.exempt_from_pruning` (Task 1).
@@ -2452,8 +2899,11 @@ sub-app.
   # rhapto/services/accounts.py
   async def mark_seen(session: AsyncSession, user_id: uuid.UUID) -> None: ...
   async def inactive_accounts(session: AsyncSession, cutoff: datetime) -> list[User]: ...
+  def would_delete_everyone(all_user_ids: Sequence[uuid.UUID], to_delete_ids: Sequence[uuid.UUID]) -> bool: ...
   ```
-  Task 7 consumes both, plus adds `delete_account`/`sweep_orphan_files` to this same module.
+  Task 7 consumes all three, plus adds `delete_account`/`sweep_orphan_files` to this same module.
+  `MeOut.deletion_due_at: datetime | None` (new field, `None` when exempt or not yet computable) is
+  consumed by the new `DeletionBanner` component this task also adds.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -2512,7 +2962,14 @@ async def test_inactive_accounts_excludes_exempt_users(session: AsyncSession) ->
 Run: `pytest tests/unit/test_accounts_lifecycle.py -v`
 Expected: FAIL — `rhapto.services.accounts` does not exist.
 
-- [ ] **Step 3: Implement `services/accounts.py`**
+- [ ] **Step 3: Implement `services/accounts.py` — `mark_seen` as one atomic `UPDATE` (plan-review I5)**
+
+The earlier draft did `session.get` (a `SELECT`) then a conditional attribute write — an extra
+`SELECT` on every authenticated request in both modes, and a read-then-write that is not atomic under
+concurrent requests for the same user. Fixed with a single `UPDATE ... WHERE ... AND last_seen_at <
+now() - interval '1 hour'`: the database itself decides whether the row needs touching, in one
+round trip, and two concurrent requests for the same user race safely (whichever commits first wins;
+the second's `WHERE` clause simply matches zero rows).
 
 ```python
 # apps/api/src/rhapto/services/accounts.py
@@ -2520,30 +2977,30 @@ from __future__ import annotations
 
 import logging
 import uuid
-from datetime import UTC, datetime, timedelta
+from collections.abc import Sequence
+from datetime import UTC, datetime
 
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from rhapto.db.models import User
 
 logger = logging.getLogger("rhapto.services.accounts")
 
-MARK_SEEN_THROTTLE = timedelta(hours=1)
-
 
 async def mark_seen(session: AsyncSession, user_id: uuid.UUID) -> None:
-    """Update last_seen_at, throttled to at most once per hour per user.
-
-    Called from current_user on every authenticated request; a failure here must never fail the
-    request it rides along with, so the caller wraps this in a try/except (architecture.md §4.1).
+    """Move last_seen_at to now(), but only when it is already more than an hour stale -- one
+    atomic UPDATE, no preceding SELECT (plan-review I5). Called from current_user on every
+    authenticated request; a failure here must never fail the request it rides along with, so the
+    caller wraps this in a try/except (architecture.md §4.1).
     """
-    user = await session.get(User, user_id)
-    if user is None:
-        return
-    if datetime.now(UTC) - user.last_seen_at < MARK_SEEN_THROTTLE:
-        return
-    user.last_seen_at = datetime.now(UTC)
+    await session.execute(
+        text(
+            "UPDATE users SET last_seen_at = now() "
+            "WHERE id = :uid AND last_seen_at < now() - interval '1 hour'"
+        ),
+        {"uid": str(user_id)},
+    )
 
 
 async def inactive_accounts(session: AsyncSession, cutoff: datetime) -> list[User]:
@@ -2553,6 +3010,17 @@ async def inactive_accounts(session: AsyncSession, cutoff: datetime) -> list[Use
             select(User).where(User.last_seen_at < cutoff, User.exempt_from_pruning.is_(False))
         )
     )
+
+
+def would_delete_everyone(
+    all_user_ids: Sequence[uuid.UUID], to_delete_ids: Sequence[uuid.UUID]
+) -> bool:
+    """True iff pruning `to_delete_ids` would leave zero accounts on the instance -- the last-
+    account guard plan-review I6 asked for. A misconfigured RHAPTO_INACTIVE_DAYS or a period of
+    CLI-only use (which never calls mark_seen) must never be able to silently empty the instance;
+    both the CLI's --yes path and the daily cron (Task 7) check this before deleting anything.
+    """
+    return bool(all_user_ids) and set(all_user_ids) <= set(to_delete_ids)
 ```
 
 - [ ] **Step 4: Run the tests again**
@@ -2630,12 +3098,146 @@ def accounts_prune(dry_run: bool = typer.Option(True, "--dry-run/--yes")) -> Non
             "error: --yes deletion is not implemented until Task 7's delete_account ships", err=True
         )
         raise typer.Exit(1)
+
+
+@accounts_app.command("exempt")
+def accounts_exempt(
+    email: str = typer.Argument(...),
+    on: bool = typer.Option(True, "--on/--off", help="set or clear exempt_from_pruning"),
+) -> None:
+    """Fixes plan-review I6: nothing previously set exempt_from_pruning, so the column added in
+    migration 0011 was unreachable. Lets the owner exempt his own account (or any account) from
+    the 90-day prune -- an explicit, printed decision, never an implicit default."""
+    settings = Settings()
+
+    async def run() -> bool:
+        engine = make_engine(settings.database_url)
+        try:
+            async with make_session_factory(engine)() as session:
+                from sqlalchemy import select as sa_select
+
+                from rhapto.db.models import User
+
+                user = await session.scalar(sa_select(User).where(User.email == email.casefold()))
+                if user is None:
+                    return False
+                user.exempt_from_pruning = on
+                await session.commit()
+                return True
+        finally:
+            await engine.dispose()
+
+    if not asyncio.run(run()):
+        typer.echo(f"error: no account found with email {email!r}", err=True)
+        raise typer.Exit(1)
+    typer.echo(f"{email}: exempt_from_pruning = {on}")
 ```
 
-- [ ] **Step 7: Write the CLI test**
+- [ ] **Step 7: Add `deletion_due_at` to `MeOut` and a day-60 web banner (plan-review I6)**
 
 ```python
-# apps/api/tests/cli/test_accounts_prune.py
+# apps/api/src/rhapto/api/schemas.py — MeOut
+class MeOut(BaseModel):
+    email: str
+    user_id: uuid.UUID
+    llm_configured: bool
+    auth_mode: Literal["token", "access"]
+    deletion_due_at: datetime | None  # None when exempt; otherwise last_seen_at + RHAPTO_INACTIVE_DAYS
+```
+
+```python
+# apps/api/src/rhapto/api/routers/meta.py — me()
+from datetime import timedelta
+
+
+@router.get("/me", response_model=MeOut)
+async def me(
+    user_id: Annotated[uuid.UUID, Depends(current_user)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+    settings: Annotated[Settings, Depends(get_settings_dep)],
+) -> MeOut:
+    user = await session.get(User, user_id)
+    if user is None:
+        raise HTTPException(status_code=503, detail="user not bootstrapped")
+    due_at = (
+        None
+        if user.exempt_from_pruning
+        else user.last_seen_at + timedelta(days=settings.rhapto_inactive_days)
+    )
+    return MeOut(
+        email=user.email,
+        user_id=user.id,
+        llm_configured=await is_llm_configured(session, settings, user_id),
+        auth_mode=settings.rhapto_auth_mode,
+        deletion_due_at=due_at,
+    )
+```
+
+```typescript
+// apps/web/src/components/shell/DeletionBanner.tsx
+"use client";
+import { useMe } from "@/lib/api/queries";
+
+const WARN_WITHIN_DAYS = 30; // owner decision Q3: warn from day 60 of a 90-day window
+
+export function DeletionBanner() {
+  const me = useMe();
+  if (!me.isSuccess || !me.data.deletion_due_at) return null;
+  const dueAt = new Date(me.data.deletion_due_at);
+  const daysLeft = Math.ceil((dueAt.getTime() - Date.now()) / 86_400_000);
+  if (daysLeft > WARN_WITHIN_DAYS || daysLeft < 0) return null;
+  return (
+    <div className="w-full bg-amber-100 px-4 py-2 text-center text-sm text-amber-900 dark:bg-amber-950 dark:text-amber-100">
+      Your account has been inactive for a while. If you don't sign in again, it and everything in
+      it will be deleted in {daysLeft} day{daysLeft === 1 ? "" : "s"}.
+    </div>
+  );
+}
+```
+
+```typescript
+// apps/web/src/components/shell/DeletionBanner.test.tsx
+import { render, screen } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
+import { DeletionBanner } from "./DeletionBanner";
+
+vi.mock("@/lib/api/queries", () => ({ useMe: vi.fn() }));
+import { useMe } from "@/lib/api/queries";
+
+describe("DeletionBanner", () => {
+  it("renders nothing when deletion_due_at is more than 30 days away", () => {
+    const far = new Date(Date.now() + 60 * 86_400_000).toISOString();
+    vi.mocked(useMe).mockReturnValue({ isSuccess: true, data: { deletion_due_at: far } } as ReturnType<typeof useMe>);
+    render(<DeletionBanner />);
+    expect(screen.queryByText(/deleted in/)).not.toBeInTheDocument();
+  });
+
+  it("warns when deletion is within 30 days", () => {
+    const soon = new Date(Date.now() + 10 * 86_400_000).toISOString();
+    vi.mocked(useMe).mockReturnValue({ isSuccess: true, data: { deletion_due_at: soon } } as ReturnType<typeof useMe>);
+    render(<DeletionBanner />);
+    expect(screen.getByText(/deleted in 10 days/)).toBeInTheDocument();
+  });
+
+  it("renders nothing when exempt (deletion_due_at is null)", () => {
+    vi.mocked(useMe).mockReturnValue({ isSuccess: true, data: { deletion_due_at: null } } as ReturnType<typeof useMe>);
+    render(<DeletionBanner />);
+    expect(screen.queryByText(/deleted in/)).not.toBeInTheDocument();
+  });
+});
+```
+
+Mount `<DeletionBanner />` in the same top-level shell component that renders `TopBar`
+(`apps/web/src/components/shell/Shell.tsx`, per the earlier directory listing) — the implementer
+confirms the exact insertion point by reading that file first.
+
+Regenerate the OpenAPI document and web types: `python scripts/export_openapi.py` (from `apps/api`),
+`pnpm gen:api` (from `apps/web`).
+
+- [ ] **Step 8: Write the CLI tests — in `tests/unit/`, not `tests/cli/` (plan-review I11)**
+
+```python
+# apps/api/tests/unit/test_accounts_prune.py
 from __future__ import annotations
 
 import asyncio
@@ -2684,28 +3286,60 @@ def test_prune_yes_is_not_yet_implemented(migrated_db, monkeypatch) -> None:
     asyncio.run(seed())
     result = runner.invoke(app, ["accounts", "prune", "--yes"])
     assert result.exit_code == 1
+
+
+def test_exempt_on_then_off(migrated_db, monkeypatch) -> None:
+    monkeypatch.setenv("DATABASE_URL", migrated_db)
+    monkeypatch.setenv("RHAPTO_SECRET_KEY", "irrelevant-for-this-command")
+
+    async def seed() -> None:
+        engine = make_engine(migrated_db)
+        async with make_session_factory(engine)() as session:
+            await get_or_create_user(session, "owner@example.com")
+            await session.commit()
+        await engine.dispose()
+
+    asyncio.run(seed())
+    on_result = runner.invoke(app, ["accounts", "exempt", "owner@example.com", "--on"])
+    assert on_result.exit_code == 0 and "True" in on_result.output
+    off_result = runner.invoke(app, ["accounts", "exempt", "owner@example.com", "--off"])
+    assert off_result.exit_code == 0 and "False" in off_result.output
+
+
+def test_exempt_unknown_account_exits_1(migrated_db, monkeypatch) -> None:
+    monkeypatch.setenv("DATABASE_URL", migrated_db)
+    monkeypatch.setenv("RHAPTO_SECRET_KEY", "irrelevant-for-this-command")
+    result = runner.invoke(app, ["accounts", "exempt", "nobody@example.com"])
+    assert result.exit_code == 1
 ```
 
-- [ ] **Step 8: Run the new tests, then the full suite**
+- [ ] **Step 9: Run the new tests, then the full suites**
 
-Run: `pytest tests/unit/test_accounts_lifecycle.py tests/cli/test_accounts_prune.py -v` — expect PASS.
+Run: `pytest tests/unit/test_accounts_lifecycle.py tests/unit/test_accounts_prune.py -v` — expect PASS.
 Run: `pytest` — expect green.
 Run: `ruff check .` and `mypy src` — expect clean.
+Run (apps/web): `pnpm test DeletionBanner.test.tsx`, then `pnpm test`, `pnpm lint`, `pnpm typecheck`
+— expect green.
 
-- [ ] **Step 9: Commit**
+- [ ] **Step 10: Commit**
 
 ```bash
 git add apps/api/src/rhapto/services/accounts.py apps/api/src/rhapto/api/deps.py \
   apps/api/src/rhapto/config.py apps/api/src/rhapto/cli/main.py \
-  apps/api/tests/unit/test_accounts_lifecycle.py apps/api/tests/cli/test_accounts_prune.py
+  apps/api/src/rhapto/api/schemas.py apps/api/src/rhapto/api/routers/meta.py \
+  packages/schemas/openapi.json apps/web/src/lib/api/schema.d.ts \
+  apps/web/src/components/shell/DeletionBanner.tsx apps/web/src/components/shell/DeletionBanner.test.tsx \
+  apps/api/tests/unit/test_accounts_lifecycle.py apps/api/tests/unit/test_accounts_prune.py
 git commit -m "$(cat <<'EOF'
-last_seen_at throttling, inactive_accounts query, prune --dry-run (B1a)
+last_seen_at throttling, inactive_accounts query, prune --dry-run, exempt CLI, day-60 banner (B1a)
 
-mark_seen updates users.last_seen_at on any authenticated request, throttled to once per hour, and
-never fails the request it rides along with. inactive_accounts finds every non-exempt account past
-RHAPTO_INACTIVE_DAYS (default 90). `rhapto accounts prune` lists them; --yes is a defined,
-not-yet-wired error until Task 7 adds the real deletion path, so this command never destroys data
-before that path exists.
+mark_seen is now a single atomic UPDATE with no preceding SELECT (plan-review I5), throttled to
+once per hour, and never fails the request it rides along with. inactive_accounts finds every
+non-exempt account past RHAPTO_INACTIVE_DAYS (default 90). `rhapto accounts prune` lists them;
+--yes is a defined, not-yet-wired error until Task 7 adds the real deletion path. `rhapto accounts
+exempt` sets/clears exempt_from_pruning, which nothing could previously reach (plan-review I6).
+MeOut.deletion_due_at and a new DeletionBanner give a returning user the day-60 warning the
+architecture calls for, before Task 7's cron can ever delete anything unattended.
 
 Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_013CTBNZrgo9dpYW6vRs2TC2
@@ -2713,8 +3347,8 @@ EOF
 )"
 ```
 
-**Acceptance criteria advanced:** none new directly satisfied yet (AC 8/16 land in Task 7); this task
-lays the read path Task 7's deletion trigger and Task 8's day-60 banner both need.
+**Acceptance criteria advanced:** 15 (the day-60 banner and `exempt` command are the safety net
+against the prune cron becoming a new threat to the owner's own data); AC 8/16 land fully in Task 7.
 
 ---
 
@@ -2740,13 +3374,20 @@ try/except at the task boundary and writes only to rows that, after this deletio
 so an in-flight task for a just-deleted user can fail loudly but can never resurrect or corrupt
 anything, which is the property the architecture actually requires.
 
+This task also fixes **C7** (the deletion tests could not pass as originally written — see Step 1),
+**minor 4** (`sweep_orphan_files` must skip a stray directory name rather than crash the whole sweep
+on it), and wires Task 6's `would_delete_everyone` last-account guard into both destructive paths, plus
+gives the orphan sweep its own try/except so a failed prune can never silently skip it (the plan
+reviewer's accepted caveat on this task's own files-before-rows argument).
+
 **Files:**
 - Modify: `apps/api/src/rhapto/services/accounts.py` (`delete_account`, `sweep_orphan_files`)
-- Modify: `apps/api/src/rhapto/cli/main.py` (`accounts prune --yes` calls `delete_account`;
-  `accounts delete <email> --yes`)
-- Modify: `apps/api/src/rhapto/worker/main.py` (daily prune cron)
+- Modify: `apps/api/src/rhapto/cli/main.py` (`accounts prune --yes` calls `delete_account`, guarded by
+  `would_delete_everyone`; `accounts delete <email> --yes`)
+- Modify: `apps/api/src/rhapto/worker/main.py` (daily prune cron, same guard, sweep in its own
+  try/except)
 - Test: `apps/api/tests/unit/test_delete_account.py`
-- Test: `apps/api/tests/cli/test_accounts_delete.py`
+- Test: `apps/api/tests/unit/test_accounts_delete.py` (not `tests/cli/` — plan-review I11)
 
 **Interfaces:**
 - Consumes: `PackageStorage.delete`/`delete_document` (unchanged, `services/storage.py`),
@@ -2767,6 +3408,14 @@ anything, which is the property the architecture actually requires.
   ```
 
 - [ ] **Step 1: Write the failing deletion tests**
+
+**Fixes plan-review C7.** `make_session_factory` sets `expire_on_commit=False`
+(`apps/api/src/rhapto/db/session.py:16`). `jobs`/`packages` rows are removed by a database-level
+`ON DELETE CASCADE` the ORM never observes, so nothing expires the in-memory `Job`/`Package` objects
+these tests already loaded — `await session.get(Job, job.id)` returns the still-cached instance, not
+`None`, and the earlier draft's assertions failed (or worse, passed vacuously). Both affected tests
+call `session.expunge_all()` after `delete_account`'s commit, forcing a fresh read from the database
+for every subsequent `session.get`:
 
 ```python
 # apps/api/tests/unit/test_delete_account.py
@@ -2800,14 +3449,21 @@ async def test_delete_account_removes_the_user_row_and_cascades(
     await session.commit()
 
     package_id = package.id
+    user_id = user.id
+    job_id = job.id
     storage.write_docx(str(package_id), b"fake docx bytes")
 
-    report = await delete_account(session, storage, user.id)
+    report = await delete_account(session, storage, user_id)
     await session.commit()
+    # expire_on_commit=False (db/session.py:16) means the ORM never notices the DB-level CASCADE
+    # that just removed `job`/`user` -- without this, session.get below returns the stale
+    # in-memory object instead of re-querying, and these assertions would pass or fail for the
+    # wrong reason (plan-review C7).
+    session.expunge_all()
 
     assert report.package_files_deleted == 1
-    assert await session.get(User, user.id) is None
-    assert await session.get(Job, job.id) is None
+    assert await session.get(User, user_id) is None
+    assert await session.get(Job, job_id) is None
     assert not storage.dir_for(str(package_id)).exists()
 
 
@@ -2818,12 +3474,15 @@ async def test_delete_account_never_touches_another_users_rows(session: AsyncSes
     staying_job = await create_job(session, staying.id, jd_text="A real job description. " * 10)
     await create_job(session, leaving.id, jd_text="Another real job description. " * 10)
     await session.commit()
+    staying_id = staying.id
+    staying_job_id = staying_job.id
 
     await delete_account(session, storage, leaving.id)
     await session.commit()
+    session.expunge_all()  # plan-review C7 -- see the note above
 
-    assert await session.get(User, staying.id) is not None
-    assert await session.get(Job, staying_job.id) is not None
+    assert await session.get(User, staying_id) is not None
+    assert await session.get(Job, staying_job_id) is not None
 
 
 async def test_sweep_orphan_files_removes_packages_with_no_row(tmp_path: Path, session: AsyncSession) -> None:
@@ -2836,6 +3495,24 @@ async def test_sweep_orphan_files_removes_packages_with_no_row(tmp_path: Path, s
 
     assert removed >= 1
     assert not storage.dir_for(orphan_id).exists()
+
+
+async def test_sweep_orphan_files_skips_a_directory_name_that_is_not_a_valid_package_id(
+    tmp_path: Path, session: AsyncSession
+) -> None:
+    """Fixes plan-review minor 4: storage.delete() raises ValueError for any name that does not
+    match SAFE_ID (services/storage.py:15,22-25); one stray directory must not abort the sweep."""
+    storage = PackageStorage(tmp_path / "packages")
+    storage.root.mkdir(parents=True, exist_ok=True)
+    (storage.root / ".hidden-invalid-name").mkdir()  # fails SAFE_ID (services/storage.py:15): must
+                                                       # start with an alphanumeric character
+    valid_orphan = str(uuid.uuid4())
+    storage.write_docx(valid_orphan, b"orphaned")
+
+    removed = await sweep_orphan_files(session, storage)
+
+    assert removed == 1
+    assert not storage.dir_for(valid_orphan).exists()
 ```
 
 - [ ] **Step 2: Run to see it fail**
@@ -2892,7 +3569,10 @@ async def sweep_orphan_files(session: AsyncSession, storage: PackageStorage) -> 
     """Delete any package directory or resume-document directory with no matching row.
 
     Self-heals the crash window in delete_account (files deleted, row-delete not yet committed --
-    or vice versa if this ever ran between the two) and cleans up any pre-existing orphan.
+    or vice versa if this ever ran between the two) and cleans up any pre-existing orphan. A
+    directory whose name is not a valid package id (fails PackageStorage.SAFE_ID) is skipped, not
+    raised on -- one stray directory (a `.DS_Store`-style artifact, a hand-created folder) must
+    never abort the whole sweep (plan-review minor 4).
     """
     removed = 0
     if not storage.root.exists():
@@ -2902,14 +3582,22 @@ async def sweep_orphan_files(session: AsyncSession, storage: PackageStorage) -> 
         if entry.name == "resume-document" or not entry.is_dir():
             continue
         if entry.name not in existing_package_ids:
-            storage.delete(entry.name)
+            try:
+                storage.delete(entry.name)
+            except ValueError:
+                logger.warning("skipping non-package-id directory in packages root: %r", entry.name)
+                continue
             removed += 1
     doc_root = storage.root / "resume-document"
     if doc_root.exists():
         existing_user_ids = {str(uid) for uid in await session.scalars(select(User.id))}
         for entry in doc_root.iterdir():
             if entry.is_dir() and entry.name not in existing_user_ids:
-                storage.delete_document(uuid.UUID(entry.name))
+                try:
+                    storage.delete_document(uuid.UUID(entry.name))
+                except ValueError:
+                    logger.warning("skipping non-uuid directory under resume-document: %r", entry.name)
+                    continue
                 removed += 1
     return removed
 ```
@@ -2924,16 +3612,26 @@ Expected: PASS.
 ```python
 # apps/api/src/rhapto/cli/main.py — replace the accounts_prune body's `else` branch (Step 6 above)
     else:
-        async def run_deletions() -> int:
+        async def run_deletions() -> int | None:
             engine = make_engine(settings.database_url)
             try:
                 async with make_session_factory(engine)() as session:
-                    from rhapto.services.accounts import delete_account, inactive_accounts
+                    from rhapto.db.repositories.users import list_user_ids
+                    from rhapto.services.accounts import (
+                        delete_account,
+                        inactive_accounts,
+                        would_delete_everyone,
+                    )
                     from rhapto.services.storage import PackageStorage
 
                     storage = PackageStorage(settings.rhapto_packages_dir)
                     cutoff = datetime.now(UTC) - timedelta(days=settings.rhapto_inactive_days)
                     to_delete = await inactive_accounts(session, cutoff)
+                    all_ids = await list_user_ids(session)
+                    # plan-review I6: a misconfigured RHAPTO_INACTIVE_DAYS, or a period of CLI-only
+                    # use that never touched last_seen_at, must never be able to empty the instance.
+                    if would_delete_everyone(all_ids, [u.id for u in to_delete]):
+                        return None
                     for u in to_delete:
                         await delete_account(session, storage, u.id)
                     await session.commit()
@@ -2942,6 +3640,13 @@ Expected: PASS.
                 await engine.dispose()
 
         deleted = asyncio.run(run_deletions())
+        if deleted is None:
+            typer.echo(
+                "error: refusing to prune -- this would delete every remaining account. If that is "
+                "really intended, use `rhapto accounts delete <email> --yes` one at a time.",
+                err=True,
+            )
+            raise typer.Exit(1)
         typer.echo(f"deleted {deleted} account(s)")
 
 
@@ -2992,23 +3697,57 @@ branches need it).
 # apps/api/src/rhapto/worker/main.py — WorkerSettings.cron_jobs
 from datetime import UTC, datetime, timedelta
 
-from rhapto.services.accounts import delete_account, inactive_accounts, sweep_orphan_files
+from rhapto.db.repositories.users import list_user_ids
+from rhapto.services.accounts import (
+    delete_account,
+    inactive_accounts,
+    sweep_orphan_files,
+    would_delete_everyone,
+)
 from rhapto.services.storage import PackageStorage
 
 
 async def prune_inactive_accounts(ctx: dict[str, Any]) -> None:
+    """The daily destructive cron. Two things the plan reviewer specifically required, both fixed
+    here: (1) the same last-account guard as the CLI (I6) -- an unattended cron is exactly where a
+    misconfiguration doing something catastrophic matters most; (2) the orphan sweep runs in its
+    own try/except, separate from the prune loop, so a prune failure can never silently skip the
+    sweep (the plan reviewer's accepted caveat on this task's files-before-rows argument).
+    """
     factory: async_sessionmaker[AsyncSession] = ctx["session_factory"]
     settings = get_settings()
     storage = PackageStorage(settings.rhapto_packages_dir)
-    async with factory() as session:
-        cutoff = datetime.now(UTC) - timedelta(days=settings.rhapto_inactive_days)
-        for user in await inactive_accounts(session, cutoff):
-            logger.info("pruning inactive account %s (last seen %s)", user.email, user.last_seen_at)
-            await delete_account(session, storage, user.id)
-        await session.commit()
-        removed = await sweep_orphan_files(session, storage)
-        if removed:
-            logger.info("orphan sweep removed %d file(s)", removed)
+    try:
+        async with factory() as session:
+            cutoff = datetime.now(UTC) - timedelta(days=settings.rhapto_inactive_days)
+            to_delete = await inactive_accounts(session, cutoff)
+            all_ids = await list_user_ids(session)
+            if would_delete_everyone(all_ids, [u.id for u in to_delete]):
+                logger.error(
+                    "refusing scheduled prune: it would delete every remaining account "
+                    "(%d candidate(s)). Check RHAPTO_INACTIVE_DAYS and whether last_seen_at is "
+                    "being updated at all.",
+                    len(to_delete),
+                )
+            else:
+                # Logged before any deletion runs, per plan-review I6: an operator reading the
+                # cron log sees exactly who was about to be pruned, not just a count afterwards.
+                for user in to_delete:
+                    logger.info(
+                        "pruning inactive account %s (last seen %s)", user.email, user.last_seen_at
+                    )
+                for user in to_delete:
+                    await delete_account(session, storage, user.id)
+                await session.commit()
+    except Exception:
+        logger.exception("scheduled account prune failed")
+    try:
+        async with factory() as session:
+            removed = await sweep_orphan_files(session, storage)
+            if removed:
+                logger.info("orphan sweep removed %d file(s)", removed)
+    except Exception:
+        logger.exception("scheduled orphan sweep failed")
 ```
 
 ```python
@@ -3021,10 +3760,10 @@ async def prune_inactive_accounts(ctx: dict[str, Any]) -> None:
     )
 ```
 
-- [ ] **Step 7: Write the CLI test**
+- [ ] **Step 7: Write the CLI test — in `tests/unit/`, not `tests/cli/` (plan-review I11)**
 
 ```python
-# apps/api/tests/cli/test_accounts_delete.py
+# apps/api/tests/unit/test_accounts_delete.py
 from __future__ import annotations
 
 import asyncio
@@ -3081,11 +3820,50 @@ def test_prune_yes_deletes_inactive_accounts(migrated_db, monkeypatch, tmp_path)
     result = runner.invoke(app, ["accounts", "prune", "--yes"])
     assert result.exit_code == 0, result.output
     assert "deleted 1 account" in result.output
+
+
+def test_prune_refuses_to_delete_the_last_remaining_account(migrated_db, monkeypatch, tmp_path) -> None:
+    """Fixes plan-review I6: a misconfigured RHAPTO_INACTIVE_DAYS, or CLI-only use that never
+    updates last_seen_at, must never be able to silently empty the instance."""
+    monkeypatch.setenv("DATABASE_URL", migrated_db)
+    monkeypatch.setenv("RHAPTO_SECRET_KEY", "irrelevant-for-this-command")
+    monkeypatch.setenv("RHAPTO_PACKAGES_DIR", str(tmp_path / "packages"))
+
+    async def seed() -> None:
+        engine = make_engine(migrated_db)
+        async with make_session_factory(engine)() as session:
+            only = await get_or_create_user(session, "only-account@example.com")
+            only.last_seen_at = datetime.now(UTC) - timedelta(days=200)
+            await session.commit()
+        await engine.dispose()
+
+    asyncio.run(seed())
+    result = runner.invoke(app, ["accounts", "prune", "--yes"])
+    assert result.exit_code == 1
+    assert "every remaining account" in result.output
+
+    async def still_exists() -> bool:
+        engine = make_engine(migrated_db)
+        try:
+            async with make_session_factory(engine)() as session:
+                from sqlalchemy import select as sa_select
+
+                from rhapto.db.models import User
+
+                return (
+                    await session.scalar(
+                        sa_select(User).where(User.email == "only-account@example.com")
+                    )
+                ) is not None
+        finally:
+            await engine.dispose()
+
+    assert asyncio.run(still_exists())
 ```
 
 - [ ] **Step 8: Run the new tests, then the full suite**
 
-Run: `pytest tests/unit/test_delete_account.py tests/cli/test_accounts_delete.py -v` — expect PASS.
+Run: `pytest tests/unit/test_delete_account.py tests/unit/test_accounts_delete.py -v` — expect PASS.
 Run: `pytest` — expect green.
 Run: `ruff check .` and `mypy src` — expect clean.
 
@@ -3094,19 +3872,23 @@ Run: `ruff check .` and `mypy src` — expect clean.
 ```bash
 git add apps/api/src/rhapto/services/accounts.py apps/api/src/rhapto/cli/main.py \
   apps/api/src/rhapto/worker/main.py \
-  apps/api/tests/unit/test_delete_account.py apps/api/tests/cli/test_accounts_delete.py
+  apps/api/tests/unit/test_delete_account.py apps/api/tests/unit/test_accounts_delete.py
 git commit -m "$(cat <<'EOF'
 delete_account (files before rows), orphan sweep, real prune/delete CLI, daily cron (B1b)
 
 delete_account deletes a user's package files and resume document from disk before deleting the
 users row, which cascades through all 17 UserScopedMixin tables plus packages/applications
 cascading from jobs -- no other account's rows are ever touched, because nothing is shared in this
-schema before Phase C. sweep_orphan_files self-heals a crash between the file and row deletes.
-`rhapto accounts prune --yes` and `rhapto accounts delete <email> --yes` both go through
-delete_account; a daily 03:00 cron runs the real prune. Arq job cancellation for in-flight tasks
-was scoped out: no job-id tracking exists to correlate a Task row to a cancellable arq job, and
-building that is its own project -- the existing per-task try/except plus files-before-rows
-ordering already guarantees no resurrection and no cross-account harm.
+schema before Phase C. sweep_orphan_files self-heals a crash between the file and row deletes, and
+now skips (rather than aborts on) a directory whose name isn't a valid package id (plan-review
+minor 4). `rhapto accounts prune --yes` and the daily cron both refuse to run if every remaining
+account would be deleted (plan-review I6) and log the full list before deleting anything; the
+cron's orphan sweep runs in its own try/except so a prune failure can never silently skip it
+(plan-review's accepted caveat). `rhapto accounts delete <email> --yes` deletes one account
+unconditionally. Arq job cancellation for in-flight tasks was scoped out: no job-id tracking exists
+to correlate a Task row to a cancellable arq job, and building that is its own project -- the
+existing per-task try/except plus files-before-rows ordering already guarantees no resurrection and
+no cross-account harm.
 
 Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_013CTBNZrgo9dpYW6vRs2TC2
@@ -3128,24 +3910,41 @@ in this checkout — this task's code changes are the runbook/script changes; th
 those specific files is a Phase 7 (Delivery) action, not a code change, and is called out as such
 below rather than invented as a test.
 
+This task also fixes **I7** (the retention promise was published with nothing checking that the cron
+actually runs) and **minor 7** (the backup-script test used `which`, which is not on the owner's
+Windows dev box, causing a collection-time crash rather than a clean skip). It also corrects a claim
+the earlier draft made without checking: **minor 8** — Task 2's `TokenGate` (as rewritten in this
+revision) never renders `Landing` in access mode at all; a not-yet-authenticated visitor there is
+handled entirely by Cloudflare's own hosted login page, before any Rhapto code runs. "Stated to the
+user before they sign up" therefore cannot be satisfied by anything in this repository for access
+mode — the correct owner of that copy is the Cloudflare Access application's own login-page
+customisation, a dashboard setting, not code. This task drops the incorrect `Landing.tsx` edit and
+says explicitly where the promise is actually shown.
+
 **Files:**
 - Modify: `scripts/backup-db.sh` (add the mandatory post-restore prune step to the documented
   procedure; add a `--pre-migration` mode that writes into `$BACKUP_DIR` with the standard name)
 - Modify: `apps/web/src/app/settings/page.tsx` or a new `apps/web/src/components/settings/DataRetentionNotice.tsx`
   (publish the true-bound promise text)
-- Test: `scripts/test-backup-db.sh` (a bash test script, following this repo's convention of
-  testing shell scripts by invoking them against a scratch directory — verify this convention exists
-  before writing it; if `scripts/` has no existing test pattern, this becomes a `pytest` test that
-  shells out to `backup-db.sh` via `subprocess`, placed at `apps/api/tests/unit/test_backup_script.py`)
+- Modify: `apps/api/src/rhapto/cli/main.py` (`rhapto backups check`)
+- Test: `apps/api/tests/unit/test_backup_script.py`
+- Test: `apps/api/tests/unit/test_backups_check.py`
 - Test: `apps/web/src/components/settings/DataRetentionNotice.test.tsx`
 
 **Interfaces:**
 - Consumes: nothing from earlier tasks (this task is deploy-ops plus one static piece of UI copy).
-- Produces: no new Python/TypeScript interface; the deploy runbook (documented in this task's steps,
-  not a file this plan creates, since no runbook file exists in this checkout to extend — the
-  implementer should check for `docs/runbook.md` or similar before assuming one must be created new)
-  gains two mandatory steps: install the cron, and run `rhapto accounts prune --yes` immediately
-  after any restore.
+- Produces:
+  ```python
+  # rhapto/cli/main.py
+  # `rhapto backups check` -- exit 0 if $BACKUP_DIR has a backup-*.dump newer than 48h, else exit 1
+  # with an actionable message. Meant to be wired into the same cron/monitoring the nightly backup
+  # itself runs under, or a `rhapto doctor`-style health check, by Delivery.
+  ```
+  No other task in this plan consumes it. The deploy runbook (documented in this task's steps, not a
+  file this plan creates, since no runbook file exists in this checkout to extend — the implementer
+  should check for `docs/runbook.md` or similar before assuming one must be created new) gains three
+  mandatory steps: install the backup cron, wire `rhapto backups check` into a daily monitoring check,
+  and run `rhapto accounts prune --yes` immediately after any restore.
 
 - [ ] **Step 1: Check for an existing runbook file**
 
@@ -3191,10 +3990,15 @@ Add to the existing "RESTORE" section in the header:
 
 - [ ] **Step 3: Write the backup script test**
 
+**Fixes plan-review minor 7:** the earlier draft shelled out to `which`, which does not exist on the
+owner's Windows dev box — a bare `FileNotFoundError` at collection time, not the clean skip this test
+intends. `shutil.which` is the portable stdlib equivalent.
+
 ```python
 # apps/api/tests/unit/test_backup_script.py
 from __future__ import annotations
 
+import shutil
 import subprocess
 from pathlib import Path
 
@@ -3204,7 +4008,7 @@ SCRIPT = Path(__file__).resolve().parents[3].parent / "scripts" / "backup-db.sh"
 
 
 def _pg_dump_available() -> bool:
-    return subprocess.run(["which", "pg_dump"], capture_output=True).returncode == 0
+    return shutil.which("pg_dump") is not None
 
 
 @pytest.mark.skipif(not _pg_dump_available(), reason="pg_dump not on PATH in this environment")
@@ -3233,7 +4037,89 @@ Run: `pytest tests/unit/test_backup_script.py -v` (from `apps/api`)
 Expected: FAIL before Step 2 (no `LABEL` handling, so the dump name never contains `pre-0011`); PASS
 after.
 
-- [ ] **Step 5: Publish the true-bound promise on the settings screen**
+- [ ] **Step 5: Add `rhapto backups check` — fixing plan-review I7**
+
+**The promise text (Step 6) is only true if the cron that keeps it true is actually running and
+recent enough.** Verified: `scripts/backup-db.sh` correctly implements `RETENTION_DAYS`-bounded
+retention, but nothing checks that it is actually being invoked. This command gives Delivery (or any
+external monitoring) something to wire in that fails loudly rather than the retention promise quietly
+becoming false.
+
+```python
+# apps/api/src/rhapto/cli/main.py — new command, its own small Typer group or on accounts_app's
+# sibling; a new `backups_app` keeps it independent of account lifecycle commands
+backups_app = typer.Typer(no_args_is_help=True, help="Backup maintenance.")
+app.add_typer(backups_app, name="backups")
+
+
+@backups_app.command("check")
+def backups_check(
+    backup_dir: Path = typer.Option(
+        Path("./backups"), "--backup-dir", envvar="BACKUP_DIR", help="Same as backup-db.sh's BACKUP_DIR"
+    ),
+    max_age_hours: int = typer.Option(48, "--max-age-hours"),
+) -> None:
+    """Exit 0 if a backup-*.dump newer than --max-age-hours exists in --backup-dir, else exit 1
+    with an actionable message. Wire this into the same cron/monitoring the nightly backup runs
+    under -- a retention promise nobody checks is a promise that can go silently false."""
+    import time
+
+    if not backup_dir.is_dir():
+        typer.echo(f"error: backup directory {backup_dir} does not exist", err=True)
+        raise typer.Exit(1)
+    cutoff = time.time() - max_age_hours * 3600
+    dumps = sorted(backup_dir.glob("backup-*.dump"), key=lambda p: p.stat().st_mtime, reverse=True)
+    if not dumps or dumps[0].stat().st_mtime < cutoff:
+        newest = f"{dumps[0].name} ({dumps[0].stat().st_mtime})" if dumps else "none found"
+        typer.echo(
+            f"error: no backup newer than {max_age_hours}h in {backup_dir} (newest: {newest}). "
+            "The nightly cron may not be running -- check `crontab -l` and the backup log.",
+            err=True,
+        )
+        raise typer.Exit(1)
+    typer.echo(f"ok: {dumps[0].name} is newer than {max_age_hours}h")
+```
+
+```python
+# apps/api/tests/unit/test_backups_check.py
+from __future__ import annotations
+
+import time
+from pathlib import Path
+
+from typer.testing import CliRunner
+
+from rhapto.cli.main import app
+
+runner = CliRunner()
+
+
+def test_check_passes_with_a_fresh_dump(tmp_path: Path) -> None:
+    (tmp_path / "backup-rhapto-20260101T000000Z.dump").touch()
+    result = runner.invoke(app, ["backups", "check", "--backup-dir", str(tmp_path)])
+    assert result.exit_code == 0, result.output
+
+
+def test_check_fails_with_no_dumps(tmp_path: Path) -> None:
+    result = runner.invoke(app, ["backups", "check", "--backup-dir", str(tmp_path)])
+    assert result.exit_code == 1
+    assert "no backup newer than" in result.output
+
+
+def test_check_fails_with_only_a_stale_dump(tmp_path: Path) -> None:
+    stale = tmp_path / "backup-rhapto-20200101T000000Z.dump"
+    stale.touch()
+    old_time = time.time() - 72 * 3600
+    import os
+
+    os.utime(stale, (old_time, old_time))
+    result = runner.invoke(app, ["backups", "check", "--backup-dir", str(tmp_path), "--max-age-hours", "48"])
+    assert result.exit_code == 1
+```
+
+Run: `pytest tests/unit/test_backups_check.py -v` — expect PASS.
+
+- [ ] **Step 6: Publish the true-bound promise on the settings screen**
 
 ```typescript
 // apps/web/src/components/settings/DataRetentionNotice.tsx
@@ -3266,38 +4152,55 @@ describe("DataRetentionNotice", () => {
 Render `<DataRetentionNotice />` on `apps/web/src/app/settings/page.tsx`, at the point (verified by
 reading that file) where connection/account information is already shown — the exact insertion point
 is a one-line JSX addition the implementer places after reading the current file, since this plan
-does not reproduce that file's full contents; the requirement it must satisfy is "stated to the user
-before they sign up, not buried" (Owner decision Q3), so in `access` mode this component must also
-render on whatever unauthenticated landing state a not-yet-invited or newly-redirected visitor sees
-— cross-check against `apps/web/src/components/landing/Landing.tsx` (already read in Task 2's
-research: `TokenGate` renders `<Landing />` for an unauthenticated visitor at `/`) and add it there
-too, so the promise is visible pre-sign-in as the owner decision requires, not only after.
+does not reproduce that file's full contents.
 
-- [ ] **Step 6: Run the new tests, then the full suites**
+**Where the promise is actually shown, stated precisely (fixes plan-review minor 8):** the earlier
+draft of this task said the promise must also render on `Landing.tsx` "so it's visible pre-sign-in in
+access mode" — checked against Task 2's rewritten `TokenGate` and that is not true. In access mode,
+`TokenGate` never renders `Landing`; an unauthenticated visitor is either shown Cloudflare's own
+hosted login page (before any Rhapto code runs at all) or, after a valid-but-non-allowlisted sign-in,
+the "Access refused" card. There is no code-rendered screen in this repository that appears *before*
+sign-in in access mode. So:
+- The settings-screen `DataRetentionNotice` (this step) is the first-authenticated-screen disclosure,
+  satisfying the letter of Owner decision Q3 for `token` mode (the single-owner case, where "before
+  they sign up" and "immediately after" are the same moment, since there is no separate signup step).
+- For `access` mode, the genuinely pre-signup disclosure surface is the **Cloudflare Access
+  application's own login-page customisation** — a setting in the Cloudflare dashboard, not code.
+  This is an operational action, handed to Delivery below, the same way the cron install and the
+  ad-hoc dump cleanup are.
+- `Landing.tsx` is left unmodified by this task: it renders only in `token` mode, where there is one
+  account (the owner's) and no one else's 90-day clock is running yet.
+
+- [ ] **Step 7: Run the new tests, then the full suites**
 
 Run (apps/web): `pnpm test DataRetentionNotice.test.tsx` — expect PASS; then `pnpm test`, `pnpm lint`,
 `pnpm typecheck` — expect green.
-Run (apps/api): `pytest tests/unit/test_backup_script.py -v`, then the full `pytest`, `ruff check .`,
-`mypy src` — expect green (this task's Python change is test-only plus a shell script; nothing in
-`apps/api/src` changes, so no mypy/ruff surface is added).
+Run (apps/api): `pytest tests/unit/test_backup_script.py tests/unit/test_backups_check.py -v`, then
+the full `pytest`, `ruff check .`, `mypy src` — expect green.
 
-- [ ] **Step 7: Commit**
+- [ ] **Step 8: Commit**
 
 ```bash
-git add scripts/backup-db.sh apps/api/tests/unit/test_backup_script.py \
+git add scripts/backup-db.sh apps/api/src/rhapto/cli/main.py \
+  apps/api/tests/unit/test_backup_script.py apps/api/tests/unit/test_backups_check.py \
   apps/web/src/components/settings/DataRetentionNotice.tsx \
   apps/web/src/components/settings/DataRetentionNotice.test.tsx \
-  apps/web/src/app/settings/page.tsx apps/web/src/components/landing/Landing.tsx
+  apps/web/src/app/settings/page.tsx
 git commit -m "$(cat <<'EOF'
-Pre-migration dumps land inside BACKUP_DIR, mandatory post-restore prune, published promise (B2)
+Pre-migration dumps land inside BACKUP_DIR, mandatory post-restore prune, backup freshness check,
+published promise (B2)
 
 backup-db.sh gains a LABEL mode so a pre-migration dump uses the same backup-<db>-<label>-<ts>.dump
 naming the nightly RETENTION_DAYS=14 prune already recognises -- a dump outside $BACKUP_DIR is a
 standing violation of the deletion promise the moment a second account exists. The restore
 procedure documented in the script's header now has a mandatory `rhapto accounts prune --yes` step
-immediately after any restore, before the app is pointed at it. The settings screen and the
-pre-sign-in landing page both state the promise with its true worst-case bound -- 90 days plus up
-to 14 for backups, 104 days worst case -- never a flat 90.
+immediately after any restore, before the app is pointed at it. `rhapto backups check` fails loudly
+if no dump newer than 48h exists, so the retention promise has something checking it actually holds
+(plan-review I7) instead of just tooling that would make it true if run. The settings screen states
+the promise with its true worst-case bound -- 90 days plus up to 14 for backups, 104 days worst case
+-- never a flat 90; the pre-signup surface in access mode is the Cloudflare Access application's own
+login page, not Rhapto code (plan-review minor 8 -- the earlier claim that Landing.tsx renders
+pre-sign-in in access mode was checked against Task 2's TokenGate and found false).
 
 Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_013CTBNZrgo9dpYW6vRs2TC2
@@ -3307,10 +4210,12 @@ EOF
 
 **Note for Delivery (role 7), not a step in this plan:** the cron install (`0 3 * * *
 BACKUP_DIR=/var/backups/rhapto scripts/backup-db.sh >> /var/log/rhapto-backup.log 2>&1`, already
-documented in the script's header) and the deletion of the ad-hoc `/root/rhapto-pre-0010-*.sql`
-dumps are operational actions against the production host, not code changes — they belong to role 7
-("Delivery never runs unprompted for anything irreversible"), and this task's job is only to make the
-tooling and the promise correct, which it now is.
+documented in the script's header), wiring `rhapto backups check` into daily monitoring, adding the
+90+14-day promise to the Cloudflare Access application's login-page customisation, and the deletion
+of the ad-hoc `/root/rhapto-pre-0010-*.sql` dumps are all operational actions against the production
+host/Cloudflare dashboard, not code changes — they belong to role 7 ("Delivery never runs unprompted
+for anything irreversible"), and this task's job is only to make the tooling and the promise correct,
+which it now is.
 
 **Acceptance criteria advanced:** 15 (backup retention does not touch the owner's live data; it
 bounds how long deleted data survives), and the Owner-decision-Q3 backup requirement generally
@@ -3322,45 +4227,102 @@ pre-migration dumps reach the pruner, and post-restore prune is mandatory).
 
 ## Self-review
 
+### Plan-review resolution log
+
+An independent plan review of the previous version of this document returned NOT SAFE TO EXECUTE (7
+Critical, 11 Important, 8 Minor). Every finding was either fixed in place or answered explicitly
+below; none was silently dropped.
+
+**Critical — all fixed:**
+
+| # | Finding | Fix | Where |
+|---|---|---|---|
+| C1 | Circular import between `auth.py` and `deps.py` | `auth.py` reads `request.app.state.rhapto` directly (a `TYPE_CHECKING`-only import of `AppState`); it no longer imports anything from `deps.py` at runtime | Task 1 Step 7 |
+| C2 | `NEXT_PUBLIC_API_URL=""` fell back to `localhost:8000` (`\|\|` treats `""` as falsy) | `DEFAULT_API_URL`/`getSettings()` distinguish `undefined` from `""` explicitly; `SAME_ORIGIN_DEPLOYMENT` sentinel added | Task 2 Steps 1-4 |
+| C3 | `TokenGate` gated every route on a `localStorage` token access-mode users never have | `TokenGate` unlocks on `useMe()` succeeding when `SAME_ORIGIN_DEPLOYMENT`; `MeOut.auth_mode` added for good measure (Task 1) though `TokenGate` ends up not needing to read it directly | Task 1 Step 10, Task 2 Step 12-13 |
+| C4 | New `ctx["engine"]`/`ctx["redis"]` reads broke `worker_ctx`, `ctx_for`, and `test_registry` | Both fixtures gain the keys; the two `poll_all_sources`-level tests that asserted the deleted inline loop move to `poll_user`; `test_registry`'s expected set gains `"poll_user"` | Task 4 Step 7 |
+| C5 | Backfill could violate `uq_jobs_user_source_external`, bricking sign-in | `DISTINCT ON (source, COALESCE(external_id, dedupe_hash))` replaces `DISTINCT ON (dedupe_hash)`; `NOT EXISTS` extended to `(user_id, source, external_id)`; bare `ON CONFLICT DO NOTHING` added — all three, not alternatives, per the review's own ruling | Task 5 Step 3 |
+| C6 | Seeding inside `current_user` raced and made every endpoint pay for it | `get_or_create_user` gets `ON CONFLICT (email) DO NOTHING`; seeding moved entirely out of `current_user` into a dedicated, idempotent `POST /api/v1/me/bootstrap` | Task 3 Step 8, Task 5 Step 5 |
+| C7 | `session.get` after a DB-level cascade returned the stale identity-mapped row (`expire_on_commit=False`) | Both affected tests call `session.expunge_all()` after the commit, forcing a fresh read | Task 7 Step 1 |
+
+**Important — all fixed:**
+
+| # | Finding | Fix | Where |
+|---|---|---|---|
+| I1 | `derive_searches` at first sign-in was a guaranteed no-op (zero tracks) | Dropped from A5 entirely; explicitly left to Phase D | Task 5 (scope note) |
+| I2 | Test indexed `list_jobs`'s return as bare `Job` rows; it returns `list[tuple[Job, str \| None]]` | Test corrected to `rows[0][0].best_fit` | Task 5 (backfill test file) |
+| I3 | PDF concurrency test was vacuous (no `Package` rows, passed with or without the lock) | Real `Job`/`Package` rows inserted; assertion tightened to `== 1` | Task 4 Step 10 |
+| I4 | Planned `localStorage` namespacing targeted `lib/skipped.ts`, which has no live callers | Dropped entirely; verified `apply-prompt.ts`'s job-id keys cannot collide across accounts (job ids are per-row UUIDs); AC 11 re-justified on the stronger, verified basis that no identity-bearing state is stored at all | Task 2 (rewritten) |
+| I5 | `mark_seen` added a `SELECT` to every request | Single atomic `UPDATE ... WHERE ... AND last_seen_at < now() - interval '1 hour'`, no read | Task 6 Step 3 |
+| I6 | Prune cron had no exemption path, no last-account guard, no user-facing notice | `rhapto accounts exempt`, `would_delete_everyone` guard (CLI and cron), `MeOut.deletion_due_at` + `DeletionBanner` | Task 6 Steps 6-7, Task 7 Steps 5-6 |
+| I7 | Nothing checked that the backup cron actually ran | `rhapto backups check`, exit 1 if no dump newer than 48h | Task 8 Step 5 |
+| I8 | JWKS cache reset its TTL on a failed fetch and never evicted a rotated key | `_last_attempt_at` separated from `_fetched_at`; key set replaced (not merged) on success, previous set retained as fallback; dead `PyJWKClient` removed | Task 3 Step 5 |
+| I9 | No startup check that `RHAPTO_ACCESS_TEAM`/`_AUD` are non-empty | Startup assertion extended; regression test for a list-valued `aud` claim added | Task 3 Step 10, Step 12 |
+| I10 | `db/repositories/jobs.py` imported the whole discovery stack via `SOURCES` | `backfill_public_jobs` takes `public_sources: Sequence[str]`; caller supplies `list(SOURCES.keys())` | Task 5 Step 3 |
+| I11 | Tests planned for a non-existent `tests/cli/` directory | Moved to `tests/unit/`, alongside the existing `test_cli.py` | Tasks 3, 6, 7 |
+
+**Minor — all fixed:** dead `object.__setattr__` prose removed and replaced with a verified plain
+assignment (Task 1 Step 9); settings-mutation-without-restore now stated as safe rather than left
+unexplained (Task 3, test file preamble); `accounts set-email` casefolds its lookup and checks the
+target email is free (Task 3 Step 11); `sweep_orphan_files` skips a non-`SAFE_ID` directory name
+instead of raising (Task 7 Step 3); the proxy route's `duplex` option is typed via an intersection
+type instead of a brittle `@ts-expect-error`, `..` path segments are rejected, and `range`/
+`accept-encoding` are forwarded (Task 2 Step 9); stale `0010_shared_job_pool.cpython-312.pyc` flagged
+for deletion (Task 1 Step 3); `shutil.which` replaces `which` in the backup-script test so it skips
+cleanly on Windows (Task 8 Step 3); the pre-signup promise's real placement is corrected — it is the
+Cloudflare Access login page in `access` mode, not `Landing.tsx`, which never renders there (Task 8).
+
+**The reviewer's ruling on this plan's three self-flagged calls, and how each landed:**
+
+1. **A5's trigger point** — the reviewer agreed identity-first-without-Phase-D was right, but ruled
+   putting the seed inside `current_user` was wrong on three counts (turns a data bug into "cannot
+   sign in", races, and orphans `derive_searches`). **Adopted in full**: the seed is now
+   `POST /api/v1/me/bootstrap`, gated behind `users.seeded_at` with no advisory lock (a deliberate,
+   stated departure from the reviewer's suggested lock — see Task 5 Step 5's own reasoning: the
+   underlying operation is already idempotent three ways, so the lock would buy negligible safety
+   over real new engine-access plumbing the test fixtures do not currently support; cost if wrong is
+   one extra idempotent pass on one account's first sign-in, never a correctness failure).
+2. **`NOT EXISTS` vs `ON CONFLICT`** — the reviewer ruled the premise correct but the conclusion
+   incomplete: both are needed, plus the `DISTINCT ON` grouping fix. **Adopted in full**, Task 5 Step 3.
+3. **Files-before-rows over arq cancellation** — accepted as right, with one caveat: the orphan sweep
+   must not share the prune's try-less cron. **Adopted in full**: the sweep now runs in its own
+   `try/except`, Task 7 Step 6.
+
 ### Spec coverage
 
 | AC | Task(s) | Status |
 |---|---|---|
-| 1 | 3, 5 | Met — allowlisted sign-in creates an account; no owner action after the invite |
-| 2 | 3 | Met — IdP login only, refused at the edge/API for non-members, no account shell created |
+| 1 | 3, 5 | Met — allowlisted sign-in creates an account; no owner action after the invite; `TokenGate` (Task 2) is what actually lets the person reach the app |
+| 2 | 2, 3 | Met — IdP login only, refused at the edge/API for non-members, no account shell created |
 | 3 | 5 | Partially met — the grid is full, not empty; the setup-*flow* itself (Phase D wizard) is out of scope, unbuilt by a separate spec |
 | 4 | — | Deferred — pre-existing (`LlmTestOut`/`is_llm_configured` already gate this for a single user); untouched by multi-tenancy, no task needed |
-| 5 | — | Deferred to Phase D (location-preference collection during setup); `derive_searches` (Task 5) reads whatever `answers.location_preferred` already holds, unchanged |
+| 5 | — | Deferred to Phase D (location-preference collection during setup) |
 | 6 | 1, 2 | Met — identity resolution plus the pre-existing `UserScopedMixin` cascade on every table |
 | 7 | 5 | Met — A5 copies only public JD text, never a block/verified fact/extract |
-| 8 | 7 | Met — `delete_account` cascades only within the deleted user's own FK graph |
-| 9 | — | Deferred to Phase C, explicitly. `check_visibility`'s empty-`context_tags` no-op (architecture §3.5 rule 6) is a real bug, but the risk it closes — a *shared* cached extract — cannot exist until `posting_extracts` exists; in Phase A/B, `extracted_json` stays per-user and A5 explicitly never copies it. Forcing this fix into A/B would be inventing a Phase C task under a different name. Flagged for Phase C's plan. |
+| 8 | 7 | Met — `delete_account` cascades only within the deleted user's own FK graph, proven by a test that now actually observes it (C7) |
+| 9 | — | Deferred to Phase C, explicitly. `check_visibility`'s empty-`context_tags` no-op (architecture §3.5 rule 6) is a real bug, but the risk it closes — a *shared* cached extract — cannot exist until `posting_extracts` exists; in Phase A/B, `extracted_json` stays per-user and A5 explicitly never copies it. Flagged for Phase C's plan. |
 | 10 | 4 | Met (mostly pre-existing) — per-task LLM key resolution already isolates cost; Task 4's fan-out prevents one user's poll from starving another's CPU budget |
-| 11 | 1, 2 | Met — per-request identity plus per-user `localStorage` namespacing |
+| 11 | 1, 2 | Met — per-request identity, and no identity-bearing `localStorage` state exists at all in access mode (a stronger property than the namespacing originally claimed, per I4) |
 | 12 | — | Deferred — pre-existing single-user behaviour, unaffected |
 | 13 | — | Deferred — pre-existing (`is_llm_configured`), unaffected |
 | 14 | — | Deferred to Phase D / pre-existing empty-state copy, unaffected by tenancy |
-| 15 | 1, 3, 5, 8 | Met — additive migration, startup assertion + `set-email` CLI, A5 reads the owner's rows without mutating them, backup retention doesn't touch live data |
+| 15 | 1, 3, 5, 6, 8 | Met — additive migration, startup assertion + `set-email` CLI, A5 reads the owner's rows without mutating them, `exempt`/`deletion_due_at`/`DeletionBanner` keep the prune cron from becoming a new threat to the owner's own data, backup retention doesn't touch live data |
 | 16 | 7 | Met — deletion never rotates or breaks another account's stored key, because nothing is shared |
 
-AC 4/5/12/13/14 are correctly out of this plan's scope: they are pre-existing single-user behaviours
-the functional spec asks multi-tenancy not to break, and none of the eight tasks above touches the
-code paths that implement them (`LlmSettingsIn`/`LlmTestOut`, `is_llm_configured`,
-`resolve_llm_config`, `ChecklistOut`, the empty-state copy in `apps/web/src/components/jobs`) — so
-there is nothing to regress and nothing to add here.
+AC 4/5/12/13/14 are correctly out of this plan's scope: pre-existing single-user behaviours the
+functional spec asks multi-tenancy not to break, untouched by any task above.
 
 ### Placeholder scan
 
 Reviewed every code block above for "TBD", "implement later", "add appropriate handling", or a step
-that names behaviour without showing it. Two spots were **not** placeholders but are worth
-distinguishing from the failure mode the prompt warns against, since they look similar at a glance:
+that names behaviour without showing it. Two spots are **not** placeholders but are worth
+distinguishing from the failure mode the prompt warns against:
 
 - Task 1 Step 7's `access` mode branch raises a real, tested `HTTPException(501, ...)` — a defined
   behaviour for an unreachable code path, replaced by real logic in Task 3, not a stub left unfilled.
 - Task 8 Step 1 asks the implementer to check for a runbook file before deciding where the
   post-restore step lives, because no such file was found in this checkout during this plan's
-  research and inventing one unprompted would risk duplicating an operational doc role 7 already
-  maintains elsewhere; this is a real decision point stated as one, not a deferred implementation.
+  research; this is a real decision point stated as one, not a deferred implementation.
 
 No step describes a test without a body, references a function or type not defined by an earlier
 task's Interfaces block, or says "similar to Task N" in place of code.
@@ -3370,39 +4332,24 @@ task's Interfaces block, or says "similar to Task N" in place of code.
 - `Principal` (Task 1: `mode: AuthMode, subject: str, email: str`) is used identically in Task 3's
   rewrite of `resolve_principal` and nowhere renamed or reshaped.
 - `current_user`'s return type (`uuid.UUID`) and its being resolvable via bare `Depends(current_user)`
-  is preserved across Tasks 1, 3, 5, 6 despite the function's internal parameter list growing (adding
-  `session`, then reusing it) — verified this is safe because every call site in the routers uses
-  `Annotated[uuid.UUID, Depends(current_user)]`, which never enumerates `current_user`'s own
-  parameters.
-- `backfill_public_jobs(session, user_id) -> int` (Task 5) matches its only call site (Task 5 Step 5,
-  inside `current_user`) and its test suite (Task 5 Step 1) exactly — no other task calls or renames
-  it.
-- `mark_seen`/`inactive_accounts` (Task 6) keep the exact signatures Task 7 and Task 8's cron
-  (`prune_inactive_accounts`) consume: `mark_seen(session, user_id) -> None`,
-  `inactive_accounts(session, cutoff) -> list[User]`.
-- `delete_account(session, storage, user_id) -> DeletionReport` (Task 7) is used with the same
-  three positional arguments in the CLI's `prune --yes`, `accounts delete`, and the worker's
-  `prune_inactive_accounts` — no task calls it with a different argument order or a keyword that
-  another task's definition doesn't accept.
+  is preserved across Tasks 1, 3, 6 despite the function's internal parameter list growing (adding
+  `session`, then reusing it) — every call site in the routers uses `Annotated[uuid.UUID,
+  Depends(current_user)]`, which never enumerates `current_user`'s own parameters. Task 5 does **not**
+  touch `current_user` at all (this was the whole point of the C6 fix).
+- `backfill_public_jobs(session, user_id, *, public_sources: Sequence[str]) -> int` (Task 5) matches
+  its only call site (the new `POST /me/bootstrap` handler) and its test suite exactly — no other task
+  calls or renames it, and no task imports `SOURCES` into the DB layer (I10).
+- `mark_seen`/`inactive_accounts`/`would_delete_everyone` (Task 6) keep the exact signatures Task 7's
+  CLI and cron consume: `mark_seen(session, user_id) -> None`, `inactive_accounts(session, cutoff) ->
+  list[User]`, `would_delete_everyone(all_ids, to_delete_ids) -> bool`.
+- `delete_account(session, storage, user_id) -> DeletionReport` (Task 7) is used with the same three
+  positional arguments in the CLI's `prune --yes`, `accounts delete`, and the worker's
+  `prune_inactive_accounts` — no task calls it with a different argument order.
 - `poll_user(ctx, user_id: str) -> None` (Task 4) is registered in both `TASKS` and
   `WorkerSettings.functions` with the same name string `"poll_user"` used by `poll_all_sources`'s
-  `enqueue_job` call — verified these three spellings match exactly.
-
-### Where the architecture left a genuine decision to Role 3 (this plan)
-
-1. **A5's trigger point.** The architecture assumed an onboarding-completion request (Phase D, not
-   built) runs the backfill. Since Phase D is out of scope here, Task 5 wires it into Task 3's
-   first-sign-in account creation instead, so Phase A ships as a complete unit per the architecture's
-   own criterion. Stated explicitly at the top of Task 5.
-2. **Idempotency of the backfill's `INSERT ... SELECT`.** The architecture's literal SQL used `ON
-   CONFLICT DO NOTHING` with no target — but `jobs` has no unique constraint on `(user_id,
-   dedupe_hash)` today (verified against `db/models.py`), and adding one would be a schema change A5
-   is explicitly scoped not to need. Task 5 uses a `NOT EXISTS` predicate instead, which is
-   semantically identical and needs no migration; noted as a deliberate, verified deviation from the
-   architecture's exact SQL, not an invention.
-3. **Arq job cancellation on deletion.** The architecture calls for aborting a departing user's queued
-   jobs before deleting rows. No job-id tracking exists to make a `Task` row's arq job cancellable
-   today, and building that is a real, separate piece of infrastructure. Task 7 states this
-   explicitly and relies on the existing per-task try/except plus files-before-rows ordering, which
-   satisfies the actual requirement (no resurrection, no cross-account harm) without the missing
-   infrastructure.
+  `enqueue_job` call, and by the updated `ctx_for`/`worker_ctx` fixtures that now also carry `engine`/
+  `redis` — verified these spellings match exactly across all four files C4 touches.
+- `BootstrapOut.seeded: bool` (Task 5) and `MeOut.auth_mode`/`MeOut.deletion_due_at` (Tasks 1, 6) are
+  each produced by exactly one endpoint and consumed by exactly one web-side caller
+  (`useBootstrap`/`TokenGate` is not one of them — it reads `SAME_ORIGIN_DEPLOYMENT` and `useMe().isSuccess`,
+  not `auth_mode`, a deliberate simplification noted in Task 2).
