@@ -37,6 +37,26 @@ CACHE_READ_MULTIPLIER = Decimal("0.1")
 CACHE_CREATION_MULTIPLIER = Decimal("1.25")
 
 
+def _rate_for(model: str) -> ModelRate | None:
+    """The rate for a model id, tolerating the dated form vendors also publish.
+
+    Anthropic ships both a rolling alias and a dated id for the same model -- `claude-haiku-4-5`
+    and `claude-haiku-4-5-20251001` price identically, but only the alias is listed above. A run
+    made with the dated id was therefore recorded with no cost at all, which is worse than a stale
+    estimate: it silently drops out of the usage total instead of showing up as a number to check.
+    So an exact match wins, and failing that the longest listed id the model starts with does --
+    longest so that adding, say, `claude-haiku-4-5-pro` later cannot be swallowed by the shorter
+    `claude-haiku-4-5` prefix.
+    """
+    exact = MODEL_RATES.get(model)
+    if exact is not None:
+        return exact
+    prefixes = [known for known in MODEL_RATES if model.startswith(known)]
+    if not prefixes:
+        return None
+    return MODEL_RATES[max(prefixes, key=len)]
+
+
 def estimate_cost(model: str | None, usage: TokenUsage) -> Decimal | None:
     """The estimated USD cost of `usage` on `model`, or None if the model isn't priced.
 
@@ -46,7 +66,7 @@ def estimate_cost(model: str | None, usage: TokenUsage) -> Decimal | None:
     """
     if model is None:
         return None
-    rate = MODEL_RATES.get(model)
+    rate = _rate_for(model)
     if rate is None:
         return None
     million = Decimal(1_000_000)

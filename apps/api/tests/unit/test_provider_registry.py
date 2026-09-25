@@ -8,7 +8,7 @@ from rhapto.engine.types import EngineError
 
 
 def test_provider_ids_lists_the_supported_providers() -> None:
-    assert provider_ids() == ["anthropic", "openai", "gemini", "groq"]
+    assert provider_ids() == ["anthropic", "openai", "gemini", "groq", "openrouter"]
 
 
 def test_registry_entries_carry_labels_env_keys_and_a_default_in_models() -> None:
@@ -17,12 +17,14 @@ def test_registry_entries_carry_labels_env_keys_and_a_default_in_models() -> Non
         "OpenAI",
         "Google Gemini",
         "Groq (free tier)",
+        "OpenRouter",
     ]
     assert [PROVIDERS[p].env_key for p in provider_ids()] == [
         "ANTHROPIC_API_KEY",
         "OPENAI_API_KEY",
         "GEMINI_API_KEY",
         "GROQ_API_KEY",
+        "OPENROUTER_API_KEY",
     ]
     for provider_id, info in PROVIDERS.items():
         assert info.id == provider_id
@@ -37,6 +39,7 @@ def test_registry_entries_carry_labels_env_keys_and_a_default_in_models() -> Non
         ("openai", "gpt-5", OpenAIProvider),
         ("gemini", "gemini-2.5-pro", GeminiProvider),
         ("groq", "llama-3.3-70b-versatile", OpenAIProvider),
+        ("openrouter", "meta-llama/llama-3.3-70b-instruct", OpenAIProvider),
     ],
 )
 def test_build_llm_returns_the_adapter_for_each_provider(
@@ -53,6 +56,8 @@ def test_an_openai_compatible_provider_is_pointed_at_its_own_host() -> None:
     which fails as an auth error and sends the user hunting in the wrong place entirely."""
     groq = build_llm("groq", "llama-3.3-70b-versatile", "gsk-test-1234")
     assert "api.groq.com" in str(groq._client.base_url)
+    router = build_llm("openrouter", "meta-llama/llama-3.3-70b-instruct", "sk-or-test-1234")
+    assert "openrouter.ai" in str(router._client.base_url)
 
 
 def test_openai_itself_keeps_the_sdk_default_host() -> None:

@@ -150,7 +150,11 @@ def test_experience_is_ordered_newest_first_whatever_the_model_returned() -> Non
 
 def test_an_entry_without_a_period_keeps_its_relative_place_at_the_end() -> None:
     """A dateless entry must not be invented a date, nor silently jump the queue."""
-    rows = (("NoDate", None, False), ("Acme Analytics", "2023-Present", False), ("Contoso Systems", "2012-2023", False))
+    rows = (
+        ("NoDate", None, False),
+        ("Acme Analytics", "2023-Present", False),
+        ("Contoso Systems", "2012-2023", False),
+    )
     out = ComposeOutput(summary=[], sections=[_experience(*rows)], cover_note="x", change_log="y")
     profile = _profile_for(*rows)
     doc = assemble_resume(out, profile)

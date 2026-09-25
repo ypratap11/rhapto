@@ -86,7 +86,13 @@ async def test_get_reports_nothing_configured_and_lists_the_providers(
     body = response.json()
     assert body["source"] == "none" and body["key_set"] is False
     assert body["provider"] is None and body["model"] is None and body["key_hint"] is None
-    assert [p["id"] for p in body["providers"]] == ["anthropic", "openai", "gemini", "groq"]
+    assert [p["id"] for p in body["providers"]] == [
+        "anthropic",
+        "openai",
+        "gemini",
+        "groq",
+        "openrouter",
+    ]
     openai_info = body["providers"][1]
     assert openai_info["label"] == "OpenAI" and openai_info["default"] == "gpt-5"
     assert "gpt-5-mini" in openai_info["models"]
@@ -319,7 +325,13 @@ async def test_the_unreadable_key_409_carries_the_provider_list(
     app.state.rhapto.settings.rhapto_secret_key = base64.urlsafe_b64encode(b"x" * 32).decode()
     body = (await client.get(URL)).json()
     assert body["code"] == "llm_key_unreadable"
-    assert [p["id"] for p in body["providers"]] == ["anthropic", "openai", "gemini", "groq"]
+    assert [p["id"] for p in body["providers"]] == [
+        "anthropic",
+        "openai",
+        "gemini",
+        "groq",
+        "openrouter",
+    ]
     assert body["providers"][1] == {
         "id": "openai",
         "label": "OpenAI",

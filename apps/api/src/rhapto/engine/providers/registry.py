@@ -65,12 +65,29 @@ PROVIDERS: dict[str, ProviderInfo] = {
         env_key="GROQ_API_KEY",
         base_url="https://api.groq.com/openai/v1",
     ),
+    # OpenRouter fronts dozens of models from many vendors behind OpenAI's protocol, which makes
+    # it the cheapest way to try an open model without hosting one: the local box cannot run
+    # anything useful (an 8B at 4-bit needs ~5GB against 940MB free), and a GPU host costs more
+    # per month than the API costs per year at this volume. Model ids here are namespaced by
+    # vendor and are suggestions, not a whitelist -- see `model_for`.
+    "openrouter": ProviderInfo(
+        id="openrouter",
+        label="OpenRouter",
+        models=(
+            "anthropic/claude-haiku-4.5",
+            "meta-llama/llama-3.3-70b-instruct",
+            "qwen/qwen-2.5-72b-instruct",
+        ),
+        default="meta-llama/llama-3.3-70b-instruct",
+        env_key="OPENROUTER_API_KEY",
+        base_url="https://openrouter.ai/api/v1",
+    ),
 }
 
 #: Providers spoken to with the OpenAI adapter. Membership, not the provider id, is what picks the
 #: adapter in `build_llm`, so adding an OpenAI-compatible host is one PROVIDERS entry and one name
 #: here — no new adapter, no new error mapping, no new tests of the wire format.
-OPENAI_COMPATIBLE = frozenset({"openai", "groq"})
+OPENAI_COMPATIBLE = frozenset({"openai", "groq", "openrouter"})
 
 
 FAKE_PROVIDER_ID = "fake"
