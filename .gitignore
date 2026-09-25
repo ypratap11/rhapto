@@ -33,3 +33,6 @@ apps/web/coverage/
 
 # Local screenshot walkthroughs (may contain real profile data)
 apps/web/.screenshots/
+
+# Business/company material belongs in the private augaster repo, never here
+docs/one-pager.md
