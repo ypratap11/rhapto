@@ -338,3 +338,15 @@ async def test_the_unreadable_key_409_carries_the_provider_list(
         "models": ["gpt-5", "gpt-5-mini"],
         "default": "gpt-5",
     }
+
+
+async def test_the_probe_gives_a_reasoning_model_room_to_think(client: httpx.AsyncClient) -> None:
+    """A tight output cap fails the probe on a model that is working perfectly.
+
+    Reasoning models spend output tokens thinking before they emit the answer, so a 64-token
+    budget returned "hit the token cap before finishing Ping" for a correct key and a valid
+    model -- a false negative at the exact moment a new user is deciding whether Rhapto works.
+    """
+    from rhapto.api.routers.settings import PROBE_MAX_TOKENS
+
+    assert PROBE_MAX_TOKENS >= 1024, "too tight for a model that thinks before it answers"

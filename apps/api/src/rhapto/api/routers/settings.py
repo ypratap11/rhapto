@@ -156,6 +156,14 @@ async def delete_llm_settings_endpoint(user_id: UserDep, session: SessionDep) ->
     return Response(status_code=204)
 
 
+#: Output budget for the connectivity probe. `Ping` needs a handful of tokens, but a reasoning
+#: model spends its output budget thinking before it emits anything, so a tight cap makes the probe
+#: fail with "hit the token cap" on a key and model that are both perfectly fine -- a false negative
+#: at exactly the moment a new user is deciding whether this thing works. Generous enough to cover
+#: a thinking pass, still a fraction of a cent.
+PROBE_MAX_TOKENS = 2048
+
+
 @router.post("/settings/llm/test", response_model=LlmTestOut)
 async def test_llm_settings(
     body: LlmTestIn,
@@ -174,7 +182,7 @@ async def test_llm_settings(
             system=[SystemBlock(text="Reply with ok=true.")],
             messages=[Message(role="user", content="ping")],
             output_schema=Ping,
-            max_tokens=64,
+            max_tokens=PROBE_MAX_TOKENS,
         )
     except Exception as exc:
         # A failed probe is the endpoint's answer, not an error: a rejected key
