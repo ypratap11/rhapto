@@ -463,7 +463,15 @@ def score_cmd(
         vectors = await embedder.embed([track_text(t) for t in loaded.tracks] + [text])
         track_vectors = {t.id: v for t, v in zip(loaded.tracks, vectors[:-1], strict=True)}
         title = text.strip().splitlines()[0][:200] if text.strip() else None
-        for s in score_job(title, text, vectors[-1], loaded.tracks, track_vectors):
+        preference = location_preference_from_answers(loaded.answers)
+        for s in score_job(
+            title,
+            text,
+            vectors[-1],
+            loaded.tracks,
+            track_vectors,
+            has_location_preference=bool(preference.terms),
+        ):
             typer.echo(
                 f"{s.track_id:<14} fit={s.fit_score:>3} semantic={s.semantic:>3} "
                 f"keywords={s.keywords:>3} matched={', '.join(s.matched) or '-'}"
