@@ -1519,6 +1519,14 @@
       },
       "MeOut": {
         "properties": {
+          "auth_mode": {
+            "enum": [
+              "token",
+              "access"
+            ],
+            "title": "Auth Mode",
+            "type": "string"
+          },
           "email": {
             "title": "Email",
             "type": "string"
@@ -1536,7 +1544,8 @@
         "required": [
           "email",
           "user_id",
-          "llm_configured"
+          "llm_configured",
+          "auth_mode"
         ],
         "title": "MeOut",
         "type": "object"
@@ -3970,10 +3979,11 @@
             "name": "sort",
             "required": false,
             "schema": {
-              "default": "newest",
+              "default": "relevance",
               "enum": [
                 "fit",
-                "newest"
+                "newest",
+                "relevance"
               ],
               "title": "Sort",
               "type": "string"

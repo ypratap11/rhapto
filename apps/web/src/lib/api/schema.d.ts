@@ -1458,6 +1458,11 @@ export interface components {
         };
         /** MeOut */
         MeOut: {
+            /**
+             * Auth Mode
+             * @enum {string}
+             */
+            auth_mode: "token" | "access";
             /** Email */
             email: string;
             /** Llm Configured */
@@ -2485,7 +2490,7 @@ export interface operations {
                 track?: string | null;
                 bucket?: ("fit" | "low") | null;
                 region?: "preferred" | "us" | "any";
-                sort?: "fit" | "newest";
+                sort?: "fit" | "newest" | "relevance";
                 /** @description comma-separated job ids, at most 200 */
                 ids?: string | null;
                 /** @description show only hidden jobs */

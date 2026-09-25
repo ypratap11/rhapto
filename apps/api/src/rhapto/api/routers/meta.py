@@ -44,4 +44,5 @@ async def me(
         email=user.email,
         user_id=user.id,
         llm_configured=await is_llm_configured(session, settings, user_id),
+        auth_mode=settings.rhapto_auth_mode,
     )

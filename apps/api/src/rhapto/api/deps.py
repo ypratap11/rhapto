@@ -1,14 +1,14 @@
 from __future__ import annotations
 
-import secrets
 import uuid
 from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass
 from typing import Annotated
 
-from fastapi import Header, HTTPException, Request
+from fastapi import Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
+from rhapto.api.auth import Principal, resolve_principal
 from rhapto.config import Settings
 from rhapto.engine.providers.llm import LLMProvider
 from rhapto.engine.providers.registry import build_llm
@@ -72,23 +72,15 @@ def get_llm_factory(request: Request) -> LlmFactory:
 
 
 async def current_user(
-    request: Request, authorization: Annotated[str | None, Header()] = None
+    request: Request,
+    principal: Annotated[Principal, Depends(resolve_principal)],
 ) -> uuid.UUID:
     state = get_state(request)
-    expected = state.settings.rhapto_api_token
-    provided = (
-        authorization.removeprefix("Bearer ").strip()
-        if authorization and authorization.startswith("Bearer ")
-        else None
-    )
-    if not expected or not secrets.compare_digest(provided or "", expected):
-        raise HTTPException(
-            status_code=401,
-            detail="missing or invalid bearer token",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-    if state.user_id is None:
-        # The lifespan bootstraps the user row; a request that beats it is a readiness problem,
-        # not an auth problem.
-        raise HTTPException(status_code=503, detail="server not ready")
-    return state.user_id
+    if principal.mode == "token":
+        if state.user_id is None:
+            # The lifespan bootstraps the user row; a request that beats it is a readiness
+            # problem, not an auth problem.
+            raise HTTPException(status_code=503, detail="server not ready")
+        return state.user_id
+    # access mode: Task 3 maps principal.email to a users.id (get-or-create on first sign-in).
+    raise HTTPException(status_code=501, detail="access mode is not yet supported")

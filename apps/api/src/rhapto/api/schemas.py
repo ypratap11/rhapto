@@ -26,6 +26,7 @@ class MeOut(BaseModel):
     # False when neither Settings nor the environment yields a usable provider key: the web app
     # uses it to point the user at Settings before they try to tailor anything.
     llm_configured: bool
+    auth_mode: Literal["token", "access"]
 
 
 class ProviderInfoOut(BaseModel):
