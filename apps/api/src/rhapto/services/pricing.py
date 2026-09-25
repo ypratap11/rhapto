@@ -27,6 +27,11 @@ MODEL_RATES: dict[str, ModelRate] = {
     "claude-opus-5": ModelRate(Decimal("5.00"), Decimal("25.00")),
     "claude-sonnet-5": ModelRate(Decimal("2.00"), Decimal("10.00")),
     "claude-haiku-4-5": ModelRate(Decimal("1.00"), Decimal("5.00")),
+    # Reached through OpenRouter, so the id carries its vendor prefix -- that string is what the
+    # package records and therefore what this table must be keyed on. NOTE: a promotional rate
+    # (50% off list) as of 2026-09-25; when the sale ends this line is wrong until someone updates
+    # it, which is the standing hazard of any price list in source.
+    "google/gemini-3.8-flash": ModelRate(Decimal("0.75"), Decimal("3.75")),
 }
 
 # Cache-token multipliers of the base input rate. These are standard Anthropic cache pricing
