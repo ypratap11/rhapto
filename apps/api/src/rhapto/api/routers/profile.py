@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import io
 import logging
 import tempfile
@@ -12,12 +13,15 @@ from fastapi import APIRouter, Depends, HTTPException, Response, UploadFile
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from rhapto.api.deps import current_user, get_enqueuer, get_session, get_storage
+from rhapto.api.deps import current_user, get_enqueuer, get_session, get_settings_dep, get_storage
 from rhapto.api.errors import not_found
-from rhapto.api.schemas import ImportOut, ResumeDocumentOut
+from rhapto.api.schemas import ImportOut, ResumeDocumentOut, ResumeImportOut
+from rhapto.config import Settings
 from rhapto.db.models import ResumeDocumentRow
 from rhapto.db.repositories import documents as documents_repo
 from rhapto.db.repositories import profile as repo
+from rhapto.engine.document import parse_docx
+from rhapto.engine.import_resume import import_resume, to_blocks, to_tracks
 from rhapto.engine.scoring import SCORING_KEYS
 from rhapto.models.profile.bases import ResumeBase
 from rhapto.models.profile.blocks import Block
@@ -26,8 +30,14 @@ from rhapto.models.profile.tracks import Track
 from rhapto.models.profile.watchlist import AggregatorEntry, WatchlistEntry
 from rhapto.models.source_document import SourceDocument
 from rhapto.profile.loader import dump_profile
-from rhapto.services.documents import DocumentError, delete_resume_document, store_resume_document
+from rhapto.services.documents import (
+    MAX_BYTES,
+    DocumentError,
+    delete_resume_document,
+    store_resume_document,
+)
 from rhapto.services.enqueue import Enqueuer
+from rhapto.services.llm import resolve_llm
 from rhapto.services.profile_sync import (
     aggregator_row_to_model,
     base_row_to_model,
@@ -39,7 +49,7 @@ from rhapto.services.profile_sync import (
     watchlist_row_to_model,
 )
 from rhapto.services.storage import PackageStorage
-from rhapto.services.taxonomy import validate_track_taxonomy
+from rhapto.services.taxonomy import find_field, find_role, validate_track_taxonomy
 
 logger = logging.getLogger(__name__)
 
@@ -57,6 +67,7 @@ UserDep = Annotated[uuid.UUID, Depends(current_user)]
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
 EnqueuerDep = Annotated[Enqueuer, Depends(get_enqueuer)]
 StorageDep = Annotated[PackageStorage, Depends(get_storage)]
+SettingsDep = Annotated[Settings, Depends(get_settings_dep)]
 
 
 def _check_id(path_id: str, body_id: str) -> None:
@@ -297,6 +308,54 @@ async def import_profile(
         tracks=len(profile.tracks),
         bases=len(profile.bases),
         guardrails=len(profile.guardrails),
+    )
+
+
+@router.post("/import-resume", response_model=ResumeImportOut)
+async def import_resume_endpoint(
+    file: UploadFile,
+    user_id: UserDep,
+    session: SessionDep,
+    settings: SettingsDep,
+) -> ResumeImportOut:
+    """Parse an uploaded resume into a proposed profile. Writes nothing.
+
+    The user reviews the proposal and accepts it through the existing block, track and answer
+    endpoints, so there is exactly one code path that writes a profile.
+    """
+    if not (file.filename or "").lower().endswith(".docx"):
+        raise HTTPException(status_code=422, detail="upload a .docx file")
+    data = await file.read()
+    if len(data) > MAX_BYTES:
+        # Same cap the resume-document tune mode enforces (`services.documents.store_resume_document`).
+        raise HTTPException(status_code=422, detail="the document must be 5 MB or smaller")
+    try:
+        document = await asyncio.to_thread(parse_docx, data, file.filename or "resume.docx")
+    except Exception as exc:
+        raise HTTPException(
+            status_code=422, detail="could not read the document; is it a valid .docx?"
+        ) from exc
+
+    llm = await resolve_llm(session, settings, user_id)
+    try:
+        proposal, _usage = await import_resume(document, llm)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    blocks = to_blocks(proposal.blocks)
+    tracks = [
+        t
+        for t in to_tracks(proposal.tracks)
+        if find_field(t.field) is not None and find_role(t.field, t.role) is not None
+    ]
+    return ResumeImportOut(
+        blocks=blocks,
+        tracks=tracks,
+        location=proposal.location,
+        dropped_periods=sum(
+            1 for i, b in zip(proposal.blocks, blocks, strict=True) if i.period and not b.period
+        ),
+        metrics_to_confirm=sum(1 for b in blocks if b.metric),
     )
 
 
