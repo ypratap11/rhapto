@@ -377,22 +377,36 @@ def test_db_upgrade_and_profile_import_export_commands_exist() -> None:
 
 
 def test_db_upgrade_reports_an_unreachable_database(monkeypatch: pytest.MonkeyPatch) -> None:
-    from rhapto.config import Settings
-
-    monkeypatch.setenv("DATABASE_URL", "unused")  # restored on teardown
-    monkeypatch.setattr(
-        cli,
-        "get_settings",
-        lambda: Settings(
-            _env_file=None,
-            database_url="postgresql+asyncpg://rhapto:sup3rsecret@127.0.0.1:1/rhapto",
-        ),
-    )
+    # db_upgrade constructs a bare Settings() to read only database_url, so we provide the
+    # bad URL via DATABASE_URL environment variable. This test verifies the error message
+    # masks the password.
+    monkeypatch.setenv("DATABASE_URL", "postgresql+asyncpg://rhapto:sup3rsecret@127.0.0.1:1/rhapto")
     result = runner.invoke(cli.app, ["db", "upgrade"])
     assert result.exit_code == 1
     assert "cannot reach the database" in result.output
     assert "docker compose up -d db redis" in result.output
     assert "sup3rsecret" not in result.output and "***" in result.output
+
+
+def test_db_upgrade_works_without_secret_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    """db_upgrade() should not require RHAPTO_SECRET_KEY because it reads only database_url.
+    It is invoked during Docker startup (rhapto db upgrade && uvicorn ...) and must not fail
+    because secrets are not yet loaded. This test passes when db_upgrade() constructs a bare
+    Settings() instead of calling get_settings()."""
+    monkeypatch.delenv("RHAPTO_SECRET_KEY", raising=False)
+    monkeypatch.setenv("DATABASE_URL", "unused")  # restored on teardown
+
+    # db_upgrade will attempt to connect to the test database URL and fail with a cleaner
+    # error (cannot reach database) instead of MissingSecretKeyError. We're testing that it
+    # *does* get past the settings validation step.
+    monkeypatch.setattr(
+        cli,
+        "run_migrations",
+        lambda url: None,  # Mock success; URL is read-only
+    )
+    result = runner.invoke(cli.app, ["db", "upgrade"])
+    assert result.exit_code == 0
+    assert "database is up to date" in result.output
 
 
 def test_tailor_mode_blocks_with_document_ignores_it(

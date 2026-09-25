@@ -244,7 +244,12 @@ def mask_url(url: str) -> str:
 @db_app.command("upgrade")
 def db_upgrade() -> None:
     """Apply database migrations."""
-    url = get_settings().database_url
+    # Construct a bare Settings() to read only database_url; this command is invoked during
+    # Docker startup (rhapto db upgrade && uvicorn ...) before secrets are validated. The
+    # rhapto_secret_key is only needed by the API and worker entrypoints, not by this
+    # database maintenance step -- so it must not block a migration.
+    settings = Settings()
+    url = settings.database_url
     try:
         run_migrations(url)
     except (OSError, SQLAlchemyError) as exc:
@@ -280,7 +285,10 @@ def profile_import(
     ),
 ) -> None:
     """Import a YAML profile directory into the database, replacing what is stored."""
-    settings = get_settings()
+    # Construct a bare Settings() to read only database_url and rhapto_user_email (which
+    # has a default); this command does not need rhapto_secret_key, which is only used by
+    # the API and worker entrypoints.
+    settings = Settings()
     try:
         profile = asyncio.run(
             _with_user(
@@ -302,7 +310,10 @@ def profile_export(
     path: Path = typer.Argument(Path("./profile"), help="Directory to write YAML files into"),
 ) -> None:
     """Export the stored profile to a YAML directory."""
-    settings = get_settings()
+    # Construct a bare Settings() to read only database_url and rhapto_user_email (which
+    # has a default); this command does not need rhapto_secret_key, which is only used by
+    # the API and worker entrypoints.
+    settings = Settings()
     try:
         profile = asyncio.run(
             _with_user(
