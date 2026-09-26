@@ -6,10 +6,13 @@ from dataclasses import dataclass
 from typing import Annotated
 
 from fastapi import Depends, HTTPException, Request
+from sqlalchemy import update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from rhapto.api.auth import Principal, is_allowed_email, resolve_principal
 from rhapto.config import Settings
+from rhapto.db.models import User
 from rhapto.db.repositories.users import get_or_create_user
 from rhapto.engine.providers.llm import LLMProvider
 from rhapto.engine.providers.registry import build_llm
@@ -72,6 +75,36 @@ def get_llm_factory(request: Request) -> LlmFactory:
     return get_state(request).llm_factory
 
 
+async def _record_idp_subject(session: AsyncSession, user_id: uuid.UUID, subject: str) -> None:
+    """Best-effort: records the verified IdP subject the first time it's seen, in its own
+    savepoint (fix-round N1). Two problems this closes at once:
+
+    1. Sharing this write with the account-creation transaction meant a `sub` collision (two
+       different, both-allowlisted emails whose IdP somehow issues the same subject) rolled back
+       the *account row itself* along with the write -- a permanent, self-repeating 409 lockout
+       for the second person, since every retry hits the same collision. The account row is now
+       committed by the caller *before* this runs, so this write can never take it down with it.
+    2. "Never overwrite" was enforced only in Python (`if not user.idp_subject`), so two
+       concurrent first-sign-in requests that both read a NULL subject could both attempt to
+       write it.
+
+    `WHERE idp_subject IS NULL` moves point 2 into SQL, where the race cannot reach it. The
+    `begin_nested()` savepoint means a collision on the UNIQUE constraint rolls back only this
+    write, not the (already-committed) account row: a colliding subject degrades to "audit field
+    not recorded", never to "this person cannot sign in".
+    """
+    try:
+        async with session.begin_nested():
+            await session.execute(
+                update(User)
+                .where(User.id == user_id, User.idp_subject.is_(None))
+                .values(idp_subject=subject)
+            )
+    except IntegrityError:
+        pass  # another row already holds this subject; the account itself is unaffected
+    await session.commit()
+
+
 async def current_user(
     request: Request,
     principal: Annotated[Principal, Depends(resolve_principal)],
@@ -95,11 +128,10 @@ async def current_user(
     ):
         raise HTTPException(status_code=403, detail="this instance is invite-only")
     user = await get_or_create_user(session, principal.email)
-    # Record the verified IdP subject the first time it's seen (migration 0011 added
-    # `users.idp_subject` specifically for this). Only ever set when currently NULL, never
-    # overwritten: the column is UNIQUE, and Access can reissue a `sub` for the same person, so an
-    # unconditional write on every request risks colliding with a stale value left on another row.
-    if principal.subject and not user.idp_subject:
-        user.idp_subject = principal.subject
+    # The account row is committed on its own, before the idp_subject write below is even
+    # attempted -- see _record_idp_subject's docstring (N1) for why sharing one transaction
+    # between the two turned a rare subject collision into a permanent account lockout.
     await session.commit()
+    if principal.subject:
+        await _record_idp_subject(session, user.id, principal.subject)
     return user.id

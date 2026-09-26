@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import secrets
 import time
 from dataclasses import dataclass
@@ -63,7 +64,12 @@ def is_allowed_email(email: str, allowed_emails: str, allowed_domains: str) -> b
     # though the real domain (by any mail-parsing rule) is "evil.com".
     if normalized.count("@") != 1:
         return False
-    domain = normalized.rsplit("@", 1)[-1]
+    local, domain = normalized.split("@", 1)
+    # A non-empty local part required too: "@example.com" alone (no IdP issues this, but nothing
+    # upstream rules it out either) would otherwise still satisfy `count("@") == 1` and match
+    # domain "example.com".
+    if not local:
+        return False
     return domain in domains
 
 
@@ -126,8 +132,11 @@ class JwksCache:
                 await self._refresh()
             # A non-JSON JWKS body (`response.json()` above) or a JWK `_refresh` cannot parse
             # (`jwt.PyJWK(jwk).key` above) must land here too, not escape as a 500 -- both are
-            # "we cannot check", the same as an unreachable host.
-            except (httpx.HTTPError, ValueError, PyJWTError):
+            # "we cannot check", the same as an unreachable host. `json.JSONDecodeError`
+            # specifically, not a bare `ValueError`: the latter would also swallow a genuine
+            # programming error elsewhere in this block and misreport it as a transient,
+            # Retry-After-able 503 instead of surfacing it during an incident.
+            except (httpx.HTTPError, json.JSONDecodeError, PyJWTError):
                 self._last_refresh_failed = True
         if kid in self._keys:
             return self._keys[kid]

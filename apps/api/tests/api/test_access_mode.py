@@ -51,6 +51,13 @@ def test_a_second_at_sign_does_not_smuggle_a_different_domain_past_the_check() -
     assert not is_allowed_email("a@evil.com@company.io", "", "company.io")
 
 
+def test_an_empty_local_part_does_not_match_the_domain_alone() -> None:
+    """N3 regression: '@example.com' (no local part) satisfies `count("@") == 1` and would
+    `rsplit` to domain 'example.com' just like a real address does -- no IdP issues an address
+    with no local part, but nothing upstream ruled it out either."""
+    assert not is_allowed_email("@example.com", "", "example.com")
+
+
 # --- Integration tests: real Cloudflare Access JWT verification wired end to end ---
 #
 # Every test below mutates `state.settings` directly rather than restoring it afterwards. This is
@@ -470,7 +477,11 @@ async def test_a_key_dropped_by_a_successful_refresh_is_not_accepted_from_the_re
 async def test_an_unparseable_jwks_response_is_a_503_not_a_500(monkeypatch) -> None:
     """I4 regression: a non-JSON JWKS body (or a JWK `_refresh` cannot parse) must land in the
     same "cannot verify identity right now" path as a network failure, not escape `key_for`
-    entirely as an unhandled exception. Before the fix, `key_for` caught only `httpx.HTTPError`."""
+    entirely as an unhandled exception. Before the fix, `key_for` caught only `httpx.HTTPError`.
+    Raises `json.JSONDecodeError` specifically (N4) -- what `httpx.Response.json()` actually
+    raises on invalid JSON, verified against the installed httpx -- rather than a bare
+    `ValueError`, since `key_for` no longer catches the latter (a genuine, unrelated `ValueError`
+    elsewhere in the block must not be silently reported as a transient 503)."""
     cache = auth_module.JwksCache("http://unused", refetch_floor=0)
 
     class _BadResponse:
@@ -478,7 +489,7 @@ async def test_an_unparseable_jwks_response_is_a_503_not_a_500(monkeypatch) -> N
             return None
 
         def json(self) -> None:
-            raise ValueError("not JSON")
+            raise json.JSONDecodeError("not JSON", "not json", 0)
 
     class _FakeClient:
         async def __aenter__(self) -> _FakeClient:
@@ -495,6 +506,22 @@ async def test_an_unparseable_jwks_response_is_a_503_not_a_500(monkeypatch) -> N
     with pytest.raises(HTTPException) as exc_info:
         await cache.key_for("some-kid")
     assert exc_info.value.status_code == 503
+
+
+async def test_an_unrelated_value_error_is_not_swallowed_as_a_503(monkeypatch) -> None:
+    """N4 regression: `key_for` catches `json.JSONDecodeError` specifically, not a bare
+    `ValueError` -- a genuine, unrelated bug raising a plain `ValueError` inside `_refresh` must
+    propagate and surface, not be misreported as a transient, Retry-After-able 503 during an
+    incident."""
+    cache = auth_module.JwksCache("http://unused", refetch_floor=0)
+
+    async def broken_refresh(self: auth_module.JwksCache) -> None:
+        raise ValueError("not a JSON-decode failure -- a real bug")
+
+    monkeypatch.setattr(auth_module.JwksCache, "_refresh", broken_refresh)
+
+    with pytest.raises(ValueError, match="not a JSON-decode failure"):
+        await cache.key_for("some-kid")
 
 
 # --- I5: the verified `sub` claim is stored on `users.idp_subject`, and never overwritten ---
@@ -543,6 +570,59 @@ async def test_verified_sub_is_stored_on_first_sign_in_and_never_overwritten(
         stored_again = await session.scalar(select(User).where(User.email == "wife@example.com"))
     assert stored_again is not None
     assert stored_again.idp_subject == "idp-sub-1"  # unchanged
+
+
+async def test_a_duplicate_sub_across_two_different_emails_does_not_lock_either_one_out(
+    app: FastAPI, rsa_keypair, monkeypatch, session_factory
+) -> None:
+    """N1 regression: the idp_subject write used to share its transaction with account creation,
+    so a `sub` collision between two different, both-allowlisted people rolled back the SECOND
+    person's account row along with the write -- a permanent, self-repeating 409 on every one of
+    their requests, since the row was never created and every retry hits the same collision. Both
+    signs-ins must succeed, and both `users` rows must exist, regardless of which one "wins" the
+    idp_subject column."""
+    state: AppState = app.state.rhapto
+    state.settings.rhapto_auth_mode = "access"
+    state.settings.rhapto_access_team = "test-team"
+    state.settings.rhapto_access_aud = "test-aud"
+    state.settings.rhapto_allowed_emails = "first@example.com,second@example.com"
+
+    private_key, public_key = rsa_keypair
+    _install_test_team_cache(monkeypatch, public_key)
+
+    def token_for(email: str) -> str:
+        claims = _access_claims(email, sub="SHARED-SUB")
+        return pyjwt.encode(claims, private_key, algorithm="RS256", headers={"kid": "test-kid"})
+
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://test"
+    ) as c:
+        first_response = await c.get(
+            "/api/v1/me", headers={"Cf-Access-Jwt-Assertion": token_for("first@example.com")}
+        )
+    assert first_response.status_code == 200
+
+    # The second, DIFFERENT email presenting the same sub must still get a working session, not
+    # a 409 -- and must keep getting one on every subsequent request, not just avoid a crash once.
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://test"
+    ) as c:
+        second_response = await c.get(
+            "/api/v1/me", headers={"Cf-Access-Jwt-Assertion": token_for("second@example.com")}
+        )
+        second_response_again = await c.get(
+            "/api/v1/me", headers={"Cf-Access-Jwt-Assertion": token_for("second@example.com")}
+        )
+    assert second_response.status_code == 200
+    assert second_response_again.status_code == 200
+
+    async with session_factory() as session:
+        first_user = await session.scalar(select(User).where(User.email == "first@example.com"))
+        second_user = await session.scalar(select(User).where(User.email == "second@example.com"))
+    assert first_user is not None
+    assert second_user is not None
+    assert first_user.idp_subject == "SHARED-SUB"  # whichever signed in first keeps the subject
+    assert second_user.idp_subject is None  # lost the race for the column, not for the account
 
 
 # --- M11, M12: malformed claims/header fields, not signature-level attacks ---
