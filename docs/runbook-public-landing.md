@@ -33,7 +33,40 @@ the access-mode branch, which is what makes this possible. The queued task
 `.superpowers/sdd/2026-09-25-multi-tenancy-a-b/task-landing-default-brief.md` does this as part of
 moving the dashboard to `/dashboard`; ship that first.
 
-## Cloudflare configuration
+## ATTEMPTED 2026-09-26 AND IT DID NOT WORK — read this before trying again
+
+The configuration below was tried on the live account and **failed**. Do not repeat it as written.
+
+What was built: a second self-hosted application named `rhapto`, destinations `rhapto.augaster.com/`,
+`/about`, `/_next/*`, `/favicon.ico`, with one policy `Rhapto-Public`, action **Bypass**, include
+**Everyone**. Saved and attached.
+
+What happened: `/` and `/about` kept returning `302` to the Access login, and so did `/favicon.ico` and
+`/_next/static/...`. So the bypass application matched **nothing**.
+
+How that was established, rather than guessed: the `aud` claim inside the 302's `Location` meta token
+was compared against `RHAPTO_ACCESS_AUD` on the server. **They matched** — meaning the redirect came
+from the hostname-wide application the API verifies against, so the bypass application was never
+evaluated for any of its four paths.
+
+The likely cause, and the reason the obvious fix is not enough: a hostname-wide application
+(`rhapto.augaster.com`) and a root destination (`rhapto.augaster.com/`) are the same destination, so
+specificity cannot break the tie for `/`. That alone does not explain `/about` also failing, so
+something in the destination rows or their attachment was additionally wrong — unresolved.
+
+**The approach to try instead: invert the two applications.** Give the bypass application the public
+paths, and change the *protected* application from the bare hostname to an explicit list —
+`/jobs`, `/dashboard`, `/pipeline`, `/profile`, `/resumes`, `/settings`, `/api/*`. No overlap, so no
+precedence question.
+
+**The risk of that inversion, stated plainly: anything you forget to list becomes public.** Run
+`scripts/check-access-boundary.sh` after every save, and stop immediately if any line under PROTECTED
+returns anything other than a redirect to Access. Do not attempt it tired.
+
+**The zero-risk alternative** is to put the explainer on `augaster.com`, which is already public and
+already links to Rhapto, and leave `rhapto.augaster.com` as the app. Ten minutes, nothing to expose.
+
+## Cloudflare configuration (as attempted — see the correction above)
 
 In Zero Trust → Access → Applications, add a **second** self-hosted application. A more specific path
 takes precedence over the hostname-wide application, so this one carves the public holes and the
