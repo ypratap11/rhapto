@@ -112,7 +112,7 @@ test("Applied moves to Interview, a due follow-up leads the dashboard, then Clos
   await page.getByRole("button", { name: "Save follow-up" }).click();
   await expect(page.getByText("Follow-up saved")).toBeVisible();
 
-  await page.goto("/");
+  await page.goto("/dashboard");
   const activeApplications = page.getByRole("region", { name: "Active applications" });
   const firstCard = activeApplications.getByRole("listitem").first();
   await expect(firstCard).toContainText("Follow up today");

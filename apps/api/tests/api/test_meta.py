@@ -38,6 +38,11 @@ async def test_me_returns_user(client: httpx.AsyncClient) -> None:
     assert response.json()["email"] == "test@example.com"
 
 
+async def test_me_returns_the_auth_mode(client: httpx.AsyncClient) -> None:
+    response = await client.get("/api/v1/me")
+    assert response.json()["auth_mode"] == "token"
+
+
 async def test_unknown_route_is_problem_json(client: httpx.AsyncClient) -> None:
     response = await client.get("/api/v1/nope")
     assert response.status_code == 404

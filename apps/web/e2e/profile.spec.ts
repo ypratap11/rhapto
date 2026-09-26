@@ -23,7 +23,7 @@ test("the field picker creates a track, and its resume-suggestion chips only app
   // with the same words ("No tracks yet. Pick a field and a role.") and is visible at the same time.
   await expect(page.getByText("No tracks yet. Import your profile or add a track.")).toBeVisible();
 
-  await page.goto("/");
+  await page.goto("/dashboard");
   await expect(checklistRow(page, "Tracks")).toHaveAttribute("data-done", "false");
 
   // Remove the resume document (uploaded by an earlier setup step / prior run of this suite —
@@ -65,6 +65,6 @@ test("the field picker creates a track, and its resume-suggestion chips only app
   await chips.first().click();
   await expect(page.getByText(/^Added the .* track$/)).toBeVisible();
 
-  await page.goto("/");
+  await page.goto("/dashboard");
   await expect(checklistRow(page, "Tracks")).toHaveAttribute("data-done", "true");
 });

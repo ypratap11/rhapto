@@ -1,0 +1,352 @@
+from __future__ import annotations
+
+import uuid
+from datetime import UTC, datetime, timedelta
+
+from sqlalchemy import select, text
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+
+from rhapto.db.models import Job
+from rhapto.db.repositories.jobs import backfill_public_jobs
+from rhapto.db.repositories.searches import create_search
+from rhapto.db.repositories.users import claim_seed, get_or_create_user
+
+
+async def _seed_job(session: AsyncSession, owner_id: uuid.UUID, **overrides) -> Job:
+    defaults = dict(
+        user_id=owner_id,
+        source="greenhouse",
+        external_id="ext-1",
+        url="https://boards.example.com/1",
+        company="Acme",
+        title="Engineer",
+        location="Remote",
+        posted_at=datetime.now(UTC),
+        jd_text="A real job description, long enough to pass validation. " * 3,
+        jd_embedding=[0.1] * 384,
+        dedupe_hash=f"hash-{uuid.uuid4()}",
+        identity_hash=f"identity-{uuid.uuid4()}",
+        discovered_at=datetime.now(UTC),
+        miss_count=0,
+    )
+    defaults.update(overrides)
+    job = Job(**defaults)
+    session.add(job)
+    await session.flush()
+    return job
+
+
+PUBLIC_SOURCES = ["greenhouse", "lever"]  # real SOURCES keys used only as test fixtures here (I10:
+# the repository function itself never imports SOURCES)
+
+
+async def test_copies_a_public_job_into_the_new_account(session: AsyncSession) -> None:
+    owner = await get_or_create_user(session, "owner@example.com")
+    newcomer = await get_or_create_user(session, "newcomer@example.com")
+    await _seed_job(session, owner.id)
+    await session.commit()
+
+    count = await backfill_public_jobs(session, newcomer.id, public_sources=PUBLIC_SOURCES)
+    await session.commit()
+
+    assert count == 1
+    rows = list(await session.scalars(select(Job).where(Job.user_id == newcomer.id)))
+    assert len(rows) == 1
+    assert rows[0].jd_embedding is not None  # the cached vector rides along
+
+
+async def test_never_copies_a_manual_job(session: AsyncSession) -> None:
+    """The highest-consequence line of SQL in Phase A: a hand-pasted recruiter email must never
+    reach a second account."""
+    owner = await get_or_create_user(session, "owner@example.com")
+    newcomer = await get_or_create_user(session, "newcomer@example.com")
+    await _seed_job(session, owner.id, source="manual", external_id=None, url=None)
+    await session.commit()
+
+    count = await backfill_public_jobs(session, newcomer.id, public_sources=PUBLIC_SOURCES)
+    await session.commit()
+
+    assert count == 0
+    rows = list(await session.scalars(select(Job).where(Job.user_id == newcomer.id)))
+    assert rows == []
+
+
+async def test_never_copies_a_source_that_is_not_in_the_allowlist_even_though_it_is_not_manual(
+    session: AsyncSession,
+) -> None:
+    """A negative filter (`source <> 'manual'`) would pass `test_never_copies_a_manual_job` above
+    just as well as the required positive allowlist does, since both exclude 'manual' -- that test
+    alone cannot tell the two implementations apart. This test plants a job under a source that is
+    neither 'manual' nor in `public_sources` (standing in for a source registered after this code
+    was written, or a source under active development that should not be exposed to new accounts
+    yet) and is the one that actually fails if the filter is ever loosened to a negative check."""
+    owner = await get_or_create_user(session, "owner@example.com")
+    newcomer = await get_or_create_user(session, "newcomer@example.com")
+    await _seed_job(session, owner.id, source="not-yet-allowlisted", external_id="ext-future")
+    await session.commit()
+
+    count = await backfill_public_jobs(session, newcomer.id, public_sources=PUBLIC_SOURCES)
+    await session.commit()
+
+    assert count == 0
+    rows = list(await session.scalars(select(Job).where(Job.user_id == newcomer.id)))
+    assert rows == []
+
+
+async def test_excluded_columns_are_never_copied(session: AsyncSession) -> None:
+    """Plan-review I1: the `search_id` exclusion used to be asserted vacuously -- no fixture row
+    ever set it, so the source value was already NULL and the assertion passed whether or not the
+    column was copied. `search_id` is a cross-tenant foreign key with real consequences if copied:
+    `list_jobs` (`jobs.py:162`) joins `SearchRow` on it with no user scoping, so a copied
+    `search_id` would print the *owner's* saved-search name on the newcomer's job card. This test
+    now sets it to a real `SearchRow` the owner owns, and asserts `len(rows) == 2` so the
+    `for row in rows:` loop below cannot pass vacuously on an empty result either.
+    """
+    owner = await get_or_create_user(session, "owner@example.com")
+    owner_search = await create_search(
+        session,
+        owner.id,
+        name="Owner's private search",
+        keywords=["staff"],
+        location=None,
+        remote="include",
+    )
+    other_owner_job = await _seed_job(session, owner.id, source="greenhouse")
+    newcomer = await get_or_create_user(session, "newcomer@example.com")
+    await _seed_job(
+        session,
+        owner.id,
+        source="lever",
+        external_id="ext-2",
+        dedupe_hash=f"hash-{uuid.uuid4()}",
+        best_fit=88,
+        best_track_id="pm",
+        location_tier="preferred",
+        hidden_at=datetime.now(UTC),
+        rescued=True,
+        extracted_json={"company": "Acme", "title": "Engineer", "context_tags": []},
+        repost_of=other_owner_job.id,
+        search_id=owner_search.id,
+    )
+    await session.commit()
+
+    await backfill_public_jobs(session, newcomer.id, public_sources=PUBLIC_SOURCES)
+    await session.commit()
+
+    rows = list(await session.scalars(select(Job).where(Job.user_id == newcomer.id)))
+    assert len(rows) == 2
+    for row in rows:
+        assert row.extracted_json is None
+        assert row.repost_of is None
+        assert row.best_fit is None
+        assert row.best_track_id is None
+        assert row.location_tier is None
+        assert row.hidden_at is None
+        assert row.rescued is False
+        assert row.search_id is None
+
+
+async def test_excludes_unlisted_and_stale_jobs(session: AsyncSession) -> None:
+    owner = await get_or_create_user(session, "owner@example.com")
+    newcomer = await get_or_create_user(session, "newcomer@example.com")
+    await _seed_job(session, owner.id, source="greenhouse", unlisted_at=datetime.now(UTC))
+    await _seed_job(
+        session,
+        owner.id,
+        source="lever",
+        external_id="ext-old",
+        dedupe_hash=f"hash-{uuid.uuid4()}",
+        posted_at=datetime.now(UTC) - timedelta(days=91),
+    )
+    # Plan-review M4: a dateless posting used to be admitted at any age (the age filter read
+    # `posted_at IS NULL OR posted_at > cutoff`), and the copy then stamps `discovered_at = now()`,
+    # so a two-year-old dateless posting would seed the first screen and read as fresh under
+    # `posted_within=24h`. This row has no `posted_at` and a `discovered_at` well past the cutoff,
+    # so it must be excluded exactly like the dated-and-stale row above.
+    await _seed_job(
+        session,
+        owner.id,
+        source="lever",
+        external_id="ext-dateless-stale",
+        dedupe_hash=f"hash-{uuid.uuid4()}",
+        posted_at=None,
+        discovered_at=datetime.now(UTC) - timedelta(days=400),
+    )
+    await session.commit()
+
+    count = await backfill_public_jobs(session, newcomer.id, public_sources=PUBLIC_SOURCES)
+    await session.commit()
+    assert count == 0
+    rows = list(await session.scalars(select(Job).where(Job.user_id == newcomer.id)))
+    assert (
+        rows == []
+    )  # plan-review M5: count alone can't catch a future "report 0 but still insert"
+
+
+async def test_is_idempotent(session: AsyncSession) -> None:
+    owner = await get_or_create_user(session, "owner@example.com")
+    newcomer = await get_or_create_user(session, "newcomer@example.com")
+    await _seed_job(session, owner.id, source="greenhouse")
+    await session.commit()
+
+    first = await backfill_public_jobs(session, newcomer.id, public_sources=PUBLIC_SOURCES)
+    await session.commit()
+    second = await backfill_public_jobs(session, newcomer.id, public_sources=PUBLIC_SOURCES)
+    await session.commit()
+
+    assert first == 1
+    assert second == 0
+    rows = list(await session.scalars(select(Job).where(Job.user_id == newcomer.id)))
+    assert len(rows) == 1
+
+
+async def test_is_idempotent_for_a_public_row_with_no_external_id(session: AsyncSession) -> None:
+    """Plan-review I5: idempotency layer 2 -- the `NOT EXISTS` guard on `(user_id, dedupe_hash)`
+    (`jobs.py:103-106`) -- had no test at all. `test_is_idempotent` above cannot exercise it: its
+    fixture row has `external_id="ext-1"`, so the bare `ON CONFLICT DO NOTHING` (layer 3) absorbs
+    the re-insert via the partial index `uq_jobs_user_source_external`, which only applies `WHERE
+    external_id IS NOT NULL`. A public row with no `external_id` (a source that doesn't expose a
+    stable id) has no unique index protecting it at all -- layer 2 is the *only* thing preventing a
+    duplicate for it. Deleting the layer-2 guard makes this test's second call re-insert."""
+    owner = await get_or_create_user(session, "owner@example.com")
+    newcomer = await get_or_create_user(session, "newcomer@example.com")
+    await _seed_job(session, owner.id, source="greenhouse", external_id=None)
+    await session.commit()
+
+    first = await backfill_public_jobs(session, newcomer.id, public_sources=PUBLIC_SOURCES)
+    await session.commit()
+    second = await backfill_public_jobs(session, newcomer.id, public_sources=PUBLIC_SOURCES)
+    await session.commit()
+
+    assert (first, second) == (1, 0)
+    rows = list(await session.scalars(select(Job).where(Job.user_id == newcomer.id)))
+    assert len(rows) == 1
+
+
+async def test_two_rows_sharing_source_and_external_id_with_different_dedupe_hash_do_not_collide(
+    session: AsyncSession,
+) -> None:
+    """Fixes plan-review C5: a JD whose text (and therefore dedupe_hash) changed between two polls
+    used to survive `DISTINCT ON (dedupe_hash)` as two rows, both sharing (source, external_id) --
+    violating uq_jobs_user_source_external the moment both were inserted for one new account and
+    500ing the request that was supposed to create it.
+
+    `uq_jobs_user_source_external` is scoped per user_id, so the two "duplicate" rows can only
+    coexist under two *different* existing accounts (each with its own independent per-user poll
+    history, per Task 4's fan-out) -- the same account could never hold both rows simultaneously,
+    since the second insert would itself violate that constraint. This is exactly the real-world
+    shape backfill_public_jobs's unscoped `FROM jobs` has to collapse across.
+
+    Plan-review I6: `count == 1` / `len(rows) == 1` alone do not distinguish layer 1 (the C5 fix,
+    `DISTINCT ON (source, COALESCE(external_id, dedupe_hash))`) from layer 3 (`ON CONFLICT DO
+    NOTHING`) -- with layer 1 reverted to `DISTINCT ON (dedupe_hash)`, both rows would survive into
+    the INSERT, the second would self-conflict on `uq_jobs_user_source_external`, and layer 3 would
+    swallow it, producing exactly this same observable outcome. The assertion below pins the
+    *identity* only layer 1 determines: `ORDER BY ..., discovered_at ASC` makes the oldest
+    candidate win, so the surviving row must be the "hash-old-" one.
+    """
+    owner = await get_or_create_user(session, "owner@example.com")
+    another_existing_account = await get_or_create_user(session, "another-existing@example.com")
+    newcomer = await get_or_create_user(session, "newcomer@example.com")
+    await _seed_job(
+        session,
+        owner.id,
+        source="greenhouse",
+        external_id="shared-ext",
+        dedupe_hash=f"hash-old-{uuid.uuid4()}",
+        discovered_at=datetime.now(UTC) - timedelta(days=2),
+    )
+    await _seed_job(
+        session,
+        another_existing_account.id,
+        source="greenhouse",
+        external_id="shared-ext",
+        dedupe_hash=f"hash-new-{uuid.uuid4()}",
+        discovered_at=datetime.now(UTC),
+    )
+    await session.commit()
+
+    count = await backfill_public_jobs(session, newcomer.id, public_sources=PUBLIC_SOURCES)
+    await session.commit()
+
+    assert count == 1  # never raises, and collapses to exactly one row for the shared external_id
+    rows = list(await session.scalars(select(Job).where(Job.user_id == newcomer.id)))
+    assert len(rows) == 1
+    assert rows[0].dedupe_hash.startswith("hash-old-")  # the identity only layer 1 determines
+
+
+async def test_unscored_backfilled_rows_stay_in_the_default_fit_bucket(
+    session: AsyncSession,
+) -> None:
+    """Pins the existing (pre-A5) behaviour this task relies on rather than reimplementing:
+    best_fit IS NULL rows are not filtered out of the default grid view. Fixes plan-review I2:
+    list_jobs returns list[tuple[Job, str | None]] (job, search name), verified against
+    db/repositories/jobs.py:63 -- the earlier draft of this test indexed it as if it returned bare
+    Job rows."""
+    from rhapto.db.repositories.jobs import list_jobs
+
+    owner = await get_or_create_user(session, "owner@example.com")
+    newcomer = await get_or_create_user(session, "newcomer@example.com")
+    await _seed_job(session, owner.id, source="greenhouse")
+    await session.commit()
+    await backfill_public_jobs(session, newcomer.id, public_sources=PUBLIC_SOURCES)
+    await session.commit()
+
+    rows = await list_jobs(session, newcomer.id, bucket="fit")
+    assert len(rows) == 1
+    job, _search_name = rows[0]
+    assert job.best_fit is None
+
+
+async def test_already_seeded_account_is_not_reseeded_by_the_atomic_claim(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    """Migration 0011 already ran `UPDATE users SET seeded_at = now() WHERE seeded_at IS NULL`, so
+    the owner's live account -- the only one holding real data -- is already marked seeded before
+    this endpoint ever ran. Proves `claim_seed` itself (the exact function `POST /me/bootstrap`
+    calls -- plan-review I3, this used to re-type the claim SQL as a literal, which proved nothing
+    about the production path) refuses to re-claim a row whose seeded_at is already set, which is
+    what protects that account from ever being backfilled by mistake."""
+    async with session_factory() as session:
+        owner = await get_or_create_user(session, "owner@example.com")
+        await session.execute(
+            text("UPDATE users SET seeded_at = now() WHERE id = :uid"), {"uid": str(owner.id)}
+        )
+        await session.commit()
+        owner_id = owner.id
+
+    async with session_factory() as session:
+        claimed = await claim_seed(session, owner_id)
+        await session.commit()
+
+    assert claimed is False  # already-seeded account claims nothing, so no backfill would ever run
+
+
+async def test_concurrent_seed_claims_result_in_exactly_one_claim(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    """This is `claim_seed`, the exact function `POST /me/bootstrap` calls to decide whether to
+    seed (plan-review I3). Proves it directly, at the SQL level, under a real race: two concurrent
+    transactions racing on the same row's `seeded_at IS NULL` claim must not both succeed.
+    Postgres's row lock makes the loser's UPDATE block until the winner commits, then re-evaluate
+    WHERE against the now-non-NULL value and match zero rows -- this is what makes first sign-in
+    race-safe rather than merely idempotent. See also
+    `test_two_concurrent_bootstrap_requests_produce_exactly_one_seed` in `tests/api/
+    test_access_mode.py` (plan-review I4), which proves the same thing one layer up, through two
+    real concurrent HTTP requests rather than two direct calls to this function.
+    """
+    import asyncio
+
+    async with session_factory() as setup:
+        user = await get_or_create_user(setup, "racer@example.com")
+        await setup.commit()
+        user_id = user.id
+
+    async def claim() -> bool:
+        async with session_factory() as session:
+            got = await claim_seed(session, user_id)
+            await session.commit()
+            return got
+
+    results = await asyncio.gather(claim(), claim())
+    assert sorted(results) == [False, True]

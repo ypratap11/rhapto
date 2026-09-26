@@ -55,7 +55,7 @@ export default function JobPage() {
   // here." It gets its own empty state rather than the generic error banner below.
   const notFound = job.error instanceof ApiError && job.error.status === 404;
 
-  // Same two-boolean shape as the Dashboard (app/page.tsx): a paused fetch (API unreachable) settles
+  // Same two-boolean shape as the Dashboard (app/dashboard/page.tsx): a paused fetch (API unreachable) settles
   // with `isLoading` false and `error` null, which looks like "empty" rather than "loading" or
   // "failed" unless checked for explicitly. `hasIssue` gates the banner (shown even alongside stale
   // cached data from a prior successful fetch); `nothingToShow` gates falling back to that banner

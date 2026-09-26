@@ -162,18 +162,6 @@ async def score_and_store(
         )
 
 
-async def users_needing_location_backfill(session: AsyncSession) -> list[uuid.UUID]:
-    """Users with at least one job scored before location priority existed.
-
-    Their `best_fit` was never multiplied, so they out-rank every newly scored job until
-    something happens to enqueue a rescore — and a user who edits nothing never gets one.
-    """
-    rows = await session.scalars(
-        select(Job.user_id).where(Job.location_tier.is_(None)).distinct().order_by(Job.user_id)
-    )
-    return list(rows)
-
-
 async def rescore_user(
     session: AsyncSession, user_id: uuid.UUID, embedder: EmbeddingProvider
 ) -> int:

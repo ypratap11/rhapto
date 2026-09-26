@@ -2,8 +2,11 @@ from __future__ import annotations
 
 from functools import lru_cache
 from pathlib import Path
+from typing import Literal
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+AuthMode = Literal["token", "access"]
 
 
 class Settings(BaseSettings):
@@ -32,6 +35,11 @@ class Settings(BaseSettings):
     redis_url: str = "redis://localhost:6379/0"
     rhapto_api_token: str = ""
     rhapto_user_email: str = "user@example.com"
+    rhapto_auth_mode: AuthMode = "token"
+    rhapto_access_team: str = ""
+    rhapto_access_aud: str = ""
+    rhapto_allowed_emails: str = ""  # comma-separated, exact, casefolded
+    rhapto_allowed_email_domains: str = ""  # comma-separated, casefolded, no leading "@"
     rhapto_packages_dir: Path = Path("data/packages")
     rhapto_web_origin: str = "http://localhost:3000"
     rhapto_poll_interval_hours: int = 6

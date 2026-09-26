@@ -224,6 +224,52 @@ def profile_validate(
 db_app = typer.Typer(no_args_is_help=True, help="Database maintenance.")
 app.add_typer(db_app, name="db")
 
+accounts_app = typer.Typer(no_args_is_help=True, help="Account maintenance.")
+app.add_typer(accounts_app, name="accounts")
+
+
+@accounts_app.command("set-email")
+def accounts_set_email(
+    old_email: str = typer.Argument(...), new_email: str = typer.Argument(...)
+) -> None:
+    """Rename an account's email -- run before flipping RHAPTO_AUTH_MODE to access, so the owner's
+    bootstrapped account matches his Cloudflare Access email exactly."""
+    settings = Settings()
+    new_casefolded = new_email.casefold()
+
+    async def rename() -> str:
+        engine = make_engine(settings.database_url)
+        try:
+            async with make_session_factory(engine)() as session:
+                from sqlalchemy import select as sa_select
+
+                from rhapto.db.models import User
+
+                user = await session.scalar(
+                    sa_select(User).where(User.email == old_email.casefold())
+                )
+                if user is None:
+                    return "not_found"
+                taken = await session.scalar(
+                    sa_select(User).where(User.email == new_casefolded, User.id != user.id)
+                )
+                if taken is not None:
+                    return "taken"
+                user.email = new_casefolded
+                await session.commit()
+                return "ok"
+        finally:
+            await engine.dispose()
+
+    result = asyncio.run(rename())
+    if result == "not_found":
+        typer.echo(f"error: no account found with email {old_email!r}", err=True)
+        raise typer.Exit(1)
+    if result == "taken":
+        typer.echo(f"error: {new_email!r} is already in use by another account", err=True)
+        raise typer.Exit(1)
+    typer.echo(f"renamed {old_email} -> {new_email}")
+
 
 def alembic_config() -> Config:
     """alembic.ini lives two directories above the package (apps/api) in a checkout and at /app in the image."""

@@ -3156,6 +3156,31 @@ text is copied), 15 (the owner's own job rows are read-only source data for the 
 
 ## Task 6 (B1a): `last_seen_at` throttling, `inactive_accounts`, prune dry-run
 
+> **AMENDMENT 2026-09-25 — test isolation. Read before writing any test in this task.**
+>
+> Every test below takes `migrated_db`. That fixture (`apps/api/tests/conftest.py:127`) returns a
+> migrated database URL and **does not clean it**; `session_factory`
+> (`conftest.py:142-147`) truncates **on teardown only**. So a test that seeds rows through its own
+> engine leaves them behind, and the *next* invocation starts dirty.
+>
+> This already bit Task 3: `tests/unit/test_accounts_set_email.py` was copied verbatim from this plan
+> and collided across runs — it passed on run 1 and failed on run 2. Adding `session_factory` as a
+> truncating parameter was not sufficient, because teardown cleanup cannot help the first run against
+> an already-dirty database.
+>
+> **This task is more exposed than Task 3 was**, because the subject under test *is which accounts
+> exist*: a leftover account makes `prune`/`inactive_accounts`/`delete` assert against rows it did not
+> create, and the failure will look like a logic bug in the pruning code rather than a dirty database.
+>
+> Therefore, for every test in this task:
+> 1. Depend on a fixture that **truncates before the test body runs**, not only after. Task 3's fix
+>    round may already have added one while closing finding N2 — check `conftest.py` first and reuse it
+>    rather than adding a second.
+> 2. Seed **per-run unique** email addresses (`f"{uuid4().hex}@example.com"`), so two invocations cannot
+>    collide even if cleanup is skipped or a run is interrupted.
+> 3. Assert on rows **you** created — by the unique address — never on a total count of `users`.
+
+
 Verified before writing: `users.last_seen_at`/`users.exempt_from_pruning` exist as of migration
 `0011` (Task 1); no code reads or writes either column yet (grepped); `apps/api/src/rhapto/cli/main.py`
 has no `accounts` sub-app before Task 3 adds `set-email` — this task adds `prune` to that same
@@ -3691,6 +3716,31 @@ against the prune cron becoming a new threat to the owner's own data); AC 8/16 l
 ---
 
 ## Task 7 (B1b): `delete_account`, `sweep_orphan_files`, real `accounts prune --yes` / `accounts delete`
+
+> **AMENDMENT 2026-09-25 — test isolation. Read before writing any test in this task.**
+>
+> Every test below takes `migrated_db`. That fixture (`apps/api/tests/conftest.py:127`) returns a
+> migrated database URL and **does not clean it**; `session_factory`
+> (`conftest.py:142-147`) truncates **on teardown only**. So a test that seeds rows through its own
+> engine leaves them behind, and the *next* invocation starts dirty.
+>
+> This already bit Task 3: `tests/unit/test_accounts_set_email.py` was copied verbatim from this plan
+> and collided across runs — it passed on run 1 and failed on run 2. Adding `session_factory` as a
+> truncating parameter was not sufficient, because teardown cleanup cannot help the first run against
+> an already-dirty database.
+>
+> **This task is more exposed than Task 3 was**, because the subject under test *is which accounts
+> exist*: a leftover account makes `prune`/`inactive_accounts`/`delete` assert against rows it did not
+> create, and the failure will look like a logic bug in the pruning code rather than a dirty database.
+>
+> Therefore, for every test in this task:
+> 1. Depend on a fixture that **truncates before the test body runs**, not only after. Task 3's fix
+>    round may already have added one while closing finding N2 — check `conftest.py` first and reuse it
+>    rather than adding a second.
+> 2. Seed **per-run unique** email addresses (`f"{uuid4().hex}@example.com"`), so two invocations cannot
+>    collide even if cleanup is skipped or a run is interrupted.
+> 3. Assert on rows **you** created — by the unique address — never on a total count of `users`.
+
 
 Verified before writing: `apps/api/src/rhapto/services/storage.py` (`PackageStorage.delete(package_id)`,
 `delete_document(user_id)` — both already exist and are exactly what this task needs, no new storage

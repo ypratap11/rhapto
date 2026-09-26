@@ -29,7 +29,7 @@ test("the dashboard reports real numbers and a recommendation reaches a resume",
   const role = job.title ?? "";
   const company = job.company ?? "";
 
-  await page.goto("/");
+  await page.goto("/dashboard");
   await expect(page.getByRole("heading", { level: 1 })).toContainText(/new role|Nothing new yet/);
 
   // The checklist's <ul> has no accessible name of its own (it is named only by the enclosing

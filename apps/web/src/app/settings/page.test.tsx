@@ -7,8 +7,24 @@ import SettingsPage from "./page";
 import { TokenGate } from "@/components/shell/TokenGate";
 import { getSettings, setSettings } from "@/lib/api/client";
 
-vi.mock("next/navigation", () => ({ usePathname: () => "/" }));
+// "/jobs", not "/": now that "/" is one of TokenGate's PUBLIC_ROUTES (it renders the landing page
+// there for everyone), it no longer exercises token gating at all, which is what the Disconnect
+// test below needs to probe.
+vi.mock("next/navigation", () => ({ usePathname: () => "/jobs" }));
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
+
+// N1: SAME_ORIGIN_DEPLOYMENT is a `const` computed from an env var at module load, so it can only
+// be overridden through the module mock, the same pattern TokenGate.test.tsx uses.
+const sameOriginFlag = { value: false };
+vi.mock("@/lib/api/client", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/api/client")>();
+  return {
+    ...actual,
+    get SAME_ORIGIN_DEPLOYMENT() {
+      return sameOriginFlag.value;
+    },
+  };
+});
 
 // The AI provider, Job sources and Saved searches sections each have their own Save/Test/Edit
 // buttons. Holding every one of their queries in the loading state keeps those button names
@@ -36,6 +52,7 @@ afterEach(() => {
   window.localStorage.clear();
   vi.restoreAllMocks();
   llmState = { data: undefined, isLoading: true, error: null };
+  sameOriginFlag.value = false;
 });
 
 function renderPage() {
@@ -60,9 +77,9 @@ describe("SettingsPage", () => {
 
     expect(getSettings().token).toBe("");
     expect(screen.queryByText("secret content")).not.toBeInTheDocument();
-    // `usePathname` is mocked to "/" here, and the gate answers the root with the landing page
-    // rather than the Connect card -- so this is what "the gate is back" looks like at "/".
-    expect(screen.getByText("Why not just ask a chatbot?")).toBeInTheDocument();
+    // `usePathname` is mocked to "/jobs" here (a route with no PUBLIC_ROUTES bypass), so this is
+    // what "the gate is back" looks like: the short Connect card, not the landing pitch.
+    expect(screen.getByText("Connect to your Rhapto API")).toBeInTheDocument();
     expect(screen.getByLabelText(/bearer token/i)).toHaveValue("");
     expect(toast.success).toHaveBeenCalledWith("Disconnected");
   });
@@ -108,5 +125,18 @@ describe("SettingsPage", () => {
     const help = container.querySelector("#help");
     expect(help).not.toBeNull();
     expect(help).toHaveTextContent("Help");
+  });
+
+  // Fix-round finding N1: in access mode there is no bearer token to enter, and saving that card
+  // there would point this browser at another origin and silently disable the same-origin proxy.
+  it("shows the API-connection card in token mode and hides it in access mode", () => {
+    setSettings({ token: "tok", apiUrl: "http://localhost:8000" });
+    const { unmount } = renderPage();
+    expect(screen.getByText("API connection")).toBeInTheDocument();
+    unmount();
+
+    sameOriginFlag.value = true;
+    renderPage();
+    expect(screen.queryByText("API connection")).not.toBeInTheDocument();
   });
 });

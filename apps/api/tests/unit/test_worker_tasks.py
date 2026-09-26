@@ -107,6 +107,7 @@ async def test_registry() -> None:
         "render_package_pdf",
         "poll_now",
         "poll_all_sources",
+        "poll_user",
         "score_jobs",
         "rescore_jobs",
     }

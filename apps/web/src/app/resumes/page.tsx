@@ -43,7 +43,7 @@ function ResumesPageInner() {
     return map;
   }, [tracksQuery.data]);
 
-  // Same shape as the Dashboard (src/app/page.tsx): a settled error and TanStack's paused
+  // Same shape as the Dashboard (src/app/dashboard/page.tsx): a settled error and TanStack's paused
   // fetchStatus both mean "something is wrong right now", but neither should discard rows a prior
   // fetch already put on screen — only fall back to nothing when there is truly nothing cached.
   const hasIssue = Boolean(list.error) || list.isPaused;

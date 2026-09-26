@@ -20,7 +20,7 @@ import { SwitchField } from "./fields";
  */
 export function LocationTab() {
   const answers = useAnswers();
-  // The four query states (see app/page.tsx:39-49): loading gets a skeleton; a settled error *or*
+  // The four query states (see app/dashboard/page.tsx:59-65): loading gets a skeleton; a settled error *or*
   // TanStack's paused fetchStatus (networkMode: "online" parks an unreachable query at
   // isLoading: false, error: null, data: undefined — indistinguishable from "genuinely empty" by
   // isLoading/error alone) both count as "an issue"; and "nothing to show" is specifically "no data

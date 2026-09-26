@@ -1,7 +1,8 @@
 # Dashboard
 
-The Dashboard (`/`) is where you land, and it reports facts about your own search rather than
-promotional copy.
+The Dashboard (`/dashboard`) is where you land once connected, and it reports facts about your own
+search rather than promotional copy. (`/` is the explainer, and it is shown there to everyone --
+including you when you are signed in. Bookmark `/dashboard`.)
 
 ![Dashboard](images/dashboard-light.png)
 

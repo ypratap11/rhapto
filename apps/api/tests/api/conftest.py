@@ -120,6 +120,7 @@ def api_settings(tmp_path: Path, env_llm_key: str) -> Settings:
 @pytest.fixture
 def worker_ctx(
     session_factory: async_sessionmaker[AsyncSession],
+    engine: AsyncEngine,
     llm_resolver: RecordingResolver,
     event_bus: InMemoryEventBus,
     storage: PackageStorage,
@@ -127,6 +128,7 @@ def worker_ctx(
 ) -> dict[str, Any]:
     return {
         "session_factory": session_factory,
+        "engine": engine,
         "llm_resolver": llm_resolver,
         "embedder": FakeEmbeddingProvider(dimensions=384),
         "event_bus": event_bus,

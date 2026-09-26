@@ -393,6 +393,19 @@
         "title": "Body_upload_resume_document_api_v1_profile_resume_document_post",
         "type": "object"
       },
+      "BootstrapOut": {
+        "properties": {
+          "seeded": {
+            "title": "Seeded",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "seeded"
+        ],
+        "title": "BootstrapOut",
+        "type": "object"
+      },
       "ChecklistOut": {
         "description": "Six setup tests plus the verified-block tally, rendered as \"18 of 23 verified\".",
         "properties": {
@@ -1519,6 +1532,14 @@
       },
       "MeOut": {
         "properties": {
+          "auth_mode": {
+            "enum": [
+              "token",
+              "access"
+            ],
+            "title": "Auth Mode",
+            "type": "string"
+          },
           "email": {
             "title": "Email",
             "type": "string"
@@ -1536,7 +1557,8 @@
         "required": [
           "email",
           "user_id",
-          "llm_configured"
+          "llm_configured",
+          "auth_mode"
         ],
         "title": "MeOut",
         "type": "object"
@@ -3970,10 +3992,11 @@
             "name": "sort",
             "required": false,
             "schema": {
-              "default": "newest",
+              "default": "relevance",
               "enum": [
                 "fit",
-                "newest"
+                "newest",
+                "relevance"
               ],
               "title": "Sort",
               "type": "string"
@@ -4667,6 +4690,56 @@
           }
         },
         "summary": "Me",
+        "tags": [
+          "meta"
+        ]
+      }
+    },
+    "/api/v1/me/bootstrap": {
+      "post": {
+        "description": "Idempotent, cheap on every call after the first: the web app calls this once per session,\nand it only ever does real work the one time `users.seeded_at` is still NULL. Kept entirely\nout of `current_user` (plan-review C6) so no other endpoint's request pays for it and no\nfailure here can present as an auth failure.\n\nThe claim is a single atomic `UPDATE ... WHERE seeded_at IS NULL RETURNING id`, not a read-\nthen-write: Postgres's row-level locking means at most one of two concurrent callers ever gets\na row back, so the backfill runs exactly once per account even under a real race -- no\nadvisory lock, no new engine-access plumbing needed.",
+        "operationId": "bootstrap_api_v1_me_bootstrap_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BootstrapOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Bootstrap",
         "tags": [
           "meta"
         ]

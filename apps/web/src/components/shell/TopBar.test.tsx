@@ -20,14 +20,27 @@ describe("TopBar", () => {
     expect(screen.getByRole("link", { name: "Dashboard" })).not.toHaveAttribute("aria-current");
   });
 
-  it("keeps Dashboard current only on the exact root path", () => {
-    pathname.mockReturnValue("/");
+  it("points the Dashboard tab at /dashboard and marks it current there", () => {
+    pathname.mockReturnValue("/dashboard");
     render(<TopBar />);
+    expect(screen.getByRole("link", { name: "Dashboard" })).toHaveAttribute("href", "/dashboard");
     expect(screen.getByRole("link", { name: "Dashboard" })).toHaveAttribute("aria-current", "page");
   });
 
-  it("offers the theme toggle, Settings and Help", () => {
+  it("does not mark Dashboard current at /", () => {
     pathname.mockReturnValue("/");
+    render(<TopBar />);
+    expect(screen.getByRole("link", { name: "Dashboard" })).not.toHaveAttribute("aria-current");
+  });
+
+  it("points the logo at /dashboard, not /, so a signed-in person's way back is the app, not the pitch", () => {
+    pathname.mockReturnValue("/dashboard");
+    render(<TopBar />);
+    expect(screen.getByRole("link", { name: "Rhapto" })).toHaveAttribute("href", "/dashboard");
+  });
+
+  it("offers the theme toggle, Settings and Help", () => {
+    pathname.mockReturnValue("/dashboard");
     render(<TopBar />);
     expect(screen.getByRole("button", { name: /toggle theme/i })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Settings" })).toHaveAttribute("href", "/settings");
@@ -35,7 +48,7 @@ describe("TopBar", () => {
   });
 
   it("orders the trailing controls as theme toggle, then Settings, then Help", () => {
-    pathname.mockReturnValue("/");
+    pathname.mockReturnValue("/dashboard");
     render(<TopBar />);
     const trailing = [...screen.getByRole("banner").querySelectorAll("button, a[aria-label]")].map((el) =>
       el.getAttribute("aria-label"),

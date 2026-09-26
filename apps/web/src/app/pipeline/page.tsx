@@ -33,7 +33,7 @@ export default function PipelinePage() {
     [applications.data],
   );
 
-  // Same two-boolean shape as the Dashboard (app/page.tsx): a paused fetch (API unreachable)
+  // Same two-boolean shape as the Dashboard (app/dashboard/page.tsx): a paused fetch (API unreachable)
   // settles with isLoading false and error null, so isPaused is checked explicitly; hasIssue shows
   // the banner even alongside stale cached rows, nothingToShow only gates falling back when there
   // truly is nothing cached to render.

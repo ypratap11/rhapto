@@ -69,7 +69,7 @@ describe("TailorButton", () => {
     tracksData = [];
     resumeDocumentData = null;
     resumeDocumentPending = false;
-    meData = { user_id: "u1", email: "dev@example.com", llm_configured: true };
+    meData = { user_id: "u1", email: "dev@example.com", llm_configured: true, auth_mode: "token" };
     mutateAsync.mockReset();
     push.mockReset();
     vi.mocked(toast.error).mockReset();
@@ -242,7 +242,7 @@ describe("TailorButton", () => {
     expect(mutateAsync).toHaveBeenCalledWith(expect.objectContaining({ body: expect.objectContaining({ mode: "blocks" }) }));
   });
   it("links to Settings instead of offering Tailor when /me reports no AI provider", async () => {
-    meData = { user_id: "u1", email: "dev@example.com", llm_configured: false };
+    meData = { user_id: "u1", email: "dev@example.com", llm_configured: false, auth_mode: "token" };
     renderButton();
 
     expect(screen.getByRole("link", { name: "Set up your AI provider" })).toHaveAttribute("href", "/settings");

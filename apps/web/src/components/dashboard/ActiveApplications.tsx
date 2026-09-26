@@ -104,7 +104,7 @@ export function ActiveApplications() {
   // flag, then re-flag them a moment later.
   const loading = applications.isLoading || ready.isLoading || dashboard.isLoading;
   // Three separate queries, each of which can fail or pause independently (dashboard's own call can
-  // succeed while these fail, or vice versa) — same gap app/page.tsx's hasIssue/nothingToShow closes.
+  // succeed while these fail, or vice versa) — same gap app/dashboard/page.tsx's hasIssue/nothingToShow closes.
   // A paused query (unreachable network) settles into isLoading: false, error: null, data: undefined,
   // indistinguishable from "nothing in flight" without checking isPaused too.
   const hasIssue =

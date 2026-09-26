@@ -100,3 +100,26 @@ describe("problemMessage", () => {
     expect(problemMessage(problem)).toBe("request validation failed (a: 1; b: 2; c: 3)");
   });
 });
+
+describe("DEFAULT_API_URL / SAME_ORIGIN_DEPLOYMENT", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.resetModules();
+  });
+
+  it("treats an explicitly empty NEXT_PUBLIC_API_URL as same-origin, not the localhost fallback", async () => {
+    vi.stubEnv("NEXT_PUBLIC_API_URL", "");
+    vi.resetModules();
+    const mod = await import("./client");
+    expect(mod.DEFAULT_API_URL).toBe("");
+    expect(mod.SAME_ORIGIN_DEPLOYMENT).toBe(true);
+  });
+
+  it("falls back to localhost only when NEXT_PUBLIC_API_URL is truly unset", async () => {
+    vi.stubEnv("NEXT_PUBLIC_API_URL", undefined);
+    vi.resetModules();
+    const mod = await import("./client");
+    expect(mod.DEFAULT_API_URL).toBe("http://localhost:8000");
+    expect(mod.SAME_ORIGIN_DEPLOYMENT).toBe(false);
+  });
+});

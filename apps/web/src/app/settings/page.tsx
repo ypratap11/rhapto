@@ -14,7 +14,15 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ApiError, apiClient, getSettings, setSettings, unwrap, type ConnectionSettings } from "@/lib/api/client";
+import {
+  ApiError,
+  apiClient,
+  getSettings,
+  setSettings,
+  unwrap,
+  SAME_ORIGIN_DEPLOYMENT,
+  type ConnectionSettings,
+} from "@/lib/api/client";
 
 function validateApiUrl(apiUrl: string): string | null {
   return /^https?:\/\//i.test(apiUrl.trim()) ? null : "Enter an API URL starting with http:// or https://.";
@@ -98,41 +106,49 @@ export default function SettingsPage() {
           <ImportExport />
         </CardContent>
       </Card>
-      <Card>
-        <CardHeader>
-          <CardTitle>API connection</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="space-y-1">
-            <Label htmlFor="apiUrl">API URL</Label>
-            <Input id="apiUrl" ref={apiUrlRef} defaultValue="" placeholder="http://localhost:8000" />
-            {apiUrlError ? (
-              <p role="alert" className="text-xs text-destructive">
-                {apiUrlError}
-              </p>
-            ) : null}
-          </div>
-          <div className="space-y-1">
-            <Label htmlFor="token">Bearer token</Label>
+      {/* Task 2 fix-round finding N1: in access mode there is no bearer token to enter -- Cloudflare
+          Access authenticated this browser at the edge, and every section on this page already
+          gets its data from the API, which enforces the invite allowlist server-side, so hiding
+          this card exposes nothing to anyone. It is a footgun, not a vulnerability: saving it here
+          would point this browser at a different origin and silently disable the same-origin
+          proxy A2 relies on, which looks like the app breaking for no visible reason. */}
+      {!SAME_ORIGIN_DEPLOYMENT ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>API connection</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-1">
+              <Label htmlFor="apiUrl">API URL</Label>
+              <Input id="apiUrl" ref={apiUrlRef} defaultValue="" placeholder="http://localhost:8000" />
+              {apiUrlError ? (
+                <p role="alert" className="text-xs text-destructive">
+                  {apiUrlError}
+                </p>
+              ) : null}
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="token">Bearer token</Label>
+              <div className="flex gap-2">
+                <Input id="token" ref={tokenRef} type={show ? "text" : "password"} defaultValue="" autoComplete="off" />
+                <Button type="button" variant="outline" onClick={() => setShow((v) => !v)} aria-pressed={show}>
+                  {show ? "Hide" : "Show"}
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground">Stored only in this browser. It is the RHAPTO_API_TOKEN from your .env.</p>
+            </div>
             <div className="flex gap-2">
-              <Input id="token" ref={tokenRef} type={show ? "text" : "password"} defaultValue="" autoComplete="off" />
-              <Button type="button" variant="outline" onClick={() => setShow((v) => !v)} aria-pressed={show}>
-                {show ? "Hide" : "Show"}
+              <Button onClick={save}>Save</Button>
+              <Button variant="outline" onClick={test} disabled={testing}>
+                {testing ? "Testing…" : "Test connection"}
+              </Button>
+              <Button variant="outline" onClick={disconnect}>
+                Disconnect
               </Button>
             </div>
-            <p className="text-xs text-muted-foreground">Stored only in this browser. It is the RHAPTO_API_TOKEN from your .env.</p>
-          </div>
-          <div className="flex gap-2">
-            <Button onClick={save}>Save</Button>
-            <Button variant="outline" onClick={test} disabled={testing}>
-              {testing ? "Testing…" : "Test connection"}
-            </Button>
-            <Button variant="outline" onClick={disconnect}>
-              Disconnect
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      ) : null}
       <HelpSection />
     </div>
   );

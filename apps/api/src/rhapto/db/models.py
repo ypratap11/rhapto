@@ -34,9 +34,18 @@ CLOSED_REASONS = ("rejected", "withdrew", "no_response", "filled")
 
 class User(TimestampMixin, Base):
     __tablename__ = "users"
+    __table_args__ = (UniqueConstraint("idp_subject", name="uq_users_idp_subject"),)
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=new_uuid)
     email: Mapped[str] = mapped_column(String(320), unique=True, nullable=False)
     settings_json: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict, nullable=False)
+    idp_subject: Mapped[str | None] = mapped_column(Text)
+    last_seen_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    exempt_from_pruning: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="false", nullable=False
+    )
+    seeded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class ResumeBlock(UserScopedMixin, TimestampMixin, Base):

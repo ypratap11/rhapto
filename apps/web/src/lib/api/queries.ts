@@ -76,8 +76,32 @@ export function invalidateDiscovery(queryClient: QueryClient): void {
   invalidateJobs(queryClient);
 }
 
-export function useMe() {
-  return useQuery({ queryKey: keys.me, queryFn: () => unwrap(apiClient().GET("/api/v1/me")) });
+// `enabled` defaults to true for every existing caller (TailorButton always wants /me). TokenGate
+// is the one caller that passes false: in token mode, with no token stored yet, firing this on
+// every anonymous landing-page load was a guaranteed-failing request with nothing to show for it
+// (fix-round finding I4).
+export function useMe(options: { enabled?: boolean } = {}) {
+  return useQuery({
+    queryKey: keys.me,
+    queryFn: () => unwrap(apiClient().GET("/api/v1/me")),
+    enabled: options.enabled ?? true,
+  });
+}
+
+// Called once per authenticated session (see Bootstrapper in TokenGate.tsx, the only caller): the
+// dedicated, idempotent endpoint that seeds a brand-new account's first screen from existing
+// public postings. `seeded: true` only the one time it actually ran the backfill -- every other
+// call, including every one after the first, comes back false and does nothing server-side.
+export function useBootstrap() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => unwrap(apiClient().POST("/api/v1/me/bootstrap")),
+    onSuccess: (data) => {
+      if (data.seeded) {
+        invalidateJobs(queryClient);
+      }
+    },
+  });
 }
 
 export function useJobs(filters: JobFilters) {
