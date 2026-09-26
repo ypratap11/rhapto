@@ -241,6 +241,7 @@ async def test_poll_user_opens_a_fresh_session_per_call(
     session: AsyncSession,
     user: User,
     engine: AsyncEngine,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Regression guard for the shared-session bug Phase 0 already fixed: poll_user must call
     session_factory() fresh on every invocation, not hold one open across calls for different
@@ -248,6 +249,11 @@ async def test_poll_user_opens_a_fresh_session_per_call(
     which proves nothing about session identity -- this counts factory() invocations instead,
     which is what the Phase 0 bug (one shared AsyncSession, and therefore one identity map, across
     a whole per-user loop) was actually about.
+
+    Fixes M3: `call_count == 2` alone would still pass if both calls crashed immediately after
+    opening their session (`poll_user` swallows exceptions), and said nothing about whether the
+    session `poll_sources` actually receives is the one the factory just produced. Recording
+    `id(session)` from inside a monkeypatched `poll_sources` closes both gaps.
     """
     other = await get_or_create_user(session, "other@example.com")
     await seed(session, user)
@@ -262,11 +268,21 @@ async def test_poll_user_opens_a_fresh_session_per_call(
         call_count += 1
         return real_factory()
 
+    recorded_session_ids: list[int] = []
+
+    async def recording_poll_sources(
+        session: AsyncSession, *args: Any, **kwargs: Any
+    ) -> PollSummary:
+        recorded_session_ids.append(id(session))
+        return PollSummary(results=[], new_jobs=0, new_job_ids=[])
+
+    monkeypatch.setattr(worker_tasks, "poll_sources", recording_poll_sources)
     ctx = ctx_for(counting_factory, InMemoryEventBus(), engine)
     await worker_tasks.poll_user(ctx, str(user.id))
     await worker_tasks.poll_user(ctx, str(other.id))
 
     assert call_count == 2  # one fresh session per call, never reused across users
+    assert len(set(recorded_session_ids)) == 2  # poll_sources received a distinct session each time
 
 
 def test_cron_hours_from_interval() -> None:

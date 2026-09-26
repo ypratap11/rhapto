@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import threading
 import time
 import uuid
 from datetime import UTC, datetime
@@ -11,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from rhapto.db.models import Job, Package, User
 from rhapto.services.storage import PackageStorage
+from rhapto.worker import tasks as worker_tasks
 from rhapto.worker.tasks import render_package_pdf
 
 
@@ -69,15 +71,34 @@ async def test_two_concurrent_renders_never_overlap(
 
     await asyncio.gather(_warm(), _warm())
 
+    # M1: `_PDF_RENDER_LOCK` is a module-level `asyncio.Lock()` created at import time; `Lock`
+    # binds to whichever event loop first contends on it (verified: `acquire()` only calls
+    # `_get_loop()` on the contended path), so this suite passes only because this is the sole
+    # test that contends it. A second contending test anywhere in the process would raise
+    # `RuntimeError: ... bound to a different event loop`, or -- worse -- a test cancelled while
+    # holding it would leave `_locked = True` for every later test. Swapping in a fresh `Lock()`
+    # scoped to this test's own event loop removes both risks; the production code reads the
+    # module attribute at call time, so the patched instance is what `render_package_pdf` actually
+    # takes.
+    monkeypatch.setattr(worker_tasks, "_PDF_RENDER_LOCK", asyncio.Lock())
+
     concurrent = 0
     max_concurrent = 0
+    # M8: `fake_render_pdf` runs on two different OS threads (via `asyncio.to_thread`), so the
+    # plain `+= 1` / `-= 1` below is an unguarded read-modify-write race across threads -- an
+    # interleaving that under-counts would make this test pass when it should fail, exactly the
+    # failure mode the lock exists to catch. A `threading.Lock` (not `asyncio.Lock`, which is not
+    # thread-safe) around the counter update makes the count itself trustworthy.
+    counter_lock = threading.Lock()
 
     def fake_render_pdf(package_id: str, soffice_binary: str) -> None:
         nonlocal concurrent, max_concurrent
-        concurrent += 1
-        max_concurrent = max(max_concurrent, concurrent)
+        with counter_lock:
+            concurrent += 1
+            max_concurrent = max(max_concurrent, concurrent)
         time.sleep(0.05)
-        concurrent -= 1
+        with counter_lock:
+            concurrent -= 1
         return None
 
     # Patch the *instance*, not the class. `render_package_pdf` calls `storage.render_pdf(...)`;

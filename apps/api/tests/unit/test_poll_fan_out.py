@@ -24,8 +24,43 @@ async def test_poll_all_sources_enqueues_one_poll_user_job_per_user(session_fact
     redis = RecordingRedis()
     await poll_all_sources({"session_factory": session_factory, "redis": redis})
 
-    enqueued_user_ids = {kwargs["user_id"] for _, kwargs in redis.enqueued if _ == "poll_user"}
+    # M2: a set comprehension here would collapse a double-enqueue regression (each user enqueued
+    # twice would still produce the same two-element set) -- assert the list length and task names
+    # too, so "exactly once per user" is actually checked, not just "every user is somewhere".
+    assert len(redis.enqueued) == 2
+    assert {task for task, _ in redis.enqueued} == {"poll_user"}
+    enqueued_user_ids = {kwargs["user_id"] for _, kwargs in redis.enqueued}
     assert enqueued_user_ids == {str(u1_id), str(u2_id)}
+
+
+async def test_poll_all_sources_enqueues_remaining_users_after_one_enqueue_fails(
+    session_factory,
+) -> None:
+    """I1: the fan-out loop has to isolate one user's enqueue failure from the rest of the cycle.
+    Verified against arq 0.28 (`worker.py:613,625`): a plain exception is a *terminal* job
+    failure, not a retry -- retries only happen for `Retry`/`CancelledError`/`RetryJob` raised
+    from *inside* a running job, which does not apply to a failed `enqueue_job` call itself. So a
+    transient Redis error on user 1 of N must not silently drop 2..N for the whole cron cycle;
+    the old inline loop's per-user `try/except` covered exactly this, and the dispatcher needs its
+    own."""
+    async with session_factory() as session:
+        u1 = await get_or_create_user(session, "fails-to-enqueue@example.com")
+        u2 = await get_or_create_user(session, "still-enqueued@example.com")
+        await session.commit()
+        u1_id, u2_id = u1.id, u2.id
+
+    class FlakyRedis(RecordingRedis):
+        async def enqueue_job(self, task: str, **kwargs: Any) -> None:
+            if kwargs.get("user_id") == str(u1_id):
+                raise ConnectionError("redis unreachable")
+            await super().enqueue_job(task, **kwargs)
+
+    redis = FlakyRedis()
+    # Must not raise: one user's enqueue failure is caught and logged, not propagated.
+    await poll_all_sources({"session_factory": session_factory, "redis": redis})
+
+    enqueued_user_ids = [kwargs["user_id"] for _, kwargs in redis.enqueued]
+    assert enqueued_user_ids == [str(u2_id)]
 
 
 async def test_poll_all_sources_returns_without_polling_inline(
