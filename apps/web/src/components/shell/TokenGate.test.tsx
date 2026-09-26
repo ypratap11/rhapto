@@ -133,6 +133,19 @@ describe("TokenGate", () => {
     expect(screen.queryByText("secret content")).not.toBeInTheDocument(); // not signed in
     expect(mockBootstrapMutate).not.toHaveBeenCalled();
   });
+
+  // Plan-review N2: the /jobs case above is route-specific and misses the landing page -- the one
+  // route a stranger actually reaches without being sent there (see the "answers 'what is this?'"
+  // test above). Duplicated here so mounting <Bootstrapper /> beside <Landing /> can't slip back in
+  // unnoticed the way it did in review (verified: it left every other test in this file green).
+  it("never fires the bootstrap mutation at / (the anonymous landing page) in token mode", () => {
+    pathname.current = "/";
+    renderGate(<TokenGate><p>secret content</p></TokenGate>);
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(
+      "Every application, stitched to fit.",
+    );
+    expect(mockBootstrapMutate).not.toHaveBeenCalled();
+  });
 });
 
 describe("TokenGate in access mode", () => {

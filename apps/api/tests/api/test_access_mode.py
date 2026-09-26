@@ -725,6 +725,15 @@ async def test_bootstrap_seeds_a_new_accounts_first_screen_exactly_once(
         assert jobs_after.json()[0]["best_fit"] is None
 
         second = await c.post("/api/v1/me/bootstrap", headers=headers)
+        # Plan-review N5: this assertion alone does NOT guard the seeded_at claim -- the second
+        # call re-claims (seeded_at was already set, so a broken "already seeded" guard would still
+        # let it through), but the backfill then copies 0 rows because the one job already exists
+        # for this account, and the (separate, M3) "copied == 0 -> report False" branch produces
+        # this exact same observable result either way. The claim itself is guarded by
+        # test_already_seeded_account_is_not_reseeded_by_the_atomic_claim and
+        # test_concurrent_seed_claims_result_in_exactly_one_claim (tests/db/
+        # test_backfill_public_jobs.py) and by test_two_concurrent_bootstrap_requests_produce_
+        # exactly_one_seed below (tests/api) -- do not delete those believing this one covers it.
         assert second.status_code == 200 and second.json()["seeded"] is False
 
 
@@ -845,14 +854,29 @@ async def test_two_concurrent_bootstrap_requests_produce_exactly_one_seed(
 
 
 async def test_bootstrap_does_not_stamp_seeded_at_when_there_is_nothing_to_copy_yet(
-    app: FastAPI, rsa_keypair, signed_assertion, monkeypatch
+    app: FastAPI, rsa_keypair, signed_assertion, monkeypatch, session_factory
 ) -> None:
     """Plan-review M3: the claim used to be kept even when `backfill_public_jobs` copied zero rows,
     permanently marking a brand-new instance's very first account as seeded before the poller has
     discovered anything -- that account would never be backfilled once jobs existed. Now, when
     nothing was copied, the whole claim is rolled back (not just skipped), so a later session gets a
     real chance once there is something to copy.
+
+    Plan-review N1: `seeded is False` on both calls is also exactly what a *burned* claim produces
+    (`users.seeded_at` set, backfill correctly finding nothing new) -- asserting only that leaves
+    two distinct regressions of the M3 fix undetected: committing the claim even at zero rows
+    (rather than rolling it back), and `claim_seed` committing internally (which would let the claim
+    survive the endpoint's own rollback and additionally break the single-transaction atomicity
+    `test_two_concurrent_bootstrap_requests_produce_exactly_one_seed` relies on). This test now
+    reads `users.seeded_at` directly to confirm the row is still genuinely unclaimed, then proves
+    the account was left *actually* claimable -- not just reported as unseeded -- by giving it
+    something to copy and confirming a later bootstrap succeeds for real.
     """
+    from datetime import UTC, datetime
+
+    from rhapto.db.models import Job
+    from rhapto.db.repositories.users import get_or_create_user
+
     state: AppState = app.state.rhapto
     state.settings.rhapto_auth_mode = "access"
     state.settings.rhapto_access_team = "test-team"
@@ -874,3 +898,36 @@ async def test_bootstrap_does_not_stamp_seeded_at_when_there_is_nothing_to_copy_
 
         second = await c.post("/api/v1/me/bootstrap", headers=headers)
         assert second.status_code == 200 and second.json()["seeded"] is False  # claim not burned
+
+        async with session_factory() as s:
+            row = (
+                await s.execute(
+                    select(User.seeded_at).where(User.email == "first-ever@example.com")
+                )
+            ).first()
+        assert row is not None and row[0] is None  # the row is still genuinely unclaimed
+
+        async with session_factory() as session:
+            owner = await get_or_create_user(session, "later-owner@example.com")
+            session.add(
+                Job(
+                    user_id=owner.id,
+                    source="greenhouse",
+                    external_id="e-later",
+                    url="https://x/later",
+                    company="Acme",
+                    title="Engineer",
+                    location="Remote",
+                    jd_text="A real job description, long enough. " * 3,
+                    dedupe_hash="hash-later-1",
+                    discovered_at=datetime.now(UTC),
+                    miss_count=0,
+                )
+            )
+            await session.commit()
+
+        third = await c.post("/api/v1/me/bootstrap", headers=headers)
+        assert third.status_code == 200 and third.json()["seeded"] is True  # genuinely claimable
+
+        jobs_after = await c.get("/api/v1/jobs", headers=headers)
+        assert len(jobs_after.json()) == 1
