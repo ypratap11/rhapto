@@ -5,7 +5,8 @@ import { usePathname } from "next/navigation";
 import { useSyncExternalStore } from "react";
 import { Landing } from "@/components/landing/Landing";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { hasToken } from "@/lib/api/client";
+import { hasToken, SAME_ORIGIN_DEPLOYMENT } from "@/lib/api/client";
+import { useMe } from "@/lib/api/queries";
 
 function subscribe(onStoreChange: () => void): () => void {
   window.addEventListener("storage", onStoreChange);
@@ -24,20 +25,42 @@ function getServerSnapshot(): boolean | null {
   return null;
 }
 
-// Routes that render without a token. `/settings` is where the token is entered, so gating it
-// would lock a new user out of the only screen that can unlock the rest; `/about` explains what
-// Rhapto is, which is precisely what someone who has no token yet needs to read first.
+// Token-mode-only: in access mode there is no token to enter, so /settings there is just the
+// LLM-key screen like any other authenticated page, and this bypass does not apply.
 const PUBLIC_ROUTES = new Set(["/settings", "/about"]);
 
 export function TokenGate({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const connected = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
+  const tokenPresent = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
+  // Called unconditionally, per React's rules of hooks, but only consulted in the access-mode
+  // branch below. In token mode this issues one background /me request that 401s until a token
+  // is entered; that failure is inert here, exactly as an unused query result always is.
+  const me = useMe();
+
+  if (SAME_ORIGIN_DEPLOYMENT) {
+    // access mode: Cloudflare authenticated this request at the edge before it reached Rhapto at
+    // all; there is no bearer token to check. /me succeeding (this instance's own allowlist check
+    // passed too) is what "signed in" means here.
+    if (me.isPending) return null;
+    if (me.isSuccess) return <>{children}</>;
+    return (
+      <Card className="mx-auto max-w-md">
+        <CardHeader>
+          <CardTitle>Access refused</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3 text-sm text-muted-foreground">
+          <p>
+            This Rhapto instance is invite-only. If you believe you should have access, ask the
+            owner to add your email to the invite list.
+          </p>
+        </CardContent>
+      </Card>
+    );
+  }
+
   if (PUBLIC_ROUTES.has(pathname)) return <>{children}</>;
-  if (connected === null) return null;
-  if (connected) return <>{children}</>;
-  // The root is the one route a stranger reaches without being sent there, so it answers "what is
-  // this?" rather than demanding a bearer token. Every other route keeps the short Connect card:
-  // someone who navigated to /jobs already knows what Rhapto is and just needs to be let in.
+  if (tokenPresent === null) return null;
+  if (tokenPresent) return <>{children}</>;
   if (pathname === "/") return <Landing />;
   return (
     <Card className="mx-auto max-w-md">

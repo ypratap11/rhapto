@@ -2,7 +2,17 @@ import createClient, { type ClientOptions } from "openapi-fetch";
 import type { paths } from "./schema";
 
 export const STORAGE_KEYS = { token: "rhapto.token", apiUrl: "rhapto.apiUrl" } as const;
-export const DEFAULT_API_URL = process.env.NEXT_PUBLIC_API_URL?.replace(/\/+$/, "") || "http://localhost:8000";
+
+// A same-origin deployment (access mode) sets NEXT_PUBLIC_API_URL="" deliberately, so the API is
+// reached through this app's own /api/v1 proxy rather than a separate origin. `||` treats "" the
+// same as unset and silently falls back to the localhost default, which breaks that deployment;
+// distinguish "explicitly empty" from "never set" instead.
+export const SAME_ORIGIN_DEPLOYMENT = process.env.NEXT_PUBLIC_API_URL === "";
+
+export const DEFAULT_API_URL =
+  process.env.NEXT_PUBLIC_API_URL === undefined
+    ? "http://localhost:8000"
+    : process.env.NEXT_PUBLIC_API_URL.replace(/\/+$/, "");
 
 export type ConnectionSettings = { token: string; apiUrl: string };
 
@@ -52,7 +62,11 @@ function storage(): Storage | null {
 
 export function getSettings(): ConnectionSettings {
   const s = storage();
-  const apiUrl = (s?.getItem(STORAGE_KEYS.apiUrl) || DEFAULT_API_URL).replace(/\/+$/, "");
+  const storedApiUrl = s?.getItem(STORAGE_KEYS.apiUrl);
+  const apiUrl = (storedApiUrl !== null && storedApiUrl !== undefined ? storedApiUrl : DEFAULT_API_URL).replace(
+    /\/+$/,
+    "",
+  );
   return { token: s?.getItem(STORAGE_KEYS.token) ?? "", apiUrl };
 }
 

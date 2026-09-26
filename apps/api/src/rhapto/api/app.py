@@ -97,13 +97,19 @@ def create_app(
         docs_url=f"{API_PREFIX}/docs",
     )
     app.state.rhapto = state
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=[settings.rhapto_web_origin],
-        allow_methods=["*"],
-        allow_headers=["*"],
-        allow_credentials=False,
-    )
+    # In access mode the browser talks to this API only through the Next.js same-origin proxy
+    # (apps/web/src/app/api/v1/[...path]/route.ts), so there is no cross-origin request to allow;
+    # installing CORS anyway would just be a wider door than access mode's threat model wants. In
+    # token mode the web app and API are genuinely different origins (localhost:3000/8000, or a
+    # self-hoster's own split), so CORS stays exactly as it was.
+    if settings.rhapto_auth_mode == "token":
+        app.add_middleware(
+            CORSMiddleware,
+            allow_origins=[settings.rhapto_web_origin],
+            allow_methods=["*"],
+            allow_headers=["*"],
+            allow_credentials=False,
+        )
     install_error_handlers(app)
     app.include_router(meta.router, prefix=API_PREFIX, tags=["meta"])
     app.include_router(profile.router, prefix=API_PREFIX, tags=["profile"])
