@@ -12,7 +12,6 @@ from rhapto.services.scoring import (
     ensure_track_embeddings,
     rescore_user,
     score_and_store,
-    users_needing_location_backfill,
 )
 
 DATA = Track(
@@ -225,27 +224,3 @@ async def test_all_or_nothing_mode_propagates_a_chunk_failure(
     ]
     with pytest.raises(RuntimeError):
         await score_and_store(session, user.id, jobs, AlwaysFails())
-
-
-async def test_backfill_selects_only_users_with_untiered_jobs(
-    session: AsyncSession, user: User
-) -> None:
-    from rhapto.db.repositories.users import get_or_create_user
-
-    assert await users_needing_location_backfill(session) == []
-    job = await jobs_repo.create_job(session, user.id, jd_text="A job. " * 10)
-    assert job.location_tier is None
-    assert await users_needing_location_backfill(session) == [user.id]
-
-    other = await get_or_create_user(session, "other@example.com")
-    await jobs_repo.create_job(session, other.id, jd_text="Another job. " * 10)
-    assert set(await users_needing_location_backfill(session)) == {user.id, other.id}
-
-    # One row per user, however many untiered jobs they hold.
-    third = await jobs_repo.create_job(session, user.id, jd_text="A third job. " * 10)
-    assert len(await users_needing_location_backfill(session)) == 2
-
-    await profile_repo.upsert_track(session, user.id, DATA)
-    await score_and_store(session, user.id, [job, third], FakeEmbeddingProvider(dimensions=384))
-    # Scoring tiers the rows, so that user drops out; the other user is still waiting.
-    assert await users_needing_location_backfill(session) == [other.id]

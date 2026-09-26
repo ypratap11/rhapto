@@ -3,12 +3,14 @@ from __future__ import annotations
 import asyncio
 import logging
 import uuid
-from collections.abc import Awaitable, Callable
+from collections.abc import AsyncIterator, Awaitable, Callable
+from contextlib import asynccontextmanager
 from typing import Any, NotRequired, TypedDict
 
 from cryptography.fernet import Fernet
 from pydantic import ValidationError
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from rhapto.config import Settings, get_settings
 from rhapto.db.models import EMBEDDING_DIMENSIONS, Job, Package, Task
@@ -43,12 +45,41 @@ from rhapto.services.storage import PackageStorage
 
 logger = logging.getLogger("rhapto.worker")
 
+# Serialises every LibreOffice invocation process-wide: two concurrent renders cost ~200-300MB
+# each on top of the worker's ~1.87GB resident set, and max_jobs=2 means two PDF renders are
+# otherwise reachable at once -- an OOM the box can already hit with one user and two queued
+# packages (architecture.md §2.1). Shared by render_package_pdf and tailor_job's own PDF step,
+# since both reach the same `storage.render_pdf` call.
+_PDF_RENDER_LOCK = asyncio.Lock()
+
 
 LlmResolver = Callable[[AsyncSession, Settings, uuid.UUID], Awaitable[LLMProvider]]
 
 # A provider key the user has to fix: the task fails with the message alone, because the exception
 # class name tells them nothing they can act on.
 SETUP_ERRORS = (LLMNotConfiguredError, SecretsError, ProviderAuthError)
+
+
+@asynccontextmanager
+async def with_user_poll_lock(engine: AsyncEngine, user_id: uuid.UUID) -> AsyncIterator[bool]:
+    """A Postgres session-level advisory lock keyed on `user_id`, so the cron's `poll_user` and a
+    hand-triggered `poll_now` can never interleave for the same user (audit B11). Non-blocking
+    (`pg_try_advisory_lock`): the caller that loses the race skips its poll for this cycle rather
+    than queuing behind the other one, which is the right trade for a cron that runs again on its
+    own schedule. Advisory locks are connection-scoped, so the lock and its release must use the
+    same underlying connection -- a bare `AsyncSession` from a pooled sessionmaker does not
+    guarantee that, so this opens its own connection directly.
+    """
+    key = int.from_bytes(user_id.bytes[:8], "big", signed=True)
+    async with engine.connect() as conn:
+        acquired = bool(
+            (await conn.execute(text("SELECT pg_try_advisory_lock(:k)"), {"k": key})).scalar()
+        )
+        try:
+            yield acquired
+        finally:
+            if acquired:
+                await conn.execute(text("SELECT pg_advisory_unlock(:k)"), {"k": key})
 
 
 class WorkerContext(TypedDict):
@@ -188,9 +219,10 @@ async def tailor_job(ctx: dict[str, Any], task_id: str) -> None:
             )
 
             if row.docx_path is not None:
-                pdf = await asyncio.to_thread(
-                    storage.render_pdf, str(row.id), ctx["soffice_binary"]
-                )
+                async with _PDF_RENDER_LOCK:
+                    pdf = await asyncio.to_thread(
+                        storage.render_pdf, str(row.id), ctx["soffice_binary"]
+                    )
                 row.pdf_path = str(pdf) if pdf else None
 
             job.extracted_json = package.jd_extract.model_dump(mode="json")
@@ -222,14 +254,21 @@ async def tailor_job(ctx: dict[str, Any], task_id: str) -> None:
 
 
 async def render_package_pdf(ctx: dict[str, Any], package_id: str) -> None:
-    """Render the PDF for an already-persisted package's DOCX, off the API's request path."""
+    """Render the PDF for an already-persisted package's DOCX, off the API's request path.
+
+    Serialised process-wide via `_PDF_RENDER_LOCK`: two concurrent LibreOffice invocations cost
+    ~200-300MB each on top of the worker's ~1.87GB resident set, and max_jobs=2 means two PDF
+    renders are otherwise reachable at once -- an OOM the box can already hit with one user and
+    two queued packages (architecture.md §2.1).
+    """
     factory: async_sessionmaker[AsyncSession] = ctx["session_factory"]
     storage: PackageStorage = ctx["storage"]
     async with factory() as session:
         row = await session.get(Package, uuid.UUID(package_id))
         if row is None or row.docx_path is None:
             return
-        pdf = await asyncio.to_thread(storage.render_pdf, package_id, ctx["soffice_binary"])
+        async with _PDF_RENDER_LOCK:
+            pdf = await asyncio.to_thread(storage.render_pdf, package_id, ctx["soffice_binary"])
         if pdf is not None:
             row.pdf_path = str(pdf)
         await session.commit()
@@ -318,14 +357,22 @@ async def poll_now(ctx: dict[str, Any], task_id: str) -> None:
                 await session.commit()
                 await bus.publish(channel, {"event": "progress", "step": step})
 
-            summary = await poll_sources(
-                session,
-                active.user_id,
-                http=ctx["discovery_http"],
-                embedder=ctx["embedder"],
-                on_step=on_step,
-                fernet=_poll_fernet(),
-            )
+            async with with_user_poll_lock(ctx["engine"], active.user_id) as acquired:
+                if not acquired:
+                    task_repo.mark_failed(active, "a poll is already running for this account")
+                    await session.commit()
+                    await bus.publish(
+                        channel, {"event": "error", "message": "a poll is already running"}
+                    )
+                    return
+                summary = await poll_sources(
+                    session,
+                    active.user_id,
+                    http=ctx["discovery_http"],
+                    embedder=ctx["embedder"],
+                    on_step=on_step,
+                    fernet=_poll_fernet(),
+                )
             task_repo.mark_succeeded(active, f"new:{summary.new_jobs}")
             await session.commit()
             # RunResult.search_id is a uuid.UUID | None, which json.dumps (RedisEventBus.publish)
@@ -359,24 +406,24 @@ async def poll_now(ctx: dict[str, Any], task_id: str) -> None:
             await bus.publish(channel, {"event": "error", "message": str(exc)})
 
 
-async def poll_all_sources(ctx: dict[str, Any]) -> None:
-    """Cron entry point: poll every user's sources; failures are recorded per source.
-
-    Each user gets their own session: sharing one `AsyncSession` (and therefore one
-    transaction and one identity map) across every user in the loop meant one user's
-    failure rolled back another's already-flushed work, and the identity map grew for the
-    whole run instead of being released between users.
-    """
+async def poll_user(ctx: dict[str, Any], user_id: str) -> None:
+    """One user's scheduled poll, its own 600s job_timeout, advisory-locked against a concurrent
+    poll_now for the same user."""
     factory: async_sessionmaker[AsyncSession] = ctx["session_factory"]
+    engine: AsyncEngine = ctx["engine"]
     bus: EventBus = ctx["event_bus"]
-    async with factory() as session:
-        user_ids = await list_user_ids(session)
-    for user_id in user_ids:
+    uid = uuid.UUID(user_id)
+    async with with_user_poll_lock(engine, uid) as acquired:
+        if not acquired:
+            logger.info(
+                "skipping scheduled poll for user %s: a poll is already in progress", user_id
+            )
+            return
         try:
             async with factory() as session:
                 summary = await poll_sources(
                     session,
-                    user_id,
+                    uid,
                     http=ctx["discovery_http"],
                     embedder=ctx["embedder"],
                     fernet=_poll_fernet(),
@@ -386,6 +433,17 @@ async def poll_all_sources(ctx: dict[str, Any]) -> None:
             )
         except Exception:
             logger.exception("scheduled poll failed for user %s", user_id)
+
+
+async def poll_all_sources(ctx: dict[str, Any]) -> None:
+    """Cron entry point: enqueue one poll_user job per user and return immediately, so a slow or
+    stuck poll for one user never holds another user's poll behind it inside a single 600s task
+    (architecture.md §2.3 -- two users used to exceed job_timeout in the old inline loop)."""
+    factory: async_sessionmaker[AsyncSession] = ctx["session_factory"]
+    async with factory() as session:
+        user_ids = await list_user_ids(session)
+    for user_id in user_ids:
+        await ctx["redis"].enqueue_job("poll_user", user_id=str(user_id))
 
 
 async def score_jobs(ctx: dict[str, Any], user_id: str, job_ids: list[str]) -> None:
@@ -421,6 +479,7 @@ TASKS: dict[str, TaskFn] = {
     "render_package_pdf": render_package_pdf,
     "poll_now": poll_now,
     "poll_all_sources": poll_all_sources,
+    "poll_user": poll_user,
     "score_jobs": score_jobs,
     "rescore_jobs": rescore_jobs,
 }
