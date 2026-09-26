@@ -207,11 +207,17 @@ export function Landing() {
                 subscription. The only bill is your own LLM provider&rsquo;s.
               </p>
               <p>
-                A tailored resume takes two model calls. Measured on a real run, that is roughly{" "}
-                <strong className="font-medium text-foreground">19&cent;</strong> on Claude Opus 5,{" "}
-                <strong className="font-medium text-foreground">8&cent;</strong> on Sonnet 5, or{" "}
-                <strong className="font-medium text-foreground">4&cent;</strong> on Haiku 4.5, at
+                A tailored resume takes two model calls. Measured on a real run, that is{" "}
+                <strong className="font-medium text-foreground">29&ndash;36&cent;</strong> on Claude
+                Opus 5, or{" "}
+                <strong className="font-medium text-foreground">5.8&cent;</strong> on Haiku 4.5, at
                 today&rsquo;s list prices.
+              </p>
+              <p>
+                Rhapto defaults to the stronger model on purpose. On that same job the cheap one
+                passed every guardrail and still left a whole role out of the resume &mdash; the
+                checks catch invented claims, not missing ones. Until that gap is closed, the cheap
+                path is not the recommended one.
               </p>
             </CardContent>
           </Card>

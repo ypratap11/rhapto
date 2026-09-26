@@ -37,8 +37,12 @@ describe("AboutPage", () => {
     render(<AboutPage />);
     const costs = screen.getByText("What it costs").closest("[data-slot=card]");
     expect(costs).not.toBeNull();
-    expect(costs).toHaveTextContent(/19¢/);
+    expect(costs).toHaveTextContent(/29–36¢/);
     expect(costs).toHaveTextContent(/AGPL-3\.0/);
+    // The cheap model passed every guardrail and still dropped a whole role. Quoting its price
+    // without that caveat would send people to the one path that can silently lose their history,
+    // so the warning is part of the price — deleting it must fail a test, not pass review.
+    expect(costs).toHaveTextContent(/left a whole role out/);
   });
 
   it("promises in plain words that it never submits an application", () => {
