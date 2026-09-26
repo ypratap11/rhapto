@@ -9,19 +9,50 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ApiError, hasToken, SAME_ORIGIN_DEPLOYMENT } from "@/lib/api/client";
 import { useBootstrap, useMe } from "@/lib/api/queries";
 
+// Fix-round M1: a `sessionStorage` latch, not `bootstrap.isIdle` alone -- `isIdle` only protects a
+// single mount's effect running twice (see M2 below), but a signed-in user navigating through
+// /settings or /about (both bypass Bootstrapper) and back to /jobs unmounts and remounts this
+// component, and `isIdle` on a *fresh* `useBootstrap()` call is `true` again on every remount. The
+// latch is set synchronously before the request even resolves, so a session where the request
+// never actually completes (a network blip) does not retry until the next tab/session -- accepted
+// as the cost of "once per session" being literally true; the server-side atomic claim is what
+// actually protects the backfill itself, so a missed attempt just means one fewer cheap retry, not
+// a correctness gap.
+const BOOTSTRAP_ATTEMPTED_KEY = "rhapto.bootstrap-attempted";
+
+function alreadyAttemptedBootstrap(): boolean {
+  try {
+    return sessionStorage.getItem(BOOTSTRAP_ATTEMPTED_KEY) === "1";
+  } catch {
+    // Private browsing / blocked storage: treat every mount as a fresh attempt. Each extra call is
+    // one cheap UPDATE + ROLLBACK on the server (the atomic claim), never a duplicated backfill.
+    return false;
+  }
+}
+
+function markBootstrapAttempted(): void {
+  try {
+    sessionStorage.setItem(BOOTSTRAP_ATTEMPTED_KEY, "1");
+  } catch {
+    // ignore -- see alreadyAttemptedBootstrap
+  }
+}
+
 // Mounted only from the two "signed in, render children" branches below -- never on an
 // unauthenticated landing page -- so this never fires the guaranteed-failing request I4 guarded
-// against for /me. Fires the idempotent bootstrap exactly once per mount (guarded by
-// `bootstrap.isIdle`, which also survives React StrictMode's dev-only double-invoke of effects);
-// every call after the first (a re-mount, a second tab, an already-seeded account) is a cheap
-// no-op on the server, so there's no cost to not trying to dedupe across sessions.
+// against for /me. Fix-round M2: the latch is set *synchronously* inside the effect, before
+// `bootstrap.mutate()` is even called, so React StrictMode's dev-only mount -> cleanup -> remount
+// double-invoke also only fires once -- the second invoke's `alreadyAttemptedBootstrap()` check
+// already sees the flag the first invoke set (this is not `bootstrap.isIdle`, which is read from
+// the render closure and would see `true` on both invokes).
 function Bootstrapper() {
   const bootstrap = useBootstrap();
   useEffect(() => {
-    if (bootstrap.isIdle) {
+    if (!alreadyAttemptedBootstrap()) {
+      markBootstrapAttempted();
       bootstrap.mutate();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- fire once on mount, not on every render
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- fire once per mount, not on every render
   }, []);
   return null;
 }

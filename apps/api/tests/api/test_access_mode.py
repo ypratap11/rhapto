@@ -726,3 +726,151 @@ async def test_bootstrap_seeds_a_new_accounts_first_screen_exactly_once(
 
         second = await c.post("/api/v1/me/bootstrap", headers=headers)
         assert second.status_code == 200 and second.json()["seeded"] is False
+
+
+async def test_bootstrap_copies_a_job_under_a_source_added_to_sources_after_this_code_was_written(
+    app: FastAPI, rsa_keypair, signed_assertion, monkeypatch, session_factory
+) -> None:
+    """Plan-review I2: `meta.py`'s `list(SOURCES.keys())` is correct today, but nothing failed if it
+    were replaced with a hand-written literal -- mutation testing confirmed a frozen list of the
+    current eleven source names passes every existing test. This proves the allowlist is genuinely
+    *derived* from the `SOURCES` registry rather than a literal that happens to agree with it today:
+    a source registered into `SOURCES` after this endpoint was written must be copied without this
+    file changing at all.
+    """
+    from datetime import UTC, datetime
+
+    from rhapto.db.models import Job
+    from rhapto.db.repositories.users import get_or_create_user
+    from rhapto.services.discovery.sources import SOURCES
+    from rhapto.services.discovery.sources.greenhouse import GreenhouseSource
+
+    monkeypatch.setitem(SOURCES, "review-only-source", GreenhouseSource)
+
+    async with session_factory() as session:
+        owner = await get_or_create_user(session, "owner@example.com")
+        session.add(
+            Job(
+                user_id=owner.id,
+                source="review-only-source",
+                external_id="e-future",
+                url="https://x/future",
+                company="Acme",
+                title="Engineer",
+                location="Remote",
+                jd_text="A real job description, long enough. " * 3,
+                dedupe_hash="hash-future-1",
+                discovered_at=datetime.now(UTC),
+                miss_count=0,
+            )
+        )
+        await session.commit()
+
+    state: AppState = app.state.rhapto
+    state.settings.rhapto_auth_mode = "access"
+    state.settings.rhapto_access_team = "test-team"
+    state.settings.rhapto_access_aud = "test-aud"
+    state.settings.rhapto_allowed_emails = "newcomer2@example.com"
+
+    _, public_key = rsa_keypair
+    _install_test_team_cache(monkeypatch, public_key)
+
+    token = signed_assertion("newcomer2@example.com")
+    headers = {"Cf-Access-Jwt-Assertion": token}
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://test"
+    ) as c:
+        await c.get("/api/v1/me", headers=headers)
+        result = await c.post("/api/v1/me/bootstrap", headers=headers)
+        assert result.status_code == 200 and result.json()["seeded"] is True
+
+        jobs_after = await c.get("/api/v1/jobs", headers=headers)
+        sources = {job["source"] for job in jobs_after.json()}
+        assert "review-only-source" in sources
+
+
+async def test_two_concurrent_bootstrap_requests_produce_exactly_one_seed(
+    app: FastAPI, rsa_keypair, signed_assertion, monkeypatch
+) -> None:
+    """Plan-review I4: `test_concurrent_seed_claims_result_in_exactly_one_claim` (tests/db) proves
+    `claim_seed` is race-safe as a direct function call, but nothing proved two concurrent *HTTP
+    requests* to `POST /me/bootstrap` produce exactly one seed -- `meta.py`'s
+    `not await claim_seed(...)` / rollback branch was previously reached only sequentially, never
+    under a real race at the endpoint layer.
+
+    `backfill_public_jobs` is monkeypatched to a stub that always reports one row copied, so this
+    test isolates `claim_seed`'s own atomicity as the only thing that can produce "exactly one
+    seed": with the real `backfill_public_jobs` left in, its own idempotency guards (`NOT EXISTS` /
+    `ON CONFLICT DO NOTHING`) would silently absorb a double-seed even if the `seeded_at` claim
+    itself were broken -- confirmed by mutation: with the stub in place, deleting
+    `AND seeded_at IS NULL` from `claim_seed` (`db/repositories/users.py`) makes both racers win the
+    claim, both call the stub, and this test's `call_count == 1` assertion fails (2 != 1); without
+    the stub, the same mutation left this test green, because the real backfill's own idempotency
+    happened to mask it for this exact single-job fixture shape.
+    """
+    import asyncio
+
+    call_count = {"n": 0}
+
+    async def fake_backfill(session: object, user_id: object, *, public_sources: object) -> int:
+        call_count["n"] += 1
+        return 1  # pretend there is always something to copy, so `seeded` tracks the claim alone
+
+    monkeypatch.setattr("rhapto.api.routers.meta.backfill_public_jobs", fake_backfill)
+
+    state: AppState = app.state.rhapto
+    state.settings.rhapto_auth_mode = "access"
+    state.settings.rhapto_access_team = "test-team"
+    state.settings.rhapto_access_aud = "test-aud"
+    state.settings.rhapto_allowed_emails = "racer@example.com"
+
+    _, public_key = rsa_keypair
+    _install_test_team_cache(monkeypatch, public_key)
+
+    token = signed_assertion("racer@example.com")
+    headers = {"Cf-Access-Jwt-Assertion": token}
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://test"
+    ) as c:
+        await c.get("/api/v1/me", headers=headers)  # create the account first, outside the race
+
+        first, second = await asyncio.gather(
+            c.post("/api/v1/me/bootstrap", headers=headers),
+            c.post("/api/v1/me/bootstrap", headers=headers),
+        )
+        assert first.status_code == 200 and second.status_code == 200
+        seeded_flags = sorted([first.json()["seeded"], second.json()["seeded"]])
+        assert seeded_flags == [False, True]
+        assert call_count["n"] == 1  # the backfill only ever runs for the winner of the claim race
+
+
+async def test_bootstrap_does_not_stamp_seeded_at_when_there_is_nothing_to_copy_yet(
+    app: FastAPI, rsa_keypair, signed_assertion, monkeypatch
+) -> None:
+    """Plan-review M3: the claim used to be kept even when `backfill_public_jobs` copied zero rows,
+    permanently marking a brand-new instance's very first account as seeded before the poller has
+    discovered anything -- that account would never be backfilled once jobs existed. Now, when
+    nothing was copied, the whole claim is rolled back (not just skipped), so a later session gets a
+    real chance once there is something to copy.
+    """
+    state: AppState = app.state.rhapto
+    state.settings.rhapto_auth_mode = "access"
+    state.settings.rhapto_access_team = "test-team"
+    state.settings.rhapto_access_aud = "test-aud"
+    state.settings.rhapto_allowed_emails = "first-ever@example.com"
+
+    _, public_key = rsa_keypair
+    _install_test_team_cache(monkeypatch, public_key)
+
+    token = signed_assertion("first-ever@example.com")
+    headers = {"Cf-Access-Jwt-Assertion": token}
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://test"
+    ) as c:
+        await c.get("/api/v1/me", headers=headers)
+
+        first = await c.post("/api/v1/me/bootstrap", headers=headers)
+        assert first.status_code == 200 and first.json()["seeded"] is False  # nothing to copy yet
+
+        second = await c.post("/api/v1/me/bootstrap", headers=headers)
+        assert second.status_code == 200 and second.json()["seeded"] is False  # claim not burned

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import uuid
 
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -41,3 +41,27 @@ async def get_or_create_user(session: AsyncSession, email: str) -> User:
 
 async def list_user_ids(session: AsyncSession) -> list[uuid.UUID]:
     return list(await session.scalars(select(User.id).order_by(User.created_at)))
+
+
+async def claim_seed(session: AsyncSession, user_id: uuid.UUID) -> bool:
+    """Atomically claim the one-time right to backfill this account's first screen (Task 5 / A5).
+
+    Returns True the one time `seeded_at` was still NULL -- the caller should now run the backfill
+    and commit. Returns False every other time: already seeded (including every pre-existing
+    account migration 0011 stamped), or lost the race to a concurrent caller -- in which case the
+    caller must roll back rather than commit, since nothing worth keeping was written.
+
+    A single atomic `UPDATE ... WHERE seeded_at IS NULL RETURNING id`, not a read-then-write:
+    Postgres's row-level locking means at most one of two concurrent callers racing the same row
+    ever gets a row back. Extracted as its own function (plan-review I3) so the endpoint and its
+    tests share one implementation -- this statement used to be duplicated as a string literal in
+    both `routers/meta.py` and its DB-level tests, so mutating the endpoint's guard left those
+    tests green.
+    """
+    claim = await session.execute(
+        text(
+            "UPDATE users SET seeded_at = now() WHERE id = :uid AND seeded_at IS NULL RETURNING id"
+        ),
+        {"uid": str(user_id)},
+    )
+    return claim.first() is not None

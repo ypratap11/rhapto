@@ -6,7 +6,7 @@ import { hydrateRoot } from "react-dom/client";
 import { renderToString } from "react-dom/server";
 import { TokenGate } from "./TokenGate";
 import { ApiError, setSettings } from "@/lib/api/client";
-import { useMe } from "@/lib/api/queries";
+import { useBootstrap, useMe } from "@/lib/api/queries";
 
 const pathname = { current: "/" };
 vi.mock("next/navigation", () => ({ usePathname: () => pathname.current }));
@@ -21,12 +21,14 @@ vi.mock("@/lib/api/client", async (importOriginal) => {
     },
   };
 });
-// Bootstrapper (mounted only in the two "signed in" branches under test below) calls
-// useBootstrap(); it must not throw for those tests, and its mutate is never asserted on here --
-// that behaviour belongs to Bootstrapper's own test, not TokenGate's.
+// Fix-round I7: a fresh `vi.fn()` per `useBootstrap()` call (the original mock) made it impossible
+// to assert whether Bootstrapper ever actually called `.mutate()` -- every test saw a brand-new
+// spy. Hoisting one shared spy (name prefixed `mock` so Vitest's hoisting transform can see it
+// inside the `vi.mock` factory below) lets tests assert on it directly.
+const mockBootstrapMutate = vi.fn();
 vi.mock("@/lib/api/queries", () => ({
   useMe: vi.fn(() => ({ isPending: true, isSuccess: false })),
-  useBootstrap: vi.fn(() => ({ isIdle: true, mutate: vi.fn() })),
+  useBootstrap: vi.fn(() => ({ isIdle: true, mutate: mockBootstrapMutate })),
 }));
 
 function renderGate(children: React.ReactNode) {
@@ -34,7 +36,13 @@ function renderGate(children: React.ReactNode) {
   return render(<QueryClientProvider client={client}>{children}</QueryClientProvider>);
 }
 
-afterEach(() => window.localStorage.clear());
+afterEach(() => {
+  window.localStorage.clear();
+  // Bootstrapper's fix-round M1 sessionStorage latch must not leak between tests, or every test
+  // after the first one that mounts Bootstrapper would see "already attempted" and never fire.
+  window.sessionStorage.clear();
+  mockBootstrapMutate.mockClear();
+});
 
 describe("TokenGate", () => {
   it("blocks content without a token and links to settings", () => {
@@ -115,6 +123,16 @@ describe("TokenGate", () => {
     renderGate(<TokenGate><p>secret content</p></TokenGate>);
     expect(vi.mocked(useMe)).toHaveBeenCalledWith({ enabled: true });
   });
+
+  // --- fix-round finding I7: the whole web-side bootstrap wiring was untested, including the
+  // exact regression the TokenGate-vs-providers.tsx deviation exists to prevent ---
+
+  it("never fires the bootstrap mutation at /jobs in token mode with no token stored", () => {
+    pathname.current = "/jobs";
+    renderGate(<TokenGate><p>secret content</p></TokenGate>);
+    expect(screen.queryByText("secret content")).not.toBeInTheDocument(); // not signed in
+    expect(mockBootstrapMutate).not.toHaveBeenCalled();
+  });
 });
 
 describe("TokenGate in access mode", () => {
@@ -144,6 +162,47 @@ describe("TokenGate in access mode", () => {
     pathname.current = "/jobs";
     renderGate(<TokenGate><p>secret content</p></TokenGate>);
     expect(screen.getByText("secret content")).toBeInTheDocument();
+  });
+
+  // --- fix-round finding I7 (continued): the positive case, in access mode ---
+
+  it("fires the bootstrap mutation exactly once once /me succeeds", () => {
+    vi.mocked(useMe).mockReturnValue({ isPending: false, isSuccess: true } as ReturnType<typeof useMe>);
+    pathname.current = "/jobs";
+    renderGate(<TokenGate><p>secret content</p></TokenGate>);
+    expect(mockBootstrapMutate).toHaveBeenCalledTimes(1);
+  });
+
+  // --- fix-round finding M1/M2: a sessionStorage latch, not just `bootstrap.isIdle`, so a
+  // signed-in user remounting Bootstrapper (navigation through /settings or /about, or a React
+  // StrictMode dev-mode double-invoke) does not re-fire the request every time ---
+
+  it("does not re-fire the bootstrap mutation on a second mount within the same browser session", () => {
+    vi.mocked(useMe).mockReturnValue({ isPending: false, isSuccess: true } as ReturnType<typeof useMe>);
+    pathname.current = "/jobs";
+    const first = renderGate(<TokenGate><p>secret content</p></TokenGate>);
+    first.unmount();
+    renderGate(<TokenGate><p>secret content</p></TokenGate>);
+    expect(mockBootstrapMutate).toHaveBeenCalledTimes(1);
+  });
+
+  // --- fix-round finding M6: a bootstrap failure must not present as an authentication failure ---
+
+  it("still renders children when the bootstrap mutation itself errors", () => {
+    vi.mocked(useMe).mockReturnValue({ isPending: false, isSuccess: true } as ReturnType<typeof useMe>);
+    // mockReturnValueOnce, not mockReturnValue: this must not leak into later tests, which rely on
+    // the module mock's default { isIdle: true, ... } shape.
+    vi.mocked(useBootstrap).mockReturnValueOnce({
+      isIdle: false,
+      isError: true,
+      error: new ApiError(500, null, "boom"),
+      mutate: mockBootstrapMutate,
+    } as unknown as ReturnType<typeof useBootstrap>);
+    pathname.current = "/jobs";
+    renderGate(<TokenGate><p>secret content</p></TokenGate>);
+    expect(screen.getByText("secret content")).toBeInTheDocument();
+    expect(screen.queryByText(/invite-only/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/could not reach rhapto/i)).not.toBeInTheDocument();
   });
 
   it("refuses access when /me returns 401/403 (not on the invite list), never showing the token-mode card", () => {

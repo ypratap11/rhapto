@@ -75,6 +75,12 @@ async def backfill_public_jobs(
     3. A bare `ON CONFLICT DO NOTHING` (no target needed) is the last-resort guard against two
        concurrent callers both passing the `NOT EXISTS` checks before either commits -- the
        classic idempotency race a `NOT EXISTS` clause alone cannot close.
+
+    The age cutoff reads `COALESCE(posted_at, discovered_at)`, not `posted_at` alone (plan-review
+    M4): a dateless posting has no evidence of its own age, and the copy stamps `discovered_at =
+    now()` on the new row, so admitting it unconditionally would let a two-year-old dateless
+    posting seed the first screen and then read as fresh under `posted_within=24h` -- the same
+    coalesce `list_jobs` already judges recency by.
     """
     if not public_sources:
         return 0
@@ -97,7 +103,7 @@ async def backfill_public_jobs(
                     FROM jobs
                     WHERE source = ANY(:public_sources)
                       AND unlisted_at IS NULL
-                      AND (posted_at IS NULL OR posted_at > :cutoff)
+                      AND COALESCE(posted_at, discovered_at) > :cutoff
                     ORDER BY source, COALESCE(external_id, dedupe_hash), discovered_at ASC
                 ) j
                 WHERE NOT EXISTS (
