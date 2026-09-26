@@ -33,7 +33,44 @@ the access-mode branch, which is what makes this possible. The queued task
 `.superpowers/sdd/2026-09-25-multi-tenancy-a-b/task-landing-default-brief.md` does this as part of
 moving the dashboard to `/dashboard`; ship that first.
 
-## ATTEMPTED 2026-09-26 AND IT DID NOT WORK — read this before trying again
+## SOLVED 2026-09-26 — the working configuration
+
+`https://rhapto.augaster.com/` is public. Verified with `scripts/check-access-boundary.sh`: `/`,
+`/about` and a real `/_next/static/media/*.woff2` all 200, and all nine data-bearing paths still 302 to
+the Access login.
+
+**What works: invert the two applications so neither overlaps.**
+
+| Application | Destinations | Policy |
+|---|---|---|
+| `Rhapto-Public` | `rhapto.augaster.com/` , `/about` , `/_next/*` , `/favicon.ico` | Bypass / Everyone |
+| `rhapto` | the seven prefixes below, **not** the bare hostname | Email Policy / Allow |
+
+```
+rhapto.augaster.com/dashboard
+rhapto.augaster.com/jobs
+rhapto.augaster.com/pipeline
+rhapto.augaster.com/profile
+rhapto.augaster.com/resumes
+rhapto.augaster.com/settings
+rhapto.augaster.com/api
+```
+
+**Why the obvious version fails.** While the protected application claims the bare hostname, it wins
+for every request and the bypass application is never evaluated — established by comparing the `aud`
+claim inside the 302's meta token against `RHAPTO_ACCESS_AUD` on the server: they matched, so the
+redirect came from the hostname-wide app. A hostname and a root destination are the same destination,
+so specificity cannot break that tie. Removing the overlap is the fix, not reordering or specificity.
+
+**Seven prefixes are enough, and this was verified rather than assumed:** path matching covers nested
+routes. `/jobs/<uuid>` and `/jobs/<uuid>/packages/<uuid>` are both stopped, as are `/pipeline/board`
+and every `/api/v1/*`. What remains uncovered is exactly the public set.
+
+**The standing risk: anything not in that list is public.** If a new top-level route is added, add it to
+the seven and re-run the boundary check. That check tests all nine data paths on every run precisely so
+this cannot rot quietly.
+
+## Original attempt, kept because the diagnosis is the useful part
 
 The configuration below was tried on the live account and **failed**. Do not repeat it as written.
 
