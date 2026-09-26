@@ -151,7 +151,8 @@ async function assertNoLlmKeyConfigured() {
 /** The portal's routes (spec §3). The two nested pages are found by href pattern rather than
  * hard-coded ids, so the walkthrough works against any seeded database. */
 const PAGES = [
-  { name: "dashboard", path: "/" },
+  { name: "landing", path: "/" },
+  { name: "dashboard", path: "/dashboard" },
   { name: "jobs", path: "/jobs" },
   { name: "resumes", path: "/resumes" },
   { name: "pipeline", path: "/pipeline" },

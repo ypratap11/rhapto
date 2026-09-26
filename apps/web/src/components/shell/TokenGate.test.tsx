@@ -72,14 +72,20 @@ describe("TokenGate", () => {
   });
 
   it("renders children once a token is stored", () => {
-    pathname.current = "/";
+    // "/jobs", not "/": "/" is a PUBLIC_ROUTE now and renders children with or without a token,
+    // which would not exercise the token-gating this test is for (review finding C2).
+    pathname.current = "/jobs";
     setSettings({ token: "tok", apiUrl: "http://localhost:8000" });
     renderGate(<TokenGate><p>secret content</p></TokenGate>);
     expect(screen.getByText("secret content")).toBeInTheDocument();
   });
 
   it("never shows the gate during hydration for a connected user", async () => {
-    pathname.current = "/";
+    // "/jobs", not "/": at a PUBLIC_ROUTE, TokenGate never even reaches the `tokenPresent === null`
+    // branch this test pins (SSR/hydration must never flash the Connect card), so "/" would let this
+    // pass for the wrong reason — or for no reason (review finding C2, proved by mutating
+    // `getServerSnapshot` to return `false`, which left this suite green while "/" was the fixture).
+    pathname.current = "/jobs";
     setSettings({ token: "tok", apiUrl: "http://localhost:8000" });
     const client = new QueryClient();
     const gate = (
@@ -148,6 +154,12 @@ describe("TokenGate", () => {
   // "renders its children at /" test above) rather than substituting Landing itself, and in
   // production what app/page.tsx actually hands TokenGate as children at "/" is <Landing/>. Both
   // assertions below are unchanged from before this task; only this fixture was updated to match.
+  // Review finding M4: the `h1` assertion now proves something different than it did before this
+  // task -- it used to prove TokenGate *substitutes* <Landing/> at "/" regardless of children; now
+  // it proves the <Landing/> the test itself passed in was rendered (it duplicates the "renders its
+  // children at /" test above). Harmless -- the load-bearing check here is `mockBootstrapMutate`,
+  // which still discriminates on its own -- but kept for its original purpose: pinning that
+  // Bootstrapper never mounts beside a real Landing render, not a stand-in.
   it("never fires the bootstrap mutation at / (the anonymous landing page) in token mode", () => {
     pathname.current = "/";
     renderGate(<TokenGate><Landing /></TokenGate>);
@@ -291,6 +303,30 @@ describe("TokenGate in access mode", () => {
     renderGate(<TokenGate><p>secret content</p></TokenGate>);
     expect(screen.getByText("secret content")).toBeInTheDocument();
     expect(screen.queryByText(/invite-only/i)).not.toBeInTheDocument();
+    // Review finding I2: "/" must never seed, in the mode that is actually world-readable, not just
+    // in token mode (which the pre-existing test at ":157" already pinned).
+    expect(mockBootstrapMutate).not.toHaveBeenCalled();
+  });
+
+  // Review finding I2 (continued): the live post-bypass configuration is /me *succeeding* at / --
+  // nothing covered that /me outcome before. Bootstrapper must still not mount there.
+  it("renders its children at / when /me succeeds, in access mode, without ever seeding", () => {
+    vi.mocked(useMe).mockReturnValue({ isPending: false, isSuccess: true } as ReturnType<typeof useMe>);
+    pathname.current = "/";
+    renderGate(<TokenGate><p>secret content</p></TokenGate>);
+    expect(screen.getByText("secret content")).toBeInTheDocument();
+    expect(mockBootstrapMutate).not.toHaveBeenCalled();
+  });
+
+  // Review finding I1: the public-route return (":103") stops `me` being *rendered*, not
+  // *requested* -- `enabled` used to stay live in access mode regardless of route, so every view of
+  // the world-readable landing page fired a same-origin GET /api/v1/me for nothing (and, for a
+  // signed-in visitor, still reached `current_user`, which creates the account row as a side
+  // effect). `enabled` must go false the moment the route is public.
+  it("does not enable /me at /, in access mode", () => {
+    pathname.current = "/";
+    renderGate(<TokenGate><p>secret content</p></TokenGate>);
+    expect(vi.mocked(useMe)).toHaveBeenCalledWith({ enabled: false });
   });
 
   // --- fix-round finding I2: /settings must stay reachable in access mode ---

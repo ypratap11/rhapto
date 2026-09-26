@@ -1,6 +1,25 @@
 import { render, screen, within } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import AboutPage from "./page";
+
+// Review finding I3: Landing's primary CTA must be mode-aware, since /settings has nothing to
+// connect to in access mode (N1 hides its only relevant card there). `SAME_ORIGIN_DEPLOYMENT` is a
+// `const` computed from an env var at module load, so it can only be overridden through this module
+// mock -- the same pattern TokenGate.test.tsx and settings/page.test.tsx use.
+const sameOriginFlag = { value: false };
+vi.mock("@/lib/api/client", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/api/client")>();
+  return {
+    ...actual,
+    get SAME_ORIGIN_DEPLOYMENT() {
+      return sameOriginFlag.value;
+    },
+  };
+});
+
+afterEach(() => {
+  sameOriginFlag.value = false;
+});
 
 describe("AboutPage", () => {
   it("leads with what Rhapto is and a way in", () => {
@@ -9,6 +28,18 @@ describe("AboutPage", () => {
       "Every application, stitched to fit.",
     );
     expect(screen.getByRole("link", { name: /get started/i })).toHaveAttribute("href", "/settings");
+  });
+
+  it("points the primary CTAs at the dashboard in access mode, not the token-mode settings form", () => {
+    sameOriginFlag.value = true;
+    render(<AboutPage />);
+    // Both the hero and footer CTAs are mode-aware (Landing.tsx), so both read "Open your
+    // dashboard" here.
+    const dashboardLinks = screen.getAllByRole("link", { name: /open your dashboard/i });
+    expect(dashboardLinks).toHaveLength(2);
+    for (const link of dashboardLinks) expect(link).toHaveAttribute("href", "/dashboard");
+    expect(screen.queryByRole("link", { name: /^get started$/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /connect your instance/i })).not.toBeInTheDocument();
   });
 
   it("lays out exactly five numbered steps in order", () => {

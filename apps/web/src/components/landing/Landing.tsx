@@ -1,10 +1,11 @@
 /** Rhapto's pitch: what it does, why it is not a chatbot, the five steps, and what it costs.
  *
  * Rendered at two mounts, which is why it is a component and not just a page: `/about` (its own
- * URL, linkable, readable by someone already connected) and `/` via `TokenGate` for anyone who
- * is NOT connected -- a stranger arriving at the root should meet the explanation, not a bearer
- * token field. Keep it free of client hooks: `TokenGate` is a client component and this has to
- * render inside it, while `/about` stays a server component. */
+ * URL, linkable, readable by anyone) and `/` (its own page, `apps/web/src/app/page.tsx`, which
+ * `TokenGate` renders unconditionally for everyone -- signed in or not -- since "/" is one of its
+ * `PUBLIC_ROUTES`). Keep it free of client hooks: it is a server component in both mounts, and
+ * `SAME_ORIGIN_DEPLOYMENT` is a build-time constant, not a runtime read, so branching on it below
+ * needs no client boundary. */
 import Link from "next/link";
 import {
   Ban,
@@ -21,6 +22,7 @@ import {
 import { HeroBand } from "@/components/shell/HeroBand";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { SAME_ORIGIN_DEPLOYMENT } from "@/lib/api/client";
 
 
 // The three non-negotiable product rules, written for someone who has never seen the repo. They
@@ -99,8 +101,15 @@ export function Landing() {
             (`nativeButton={false}`) or a dev-mode console error. Same house style, neither cost —
             the pattern JobCard and RepostNotice already settled on. */}
         <div className="mt-2 flex flex-wrap items-center gap-3">
-          <Link href="/settings" className={buttonVariants({ size: "lg" })}>
-            Get started
+          {/* Review finding I3: in access mode there is nothing to "connect" -- Cloudflare Access
+              already signed this visitor in, and /settings' only connection card is hidden there
+              (N1), so the token-mode wording sent an invited person to a page with nothing on it,
+              away from the route that seeds their account. */}
+          <Link
+            href={SAME_ORIGIN_DEPLOYMENT ? "/dashboard" : "/settings"}
+            className={buttonVariants({ size: "lg" })}
+          >
+            {SAME_ORIGIN_DEPLOYMENT ? "Open your dashboard" : "Get started"}
           </Link>
           <a href="#how" className={buttonVariants({ size: "lg", variant: "outline" })}>
             See the five steps
@@ -254,8 +263,12 @@ export function Landing() {
       </section>
 
       <div className="flex flex-wrap items-center gap-4 border-t border-border pt-6">
-        <Link href="/settings" className={buttonVariants()}>
-          Connect your instance
+        {/* Same mode-awareness as the hero CTA above (review finding I3). */}
+        <Link
+          href={SAME_ORIGIN_DEPLOYMENT ? "/dashboard" : "/settings"}
+          className={buttonVariants()}
+        >
+          {SAME_ORIGIN_DEPLOYMENT ? "Open your dashboard" : "Connect your instance"}
         </Link>
         <p className="text-sm text-muted-foreground">
           Already set up? Head to the{" "}

@@ -86,19 +86,32 @@ function getServerSnapshot(): boolean | null {
 // client-side routing choice, not a claim that / is reachable by anyone unauthenticated: in an
 // access-mode deployment, Cloudflare Access still stops a stranger at the edge before this code
 // ever runs, unless a separate, deliberate step (docs/runbook-public-landing.md) opens / there too.
+// This set is NOT the edge-bypass list -- it says "renders without a session", not "safe for the
+// internet". /settings is a member of this set precisely because it stays gated at the edge (the
+// runbook's bypass only ever adds /, /about, /_next/* and /favicon.ico, and
+// scripts/check-access-boundary.sh asserts /settings stays protected); adding a route here grants
+// it no edge exposure at all, only a client-side pass-through once a request already arrived.
 const PUBLIC_ROUTES = new Set(["/", "/settings", "/about"]);
 
 export function TokenGate({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const tokenPresent = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
   // Called unconditionally, per React's rules of hooks, but only consulted in the access-mode
-  // branch below. `enabled` keeps it from actually firing in token mode until a token exists, so
-  // an anonymous landing-page visit no longer issues a guaranteed-failing request against
-  // whatever API URL happens to be configured (fix-round finding I4). Reuses `tokenPresent` (the
-  // `useSyncExternalStore` snapshot above) rather than calling `hasToken()` again here -- same
-  // value, one source of truth, and it re-renders correctly when the token changes (fix-round
-  // finding N2: a fresh `hasToken()` call during render doesn't react to that change on its own).
-  const me = useMe({ enabled: SAME_ORIGIN_DEPLOYMENT || tokenPresent === true });
+  // branch below, and only once past the public-route return (fix-round finding I1: `enabled` used
+  // to stay live on / in access mode, so every view of the soon-to-be-world-readable landing page
+  // fired a same-origin GET /api/v1/me that Cloudflare Access would answer with its login redirect
+  // -- harmless, since the response was never rendered at /, but pointless, and for a signed-in
+  // visitor it still reached `current_user`, which creates the account row as a side effect).
+  // `enabled` also keeps it from firing in token mode until a token exists, so an anonymous
+  // landing-page visit doesn't issue a guaranteed-failing request against whatever API URL happens
+  // to be configured (fix-round finding I4). Reuses `tokenPresent` (the `useSyncExternalStore`
+  // snapshot above) rather than calling `hasToken()` again here (fix-round finding N2) -- on a
+  // client re-render after the token changes both would agree, so the only place they can diverge
+  // is the SSR/hydration render, where `getServerSnapshot` fixes `tokenPresent` at `null` while
+  // `hasToken()` would already see a stored token; that divergence is unobservable here because
+  // `me` is read only inside the `SAME_ORIGIN_DEPLOYMENT` branch below, where `||` short-circuits
+  // to `true` regardless of either value.
+  const me = useMe({ enabled: !PUBLIC_ROUTES.has(pathname) && (SAME_ORIGIN_DEPLOYMENT || tokenPresent === true) });
 
   if (PUBLIC_ROUTES.has(pathname)) return <>{children}</>;
 

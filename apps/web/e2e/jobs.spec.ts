@@ -27,7 +27,7 @@ test("Search fills the grid with scored jobs, and Save this search surfaces on t
   // save actually landed.
   await expect(saveButton).toHaveCount(0);
 
-  await page.goto("/");
+  await page.goto("/dashboard");
   const pollButton = page.getByRole("button", { name: "Poll now" });
   await expect(pollButton).toBeVisible();
   await pollButton.click();

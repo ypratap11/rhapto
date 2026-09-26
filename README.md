@@ -112,11 +112,12 @@ docker compose up -d        # db, redis, api, worker, web
 open http://localhost:3000
 ```
 
-On first visit the app asks for the API URL (`http://localhost:8000`) and the bearer token from your `.env`
-(`RHAPTO_API_TOKEN`). The portal has six screens:
+On first visit the app shows `/`, an explainer of what Rhapto does — the dashboard moved to `/dashboard`, so
+update any bookmark. From there, "Get started" leads to the API URL (`http://localhost:8000`) and bearer
+token form from your `.env` (`RHAPTO_API_TOKEN`). The portal has six screens:
 
-1. **Dashboard** (`/`) — where you land: new fits, resumes waiting for review, your profile checklist, saved
-   searches, and what's active in your pipeline.
+1. **Dashboard** (`/dashboard`) — where you land once connected: new fits, resumes waiting for review, your
+   profile checklist, saved searches, and what's active in your pipeline.
 2. **Jobs** (`/jobs`) — search the whole market and browse everything Rhapto has found; Tailor kicks off a
    package, with progress streaming live.
 3. **Resumes** (`/resumes`) — every tailored package and what it's waiting on (needs review, blocked by

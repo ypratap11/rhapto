@@ -20,15 +20,17 @@ describe("TopBar", () => {
     expect(screen.getByRole("link", { name: "Dashboard" })).not.toHaveAttribute("aria-current");
   });
 
-  it("points the Dashboard tab at /dashboard and marks it current there but not at /", () => {
+  it("points the Dashboard tab at /dashboard and marks it current there", () => {
     pathname.mockReturnValue("/dashboard");
     render(<TopBar />);
     expect(screen.getByRole("link", { name: "Dashboard" })).toHaveAttribute("href", "/dashboard");
     expect(screen.getByRole("link", { name: "Dashboard" })).toHaveAttribute("aria-current", "page");
+  });
 
+  it("does not mark Dashboard current at /", () => {
     pathname.mockReturnValue("/");
     render(<TopBar />);
-    expect(screen.getAllByRole("link", { name: "Dashboard" }).pop()).not.toHaveAttribute("aria-current");
+    expect(screen.getByRole("link", { name: "Dashboard" })).not.toHaveAttribute("aria-current");
   });
 
   it("points the logo at /dashboard, not /, so a signed-in person's way back is the app, not the pitch", () => {

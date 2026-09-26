@@ -10,14 +10,20 @@ authentication at the same time means a failure could be either, and you will no
 
 ## Why this is safe, and where it stops being safe
 
-The landing page makes **zero API calls** — verified: no `useQuery`, no `fetch`, no client hooks in
-`apps/web/src/components/landing/Landing.tsx`. It is server-rendered markup. So a visitor with no
-session can render it completely without touching any user's data.
+**Correction (review finding I1):** an earlier version of this section verified `Landing.tsx` alone
+(no `useQuery`, no `fetch`, no client hooks) and stopped there. That verification is scoped to the
+wrong component — the page actually served at `/` is `layout → Shell → TokenGate → Landing`, and
+`TokenGate` does call the API (`useMe`). What is true, and is what makes this safe: `TokenGate`
+short-circuits on its `PUBLIC_ROUTES` (which `/` joined as part of the routing task this runbook
+depends on, and which now also gates `useMe`'s `enabled` flag, review finding I1) before that call is
+even made, so once this runbook's bypass is live, `/` issues **no API call at all** and renders no
+user data. `Landing.tsx` itself still makes no calls of its own either way — that part of the original
+claim was correct, just not the reason the page as a whole is safe.
 
 What must never be bypassed is `/api/v1/*`. If it is, the application's own invite allowlist becomes
 the only thing between the internet and everyone's résumés. That allowlist is genuinely well tested —
 forged-token tests, an empty list that fails closed, three review rounds — but removing the outer door
-buys nothing here, because the landing page never calls the API.
+buys nothing here, because `/` issues no API call at all.
 
 ## Prerequisite in the app
 
