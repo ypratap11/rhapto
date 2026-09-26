@@ -91,15 +91,30 @@ def create_app(
                     "otherwise fail with no actionable error (503 from an unreachable JWKS host, or "
                     "401 from an audience check that can never pass)."
                 )
+            if not settings.rhapto_allowed_emails and not settings.rhapto_allowed_email_domains:
+                # Checked before the query below, and reported separately from "no matching row":
+                # on a table with zero rows (a fresh install), the two causes are otherwise
+                # indistinguishable, and the fresh-install operator needs a different next step
+                # (boot in token mode first) than the owner whose email just doesn't match yet.
+                raise RuntimeError(
+                    "RHAPTO_AUTH_MODE=access but neither RHAPTO_ALLOWED_EMAILS nor "
+                    "RHAPTO_ALLOWED_EMAIL_DOMAINS is set. An empty allowlist fails closed -- "
+                    "nobody could ever sign in -- so this refuses to start rather than boot an "
+                    "instance no one can reach. Set at least one of them to the owner's "
+                    "Cloudflare Access email or domain."
+                )
             async with state.session_factory() as session:
                 allowed = await _any_allowed_user_exists(session, settings)
             if not allowed:
                 raise RuntimeError(
                     "RHAPTO_AUTH_MODE=access but no users row matches RHAPTO_ALLOWED_EMAILS/"
                     "RHAPTO_ALLOWED_EMAIL_DOMAINS. Refusing to start: this is the failure mode "
-                    "that makes the owner's existing account appear to have vanished. Run "
-                    "`rhapto accounts set-email <old> <new>` first if RHAPTO_USER_EMAIL does not "
-                    "match the owner's Cloudflare Access email."
+                    "that makes the owner's existing account appear to have vanished. If this is "
+                    "a fresh install with no users row yet, boot once with RHAPTO_AUTH_MODE=token "
+                    "first (that bootstraps a row for RHAPTO_USER_EMAIL); if a row already exists "
+                    "but under the wrong email, run `rhapto accounts set-email <old> <new>` so it "
+                    "matches the owner's Cloudflare Access email exactly, then flip "
+                    "RHAPTO_AUTH_MODE back to access."
                 )
         else:
             async with state.session_factory() as session:

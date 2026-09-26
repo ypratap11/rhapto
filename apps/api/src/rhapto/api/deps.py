@@ -95,5 +95,11 @@ async def current_user(
     ):
         raise HTTPException(status_code=403, detail="this instance is invite-only")
     user = await get_or_create_user(session, principal.email)
+    # Record the verified IdP subject the first time it's seen (migration 0011 added
+    # `users.idp_subject` specifically for this). Only ever set when currently NULL, never
+    # overwritten: the column is UNIQUE, and Access can reissue a `sub` for the same person, so an
+    # unconditional write on every request risks colliding with a stale value left on another row.
+    if principal.subject and not user.idp_subject:
+        user.idp_subject = principal.subject
     await session.commit()
     return user.id

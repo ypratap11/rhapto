@@ -27,10 +27,15 @@ async def get_or_create_user(session: AsyncSession, email: str) -> User:
     await session.flush()
     # A distinct variable name for the re-select, not a second assignment to `user` -- reassigning
     # the same name here makes mypy's overload resolution for the (identical) `session.scalar()`
-    # call widen to `Any` instead of `User | None`, silently defeating the `no-any-return` check
-    # below (verified: reveal_type differs between the two forms under `mypy --strict`).
+    # call widen to `Any` instead of `User | None`, and `no-any-return` then loudly fails the build
+    # on the `return user` below it (verified: `mypy --strict` reports "Returning Any from function
+    # declared to return 'User'" for the reused-name form; reveal_type confirms the widening).
     created = await session.scalar(select(User).where(User.email == email))
-    assert created is not None  # the row now exists, either from this INSERT or the racing one
+    if created is None:
+        # A request-path invariant, not a caller error -- raise rather than `assert`, which
+        # `python -O` strips, so this guard would otherwise silently vanish under -O and return
+        # `None` typed as `User`.
+        raise RuntimeError(f"user row for {email!r} vanished between INSERT and re-select")
     return created
 
 

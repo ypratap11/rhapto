@@ -88,6 +88,16 @@ report says why. Downloads of a blocked package carry `X-Rhapto-Guardrails: bloc
 the zip, so a blocked draft cannot be mistaken for a clean one. PDFs for edited versions are rendered by the worker a few seconds after the edit; the DOCX is
 immediate. The tracker lives under `/api/v1/applications`. Nothing here submits an application anywhere.
 
+**Inviting other people onto a running instance:** set `RHAPTO_AUTH_MODE=access` instead of the
+default `token`, put the instance behind Cloudflare Access, and set `RHAPTO_ACCESS_TEAM`,
+`RHAPTO_ACCESS_AUD`, and at least one of `RHAPTO_ALLOWED_EMAILS`/`RHAPTO_ALLOWED_EMAIL_DOMAINS` (see
+`.env.example` for details on each). `RHAPTO_API_TOKEN` is ignored entirely in this mode. The
+Cloudflare Access policy itself should allow any authenticated user; the allowlist here is the only
+authorization gate, so don't also maintain a second guest list in the Cloudflare dashboard. Before
+flipping the mode, run `rhapto accounts set-email <old> <new>` if the owner's bootstrapped
+`RHAPTO_USER_EMAIL` doesn't already match their Cloudflare Access email exactly -- the app refuses
+to start in access mode if no existing account matches the allowlist.
+
 Development without Docker for the app itself: `docker compose up -d db redis`, then from `apps/api`:
 `uv run rhapto db upgrade`, `uv run uvicorn rhapto.api.app:app --reload`, and in another shell
 `uv run arq rhapto.worker.main.WorkerSettings`. Tests: `uv run pytest` (API tests need the compose `db`).
