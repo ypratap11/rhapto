@@ -18,6 +18,12 @@ fact you own, guardrails block invented metrics, and quality beats volume.
 - Product docs: [`docs/product/`](docs/product/overview.md) — what Rhapto is, the concepts, the flow, the sources, privacy
 - User guide: [`docs/user-guide/`](docs/user-guide/getting-started.md) — install, first search, tailor, review, apply
 
+## Contributing
+
+See [`CONTRIBUTING.md`](CONTRIBUTING.md). Pull requests need one line accepting
+[`CLA.md`](CLA.md) and `git commit -s`. Four product rules are not negotiable — no auto-submit,
+provenance, verified metrics only, and nothing personal in the repo.
+
 ## License
 
 AGPL-3.0-only — see [`LICENSE`](LICENSE).
