@@ -167,6 +167,27 @@ cat /root/rhapto-pre-0011-<timestamp>.dump | docker compose exec -T db pg_restor
 Reverting `RHAPTO_AUTH_MODE` to `token` is itself a complete rollback of authentication, with no
 schema change, and is worth trying before anything heavier.
 
+## Model cost: invited accounts spend the owner's key, by decision
+
+`services/llm.py:132` is `stored_llm_config(...) or env_llm_config(settings)`, so an account with no
+provider key of its own falls back to the **server's** `ANTHROPIC_API_KEY`, with
+`RHAPTO_LLM_MODEL=claude-opus-5`. An invited person therefore needs no API key and just works — and
+every resume they tailor bills the owner at the measured **29–36c**, about $6.50 per 20 applications.
+
+**The owner confirmed this is intended (2026-09-26):** he does not want someone who has just lost a job
+to have to buy an API key first. It is recorded here because it is a decision, not a default, and
+because it is the behaviour *every* future invited account inherits.
+
+Two consequences worth knowing before the guest list grows past family:
+
+- It is unbounded. There is no per-user cap, and nothing in Phase A adds one. Ten active invitees
+  applying to 20 roles a month is roughly $65/month on the owner's card.
+- It contradicts the business plan's BYOK assumption (`rhapto-business-plan.md` argues against BYOK on
+  paid seats). Fine while invitees are family; revisit before anyone unrelated is invited.
+
+The control, when it is wanted, is to make the env fallback apply only in `token` mode — a self-hoster's
+own key is their own business, whereas a hosted instance's key is the operator's.
+
 ## What is NOT in this runbook
 
 - **Account deletion and retention** — Phase B (plan tasks 6–8), not built.
