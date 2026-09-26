@@ -98,12 +98,20 @@ describe("TokenGate", () => {
     const container = document.createElement("div");
     container.innerHTML = html;
     document.body.appendChild(container);
-    await act(async () => {
-      hydrateRoot(container, gate);
-    });
-    expect(container.textContent).toContain("secret content");
-    expect(container.textContent).not.toContain("Connect to your Rhapto API");
-    container.remove();
+    // try/finally: this container is appended by hand, so testing-library's automatic cleanup does
+    // not own it. Removing it only on the success path meant a FAILING assertion here leaked the
+    // node and poisoned every later `screen` query in this file -- during review that surfaced as a
+    // spurious fourth failure, an access-mode test reporting the token-mode Connect card. Harmless
+    // while this test could not fail; a real trap now that finding C2 re-armed it.
+    try {
+      await act(async () => {
+        hydrateRoot(container, gate);
+      });
+      expect(container.textContent).toContain("secret content");
+      expect(container.textContent).not.toContain("Connect to your Rhapto API");
+    } finally {
+      container.remove();
+    }
   });
 
   it("reveals children when settings change in the same tab", () => {
@@ -178,7 +186,7 @@ describe("TokenGate in access mode", () => {
     sameOriginFlag.value = false;
   });
 
-  it("always enables /me, regardless of any stored token", () => {
+  it("enables /me on a non-public route regardless of any stored token", () => {
     vi.mocked(useMe).mockReturnValue({ isPending: true, isSuccess: false } as ReturnType<typeof useMe>);
     pathname.current = "/jobs";
     renderGate(<TokenGate><p>secret content</p></TokenGate>);
