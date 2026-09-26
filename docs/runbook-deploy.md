@@ -6,6 +6,13 @@ step 3 or step 5.**
 Source: `.superpowers/sdd/2026-09-24-shared-job-pool/final-review.md` (findings C1/C2, I1, I2, I4,
 I5). Nothing here is invented beyond that review's runbook section.
 
+> **CORRECTION, 2026-09-25 — read before step 6.** `/opt/rhapto` is **not a git checkout.** There is
+> no `.git` directory and no remote; verified with `git rev-parse` on the box, which returns
+> `fatal: not a git repository`. Every `git fetch` / `git checkout` / `git log` command below **cannot
+> work there** and will abort the deploy at 2am. Code reaches the server by file sync. Use
+> `scripts/deploy-server.sh` (which syncs `git archive HEAD` over ssh, excluding `.env` and
+> `profile/`, then rebuilds), and read step 6 and step 9 as described in their own correction notes.
+
 ## 1. Freeze
 
 Stop the worker so no poll or tailor starts mid-deploy. Leave the API up for now.
@@ -112,13 +119,19 @@ grep -E '^RHAPTO_(SECRET_KEY|API_TOKEN)=' /opt/rhapto/.env
 
 ## 6. Deploy
 
+**The git commands here do not apply — see the correction at the top.** From your workstation, with
+the branch checked out locally:
+
 ```bash
-cd /opt/rhapto
-git fetch --all
-git checkout phase0-tenancy-fixes
-git log --oneline -1                      # expect the tip commit of this branch
-docker compose build api worker web
-docker compose up -d
+scripts/deploy-server.sh api worker web
+```
+
+That backs up `/opt/rhapto`, syncs the tracked tree at `HEAD`, rebuilds, and brings the stack up. The
+equivalent by hand, if you would rather see each step:
+
+```bash
+git archive --format=tar HEAD | ssh root@64.225.30.51   "cd /opt/rhapto && tar -xf - --exclude='.env' --exclude='profile/*'"
+ssh root@64.225.30.51 "cd /opt/rhapto && docker compose build api worker web && docker compose up -d"
 ```
 
 The `api` container's CMD is `rhapto db upgrade && uvicorn …`; `db_upgrade` now builds a bare
@@ -184,7 +197,9 @@ docker compose exec -T db psql -U rhapto -d rhapto -c "SELECT version_num FROM a
 # if it reports 0010, step the schema back BEFORE the old image starts:
 docker compose run --rm api alembic downgrade 0009
 cp /root/.env.pre-0010 /opt/rhapto/.env     # restores the blank RHAPTO_SECRET_KEY
-git checkout 9452716                        # previous main
+# NOT `git checkout` — there is no git here. Restore the pre-deploy file backup instead; the path is
+# printed by scripts/deploy-server.sh, and step 2's equivalent is /root/rhapto-predeploy-<timestamp>.
+#   rm -rf /opt/rhapto && mv /root/rhapto-predeploy-<timestamp> /opt/rhapto && cd /opt/rhapto
 docker compose build api worker web
 docker compose up -d
 docker compose exec -T db psql -U rhapto -d rhapto -c "SELECT version_num FROM alembic_version;"  # expect 0009
