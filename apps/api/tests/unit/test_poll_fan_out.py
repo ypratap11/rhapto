@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import timedelta
 from typing import Any
 
 from rhapto.db.repositories.users import get_or_create_user
@@ -31,6 +32,14 @@ async def test_poll_all_sources_enqueues_one_poll_user_job_per_user(session_fact
     assert {task for task, _ in redis.enqueued} == {"poll_user"}
     enqueued_user_ids = {kwargs["user_id"] for _, kwargs in redis.enqueued}
     assert enqueued_user_ids == {str(u1_id), str(u2_id)}
+    # Carried over from Task 4: `_defer_by` staggers each user one minute after the last so N
+    # queued polls can't occupy both worker slots back to back and starve an interactive job
+    # behind the whole fan-out (I5). This had zero coverage -- deleting the `_defer_by` kwarg
+    # entirely left this file green.
+    assert [kwargs["_defer_by"] for _, kwargs in redis.enqueued] == [
+        timedelta(0),
+        timedelta(minutes=1),
+    ]
 
 
 async def test_poll_all_sources_enqueues_remaining_users_after_one_enqueue_fails(

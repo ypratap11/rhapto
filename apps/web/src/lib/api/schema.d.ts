@@ -270,6 +270,34 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/me/bootstrap": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Bootstrap
+         * @description Idempotent, cheap on every call after the first: the web app calls this once per session,
+         *     and it only ever does real work the one time `users.seeded_at` is still NULL. Kept entirely
+         *     out of `current_user` (plan-review C6) so no other endpoint's request pays for it and no
+         *     failure here can present as an auth failure.
+         *
+         *     The claim is a single atomic `UPDATE ... WHERE seeded_at IS NULL RETURNING id`, not a read-
+         *     then-write: Postgres's row-level locking means at most one of two concurrent callers ever gets
+         *     a row back, so the backfill runs exactly once per account even under a real race -- no
+         *     advisory lock, no new engine-access plumbing needed.
+         */
+        post: operations["bootstrap_api_v1_me_bootstrap_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/packages": {
         parameters: {
             query?: never;
@@ -1069,6 +1097,11 @@ export interface components {
         Body_upload_resume_document_api_v1_profile_resume_document_post: {
             /** File */
             file: string;
+        };
+        /** BootstrapOut */
+        BootstrapOut: {
+            /** Seeded */
+            seeded: boolean;
         };
         /**
          * ChecklistOut
@@ -2827,6 +2860,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["MeOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    bootstrap_api_v1_me_bootstrap_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BootstrapOut"];
                 };
             };
             /** @description Validation Error */

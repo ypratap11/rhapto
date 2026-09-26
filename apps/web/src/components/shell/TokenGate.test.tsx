@@ -21,7 +21,13 @@ vi.mock("@/lib/api/client", async (importOriginal) => {
     },
   };
 });
-vi.mock("@/lib/api/queries", () => ({ useMe: vi.fn(() => ({ isPending: true, isSuccess: false })) }));
+// Bootstrapper (mounted only in the two "signed in" branches under test below) calls
+// useBootstrap(); it must not throw for those tests, and its mutate is never asserted on here --
+// that behaviour belongs to Bootstrapper's own test, not TokenGate's.
+vi.mock("@/lib/api/queries", () => ({
+  useMe: vi.fn(() => ({ isPending: true, isSuccess: false })),
+  useBootstrap: vi.fn(() => ({ isIdle: true, mutate: vi.fn() })),
+}));
 
 function renderGate(children: React.ReactNode) {
   const client = new QueryClient();

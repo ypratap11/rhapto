@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 import uuid
+from collections.abc import Sequence
 from datetime import UTC, datetime, timedelta
 from typing import Any, cast
 
-from sqlalchemy import CursorResult, and_, delete, func, not_, nulls_last, or_, select
+from sqlalchemy import CursorResult, and_, delete, func, not_, nulls_last, or_, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from rhapto.db.hashing import dedupe_hash
@@ -38,6 +39,83 @@ async def create_job(
     session.add(job)
     await session.flush()
     return job
+
+
+#: Matches `services.discovery.poller.INGEST_MAX_AGE_DAYS` -- a public posting older than this is
+#: not worth seeding a first screen with, for the same reason the poller doesn't ingest it fresh.
+PUBLIC_BACKFILL_MAX_AGE_DAYS = 90
+
+
+async def backfill_public_jobs(
+    session: AsyncSession, user_id: uuid.UUID, *, public_sources: Sequence[str]
+) -> int:
+    """Seed a brand-new account's first screen with every live public-source job already
+    discovered on this instance, cached embedding included, at zero LLM/embedding cost.
+
+    `public_sources` is supplied by the caller as `list(SOURCES.keys())` -- this module takes no
+    import on `rhapto.services.discovery.sources`, whose `__init__.py` imports eleven concrete
+    source modules purely for `@register` side effects (plan-review I10); the positive allowlist
+    is still enforced, just constructed one layer up.
+
+    Does not copy: extracted_json (another user's ungoverned LLM output), repost_of/search_id
+    (foreign keys into another user's own rows), best_fit/best_track_id/location_tier/hidden_at/
+    rescued (another user's opinions, meaningless for a new account).
+
+    Idempotent three ways, none of them optional (plan-review C5 -- the reviewer's ruling was that
+    these are not alternatives to each other):
+    1. The inner `DISTINCT ON (source, COALESCE(external_id, dedupe_hash))` collapses by *source
+       identity* first, not by text hash -- two rows for the same (source, external_id) whose JD
+       text changed between polls (and therefore have different dedupe_hash values) collapse to
+       one, rather than both surviving and violating `uq_jobs_user_source_external`
+       (`(user_id, source, external_id) WHERE external_id IS NOT NULL`,
+       `alembic/versions/0002_discovery.py:33-40`) the moment both are inserted for the new user.
+    2. `NOT EXISTS` guards both `(user_id, dedupe_hash)` and `(user_id, source, external_id)`, so a
+       retried call -- or a second call whose source data has since changed hash -- inserts nothing
+       already present under either key.
+    3. A bare `ON CONFLICT DO NOTHING` (no target needed) is the last-resort guard against two
+       concurrent callers both passing the `NOT EXISTS` checks before either commits -- the
+       classic idempotency race a `NOT EXISTS` clause alone cannot close.
+    """
+    if not public_sources:
+        return 0
+    cutoff = datetime.now(UTC) - timedelta(days=PUBLIC_BACKFILL_MAX_AGE_DAYS)
+    result = cast(
+        "CursorResult[Any]",
+        await session.execute(
+            text(
+                """
+                INSERT INTO jobs (
+                    id, user_id, source, external_id, url, company, title, location,
+                    posted_at, salary_text, jd_text, jd_embedding, dedupe_hash, identity_hash,
+                    discovered_at, miss_count, created_at, updated_at
+                )
+                SELECT gen_random_uuid(), :user_id, j.source, j.external_id, j.url, j.company,
+                       j.title, j.location, j.posted_at, j.salary_text, j.jd_text,
+                       j.jd_embedding, j.dedupe_hash, j.identity_hash, now(), 0, now(), now()
+                FROM (
+                    SELECT DISTINCT ON (source, COALESCE(external_id, dedupe_hash)) *
+                    FROM jobs
+                    WHERE source = ANY(:public_sources)
+                      AND unlisted_at IS NULL
+                      AND (posted_at IS NULL OR posted_at > :cutoff)
+                    ORDER BY source, COALESCE(external_id, dedupe_hash), discovered_at ASC
+                ) j
+                WHERE NOT EXISTS (
+                    SELECT 1 FROM jobs existing
+                    WHERE existing.user_id = :user_id AND existing.dedupe_hash = j.dedupe_hash
+                )
+                AND NOT EXISTS (
+                    SELECT 1 FROM jobs existing2
+                    WHERE existing2.user_id = :user_id AND existing2.source = j.source
+                      AND j.external_id IS NOT NULL AND existing2.external_id = j.external_id
+                )
+                ON CONFLICT DO NOTHING
+                """
+            ),
+            {"user_id": str(user_id), "public_sources": list(public_sources), "cutoff": cutoff},
+        ),
+    )
+    return result.rowcount or 0
 
 
 async def find_duplicate(

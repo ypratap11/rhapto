@@ -29,6 +29,12 @@ class MeOut(BaseModel):
     auth_mode: Literal["token", "access"]
 
 
+class BootstrapOut(BaseModel):
+    #: True the one time this call actually ran the backfill; False every other time (already
+    #: seeded, or lost the atomic claim to a concurrent caller).
+    seeded: bool
+
+
 class ProviderInfoOut(BaseModel):
     """One supported provider, for the Settings picker."""
 

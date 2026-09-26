@@ -2,12 +2,29 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useSyncExternalStore } from "react";
+import { useEffect, useSyncExternalStore } from "react";
 import { Landing } from "@/components/landing/Landing";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ApiError, hasToken, SAME_ORIGIN_DEPLOYMENT } from "@/lib/api/client";
-import { useMe } from "@/lib/api/queries";
+import { useBootstrap, useMe } from "@/lib/api/queries";
+
+// Mounted only from the two "signed in, render children" branches below -- never on an
+// unauthenticated landing page -- so this never fires the guaranteed-failing request I4 guarded
+// against for /me. Fires the idempotent bootstrap exactly once per mount (guarded by
+// `bootstrap.isIdle`, which also survives React StrictMode's dev-only double-invoke of effects);
+// every call after the first (a re-mount, a second tab, an already-seeded account) is a cheap
+// no-op on the server, so there's no cost to not trying to dedupe across sessions.
+function Bootstrapper() {
+  const bootstrap = useBootstrap();
+  useEffect(() => {
+    if (bootstrap.isIdle) {
+      bootstrap.mutate();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- fire once on mount, not on every render
+  }, []);
+  return null;
+}
 
 function subscribe(onStoreChange: () => void): () => void {
   window.addEventListener("storage", onStoreChange);
@@ -52,7 +69,13 @@ export function TokenGate({ children }: { children: React.ReactNode }) {
     // all; there is no bearer token to check. /me succeeding (this instance's own allowlist check
     // passed too) is what "signed in" means here.
     if (me.isPending) return null;
-    if (me.isSuccess) return <>{children}</>;
+    if (me.isSuccess)
+      return (
+        <>
+          <Bootstrapper />
+          {children}
+        </>
+      );
     const deniedByAllowlist = me.error instanceof ApiError && (me.error.status === 401 || me.error.status === 403);
     if (deniedByAllowlist) {
       return (
@@ -88,7 +111,13 @@ export function TokenGate({ children }: { children: React.ReactNode }) {
   }
 
   if (tokenPresent === null) return null;
-  if (tokenPresent) return <>{children}</>;
+  if (tokenPresent)
+    return (
+      <>
+        <Bootstrapper />
+        {children}
+      </>
+    );
   // The root is the one route a stranger reaches without being sent there, so it answers "what is
   // this?" rather than demanding a bearer token. Every other route keeps the short Connect card:
   // someone who navigated to /jobs already knows what Rhapto is and just needs to be let in.

@@ -666,3 +666,63 @@ async def test_assertion_with_no_kid_is_401(app: FastAPI, rsa_keypair) -> None:
     ) as c:
         response = await c.get("/api/v1/me", headers={"Cf-Access-Jwt-Assertion": token})
     assert response.status_code == 401
+
+
+# --- A5: the bootstrap endpoint that seeds a new account's first screen ---
+
+
+async def test_bootstrap_seeds_a_new_accounts_first_screen_exactly_once(
+    app: FastAPI, rsa_keypair, signed_assertion, monkeypatch, session_factory
+) -> None:
+    from datetime import UTC, datetime
+
+    from rhapto.db.models import Job
+    from rhapto.db.repositories.users import get_or_create_user
+
+    async with session_factory() as session:
+        owner = await get_or_create_user(session, "owner@example.com")
+        session.add(
+            Job(
+                user_id=owner.id,
+                source="greenhouse",
+                external_id="e1",
+                url="https://x/1",
+                company="Acme",
+                title="Engineer",
+                location="Remote",
+                jd_text="A real job description, long enough. " * 3,
+                dedupe_hash="hash-e2e-1",
+                discovered_at=datetime.now(UTC),
+                miss_count=0,
+            )
+        )
+        await session.commit()
+
+    state: AppState = app.state.rhapto
+    state.settings.rhapto_auth_mode = "access"
+    state.settings.rhapto_access_team = "test-team"
+    state.settings.rhapto_access_aud = "test-aud"
+    state.settings.rhapto_allowed_emails = "newcomer@example.com"
+
+    _, public_key = rsa_keypair
+    _install_test_team_cache(monkeypatch, public_key)
+
+    token = signed_assertion("newcomer@example.com")
+    headers = {"Cf-Access-Jwt-Assertion": token}
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://test"
+    ) as c:
+        me_response = await c.get("/api/v1/me", headers=headers)
+        assert me_response.status_code == 200
+        jobs_before = await c.get("/api/v1/jobs", headers=headers)
+        assert jobs_before.json() == []  # not seeded yet -- current_user alone never seeds
+
+        first = await c.post("/api/v1/me/bootstrap", headers=headers)
+        assert first.status_code == 200 and first.json()["seeded"] is True
+
+        jobs_after = await c.get("/api/v1/jobs", headers=headers)
+        assert len(jobs_after.json()) == 1
+        assert jobs_after.json()[0]["best_fit"] is None
+
+        second = await c.post("/api/v1/me/bootstrap", headers=headers)
+        assert second.status_code == 200 and second.json()["seeded"] is False
