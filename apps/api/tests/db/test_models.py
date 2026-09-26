@@ -1,9 +1,11 @@
+import asyncio
+import uuid
 from datetime import UTC, datetime
 
 import pytest
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from rhapto.db.models import Application, Job, JobScore, Package, ResumeBlock, User, WatchlistEntry
 from rhapto.db.repositories import dashboard as dashboard_repo
@@ -15,6 +17,22 @@ async def test_get_or_create_user_is_idempotent(session: AsyncSession) -> None:
     a = await get_or_create_user(session, "x@example.com")
     b = await get_or_create_user(session, "x@example.com")
     assert a.id == b.id
+
+
+async def test_concurrent_get_or_create_never_raises(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    """Two browser tabs' first requests racing to create the same brand-new account (access mode,
+    Task 3) must not surface `users.email`'s unique constraint as an unhandled IntegrityError."""
+
+    async def create() -> uuid.UUID:
+        async with session_factory() as s:
+            u = await get_or_create_user(s, "racer@example.com")
+            await s.commit()
+            return u.id
+
+    ids = await asyncio.gather(create(), create(), create())
+    assert len(set(ids)) == 1
 
 
 async def test_block_round_trip_with_arrays_and_vector(session: AsyncSession, user: User) -> None:

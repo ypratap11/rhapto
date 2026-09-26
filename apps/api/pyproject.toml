@@ -29,6 +29,7 @@ dependencies = [
     "openai>=3.13",
     "google-genai>=1.0",
     "cryptography>=42",
+    "pyjwt[crypto]>=2.9",
 ]
 
 [project.scripts]

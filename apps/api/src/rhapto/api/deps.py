@@ -8,8 +8,9 @@ from typing import Annotated
 from fastapi import Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
-from rhapto.api.auth import Principal, resolve_principal
+from rhapto.api.auth import Principal, is_allowed_email, resolve_principal
 from rhapto.config import Settings
+from rhapto.db.repositories.users import get_or_create_user
 from rhapto.engine.providers.llm import LLMProvider
 from rhapto.engine.providers.registry import build_llm
 from rhapto.services.discovery.http import DiscoveryHttp
@@ -74,6 +75,7 @@ def get_llm_factory(request: Request) -> LlmFactory:
 async def current_user(
     request: Request,
     principal: Annotated[Principal, Depends(resolve_principal)],
+    session: Annotated[AsyncSession, Depends(get_session)],
 ) -> uuid.UUID:
     state = get_state(request)
     if principal.mode == "token":
@@ -82,5 +84,16 @@ async def current_user(
             # problem, not an auth problem.
             raise HTTPException(status_code=503, detail="server not ready")
         return state.user_id
-    # access mode: Task 3 maps principal.email to a users.id (get-or-create on first sign-in).
-    raise HTTPException(status_code=501, detail="access mode is not yet supported")
+    # access mode: the allowlist is the only gate (architecture.md §1.6 amendment -- the
+    # Cloudflare Access policy itself performs authentication only). This is deliberately the
+    # *only* thing this branch does -- no seeding, no backfill; Task 5 adds a separate, dedicated
+    # endpoint for that (plan-review C6: every endpoint depends on current_user, so it must stay
+    # fast and its failure must never look like an auth failure).
+    settings = state.settings
+    if not is_allowed_email(
+        principal.email, settings.rhapto_allowed_emails, settings.rhapto_allowed_email_domains
+    ):
+        raise HTTPException(status_code=403, detail="this instance is invite-only")
+    user = await get_or_create_user(session, principal.email)
+    await session.commit()
+    return user.id
