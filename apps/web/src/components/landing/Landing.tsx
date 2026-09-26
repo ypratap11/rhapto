@@ -46,8 +46,13 @@ const PROMISES = [
 const STEPS = [
   {
     icon: KeyRound,
-    title: "Connect",
-    body: "Point Rhapto at your own instance and add one LLM provider key. It runs on your machine — your resume and your key stay there.",
+    title: "Get in",
+    // Must stay true for BOTH deployments. The earlier copy said "it runs on your machine — your
+    // resume and your key stay there", which is a privacy claim, and it is false for anyone invited
+    // onto a hosted instance: their resume is in that server's database and their provider key is
+    // encrypted there too. A privacy claim that is only true for half the readers is the one kind of
+    // copy that must never ship, because the people it misleads are deciding whether to upload a CV.
+    body: "Run it yourself and nothing leaves your machine — your resume and your provider key never go anywhere else. Or sign in to an instance you have been invited to, where your data lives on that server, encrypted, and walled off from every other account. Either way you bring your own LLM key and pay only your own usage.",
   },
   {
     // Describes what `main` does TODAY. Resume -> block library is the `resume-import` branch; when

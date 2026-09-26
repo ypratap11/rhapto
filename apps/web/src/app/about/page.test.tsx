@@ -17,12 +17,19 @@ describe("AboutPage", () => {
       "listitem",
     );
     expect(steps.map((li) => li.querySelector("[data-slot=card-title]")?.textContent)).toEqual([
-      "Connect",
+      "Get in",
       "Bring your resume",
       "Pick a track",
       "Let the jobs come to you",
       "Tailor, review, apply",
     ]);
+    // Step 1 is a privacy claim, and it is read by someone deciding whether to upload their CV. It
+    // once said only "it runs on your machine - your resume and your key stay there", which is false
+    // for anyone invited onto a hosted instance: their resume is in that server's database. Both
+    // deployments must be described, so reinstating the half-true version fails here.
+    const first = steps[0].textContent ?? "";
+    expect(first).toMatch(/nothing leaves your machine/i);
+    expect(first).toMatch(/invited/i);
   });
 
   it("states the three guarantees that are the reason to use it", () => {
