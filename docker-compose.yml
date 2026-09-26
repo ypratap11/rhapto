@@ -86,7 +86,13 @@ services:
       context: ./apps/web
       dockerfile: Dockerfile
       args:
-        NEXT_PUBLIC_API_URL: ${RHAPTO_PUBLIC_API_URL:-http://localhost:8000}
+        # Single-dash `-`, not `:-`: Compose's `:-` substitutes the default for an unset *or*
+        # empty value, which is the exact "empty means unset" bug this task fixed one layer up in
+        # apps/web/src/lib/api/client.ts. An access-mode deploy sets RHAPTO_PUBLIC_API_URL= (empty,
+        # in .env) precisely so this build arg comes through empty and SAME_ORIGIN_DEPLOYMENT can
+        # become true; `:-` would silently override that back to the localhost default and the
+        # same-origin proxy would never be used (fix-round finding I3).
+        NEXT_PUBLIC_API_URL: ${RHAPTO_PUBLIC_API_URL-http://localhost:8000}
     restart: unless-stopped
     ports:
       - "127.0.0.1:3000:3000"

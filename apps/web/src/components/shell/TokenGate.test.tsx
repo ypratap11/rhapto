@@ -5,7 +5,7 @@ import { act } from "react";
 import { hydrateRoot } from "react-dom/client";
 import { renderToString } from "react-dom/server";
 import { TokenGate } from "./TokenGate";
-import { setSettings } from "@/lib/api/client";
+import { ApiError, setSettings } from "@/lib/api/client";
 import { useMe } from "@/lib/api/queries";
 
 const pathname = { current: "/" };
@@ -94,6 +94,21 @@ describe("TokenGate", () => {
     });
     expect(screen.getByText("secret content")).toBeInTheDocument();
   });
+
+  // --- fix-round finding I4: /me must not fire in token mode until a token exists ---
+
+  it("does not enable /me in token mode until a token is stored", () => {
+    pathname.current = "/jobs";
+    renderGate(<TokenGate><p>secret content</p></TokenGate>);
+    expect(vi.mocked(useMe)).toHaveBeenCalledWith({ enabled: false });
+  });
+
+  it("enables /me once a token is stored, in token mode", () => {
+    pathname.current = "/jobs";
+    setSettings({ token: "tok", apiUrl: "http://localhost:8000" });
+    renderGate(<TokenGate><p>secret content</p></TokenGate>);
+    expect(vi.mocked(useMe)).toHaveBeenCalledWith({ enabled: true });
+  });
 });
 
 describe("TokenGate in access mode", () => {
@@ -102,6 +117,13 @@ describe("TokenGate in access mode", () => {
   });
   afterEach(() => {
     sameOriginFlag.value = false;
+  });
+
+  it("always enables /me, regardless of any stored token", () => {
+    vi.mocked(useMe).mockReturnValue({ isPending: true, isSuccess: false } as ReturnType<typeof useMe>);
+    pathname.current = "/jobs";
+    renderGate(<TokenGate><p>secret content</p></TokenGate>);
+    expect(vi.mocked(useMe)).toHaveBeenCalledWith({ enabled: true });
   });
 
   it("renders nothing while /me is pending", () => {
@@ -118,12 +140,64 @@ describe("TokenGate in access mode", () => {
     expect(screen.getByText("secret content")).toBeInTheDocument();
   });
 
-  it("refuses access when /me fails (not on the invite list), never showing the token-mode card", () => {
-    vi.mocked(useMe).mockReturnValue({ isPending: false, isSuccess: false } as ReturnType<typeof useMe>);
+  it("refuses access when /me returns 401/403 (not on the invite list), never showing the token-mode card", () => {
+    vi.mocked(useMe).mockReturnValue({
+      isPending: false,
+      isSuccess: false,
+      error: new ApiError(403, null, "Forbidden"),
+    } as unknown as ReturnType<typeof useMe>);
     pathname.current = "/jobs";
     renderGate(<TokenGate><p>secret content</p></TokenGate>);
     expect(screen.queryByText("secret content")).not.toBeInTheDocument();
     expect(screen.getByText(/invite-only/i)).toBeInTheDocument();
     expect(screen.queryByText(/Connect to your Rhapto API/i)).not.toBeInTheDocument();
+  });
+
+  // --- fix-round finding I1: a 500/network failure is not "you are not invited" ---
+
+  it("shows a generic retry state, not 'invite-only', when /me fails for a reason other than 401/403", () => {
+    const refetch = vi.fn();
+    vi.mocked(useMe).mockReturnValue({
+      isPending: false,
+      isSuccess: false,
+      error: new ApiError(500, null, "Internal Server Error"),
+      refetch,
+    } as unknown as ReturnType<typeof useMe>);
+    pathname.current = "/jobs";
+    renderGate(<TokenGate><p>secret content</p></TokenGate>);
+    expect(screen.queryByText("secret content")).not.toBeInTheDocument();
+    expect(screen.queryByText(/invite-only/i)).not.toBeInTheDocument();
+    expect(screen.getByText(/could not reach rhapto/i)).toBeInTheDocument();
+    screen.getByRole("button", { name: /retry/i }).click();
+    expect(refetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows the generic retry state (not 'invite-only') when /me fails with no ApiError at all", () => {
+    // A network error (fetch rejecting) never reaches unwrap()'s ApiError construction, so
+    // me.error may not be an ApiError instance at all; that must still be treated as "couldn't
+    // reach", not silently coerced into either card.
+    vi.mocked(useMe).mockReturnValue({
+      isPending: false,
+      isSuccess: false,
+      error: new Error("network error"),
+      refetch: vi.fn(),
+    } as unknown as ReturnType<typeof useMe>);
+    pathname.current = "/jobs";
+    renderGate(<TokenGate><p>secret content</p></TokenGate>);
+    expect(screen.queryByText(/invite-only/i)).not.toBeInTheDocument();
+    expect(screen.getByText(/could not reach rhapto/i)).toBeInTheDocument();
+  });
+
+  // --- fix-round finding I2: /settings must stay reachable in access mode ---
+
+  it("keeps /settings reachable even while /me is refused, so there is a way to fix the configuration", () => {
+    vi.mocked(useMe).mockReturnValue({
+      isPending: false,
+      isSuccess: false,
+      error: new ApiError(403, null, "Forbidden"),
+    } as unknown as ReturnType<typeof useMe>);
+    pathname.current = "/settings";
+    renderGate(<TokenGate><p>settings form</p></TokenGate>);
+    expect(screen.getByText("settings form")).toBeInTheDocument();
   });
 });
