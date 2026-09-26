@@ -16,7 +16,10 @@ import { fieldsWithTracks } from "@/lib/fields";
 import { DEFAULT_SEARCH_STATE, encodeSearchState, type SearchState } from "@/lib/search-state";
 
 // Layout: hero band, then a two-column body — 2fr of work, 1fr of context (spec §3.1). No
-// Breadcrumbs here: the Dashboard is the root, so the layout's static "Rhapto" title stands as-is.
+// Breadcrumbs here: the route is now /dashboard, not the root, but it is still the app's home
+// surface for a signed-in person -- the TopBar logo and its first tab both point here -- so a
+// breadcrumb reading just "Dashboard" with nothing above it to click back to would add clutter,
+// not orientation.
 export default function DashboardPage() {
   const router = useRouter();
   const [state, setState] = useState<SearchState>(DEFAULT_SEARCH_STATE);

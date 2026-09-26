@@ -17,7 +17,7 @@ export function RecommendedRoles({ tracks }: { tracks: Record<string, TrackInfo>
   const onLastPage = page >= RECOMMENDED_MAX_PAGES - 1;
   // A page shorter than the page size is the last page of real data, hard cap or not.
   const morePagesLeft = jobs.length === RECOMMENDED_PAGE_SIZE;
-  // Same gap app/page.tsx's hasIssue/nothingToShow closes: a query that can't reach the network
+  // Same gap app/dashboard/page.tsx's hasIssue/nothingToShow closes: a query that can't reach the network
   // parks at fetchStatus "paused" (isLoading false, error null, data undefined) rather than
   // settling into `error` — indistinguishable from a genuinely empty page without this.
   const hasIssue = Boolean(query.error) || query.isPaused;

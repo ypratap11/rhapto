@@ -105,7 +105,7 @@ function JobsPageInner() {
   const jobs = rawJobs.filter((j) => passesFit(j.best_fit ?? null, state.fit));
   const loading = live.status === "idle" ? browse.isLoading : live.status === "searching";
   const error = live.status === "idle" ? browse.error : live.status === "error" ? live.error : null;
-  // Same gap app/page.tsx's hasIssue/nothingToShow closes for the Dashboard: TanStack Query v5's
+  // Same gap app/dashboard/page.tsx's hasIssue/nothingToShow closes for the Dashboard: TanStack Query v5's
   // default networkMode "online" parks an unreachable `browse` query at fetchStatus "paused" —
   // isLoading false, error null, data undefined, the same shape a genuinely empty result set has.
   // hasIssue always shows the banner; nothingToShow only swaps the grid's empty-state copy when

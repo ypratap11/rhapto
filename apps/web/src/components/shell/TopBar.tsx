@@ -6,7 +6,7 @@ import { CircleQuestionMark, Settings } from "lucide-react";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 
 const TABS = [
-  { href: "/", label: "Dashboard" },
+  { href: "/dashboard", label: "Dashboard" },
   { href: "/jobs", label: "Jobs" },
   { href: "/resumes", label: "Resumes" },
   { href: "/pipeline", label: "Pipeline" },
@@ -22,12 +22,18 @@ export function TopBar() {
   return (
     <header className="border-b border-border bg-surface">
       <div className="mx-auto flex h-14 max-w-6xl items-center justify-between gap-6 px-6">
-        <Link href="/" className="font-serif text-xl font-medium tracking-tight">
+        {/* The logo is a signed-in person's way back to their app, not to the explainer at "/" --
+            sending them to the pitch instead would be the annoyance this route split must not
+            create. */}
+        <Link href="/dashboard" className="font-serif text-xl font-medium tracking-tight">
           Rhapto
         </Link>
         <nav aria-label="Primary" className="flex flex-1 items-center gap-5 text-sm">
           {TABS.map(({ href, label }) => {
-            const active = href === "/" ? pathname === "/" : pathname.startsWith(href);
+            // No tab's href is a prefix of another tab's href (checked: /dashboard, /jobs,
+            // /resumes, /pipeline, /profile), so a plain prefix match is unambiguous -- the old
+            // `href === "/"` special case existed only because every path starts with "/".
+            const active = pathname.startsWith(href);
             return (
               <Link
                 key={href}

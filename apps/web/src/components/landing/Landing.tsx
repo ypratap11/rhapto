@@ -259,7 +259,7 @@ export function Landing() {
         </Link>
         <p className="text-sm text-muted-foreground">
           Already set up? Head to the{" "}
-          <Link href="/" className="text-primary underline underline-offset-4">
+          <Link href="/dashboard" className="text-primary underline underline-offset-4">
             dashboard
           </Link>
           .

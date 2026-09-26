@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useSyncExternalStore } from "react";
-import { Landing } from "@/components/landing/Landing";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ApiError, hasToken, SAME_ORIGIN_DEPLOYMENT } from "@/lib/api/client";
@@ -78,11 +77,16 @@ function getServerSnapshot(): boolean | null {
 // enters credentials, and it is also the one screen an access-mode user needs if this build ever
 // ends up pointed at a token-mode API -- without this bypass applying there too, they would have
 // no route off the refusal card below (fix-round finding I2: this used to be token-mode-only).
-// It still renders the token-mode "API connection" card there in access mode
-// (apps/web/src/app/settings/page.tsx) -- harmless, but this task does not hide it (fix-round
-// finding M3 corrects only the previous, inaccurate version of this comment, not that card).
-// /about is marketing copy that needs no session in either mode.
-const PUBLIC_ROUTES = new Set(["/settings", "/about"]);
+// The token-mode "API connection" card that used to render unconditionally on /settings is now
+// hidden in access mode (apps/web/src/app/settings/page.tsx, fix-round finding N1) because saving
+// it there points the browser at another origin and silently disables the same-origin proxy.
+// /about is marketing copy that needs no session in either mode, and neither does / -- it is the
+// domain's front door (apps/web/src/app/page.tsx renders <Landing/> there directly), so it must
+// render the same way for a first-time invited person as for anyone already signed in. This is a
+// client-side routing choice, not a claim that / is reachable by anyone unauthenticated: in an
+// access-mode deployment, Cloudflare Access still stops a stranger at the edge before this code
+// ever runs, unless a separate, deliberate step (docs/runbook-public-landing.md) opens / there too.
+const PUBLIC_ROUTES = new Set(["/", "/settings", "/about"]);
 
 export function TokenGate({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -90,8 +94,11 @@ export function TokenGate({ children }: { children: React.ReactNode }) {
   // Called unconditionally, per React's rules of hooks, but only consulted in the access-mode
   // branch below. `enabled` keeps it from actually firing in token mode until a token exists, so
   // an anonymous landing-page visit no longer issues a guaranteed-failing request against
-  // whatever API URL happens to be configured (fix-round finding I4).
-  const me = useMe({ enabled: SAME_ORIGIN_DEPLOYMENT || hasToken() });
+  // whatever API URL happens to be configured (fix-round finding I4). Reuses `tokenPresent` (the
+  // `useSyncExternalStore` snapshot above) rather than calling `hasToken()` again here -- same
+  // value, one source of truth, and it re-renders correctly when the token changes (fix-round
+  // finding N2: a fresh `hasToken()` call during render doesn't react to that change on its own).
+  const me = useMe({ enabled: SAME_ORIGIN_DEPLOYMENT || tokenPresent === true });
 
   if (PUBLIC_ROUTES.has(pathname)) return <>{children}</>;
 
@@ -149,10 +156,9 @@ export function TokenGate({ children }: { children: React.ReactNode }) {
         {children}
       </>
     );
-  // The root is the one route a stranger reaches without being sent there, so it answers "what is
-  // this?" rather than demanding a bearer token. Every other route keeps the short Connect card:
-  // someone who navigated to /jobs already knows what Rhapto is and just needs to be let in.
-  if (pathname === "/") return <Landing />;
+  // / is handled above by PUBLIC_ROUTES, so every route that reaches here (/jobs, /pipeline, ...)
+  // is one someone navigated to directly, without a token -- they already know what Rhapto is and
+  // just need to be let in, so the short Connect card is enough.
   return (
     <Card className="mx-auto max-w-md">
       <CardHeader>

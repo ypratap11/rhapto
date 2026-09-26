@@ -5,6 +5,7 @@ import { act } from "react";
 import { hydrateRoot } from "react-dom/client";
 import { renderToString } from "react-dom/server";
 import { TokenGate } from "./TokenGate";
+import { Landing } from "@/components/landing/Landing";
 import { ApiError, setSettings } from "@/lib/api/client";
 import { useBootstrap, useMe } from "@/lib/api/queries";
 
@@ -52,16 +53,16 @@ describe("TokenGate", () => {
     expect(screen.getByRole("link", { name: /open settings/i })).toHaveAttribute("href", "/settings");
   });
 
-  it("answers 'what is this?' at the root rather than demanding a token", () => {
-    // The root is the one route a stranger reaches without being sent there. A bearer-token field
-    // is a dead end for someone who has never heard of Rhapto.
+  // Landing-default task: "/" is now in PUBLIC_ROUTES, so TokenGate no longer substitutes its own
+  // fallback there (that used to be how a stranger at "/" saw the pitch instead of a bearer-token
+  // field). It just renders children -- app/page.tsx is what supplies <Landing/> as those children
+  // in production. This is the test that pins the owner's actual request: before this task, an
+  // anonymous "/" visit in token mode was blocked behind the same Connect card as every other route.
+  it("renders its children at / with no token present, in token mode", () => {
     pathname.current = "/";
     renderGate(<TokenGate><p>secret content</p></TokenGate>);
-    expect(screen.queryByText("secret content")).not.toBeInTheDocument();
-    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(
-      "Every application, stitched to fit.",
-    );
-    expect(screen.getByRole("link", { name: /get started/i })).toHaveAttribute("href", "/settings");
+    expect(screen.getByText("secret content")).toBeInTheDocument();
+    expect(screen.queryByText(/connect to your rhapto api/i)).not.toBeInTheDocument();
   });
 
   it("always renders the settings page", () => {
@@ -100,7 +101,9 @@ describe("TokenGate", () => {
   });
 
   it("reveals children when settings change in the same tab", () => {
-    pathname.current = "/";
+    // "/jobs", not "/": "/" is a PUBLIC_ROUTE now and would show children regardless of token,
+    // which would not exercise the reactivity this test is for.
+    pathname.current = "/jobs";
     renderGate(<TokenGate><p>secret content</p></TokenGate>);
     expect(screen.queryByText("secret content")).not.toBeInTheDocument();
     act(() => {
@@ -135,12 +138,19 @@ describe("TokenGate", () => {
   });
 
   // Plan-review N2: the /jobs case above is route-specific and misses the landing page -- the one
-  // route a stranger actually reaches without being sent there (see the "answers 'what is this?'"
-  // test above). Duplicated here so mounting <Bootstrapper /> beside <Landing /> can't slip back in
-  // unnoticed the way it did in review (verified: it left every other test in this file green).
+  // route a stranger actually reaches without being sent there. Duplicated here so mounting
+  // <Bootstrapper /> beside <Landing /> can't slip back in unnoticed the way it did in review
+  // (verified: it left every other test in this file green).
+  //
+  // Landing-default task: children is <Landing/> here, not the `<p>secret content</p>` stand-in
+  // used elsewhere in this file. That stand-in stops being a faithful fixture at "/" once "/"
+  // becomes a PUBLIC_ROUTE -- TokenGate now renders whatever children it is given there (see the
+  // "renders its children at /" test above) rather than substituting Landing itself, and in
+  // production what app/page.tsx actually hands TokenGate as children at "/" is <Landing/>. Both
+  // assertions below are unchanged from before this task; only this fixture was updated to match.
   it("never fires the bootstrap mutation at / (the anonymous landing page) in token mode", () => {
     pathname.current = "/";
-    renderGate(<TokenGate><p>secret content</p></TokenGate>);
+    renderGate(<TokenGate><Landing /></TokenGate>);
     expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(
       "Every application, stitched to fit.",
     );
@@ -264,6 +274,23 @@ describe("TokenGate in access mode", () => {
     renderGate(<TokenGate><p>secret content</p></TokenGate>);
     expect(screen.queryByText(/invite-only/i)).not.toBeInTheDocument();
     expect(screen.getByText(/could not reach rhapto/i)).toBeInTheDocument();
+  });
+
+  // Landing-default task, item 4 (access-mode half): PUBLIC_ROUTES is checked before the
+  // SAME_ORIGIN_DEPLOYMENT branch (Task 2's fix round moved it there deliberately, so /settings
+  // stays reachable too), so "/" renders children even when /me is refused -- there is no wall
+  // of "Access refused" for a stranger who has never heard of Rhapto, only for someone who
+  // navigates to an app route directly without being let in.
+  it("renders its children at / even when /me fails, in access mode", () => {
+    vi.mocked(useMe).mockReturnValue({
+      isPending: false,
+      isSuccess: false,
+      error: new ApiError(403, null, "Forbidden"),
+    } as unknown as ReturnType<typeof useMe>);
+    pathname.current = "/";
+    renderGate(<TokenGate><p>secret content</p></TokenGate>);
+    expect(screen.getByText("secret content")).toBeInTheDocument();
+    expect(screen.queryByText(/invite-only/i)).not.toBeInTheDocument();
   });
 
   // --- fix-round finding I2: /settings must stay reachable in access mode ---
