@@ -35,8 +35,13 @@ merging; each is small and scoped. The 0.3 pollers plan comes before stage 4 (de
 
 ## Repo hygiene before publishing
 
-- Rewrite history to drop the real employer name committed in a9838fb (the file was corrected later,
-  the history was not).
+- ~~Rewrite history to drop the real employer name committed in a9838fb (the file was corrected
+  later, the history was not).~~ **Done 2026-09-25.** The scope turned out to be wider than this note
+  recorded: an employer name in one old blob of `docs/requirements-architecture.md`, *and* two
+  employer names with employment dates in the reachable commit message `df358bed` — which no
+  file-based check could ever have seen. Both purged in the same rewrite that relicensed to AGPL.
+  `scripts/check-no-personal-data.py --history` now scans blobs, commit messages and path names, and
+  is verified to fail against the pre-rewrite backup.
 - CI: regenerate `packages/schemas/openapi.json`, `schema.d.ts`, and the Pydantic models and fail on
   diff; run the personal-data check; run web and api suites.
 - Web test suite: `testTimeout` is 20s repo-wide because jsdom + Base UI + `userEvent.type` is slow;

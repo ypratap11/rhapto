@@ -33,7 +33,9 @@ the code is.
 4. **No personal data, ever.** `profile/` is real user data and is gitignored. Nothing from it —
    names, employers, metrics, dates — may reach code, tests, fixtures, docs, or screenshots. Use
    `profile.example/`, which is fictional. `scripts/check-no-personal-data.py` enforces this; run it
-   before you push.
+   before you push, and `--history` before anything is published or a branch is pushed for the first
+   time. Correcting a file does not correct the commit that introduced it, and a commit *message* is
+   not a file — no linter reads it and it cannot be fixed without rewriting history.
 
 ## Known gap, if you are looking for something worth doing
 

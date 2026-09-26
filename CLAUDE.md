@@ -56,7 +56,10 @@ See the roadmap table in the requirements doc for full scope per phase.
   committed artifacts (fixtures, snapshots, docs, examples) must come from
   `profile.example/`.
 - Add a CI secret-scan step and a check that no string from
-  `profile/blocks.yaml` orgs appears in committed files.
+  `profile/blocks.yaml` orgs appears in committed files: `scripts/check-no-personal-data.py`
+  (tracked files) and `--history` (every blob, commit message and path name). Run the history scope
+  before anything becomes public. A green working-tree scan says nothing about history — that gap
+  left an employer name, with dates, in a public commit message for weeks.
 
 ## Working agreement (set by the owner, 2026-09-24)
 
