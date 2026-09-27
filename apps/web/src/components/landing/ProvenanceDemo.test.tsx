@@ -21,6 +21,10 @@ describe("ProvenanceDemo", () => {
     expect(bullet).toHaveAttribute("aria-expanded", "true");
     const region = document.getElementById(bullet.getAttribute("aria-controls")!);
     expect(region).not.toBeNull();
+    // "styled as provenance" is half the claim: this panel means "this came from somewhere", and
+    // the token that says so is the one the app already uses for it. Without this line, swapping it
+    // for the deleted-red panel would leave every other assertion here passing.
+    expect(region).toHaveClass("bg-diff-add-bg");
     const source = within(region!);
     expect(source.getByText("verified: true")).toBeInTheDocument();
     expect(source.getByText(/Acme Analytics/)).toBeInTheDocument();
@@ -40,7 +44,9 @@ describe("ProvenanceDemo", () => {
     const user = userEvent.setup();
     const bullet = screen.getByRole("button", { name: /redesigned the customer onboarding/i });
 
-    bullet.focus();
+    // Really press Tab rather than calling .focus(): the bullets are the first things in the demo
+    // a keyboard user reaches, and .focus() would pass even on an element Tab can never land on.
+    await user.tab();
     expect(bullet).toHaveFocus();
     await user.keyboard("{Enter}");
 
@@ -66,7 +72,7 @@ describe("ProvenanceDemo", () => {
     expect(toggle).toHaveAttribute("aria-checked", "true");
     expect(screen.getByText(/increased forecast accuracy by 42%/i)).toBeInTheDocument();
     expect(screen.getByText("no-unverified-metrics")).toBeInTheDocument();
-    expect(screen.getByText("sections[0].entries[1].bullets[2]")).toBeInTheDocument();
+    expect(screen.getByText("sections[0].entries[1].bullets[1]")).toBeInTheDocument();
     expect(
       screen.getByText(/block 'acme-forecast' is not verified but the text contains metric\(s\): 42%/),
     ).toBeInTheDocument();

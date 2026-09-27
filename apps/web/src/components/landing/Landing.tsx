@@ -122,6 +122,13 @@ export function Landing() {
             See the five steps
           </a>
         </div>
+        <p className="max-w-2xl text-sm text-muted-foreground">
+          A new account starts empty. You will need a resume to upload, one track, and your contact
+          details before Rhapto can produce anything.{" "}
+          <a href="#honest" className="text-primary underline underline-offset-4">
+            What that means
+          </a>
+        </p>
       </HeroBand>
 
       {/* The human reason, before any mechanism. Everything below this explains HOW Rhapto works;
@@ -184,14 +191,15 @@ export function Landing() {
       <section aria-labelledby="demo-heading" className="mb-12">
         <HeroBand tone="sand" height="tall">
           <p className="text-xs font-medium tracking-[0.14em] text-muted-foreground uppercase">
-            From Rhapto&rsquo;s own renderer
+            The mechanism, not a claim about it
           </p>
           <h2 id="demo-heading" className="font-heading text-2xl font-medium">
             Every bullet knows where it came from
           </h2>
           <p className="max-w-2xl text-sm text-muted-foreground">
-            A real fragment of what Rhapto renders, not a mockup. Each line below traces back to a
-            fact already confirmed.
+            A resume fragment in Rhapto&rsquo;s layout. Every line traces back to a fact already
+            confirmed &mdash; and the refusal you can switch on below is the validator&rsquo;s own
+            output: rule, path and message exactly as it produces them.
           </p>
           <div className="mt-2">
             <ProvenanceDemo />
@@ -235,7 +243,7 @@ export function Landing() {
       </section>
 
       <section aria-labelledby="honest" className="mb-10">
-        <h2 id="honest" className="font-heading text-2xl font-medium">
+        <h2 id="honest" className="scroll-mt-20 font-heading text-2xl font-medium">
           Before you start
         </h2>
         <div className="mt-6 grid gap-4 md:grid-cols-3">

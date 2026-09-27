@@ -81,6 +81,25 @@ def test_flags_number_from_unverified_block_even_if_present_in_source(
     assert len(violations) == 1 and "not verified" in violations[0].message
 
 
+def test_message_wording_is_exact(demo_profile_dir: Path) -> None:
+    """The public landing page quotes this message verbatim.
+
+    `apps/web/src/components/landing/ProvenanceDemo.tsx` shows a guardrail refusal as the proof that
+    Rhapto does not invent metrics, and copies this string into the page. Neither side pinned the
+    wording, so rewording it here would have left both suites green while the page quoted output the
+    product no longer produces. Change this test and that component together, or not at all.
+    """
+    resume = demo_resume()
+    resume.sections[1].entries[0].bullets[0] = bullet(
+        "Increased forecast accuracy by 42% using a new ML model.", "side-llm-tool"
+    )
+    violations = check_metrics(make_ctx(demo_profile_dir, resume))
+    assert len(violations) == 1
+    assert violations[0].message == (
+        "block 'side-llm-tool' is not verified but the text contains metric(s): 42%"
+    )
+
+
 def test_adversarial_spelled_out_fraction(demo_profile_dir: Path) -> None:
     resume = demo_resume()
     resume.sections[0].entries[0].bullets[1] = bullet(
