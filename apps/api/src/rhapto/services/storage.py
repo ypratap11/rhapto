@@ -91,8 +91,22 @@ class PackageStorage:
         path.write_bytes(data)
         return path
 
+    def document_path(self, user_id: uuid.UUID) -> Path:
+        return self.document_dir(user_id) / "source.docx"
+
+    def has_document(self, user_id: uuid.UUID) -> bool:
+        """Whether the file is actually there, without reading it.
+
+        The `resume_documents` row and the file on the volume can disagree: the row survives anything
+        that loses the volume's contents, and on this deployment one did -- the row said "uploaded"
+        for three days after the file was gone. The profile checklist read the row alone and reported
+        the setup step as complete, so the product asserted the user was ready and only told the truth
+        when they pressed Tailor. Shares `document_path` with `read_document` so the two cannot drift.
+        """
+        return self.document_path(user_id).is_file()
+
     def read_document(self, user_id: uuid.UUID) -> bytes:
-        path = self.document_dir(user_id) / "source.docx"
+        path = self.document_path(user_id)
         if not path.is_file():
             raise FileNotFoundError(f"no resume document stored for user {user_id}")
         return path.read_bytes()

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import shutil
 import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -10,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from rhapto.db.repositories import jobs as jobs_repo
 from rhapto.db.repositories import profile as profile_repo
 from rhapto.models.profile.tracks import Track
+from rhapto.services.storage import PackageStorage
 
 
 async def test_an_empty_account_reports_zeroes_and_an_empty_checklist(
@@ -42,6 +44,56 @@ async def test_the_checklist_reads_the_imported_profile(
     assert checklist["blocks_verified"] is (checklist["verified_blocks"] > 0)
     # No .docx was uploaded by the importer.
     assert checklist["resume_template"] is False
+
+
+async def test_an_uploaded_document_completes_the_resume_step(
+    client: httpx.AsyncClient,
+) -> None:
+    from helpers_docx import build_fixture_docx
+
+    files = {
+        "file": (
+            "cv.docx",
+            build_fixture_docx(),
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        )
+    }
+    assert (await client.post("/api/v1/profile/resume-document", files=files)).status_code == 201
+    checklist = (await client.get("/api/v1/dashboard")).json()["checklist"]
+    assert checklist["resume_template"] is True
+
+
+async def test_a_row_whose_file_has_vanished_does_not_count_as_uploaded(
+    client: httpx.AsyncClient, storage: PackageStorage
+) -> None:
+    """The row and the file can disagree, and the row is the one that survives losing a volume.
+
+    This happened in production: the `resume_documents` row outlived its file by three days, the
+    checklist read the row alone and reported the step complete, and the owner only found out when
+    he pressed Tailor -- the one moment the product had his attention for something else.
+    `documents.load_source` already treats a vanished file as "no document"; the checklist has to
+    agree with it, or the product contradicts itself.
+    """
+    from helpers_docx import build_fixture_docx
+
+    files = {
+        "file": (
+            "cv.docx",
+            build_fixture_docx(),
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        )
+    }
+    assert (await client.post("/api/v1/profile/resume-document", files=files)).status_code == 201
+    assert (await client.get("/api/v1/dashboard")).json()["checklist"]["resume_template"] is True
+
+    # Lose the file the way a volume migration loses it: the row stays, the bytes do not.
+    shutil.rmtree(storage.root / "resume-document", ignore_errors=True)
+
+    checklist = (await client.get("/api/v1/dashboard")).json()["checklist"]
+    assert checklist["resume_template"] is False, (
+        "the checklist still reports an uploaded template while the file is gone; tune mode will "
+        "refuse to run and the user has been told they are ready"
+    )
 
 
 async def test_new_fit_count_respects_the_track_threshold_and_the_window(
