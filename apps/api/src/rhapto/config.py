@@ -45,6 +45,11 @@ class Settings(BaseSettings):
     rhapto_poll_interval_hours: int = 6
     rhapto_discovery_user_agent: str = "rhapto-discovery/0.3"
     rhapto_discovery_base_override: str = ""
+    # How many model runs an account with no key of its own may spend on THIS deployment's key, in
+    # access (invite-allowlist) mode. Negative disables the cap; 0 refuses every such run. Ignored
+    # entirely in token mode, which is a single self-hosted account already using its own env key --
+    # that exemption is what makes a default of 3 safe to ship without an env change anywhere.
+    rhapto_trial_runs: int = 3
 
 
 class MissingSecretKeyError(RuntimeError):

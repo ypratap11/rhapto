@@ -14,6 +14,7 @@ dict key; rotating a key therefore produces a new entry instead of reusing the s
 from __future__ import annotations
 
 import hashlib
+import hmac
 import logging
 import uuid
 from dataclasses import dataclass, field
@@ -165,6 +166,16 @@ _CACHE: dict[tuple[str, str], tuple[str, LLMProvider]] = {}
 
 def _key_hash(api_key: str) -> str:
     return hashlib.sha256(api_key.encode()).hexdigest()
+
+
+def same_key(a: str, b: str) -> bool:
+    """Whether two provider keys are the same key, compared as digests and in constant time.
+
+    Needed because a stored copy of the deployment's key is still the deployment's key: a user who
+    saved one (which `PUT /settings/llm` used to allow) must not become exempt from the trial cap
+    just by having a row. Never compares plaintext with `==`, never logs either side.
+    """
+    return hmac.compare_digest(_key_hash(a), _key_hash(b))
 
 
 def llm_for(config: LlmConfig) -> LLMProvider:
