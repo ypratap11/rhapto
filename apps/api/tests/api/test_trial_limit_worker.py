@@ -20,14 +20,15 @@ import uuid
 from typing import Any
 
 import pytest
-from helpers import default_tailor_script
+from helpers import bullet, default_tailor_script, demo_extract, demo_resume
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from rhapto.db.models import Task
+from rhapto.db.models import Package, Task
 from rhapto.db.repositories.jobs import create_job
 from rhapto.db.repositories.llm_settings import upsert_llm_settings
 from rhapto.db.repositories.users import get_or_create_user, trial_runs_used
+from rhapto.engine.compose import AnswerItem, ComposeOutput
 from rhapto.engine.providers.llm import LLMProvider, Message, StructuredResult, SystemBlock, T
 from rhapto.services.secrets import encrypt
 from rhapto.services.trial import trial_limit_message
@@ -294,3 +295,52 @@ async def test_the_worker_reads_its_limit_from_the_ctx_not_the_settings_singleto
 
     assert (await _task(session_factory, task_id)).status == "succeeded"
     assert await _used(session_factory, trial_user) == LIMIT + 1
+
+
+@pytest.mark.usefixtures("worker_profile")
+async def test_a_guardrail_blocked_package_still_consumes_a_run(
+    worker_ctx: dict[str, Any],
+    session_factory: async_sessionmaker[AsyncSession],
+    trial_user: uuid.UUID,
+    fake_llm: Any,
+) -> None:
+    """AC 6, asserted rather than left to the reader of the code.
+
+    The guardrails run *after* the model does, so a package they refuse is a package the maintainer
+    already paid for. The claim sits before `tailor(...)` precisely so this is structural rather than
+    a case anyone has to remember -- but a cap that quietly gave a free run back for every blocked
+    package would be a cap an unlucky prompt could defeat, so it is checked.
+
+    Nothing here weakens a guardrail: the scripted output invents a metric, the validator catches it,
+    and the package persists as `blocked` exactly as it does without the trial.
+    """
+    resume = demo_resume()
+    resume.sections[0].entries[0].bullets[1] = bullet("Cut warehouse cost 25%.", "acme-migration")
+    invented_metric = ComposeOutput(
+        summary=resume.summary,
+        sections=resume.sections,
+        cover_note="Dear team, " + "word " * 130,
+        change_log="Emphasised migration.",
+        answers=[AnswerItem(key="why_this_company", value="Data.")],
+    ).model_dump(mode="json")
+
+    task_id = await _queued_task(session_factory, trial_user)
+    # Three responses, because a failing validate triggers the pipeline's one repair call and the
+    # repair is scripted to make the same mistake -- so the report still fails and the package
+    # persists as `blocked`, which is the state under test.
+    fake_llm.script(demo_extract(), invented_metric, invented_metric)
+
+    await tailor_job(worker_ctx, task_id)
+
+    row = await _task(session_factory, task_id)
+    assert row.status == "succeeded", row.error
+    async with session_factory() as session:
+        package = await session.get(Package, uuid.UUID(str(row.result_ref)))
+    assert package is not None and package.status == "blocked"
+    assert {v["rule"] for v in package.guardrail_report_json["violations"]} == {
+        "no-unverified-metrics"
+    }
+    assert len(fake_llm.calls) == 3, "compose, then one repair attempt: all of it billed"
+    assert await _used(session_factory, trial_user) == 1, (
+        "the money was spent before the guardrail ran"
+    )
