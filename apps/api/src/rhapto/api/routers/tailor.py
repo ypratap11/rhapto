@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import uuid
 from collections.abc import AsyncIterator
@@ -17,6 +18,7 @@ from rhapto.api.deps import (
     get_session,
     get_settings_dep,
     get_state,
+    get_storage,
 )
 from rhapto.api.errors import not_found
 from rhapto.api.schemas import TailorBody, TaskOut
@@ -30,6 +32,7 @@ from rhapto.db.repositories.profile import get_track
 from rhapto.services.enqueue import Enqueuer
 from rhapto.services.eventbus import EventBus, task_channel
 from rhapto.services.llm import resolve_llm_config
+from rhapto.services.storage import PackageStorage
 from rhapto.services.trial import check_trial_allowance
 
 router = APIRouter()
@@ -37,6 +40,7 @@ FINISHED = {"succeeded", "failed"}
 
 UserDep = Annotated[uuid.UUID, Depends(current_user)]
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
+StorageDep = Annotated[PackageStorage, Depends(get_storage)]
 EnqueuerDep = Annotated[Enqueuer, Depends(get_enqueuer)]
 SettingsDep = Annotated[Settings, Depends(get_settings_dep)]
 EventBusDep = Annotated[EventBus, Depends(get_event_bus)]
@@ -64,6 +68,7 @@ async def tailor_job_endpoint(
     session: SessionDep,
     enqueuer: EnqueuerDep,
     settings: SettingsDep,
+    storage: StorageDep,
 ) -> TaskOut:
     if await job_repo.get_job(session, user_id, job_id) is None:
         raise not_found("job", job_id)
@@ -73,7 +78,9 @@ async def tailor_job_endpoint(
         parent = await package_repo.get_package(session, user_id, body.parent_package_id)
         if parent is None or parent.job_id != job_id:
             raise not_found("package", body.parent_package_id)
-    has_document = await documents_repo.get_document(session, user_id) is not None
+    has_document = await documents_repo.get_document(session, user_id) is not None and (
+        await asyncio.to_thread(storage.has_document, user_id)
+    )
     if body.mode == "tune" and not has_document:
         raise HTTPException(
             status_code=422,

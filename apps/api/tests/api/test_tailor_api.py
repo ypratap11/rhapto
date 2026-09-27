@@ -14,6 +14,7 @@ from rhapto.db.repositories.users import get_or_create_user
 from rhapto.engine.compose import AnswerItem
 from rhapto.engine.tune import ProposedEdit, TuneOutput
 from rhapto.services.eventbus import InMemoryEventBus
+from rhapto.services.storage import PackageStorage
 
 JD = "ExampleCo seeks a Data Platform Program Manager to lead our Snowflake migration. " * 3
 
@@ -224,6 +225,25 @@ async def test_tailor_defaults_to_tune_when_document_exists(
     assert docx.status_code == 200 and docx.content[:2] == b"PK"
     listed = (await client.get("/api/v1/packages")).json()
     assert [item["mode"] for item in listed] == ["tune"]
+
+
+@pytest.mark.usefixtures("imported_profile")
+async def test_tailor_refuses_tune_when_the_row_outlived_its_file(
+    client: httpx.AsyncClient, storage: PackageStorage, user_id: uuid.UUID
+) -> None:
+    """The `resume_documents` row and the file on the volume can disagree, and only the file can be
+    tailored. The dashboard checklist learned this after a row outlived its file for three days;
+    this endpoint had not, so pressing Tailor enqueued a task that died in the worker with
+    "no resume document stored" instead of saying so up front. Deleting the file while leaving the
+    row is exactly the state the live deployment was found in.
+    """
+    await _upload_document(client)
+    storage.delete_document(user_id)
+
+    job_id = await _job(client)
+    explicit = await client.post(f"/api/v1/jobs/{job_id}/tailor", json={"mode": "tune"})
+    assert explicit.status_code == 422, explicit.text
+    assert "resume document" in explicit.json()["detail"]
 
 
 @pytest.mark.usefixtures("imported_profile")
