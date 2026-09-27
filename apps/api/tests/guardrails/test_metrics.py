@@ -24,8 +24,13 @@ def make_ctx(demo_profile_dir: Path, resume=None):  # type: ignore[no-untyped-de
     )
 
 
-def test_registered() -> None:
-    assert RULES["no-unverified-metrics"] is check_metrics
+def test_not_registered_because_it_is_unconditional() -> None:
+    """It used to be in RULES, which made it a row a user could omit or disable. It is not any more.
+
+    `run_guardrails` calls `check_metrics` directly, beside provenance.
+    """
+    assert "no-unverified-metrics" not in RULES
+    assert check_metrics is not None
 
 
 def test_tokenizers() -> None:

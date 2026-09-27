@@ -21,8 +21,16 @@ from rhapto.models.jd_extract import JDExtract
 from rhapto.models.resume_document import ResumeDocument
 
 # Configurable rules, keyed by the name used in guardrails.yaml. Later tasks add entries.
+#
+# METRICS is deliberately ABSENT. CLAUDE.md states that provenance and no-unverified-metrics are both
+# non-negotiable and that "neither is a user-toggleable rule" -- but metrics used to live here, which
+# made it exactly that: a row in a table. Nothing seeds those rows, so every newly created account ran
+# provenance alone, and its guardrail report said `passed: true` with `rules_run: ["provenance"]`,
+# which reads like success. Found on this deployment the day a second person was invited: her account
+# had zero guardrail rows, so a metric could have printed without being verified. It now runs
+# unconditionally in run_guardrails, next to provenance, and cannot be switched off by a user, by a
+# missing row, or by an `active: false` flag.
 RULES: dict[str, Rule] = {
-    METRICS: check_metrics,
     ENTITIES: check_entities,
     DATES: check_dates,
     ATTRIBUTION: check_attribution,
@@ -41,16 +49,31 @@ def run_guardrails(
     extract: JDExtract,
     cover_note: str | None = None,
 ) -> GuardrailReport:
-    """Run provenance plus every active configured rule; the cover note is checked for metrics too."""
+    """Run the two unconditional rules plus every active configured rule.
+
+    Provenance and no-unverified-metrics always run, for every account, whatever is or is not in the
+    `guardrails` table. They are the product's two promises; a deployment where they depend on a row
+    existing is a deployment where a fresh account quietly has one of them switched off.
+
+    A user may still carry a `no-unverified-metrics` row -- older profiles all do. Its `config` is
+    honoured, and `active: false` is ignored rather than obeyed, because this rule is not one a user
+    gets to turn off. It is never run twice.
+    """
     ctx = GuardrailContext(
         resume=resume,
         blocks=profile.block_map(),
         selection_ids=frozenset(selection_ids),
         extract=extract,
     )
-    rules_run = [PROVENANCE]
+    rules_run = [PROVENANCE, METRICS]
     violations: list[Violation] = check_provenance(ctx)
+    # Honour an existing row's config if the profile has one; otherwise the rule's own defaults.
+    metrics_config = next((r.config for r in profile.guardrails if r.rule == METRICS), None)
+    metrics_ctx = ctx if metrics_config is None else ctx.with_config(metrics_config)
+    violations.extend(check_metrics(metrics_ctx))
     for rule in profile.guardrails:
+        if rule.rule == METRICS:
+            continue  # already run above, unconditionally
         if not rule.active:
             continue
         check = RULES.get(rule.rule)
@@ -58,7 +81,7 @@ def run_guardrails(
             raise UnknownGuardrailError(f"unknown guardrail rule: {rule.rule}")
         violations.extend(check(ctx.with_config(rule.config)))
         rules_run.append(rule.rule)
-    if cover_note is not None and METRICS in rules_run:
+    if cover_note is not None:
         violations.extend(_check_cover_note(ctx, cover_note))
     passed = not any(v.severity == "error" for v in violations)
     return GuardrailReport(passed=passed, rules_run=rules_run, violations=violations)
