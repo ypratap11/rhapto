@@ -103,8 +103,8 @@ export function Landing() {
           // that does nothing and no way to learn where to write.
           <p className="max-w-2xl text-sm text-muted-foreground">
             Rhapto is invite-only today &mdash; sign-in is an allowlist the maintainer keeps by hand,
-            so an address that is not on it will be turned away. Request access and an email goes to{" "}
-            {ACCESS_REQUEST_EMAIL} asking for yours to be added.
+            so an address that is not on it will be turned away. Request access opens an email to{" "}
+            {ACCESS_REQUEST_EMAIL} for you to send, asking for yours to be added.
           </p>
         ) : null}
         <p className="max-w-2xl text-sm text-muted-foreground">

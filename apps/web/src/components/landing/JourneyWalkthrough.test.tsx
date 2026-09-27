@@ -250,6 +250,11 @@ describe("JourneyWalkthrough", () => {
     const firstBeat = screen.getAllByRole("listitem")[0]!;
     expect(firstBeat).toHaveTextContent(/there is nobody to ask: you point Rhapto at your own instance/i);
     expect(firstBeat.textContent ?? "").not.toMatch(/already in\b/i);
+    // The invite-only sentence used to live in copy that had its own test; it moved here when
+    // the cards retired, and nothing pinned it afterwards. Beat 1 renders in BOTH deployment
+    // modes, so this is the only place the hosted reader's "how do I get in at all" answer is
+    // guaranteed to survive an edit.
+    expect(firstBeat).toHaveTextContent(/invite-only, so the way in is to ask/i);
   });
 
   it("names job aggregators as well as company boards, the way the rest of the page does", () => {
