@@ -34,7 +34,13 @@ CLOSED_REASONS = ("rejected", "withdrew", "no_response", "filled")
 
 class User(TimestampMixin, Base):
     __tablename__ = "users"
-    __table_args__ = (UniqueConstraint("idp_subject", name="uq_users_idp_subject"),)
+    __table_args__ = (
+        UniqueConstraint("idp_subject", name="uq_users_idp_subject"),
+        # `claim_trial_run`'s conditional UPDATE cannot drive this below zero; the constraint is
+        # here for the hand-written reset (see `trial_runs_used` below), which is the one way a
+        # human touches this column.
+        CheckConstraint("trial_runs_used >= 0", name="ck_users_trial_runs_used"),
+    )
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=new_uuid)
     email: Mapped[str] = mapped_column(String(320), unique=True, nullable=False)
     settings_json: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict, nullable=False)
@@ -46,6 +52,15 @@ class User(TimestampMixin, Base):
         Boolean, default=False, server_default="false", nullable=False
     )
     seeded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Model runs this account has spent on the DEPLOYMENT's provider key. Monotone: claimed before
+    # the call, never decremented, never refunded, and deliberately not derived from `packages` --
+    # a package is an artifact the user can edit (PATCH writes a new row carrying the parent's
+    # llm_model) and delete (DELETE /jobs cascades), so counting packages both over- and
+    # under-counts spend. Untouched for a user on their own key. Reset by hand:
+    #   UPDATE users SET trial_runs_used = 0 WHERE email = '...';
+    trial_runs_used: Mapped[int] = mapped_column(
+        Integer, default=0, server_default="0", nullable=False
+    )
 
 
 class ResumeBlock(UserScopedMixin, TimestampMixin, Base):

@@ -65,3 +65,39 @@ async def claim_seed(session: AsyncSession, user_id: uuid.UUID) -> bool:
         {"uid": str(user_id)},
     )
     return claim.first() is not None
+
+
+async def trial_runs_used(session: AsyncSession, user_id: uuid.UUID) -> int:
+    """How many runs on the deployment's key this account has spent. 0 for an unknown user.
+
+    Reads the column, not the ORM attribute: `claim_trial_run` bypasses the identity map and the
+    session factory is `expire_on_commit=False` (`db/session.py`), so a caller holding a loaded
+    `User` cannot trust `user.trial_runs_used` after a claim.
+    """
+    used = await session.scalar(select(User.trial_runs_used).where(User.id == user_id))
+    return int(used or 0)
+
+
+async def claim_trial_run(session: AsyncSession, user_id: uuid.UUID, limit: int) -> int | None:
+    """Atomically consume one run. Returns the new count, or None when the account is already at
+    `limit` (or the row is gone). The caller must commit before the money is spent.
+
+    One conditional UPDATE, not a read-then-write -- the same reasoning as `claim_seed` above:
+    Postgres takes a row lock, the loser of a race re-evaluates the WHERE under READ COMMITTED
+    (nothing here raises the isolation level; `db/session.py` sets none) and finds it no longer
+    true, so two concurrent claimers can never both take the last run. This is why the design
+    needs no advisory lock and accepts no race window -- the bound on concurrent overrun is zero
+    extra runs, not one.
+
+    Bypasses the ORM identity map, so a caller holding a loaded `User` must re-read through
+    `trial_runs_used` rather than trust the attribute.
+    """
+    claim = await session.execute(
+        text(
+            "UPDATE users SET trial_runs_used = trial_runs_used + 1 "
+            "WHERE id = :uid AND trial_runs_used < :limit RETURNING trial_runs_used"
+        ),
+        {"uid": str(user_id), "limit": limit},
+    )
+    row = claim.first()
+    return int(row[0]) if row is not None else None
