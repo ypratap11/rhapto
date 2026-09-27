@@ -74,7 +74,8 @@ describe("AboutPage", () => {
     render(<AboutPage />);
     const residency =
       screen.getByRole("heading", { name: /wherever you run it/i }).parentElement?.textContent ?? "";
-    expect(residency).toMatch(/nothing leaves your machine/i);
+    expect(residency).toMatch(/stay on your machine/i);
+    expect(residency).toMatch(/what does leave, on every run, is the text/i);
     expect(residency).toMatch(/invited/i);
   });
 

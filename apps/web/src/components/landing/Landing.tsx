@@ -29,7 +29,7 @@ const PROMISES = [
   {
     icon: BadgeCheck,
     title: "Numbers need your sign-off",
-    body: "A metric only prints once you have marked that fact verified. Until then Rhapto writes “several teams,” never “fifteen teams.” It cannot round up on your behalf.",
+    body: "Rhapto is told to write “several teams,” never “fifteen teams,” until you have marked that number verified. If it writes the number anyway, the guardrail catches it and marks the whole package blocked — so the promise does not rest on the model behaving.",
   },
   {
     icon: Hand,
@@ -222,10 +222,13 @@ export function Landing() {
               Wherever you run it
             </h3>
             <p className="mt-2 text-sm text-muted-foreground">
-              Run it yourself and nothing leaves your machine &mdash; your resume and your provider
-              key never go anywhere else. On an instance you have been invited to, your data lives on
-              that server, encrypted, and walled off from every other account. Either way you bring
-              your own LLM key and pay only your own usage.
+              Run it yourself and your blocks, your documents and your provider key stay on your
+              machine. What does leave, on every run, is the text Rhapto sends to the model provider
+              you chose &mdash; that is how the drafting happens, and it is true of any tool that
+              uses a model. Rhapto sends the parts it needs and tells you which. On an instance you
+              have been invited to, your data lives on that server, encrypted, and walled off from
+              every other account. Your provider key is yours, and the only usage you pay for is
+              your own.
             </p>
           </div>
         </HeroBand>
@@ -245,15 +248,18 @@ export function Landing() {
             </CardHeader>
             <CardContent className="space-y-3 text-sm text-muted-foreground">
               <p>
-                Rhapto itself is free and AGPL-3.0 licensed. There is no account and no
-                subscription. The only bill is your own LLM provider&rsquo;s.
+                Rhapto itself is free and AGPL-3.0 licensed. There is no subscription, and nothing
+                to sign up for &mdash; the hosted instance is invite-only, so access is an address on
+                an allowlist rather than an account you create. The only bill is your own LLM
+                provider&rsquo;s.
               </p>
               <p>
                 A tailored resume takes two model calls. Measured on a real run, that is{" "}
                 <strong className="font-medium text-foreground">29&ndash;36&cent;</strong> on Claude
                 Opus 5, or{" "}
                 <strong className="font-medium text-foreground">5.8&cent;</strong> on Haiku 4.5, at
-                today&rsquo;s list prices.
+                list prices as of September 2026. That is the model calls only; it does not include
+                running the server if you host it yourself.
               </p>
               <p>
                 Rhapto defaults to the stronger model on purpose. On that same job the cheap one

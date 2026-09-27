@@ -96,12 +96,15 @@ describe("Landing, the way in", () => {
       const block = screen
         .getByRole("heading", { name: /wherever you run it/i })
         .parentElement!.textContent!;
-      expect(block).toMatch(/nothing leaves your machine/i);
-      expect(block).toMatch(/your resume and your provider key never go anywhere else/i);
+      expect(block).toMatch(/stay on your machine/i);
+      // The exception is load-bearing: a privacy claim that omits what IS sent is the defect this
+      // sentence shipped with. It must keep naming the model provider and that it happens per run.
+      expect(block).toMatch(/what does leave, on every run, is the text/i);
+      expect(block).toMatch(/model provider\s+you chose/i);
       expect(block).toMatch(/invited to/i);
       expect(block).toMatch(/your data lives on that server, encrypted/i);
       expect(block).toMatch(/walled off from every other account/i);
-      expect(block).toMatch(/you bring your own LLM key and pay only your own usage/i);
+      expect(block).toMatch(/the only usage you pay for is your own/i);
       unmount();
     }
   });
