@@ -103,7 +103,9 @@ async def test_get_falls_back_to_the_environment(client: httpx.AsyncClient) -> N
     body = (await client.get(URL)).json()
     assert body["source"] == "env" and body["key_set"] is True
     assert body["provider"] == "anthropic" and body["model"] == "claude-sonnet-5"
-    assert body["key_hint"] == "…-env"
+    # No hint on the env path: that key is the deployment's, not this user's. See C2 and
+    # `test_get_never_reports_the_deployments_key_tail_as_the_users_own` below.
+    assert body["key_hint"] is None
 
 
 async def test_put_stores_the_key_encrypted_and_never_echoes_it(
@@ -350,3 +352,69 @@ async def test_the_probe_gives_a_reasoning_model_room_to_think(client: httpx.Asy
     from rhapto.api.routers.settings import PROBE_MAX_TOKENS
 
     assert PROBE_MAX_TOKENS >= 1024, "too tight for a model that thinks before it answers"
+
+
+# --- The deployment's own key is not the user's (architecture conditions C1 and C2) ---
+#
+# Production has two accounts and one stored key. The second account has none, and both endpoints
+# below were handing it the maintainer's live key: the PUT copied it into that user's own row, and
+# the GET reported its last four characters back as if it were theirs. Both are money- and
+# tenancy-affecting, and both are closed here.
+
+
+@pytest.mark.parametrize("env_llm_key", ["sk-test-env"], indirect=True)
+async def test_put_without_a_key_never_stores_the_deployments_own_key(
+    client: httpx.AsyncClient,
+    session_factory: async_sessionmaker[AsyncSession],
+    api_user: uuid.UUID,
+) -> None:
+    """C1. A PUT with no `api_key` and no stored row must be refused, not silently satisfied from
+    the environment.
+
+    `_key_for_write`'s env fallback meant a keyless user who pressed Save on the LLM form had the
+    maintainer's key Fernet-encrypted into their own `llm_settings` row. That is a permanent,
+    self-service exemption from any cap conditioned on "has a stored key", while still spending the
+    maintainer's money -- and `_current` then reported that key's tail back to them as their own.
+    """
+    response = await _put(client, provider="anthropic", model="claude-sonnet-5")
+    assert response.status_code == 422, response.text
+    assert "Anthropic" in response.json()["detail"]
+    assert_no_key(response)
+    assert "sk-test-env" not in response.text
+
+    async with session_factory() as session:
+        assert await get_llm_settings(session, api_user) is None
+
+
+@pytest.mark.parametrize("env_llm_key", ["sk-test-env"], indirect=True)
+async def test_the_probe_may_still_use_the_deployments_key(
+    client: httpx.AsyncClient, llm_factory: FactorySpy
+) -> None:
+    """The other half of C1: `POST /settings/llm/test` keeps the env fallback deliberately.
+
+    It is the "does this work" affordance a new user needs, it stores nothing, and each probe is a
+    fraction of a cent (`PROBE_MAX_TOKENS` plus a `Ping` schema). Gating it would refuse the probe
+    of the very key someone is adding to escape the cap.
+    """
+    response = await client.post(f"{URL}/test", json={"provider": "anthropic", "model": "claude-sonnet-5"})
+    assert response.status_code == 200, response.text
+    assert response.json()["ok"] is True
+    assert llm_factory.calls == [("anthropic", "claude-sonnet-5", "sk-test-env")]
+
+
+@pytest.mark.parametrize("env_llm_key", ["sk-test-env"], indirect=True)
+async def test_get_never_reports_the_deployments_key_tail_as_the_users_own(
+    client: httpx.AsyncClient,
+) -> None:
+    """C2. On the env path the response says a key is set and where it came from -- never any part
+    of the key itself. A refusal that hides the maintainer's key is worth nothing while the
+    adjacent endpoint hands over its last four characters to anyone who asks.
+    """
+    response = await client.get(URL)
+    assert response.status_code == 200
+    body = response.json()
+    assert body["source"] == "env" and body["key_set"] is True
+    assert body["key_hint"] is None
+    # Not just the field: no substring of the env key anywhere in the body, by any route.
+    assert "sk-test-env" not in response.text
+    assert "-env" not in response.text

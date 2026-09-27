@@ -4,9 +4,11 @@ The stored key is write-only over HTTP. It goes in encrypted and comes back only
 characters; every response here is built by `_current`, so there is one place that could ever leak
 it.
 
-Key precedence on a write is body → stored key (same provider) → environment. That lets a user
-change their model without re-typing their key, and an `.env`-only deployment save a provider
-choice without pasting one.
+Key precedence is body → stored key (same provider), and then, for the connectivity probe only,
+the environment. The `PUT` deliberately stops at the stored key: a write that fell back to the
+deployment's key copied the maintainer's key into the caller's own row (see `_key_for_write`). The
+probe keeps the fallback, because it stores nothing and is what a keyless user needs in order to
+check the key they are about to add.
 """
 
 from __future__ import annotations
@@ -95,7 +97,12 @@ async def _current(session: AsyncSession, settings: Settings, user_id: uuid.UUID
         provider=config.provider,
         model=config.model,
         key_set=True,
-        key_hint=key_hint(config.api_key),
+        # C2: the deployment's own key gets no hint. `key_hint` exists so a user can recognise
+        # which of *their* keys is stored; on the env path the key is not theirs, and returning its
+        # last four characters handed every keyless account the tail of the maintainer's live
+        # production key. `source="env"` already tells the Settings page the deployment provides
+        # the key, which is the whole of what the user needs to know.
+        key_hint=key_hint(config.api_key) if config.source == "settings" else None,
         source=config.source,
         providers=provider_list(),
     )
@@ -107,7 +114,19 @@ async def _key_for_write(
     user_id: uuid.UUID,
     info: ProviderInfo,
     body_key: str | None,
+    *,
+    allow_env: bool,
 ) -> str:
+    """The key to use for this write or probe: the submitted one, then this user's stored one.
+
+    `allow_env` is the deployment's key, and it is explicit per call site rather than a default
+    (C1). `True` for the `POST /settings/llm/test` probe: that is the "does this work" affordance a
+    new user needs, it stores nothing, and each probe costs a fraction of a cent. `False` for the
+    `PUT`, which persists what it is handed -- with the fallback in place, a keyless user who saved
+    the LLM form without typing a key had the maintainer's key Fernet-encrypted into their own
+    `llm_settings` row: a stored key they never had, spending money that was never theirs, and a
+    self-service exemption from any cap conditioned on having one.
+    """
     submitted = (body_key or "").strip()
     if submitted:
         return submitted
@@ -116,9 +135,10 @@ async def _key_for_write(
     stored = await stored_llm_config(session, settings, user_id)
     if stored is not None and stored.provider == info.id:
         return stored.api_key
-    from_env = env_key_for(settings, info)
-    if from_env:
-        return from_env
+    if allow_env:
+        from_env = env_key_for(settings, info)
+        if from_env:
+            return from_env
     raise HTTPException(status_code=422, detail=f"an API key is required for {info.label}")
 
 
@@ -134,7 +154,9 @@ async def put_llm_settings(
     body: LlmSettingsIn, user_id: UserDep, session: SessionDep, settings: SettingsDep
 ) -> LlmSettingsOut:
     info = known_provider(body.provider)
-    api_key = await _key_for_write(session, settings, user_id, info, body.api_key)
+    api_key = await _key_for_write(
+        session, settings, user_id, info, body.api_key, allow_env=False
+    )
     await upsert_llm_settings(
         session,
         user_id,
@@ -174,7 +196,9 @@ async def test_llm_settings(
 ) -> LlmTestOut:
     """Ask the provider for one tiny structured answer. Nothing is stored either way."""
     info = known_provider(body.provider)
-    api_key = await _key_for_write(session, settings, user_id, info, body.api_key)
+    api_key = await _key_for_write(
+        session, settings, user_id, info, body.api_key, allow_env=True
+    )
     model = model_for(info.id, body.model)
     try:
         llm = llm_factory(info.id, model, api_key)
