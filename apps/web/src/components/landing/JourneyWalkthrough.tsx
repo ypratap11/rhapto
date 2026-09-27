@@ -8,8 +8,9 @@
  * inside `TokenGate` and at `/about` as a server component, and must stay free of client hooks.
  *
  * Nothing here is a claim about data: no API call, no `profile/` content, no numbers. The six bodies
- * describe only what `main` does today -- in particular beat 2 does not say a .docx becomes blocks by
- * itself, because that is the unmerged `resume-import` branch, not this one.
+ * were each checked against `main`'s engine rather than against the brief, because this page's whole
+ * pitch is that it does not overstate -- and understating a shipped feature is the same defect
+ * pointing the other way. Beats 2 and 5 carry comments recording what was verified and where.
  *
  * Motion is CSS transitions on classes and one inline `scaleY`; no keyframes, no animation library,
  * no new dependency. */
@@ -31,19 +32,27 @@ const BEATS = [
   {
     icon: KeyRound,
     title: "You ask for access",
-    // True for both deployments, like step 1 of the cards: the hosted instance is invite-only, and a
-    // self-hoster has nobody to ask. Saying only the first half would read as a gate to the audience
-    // that does not have one.
-    body: "The hosted instance is invite-only, so the way in is to ask. Your address goes on the allowlist and signing in is a one-time code. Running your own copy, you are already in.",
+    // True for both deployments: the hosted instance is invite-only, and a self-hoster has nobody to
+    // ask. The self-hosted clause does NOT say "you are already in" -- `TokenGate.tsx` makes only
+    // `/`, `/settings` and `/about` public and asks for the API URL and bearer token from your .env
+    // before anything else renders, which is exactly why the self-hosted CTA on this page reads
+    // "Get started" -> /settings. "Already in" would have been this page telling someone they were
+    // signed in a few hundred pixels above the button that signs them in -- the same shape as the
+    // defect this whole change exists to fix.
+    body: "The hosted instance is invite-only, so the way in is to ask. Your address goes on the allowlist and signing in is a one-time code. Running your own copy there is nobody to ask: you point Rhapto at your own instance and you are in.",
   },
   {
     icon: FileUp,
-    // Deliberately the same promise the "Bring your resume" card makes, no more: Rhapto tailors the
-    // .docx you upload in place, or composes from blocks you wrote. Automatic resume-to-blocks
-    // extraction is the `resume-import` branch and is not on `main`, so this beat must not show a
-    // document turning itself into a block library.
+    // Verified on `main`, not assumed: every uploaded .docx is parsed into role-labelled paragraphs
+    // with no LLM at all (`engine/document.py` parse_docx/classify, shown back at
+    // `profile/ResumeDocumentTab.tsx`), and `engine/import_resume.py` behind
+    // `POST /api/v1/profile/import-resume` proposes blocks, tracks and location from it. The
+    // proposal is the point of the sentence and so is the word "review": `profile/ImportResume.tsx`
+    // only writes the blocks when the reader presses the button, and the app's own copy says
+    // "Nothing is saved until you review and accept it". Human-in-the-loop again, so the caveat
+    // makes the beat stronger rather than hedging it.
     title: "You bring your resume",
-    body: "Upload a .docx and Rhapto edits that document in place, keeping your own wording. Or write a library of blocks — roles, projects, achievements — for it to compose from.",
+    body: "Upload a .docx and Rhapto labels every paragraph in it, then offers you a library of blocks drawn from it — roles, projects, achievements. You review the proposal and nothing is saved until you accept it. Or write those blocks yourself.",
   },
   {
     icon: Compass,
@@ -53,12 +62,30 @@ const BEATS = [
   {
     icon: Radar,
     title: "Jobs arrive and get scored",
-    body: "Search when you feel like it, or let Rhapto poll company boards in the background and score everything it finds against that track.",
+    // "and job aggregators" is not filler: `services/discovery/sources` registers four board
+    // pollers (Greenhouse, Lever, Ashby, Workday) and seven aggregators, and the background run is a
+    // real arq cron, not just a button.
+    body: "Search when you feel like it, or let Rhapto poll company boards and job aggregators in the background and score everything it finds against that track.",
   },
   {
     icon: FileText,
     title: "Rhapto tailors one",
-    body: "One click drafts a resume and a cover note for a single posting. The guardrails run first: a bullet it cannot trace, or a number you have not verified, never reaches the file.",
+    // Every clause checked against `engine/pipeline.py`, because the first version of this sentence
+    // said an unverified number "never reaches the file" and that is FALSE in blocks mode. What the
+    // engine actually does, in both modes:
+    //   - provenance: blocks mode catches `OrphanBulletError` around `render_docx` and sets
+    //     `docx = b""`; tune mode writes `b""` unless `report.passed`. So an untraceable bullet does
+    //     stop the file being produced, in both.
+    //   - unverified metric: blocks mode renders and persists the DOCX anyway, with
+    //     `status == "blocked"` and the violation in the report -- pinned deliberately by
+    //     `tests/unit/test_pipeline.py` ("still rendered for review; the orphan check is the only
+    //     hard stop"). What it cannot do is become ready: `routers/packages.py` 409s mark-ready on a
+    //     blocked package. Tune mode writes nothing at all.
+    // So "blocked, and it cannot be marked ready" is the strongest claim true of both, and promising
+    // the file is never produced would be this page contradicting the engine on guardrail rule 3.
+    // (Whether blocks mode should persist that DOCX at all is a live product question for the owner
+    // -- CLAUDE.md says it must not, in any mode -- but the copy has to match the code as it is.)
+    body: "One click drafts a resume and a cover note for a single posting — editing your uploaded document's own wording rather than writing over it, or composing from your blocks. The guardrails run before you see it: a bullet that cannot be traced back to something you wrote stops the file being produced at all, and a number you have not verified marks the whole package blocked and keeps it from being marked ready.",
   },
   {
     icon: MousePointerClick,

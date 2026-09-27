@@ -56,6 +56,24 @@ function currentBeat() {
   return screen.queryByRole("button", { current: "step" });
 }
 
+/** Every class in a beat's subtree that would make it invisible or hard to read.
+ *
+ * This is the one place a class name is asserted on, and deliberately: the invariant is "a beat that
+ * has not arrived is muted, never faded and never hidden", and there is no semantic signal for it.
+ * jsdom loads no CSS, so `toBeVisible()` alone cannot see a Tailwind `opacity-0` -- it only catches
+ * inline styles and the `hidden` attribute. Both checks run: the class sweep for the utility classes,
+ * `toBeVisible()` for everything else. `opacity-100` deliberately does not match.
+ *
+ * What it protects: an un-arrived beat sits at that state for the whole time a reader is stepping
+ * backwards through the journey, so faded text would put --muted-foreground below AA on the mint
+ * band, and an opacity-0 button is still focusable and still clickable.
+ */
+function hidingClasses(root: Element) {
+  return [root, ...root.querySelectorAll("*")]
+    .flatMap((node) => Array.from(node.classList))
+    .filter((name) => /^(opacity-\d{1,2}|invisible|hidden|sr-only)$/.test(name));
+}
+
 beforeEach(() => {
   observerCallbacks.length = 0;
   vi.stubGlobal("IntersectionObserver", FakeIntersectionObserver);
@@ -86,6 +104,13 @@ describe("JourneyWalkthrough", () => {
     // Nothing has played: no beat is current and every beat is pending.
     expect(currentBeat()).toBeNull();
     expect(beatStates()).toEqual(Array(6).fill("pending"));
+
+    // And a pending beat is readable, not faded out and not hidden -- the last one especially,
+    // since it carries the never-submits promise and is pending for the whole run.
+    for (const beat of screen.getAllByRole("listitem")) {
+      expect(beat.querySelector("button")).toBeVisible();
+      expect(hidingClasses(beat)).toEqual([]);
+    }
 
     scrollIntoView();
     expect(currentBeat()).toHaveTextContent(TITLES[0]);
@@ -184,12 +209,53 @@ describe("JourneyWalkthrough", () => {
     expect(beatStates()).toEqual(Array(6).fill("arrived"));
   });
 
-  it("describes only what main does: a .docx is edited in place, not turned into blocks by itself", () => {
-    // `resume-import` is unmerged. Promising automatic resume-to-blocks extraction here would make
-    // this walkthrough the one thing on the page that overstates Rhapto.
+  it("beat 2 says what main actually does: paragraphs labelled, blocks proposed, nothing saved until you accept", () => {
+    // This test previously asserted the opposite -- that a .docx is only "edited in place" -- on the
+    // false premise that resume-to-blocks import was an unmerged branch. It is on `main`
+    // (`engine/import_resume.py`, `POST /api/v1/profile/import-resume`, reachable from Settings), so
+    // the old wording hid a shipped feature and this test defended the hiding. The proposal/review
+    // half is asserted too: writing "Rhapto turns your resume into blocks" with no mention that you
+    // accept them first would swap one overstatement for another.
     render(<JourneyWalkthrough />);
     const resumeBeat = screen.getAllByRole("listitem")[1];
-    expect(resumeBeat).toHaveTextContent(/edits that document in place/i);
-    expect(resumeBeat).toHaveTextContent(/write a library of blocks/i);
+    expect(resumeBeat).toHaveTextContent(/labels every paragraph/i);
+    expect(resumeBeat).toHaveTextContent(/offers you a library of blocks drawn from it/i);
+    expect(resumeBeat).toHaveTextContent(/nothing is saved until you accept it/i);
+  });
+
+  it("beat 5 states the guardrail promise the engine actually keeps, in both tailoring modes", () => {
+    render(<JourneyWalkthrough />);
+    const tailorBeat = screen.getAllByRole("listitem")[4]!;
+    // Provenance really is a hard stop in both modes (blocks: OrphanBulletError -> docx = b"";
+    // tune: nothing written unless the report passes).
+    expect(tailorBeat).toHaveTextContent(/stops the file being produced at all/i);
+    // An unverified metric is NOT. Blocks mode renders and persists the DOCX with the number in it,
+    // marks the package blocked, and 409s mark-ready -- pinned in apps/api's own
+    // tests/unit/test_pipeline.py. "Never reaches the file" shipped here and was false; this is the
+    // assertion that stops it coming back.
+    expect(tailorBeat).toHaveTextContent(/marks the whole package blocked and keeps it from being marked ready/i);
+    expect(tailorBeat.textContent ?? "").not.toMatch(/never reaches the file|never (gets|makes it) into/i);
+    // And the tune-mode half of "one click drafts" is the reviewed card wording, not "keeping your
+    // own wording" -- tune mode rewrites whole paragraphs, it does not preserve them.
+    expect(tailorBeat).toHaveTextContent(/rather than writing over it/i);
+    expect(tailorBeat.textContent ?? "").not.toMatch(/keeping your own wording/i);
+  });
+
+  it("beat 1 does not tell a self-hoster they are already signed in", () => {
+    // TokenGate makes only /, /settings and /about public and asks for the API URL and bearer token
+    // before anything else renders, which is why this page's self-hosted CTA is "Get started" ->
+    // /settings. "You are already in" would repeat, in the other deployment, the exact defect this
+    // change exists to fix.
+    render(<JourneyWalkthrough />);
+    const firstBeat = screen.getAllByRole("listitem")[0]!;
+    expect(firstBeat).toHaveTextContent(/there is nobody to ask: you point Rhapto at your own instance/i);
+    expect(firstBeat.textContent ?? "").not.toMatch(/already in\b/i);
+  });
+
+  it("names job aggregators as well as company boards, the way the rest of the page does", () => {
+    // main registers four board pollers and seven aggregators
+    // (services/discovery/sources/__init__.py). Saying only "company boards" understated it.
+    render(<JourneyWalkthrough />);
+    expect(screen.getAllByRole("listitem")[3]).toHaveTextContent(/company boards and job aggregators/i);
   });
 });
