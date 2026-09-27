@@ -69,6 +69,8 @@ describe("Landing, the way in", () => {
     expect(line).toBeInTheDocument();
     // Nobody has committed to answering, so this line must not imply a turnaround.
     expect(line.textContent ?? "").not.toMatch(/reply|respond|get back|within \d|hour|business day/i);
+    // And no pronoun for the maintainer: the page never names them and states nobody's pronouns.
+    expect(line.textContent ?? "").not.toMatch(/\b(him|her|his|hers|he|she|they|them)\b/i);
   });
 
   it("offers a self-hoster neither sign-in nor request access, because they have nobody to ask", () => {
@@ -81,28 +83,65 @@ describe("Landing, the way in", () => {
     expect(document.querySelectorAll('a[href^="mailto:"]')).toHaveLength(0);
   });
 
-  it("tells step 1's reader how anyone gets invited, without weakening either deployment's half", () => {
-    render(<Landing />);
-    const steps = within(screen.getByRole("list", { name: /how it works/i })).getAllByRole(
-      "listitem",
-    );
-    const first = steps[0]?.textContent ?? "";
-    expect(first).toMatch(/Invites there are an allowlist the maintainer keeps by hand/i);
-    // Both halves of the reviewed privacy claim survive: the self-hosting one and the hosted one.
-    expect(first).toMatch(/nothing leaves your machine/i);
-    expect(first).toMatch(/your data lives on that server, encrypted/i);
+  it("keeps the data-residency disclosure whole, for both audiences, after the five cards went", () => {
+    // This assertion used to reach the "Get in" card via the How it works list. The cards were
+    // removed as a duplicate telling of the journey, but card 1 was never really a step -- it is the
+    // disclosure someone reads while deciding whether to upload a CV, and its wording was rewritten
+    // after a shipped defect (a privacy claim true only for self-hosters, false for anyone on a
+    // hosted instance). It moved; it did not die. Re-pointed, not deleted, and every clause is still
+    // asserted, in both modes, since neither audience may lose its half.
+    for (const hosted of [false, true]) {
+      sameOriginFlag.value = hosted;
+      const { unmount } = render(<Landing />);
+      const block = screen
+        .getByRole("heading", { name: /wherever you run it/i })
+        .parentElement!.textContent!;
+      expect(block).toMatch(/nothing leaves your machine/i);
+      expect(block).toMatch(/your resume and your provider key never go anywhere else/i);
+      expect(block).toMatch(/invited to/i);
+      expect(block).toMatch(/your data lives on that server, encrypted/i);
+      expect(block).toMatch(/walled off from every other account/i);
+      expect(block).toMatch(/you bring your own LLM key and pay only your own usage/i);
+      unmount();
+    }
   });
 
-  it("puts the animated journey inside How it works, above the five cards, and keeps both", () => {
+  it("tells the journey once: six beats, no second telling underneath them", () => {
     render(<Landing />);
     const journey = screen.getByRole("list", { name: /from asking for access to pressing send/i });
     expect(within(journey).getAllByRole("listitem")).toHaveLength(6);
-    // The cards are still there and still five, so the titles pinned by the page tests stay put.
-    expect(
-      within(screen.getByRole("list", { name: /how it works/i })).getAllByRole("listitem"),
-    ).toHaveLength(5);
-    // Six beats beside five cards is a discrepancy a reader will notice, so the page explains it.
-    expect(screen.getByText(/five steps rather than six/i)).toBeInTheDocument();
+    // The five cards said the same thing a second time and the paragraph between them existed only
+    // to excuse that. Both are gone, and neither may come back quietly.
+    expect(screen.queryByRole("list", { name: /how it works/i })).toBeNull();
+    expect(screen.queryByText(/five steps rather than six/i)).toBeNull();
+    // The section keeps an orienting sentence, though -- losing it left the h2 running straight into
+    // the animation with no prose at all.
+    expect(screen.getByText(/Six beats from a cold install/i)).toBeInTheDocument();
+  });
+
+  it("prints the request-access address as text, not only as a mailto href", () => {
+    // A visitor with no registered mail handler gets a button that does nothing; without the address
+    // in the copy there is no way to learn where to write, and this is the one path the whole change
+    // exists to create.
+    sameOriginFlag.value = true;
+    render(<Landing />);
+    expect(screen.getByText(/sign-in is an allowlist/i).textContent ?? "").toContain(
+      ACCESS_REQUEST_EMAIL,
+    );
+  });
+
+  it("drops the redundant 'already set up' line in hosted mode, keeps it where it names a different page", () => {
+    sameOriginFlag.value = true;
+    const { unmount } = render(<Landing />);
+    // In hosted mode the button beside it is "Sign in" -> /dashboard, so this sentence was a second,
+    // contradictory framing of the same destination.
+    expect(screen.queryByText(/Already set up\?/i)).toBeNull();
+    unmount();
+
+    sameOriginFlag.value = false;
+    render(<Landing />);
+    // In token mode the button goes to /settings, so it genuinely names somewhere else.
+    expect(screen.getByText(/Already set up\?/i)).toBeInTheDocument();
   });
 
   it("keeps the client boundary in the children, not in Landing", () => {

@@ -1,4 +1,5 @@
-/** Rhapto's pitch: what it does, why it is not a chatbot, the five steps, and what it costs.
+/** Rhapto's pitch: what it does, why it is a promise rather than a chatbot, the provenance demo,
+ * the six-beat walkthrough of the journey, where your data lives, and what it costs.
  *
  * Rendered at two mounts, which is why it is a component and not just a page: `/about` (its own
  * URL, linkable, readable by anyone) and `/` (its own page, `apps/web/src/app/page.tsx`, which
@@ -7,24 +8,12 @@
  * `SAME_ORIGIN_DEPLOYMENT` is a build-time constant, not a runtime read, so branching on it below
  * needs no client boundary. */
 import Link from "next/link";
-import {
-  Ban,
-  BadgeCheck,
-  Coins,
-  Compass,
-  FileUp,
-  Fingerprint,
-  Hand,
-  KeyRound,
-  ListChecks,
-  Radar,
-  Send,
-} from "lucide-react";
+import { Ban, BadgeCheck, Coins, Fingerprint, Hand, ListChecks } from "lucide-react";
 import { HeroBand } from "@/components/shell/HeroBand";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { SAME_ORIGIN_DEPLOYMENT } from "@/lib/api/client";
-import { ACCESS_REQUEST_MAILTO } from "./access";
+import { ACCESS_REQUEST_EMAIL, ACCESS_REQUEST_MAILTO } from "./access";
 import { JourneyWalkthrough } from "./JourneyWalkthrough";
 import { ProvenanceDemo } from "./ProvenanceDemo";
 
@@ -46,48 +35,6 @@ const PROMISES = [
     icon: Hand,
     title: "The last click is yours",
     body: "Rhapto opens the employer’s own page and hands you the file. There is no code path in it that submits an application, and there never will be.",
-  },
-] as const;
-
-const STEPS = [
-  {
-    icon: KeyRound,
-    title: "Get in",
-    // Must stay true for BOTH deployments. The earlier copy said "it runs on your machine — your
-    // resume and your key stay there", which is a privacy claim, and it is false for anyone invited
-    // onto a hosted instance: their resume is in that server's database and their provider key is
-    // encrypted there too. A privacy claim that is only true for half the readers is the one kind of
-    // copy that must never ship, because the people it misleads are deciding whether to upload a CV.
-    //
-    // The allowlist sentence is the other half of this task's fix: the previous body told people to
-    // sign in to an instance they had been invited to and said nothing about how anyone gets invited,
-    // which read as a closed door. It states a fact about the hosted instance, not a privacy claim,
-    // so it stays true for a self-hoster reading the sentence before it.
-    body: "Run it yourself and nothing leaves your machine — your resume and your provider key never go anywhere else. Or sign in to an instance you have been invited to, where your data lives on that server, encrypted, and walled off from every other account. Invites there are an allowlist the maintainer keeps by hand, so if you are not on it yet, asking is an email. Either way you bring your own LLM key and pay only your own usage.",
-  },
-  {
-    // Describes what `main` does TODAY. Resume -> block library is the `resume-import` branch; when
-    // that merges, this becomes "Upload a .docx and Rhapto breaks it into blocks you own, every
-    // number unverified until you confirm it." Promising it before it ships would make this page
-    // the one thing on the site that overstates what Rhapto does.
-    icon: FileUp,
-    title: "Bring your resume",
-    body: "Upload a .docx and Rhapto tailors that document in place, editing your own wording rather than writing over it. Or build a library of blocks — roles, projects, achievements — and let it compose from those.",
-  },
-  {
-    icon: Compass,
-    title: "Pick a track",
-    body: "Choose a field and a role. That is the target every job gets scored against, with curated keywords and a fit threshold you control.",
-  },
-  {
-    icon: Radar,
-    title: "Let the jobs come to you",
-    body: "Search when you want to, or let Rhapto poll company boards and job aggregators in the background and score everything it finds against your tracks.",
-  },
-  {
-    icon: Send,
-    title: "Tailor, review, apply",
-    body: "One click drafts a resume and cover note for one posting. The guardrails run before you ever see it. You read it, you decide, and you are the one who applies.",
   },
 ] as const;
 
@@ -150,11 +97,14 @@ export function Landing() {
         {SAME_ORIGIN_DEPLOYMENT ? (
           // Says out loud what the "Sign in" button cannot: there is no registration, and the reason
           // an unknown email is refused is not a bug. No response time is promised here, because
-          // nobody has committed to one.
+          // nobody has committed to one, and no pronoun either -- the maintainer is unnamed on this
+          // page and nobody's are stated on it. The address is spelled out as text as well as being
+          // the button's href: a visitor with no registered mail handler otherwise gets a button
+          // that does nothing and no way to learn where to write.
           <p className="max-w-2xl text-sm text-muted-foreground">
             Rhapto is invite-only today &mdash; sign-in is an allowlist the maintainer keeps by hand,
-            so an address that is not on it will be turned away. Requesting access emails him to add
-            yours.
+            so an address that is not on it will be turned away. Request access and an email goes to{" "}
+            {ACCESS_REQUEST_EMAIL} asking for yours to be added.
           </p>
         ) : null}
         <p className="max-w-2xl text-sm text-muted-foreground">
@@ -242,45 +192,42 @@ export function Landing() {
         </HeroBand>
       </section>
 
-      {/* The walkthrough goes first and the cards stay beneath it: the beats are the shape of the
-          thing, the cards are the detail, and the five step titles the tests pin are in the cards.
-          A 6-column grid so five cards land 3-then-2 instead of leaving a ragged hole in the last
-          row of a 3-column grid: the first three span 2 columns each, the last two span 3. */}
+      {/* The six beats are the only telling of the journey now. The five "How it works" cards that
+          used to sit under them said the same thing a second time -- three of the five were pure
+          paraphrase -- and a paragraph explaining why there were two of everything is evidence of a
+          duplication, not a fix for one. Card 1 was the exception and did not die with them: it was
+          never really a step, it is the data-residency and who-pays disclosure, and it is below. */}
       <section aria-labelledby="how-heading" className="mb-12 scroll-mt-20" id="how">
         <HeroBand tone="mint" height="tall">
           <h2 id="how-heading" className="font-heading text-2xl font-medium">
             How it works
           </h2>
+          <p className="mt-2 max-w-3xl text-sm text-muted-foreground">
+            Six beats from a cold install to an application you send yourself. The first three you
+            do once; the last three repeat, one posting at a time.
+          </p>
           <div className="mt-4 max-w-3xl">
             <JourneyWalkthrough />
           </div>
-          {/* Six beats above, five cards below, and the reason is stated rather than left as a
-              discrepancy for the reader to trip over. */}
-          <p className="mt-10 max-w-3xl text-sm text-muted-foreground">
-            The same road in words, as five steps rather than six &mdash; the last card covers both
-            the tailoring and the send. The first three you do once; the last two you repeat per job.
-          </p>
-          <ol aria-labelledby="how-heading" className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-6">
-            {STEPS.map(({ icon: Icon, title, body }, i) => (
-              <li key={title} className={i < 3 ? "lg:col-span-2" : "lg:col-span-3"}>
-                <Card className="h-full">
-                  <CardHeader>
-                    <div className="mb-1 flex items-center gap-2.5">
-                      <span
-                        aria-hidden
-                        className="flex size-7 items-center justify-center rounded-full bg-primary font-mono text-xs font-medium text-primary-foreground"
-                      >
-                        {i + 1}
-                      </span>
-                      <Icon className="size-4 text-muted-foreground" aria-hidden />
-                    </div>
-                    <CardTitle className="text-base">{title}</CardTitle>
-                  </CardHeader>
-                  <CardContent className="text-sm text-muted-foreground">{body}</CardContent>
-                </Card>
-              </li>
-            ))}
-          </ol>
+          {/* Card 1's copy, kept whole. Every clause here was written after a real shipped defect:
+              the first version claimed "it runs on your machine -- your resume and your key stay
+              there", which is a privacy claim, and false for anyone invited onto a hosted instance,
+              whose resume is in that server's database and whose provider key is encrypted there
+              too. A privacy claim true for only half the readers is the one kind of copy that must
+              never ship, because the people it misleads are deciding whether to upload a CV. It sits
+              beside the beats rather than inside one because it is not a step -- nobody does it --
+              and burying it in beat 1's body would have made the beat unreadable. */}
+          <div className="mt-8 max-w-3xl rounded-card border-l-4 border-primary bg-surface/70 px-5 py-4">
+            <h3 id="residency" className="font-heading text-lg font-medium">
+              Wherever you run it
+            </h3>
+            <p className="mt-2 text-sm text-muted-foreground">
+              Run it yourself and nothing leaves your machine &mdash; your resume and your provider
+              key never go anywhere else. On an instance you have been invited to, your data lives on
+              that server, encrypted, and walled off from every other account. Either way you bring
+              your own LLM key and pay only your own usage.
+            </p>
+          </div>
         </HeroBand>
       </section>
 
@@ -379,13 +326,19 @@ export function Landing() {
             Request access
           </a>
         ) : null}
-        <p className="text-sm text-muted-foreground">
-          Already set up? Head to the{" "}
-          <Link href="/dashboard" className="text-primary underline underline-offset-4">
-            dashboard
-          </Link>
-          .
-        </p>
+        {/* Token mode only. In access mode this sentence sat next to a "Sign in" link to the very
+            same route, which is one destination with two contradictory framings. In token mode it
+            still earns its place: the button beside it goes to /settings, so "head to the dashboard"
+            names a different page for someone who has already connected. */}
+        {SAME_ORIGIN_DEPLOYMENT ? null : (
+          <p className="text-sm text-muted-foreground">
+            Already set up? Head to the{" "}
+            <Link href="/dashboard" className="text-primary underline underline-offset-4">
+              dashboard
+            </Link>
+            .
+          </p>
+        )}
       </div>
     </>
   );

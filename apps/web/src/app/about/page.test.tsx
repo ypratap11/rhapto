@@ -46,25 +46,36 @@ describe("AboutPage", () => {
     expect(screen.queryByRole("link", { name: /connect your instance/i })).not.toBeInTheDocument();
   });
 
-  it("lays out exactly five numbered steps in order", () => {
+  it("lays out the journey as six beats, in order", () => {
+    // Was "lays out exactly five numbered steps in order", pinning the five How it works cards. Those
+    // cards were removed: they retold, a second time and more weakly, the journey the six animated
+    // beats above them already tell. The shape assertion moves to the beats rather than disappearing.
     render(<AboutPage />);
-    const steps = within(screen.getByRole("list", { name: /how it works/i })).getAllByRole(
-      "listitem",
-    );
-    expect(steps.map((li) => li.querySelector("[data-slot=card-title]")?.textContent)).toEqual([
-      "Get in",
-      "Bring your resume",
-      "Pick a track",
-      "Let the jobs come to you",
-      "Tailor, review, apply",
+    const beats = within(
+      screen.getByRole("list", { name: /from asking for access to pressing send/i }),
+    ).getAllByRole("listitem");
+    expect(beats.map((li) => li.querySelector("button")?.firstElementChild?.textContent)).toEqual([
+      "You ask for access",
+      "You bring your resume",
+      "You pick a track",
+      "Jobs arrive and get scored",
+      "Rhapto tailors one",
+      "You review and send it",
     ]);
-    // Step 1 is a privacy claim, and it is read by someone deciding whether to upload their CV. It
-    // once said only "it runs on your machine - your resume and your key stay there", which is false
-    // for anyone invited onto a hosted instance: their resume is in that server's database. Both
-    // deployments must be described, so reinstating the half-true version fails here.
-    const first = steps[0]?.textContent ?? "";
-    expect(first).toMatch(/nothing leaves your machine/i);
-    expect(first).toMatch(/invited/i);
+  });
+
+  it("still describes where your data lives, for both deployments", () => {
+    // This is the surviving half of the old five-steps test, re-pointed rather than dropped. It is a
+    // privacy claim read by someone deciding whether to upload their CV. It once said only "it runs
+    // on your machine - your resume and your key stay there", which is false for anyone invited onto
+    // a hosted instance: their resume is in that server's database. Both deployments must be
+    // described, so reinstating the half-true version still fails here. It now lives in its own
+    // block beside the beats -- it was never a step, and nobody "does" it.
+    render(<AboutPage />);
+    const residency =
+      screen.getByRole("heading", { name: /wherever you run it/i }).parentElement?.textContent ?? "";
+    expect(residency).toMatch(/nothing leaves your machine/i);
+    expect(residency).toMatch(/invited/i);
   });
 
   it("states the three guarantees that are the reason to use it", () => {
