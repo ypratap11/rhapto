@@ -16,6 +16,7 @@ import {
   Fingerprint,
   Hand,
   KeyRound,
+  ListChecks,
   Radar,
   Send,
 } from "lucide-react";
@@ -23,6 +24,7 @@ import { HeroBand } from "@/components/shell/HeroBand";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { SAME_ORIGIN_DEPLOYMENT } from "@/lib/api/client";
+import { ProvenanceDemo } from "./ProvenanceDemo";
 
 
 // The three non-negotiable product rules, written for someone who has never seen the repo. They
@@ -89,7 +91,12 @@ export function Landing() {
         <p className="text-xs font-medium tracking-[0.14em] text-muted-foreground uppercase">
           Open source &middot; Human in the loop
         </p>
-        <h1 className="max-w-3xl font-heading text-4xl leading-tight font-medium sm:text-5xl">
+        {/* Display size (item 1): a `clamp` so the same class reads as a strong headline on a
+            360px phone (clamps to the 2.75rem floor) and genuine display type on desktop (up to
+            5rem), rather than one fixed size that is either too small or overflowing. `max-w-4xl`
+            (wider than the old `max-w-3xl`) keeps the measure sane at that size -- a narrower box
+            would wrap this into three cramped lines instead of two confident ones. */}
+        <h1 className="max-w-4xl font-heading text-[clamp(2.75rem,4vw+1.75rem,5rem)] leading-[0.95] font-medium tracking-tight">
           Every application, stitched to fit.
         </h1>
         <p className="max-w-2xl text-base text-muted-foreground sm:text-lg">
@@ -170,44 +177,68 @@ export function Landing() {
         </div>
       </section>
 
+      {/* Item 2, the centrepiece: the claim two paragraphs up ("Rhapto is built so that cannot
+          happen") shown happening, on Rhapto's own output, rather than asserted a second time. All
+          interaction lives in `ProvenanceDemo`, a separate `"use client"` component -- this section
+          itself stays a plain server-rendered wrapper, same as the rest of `Landing`. */}
+      <section aria-labelledby="demo-heading" className="mb-12">
+        <HeroBand tone="sand" height="tall">
+          <p className="text-xs font-medium tracking-[0.14em] text-muted-foreground uppercase">
+            From Rhapto&rsquo;s own renderer
+          </p>
+          <h2 id="demo-heading" className="font-heading text-2xl font-medium">
+            Every bullet knows where it came from
+          </h2>
+          <p className="max-w-2xl text-sm text-muted-foreground">
+            A real fragment of what Rhapto renders, not a mockup. Each line below traces back to a
+            fact already confirmed.
+          </p>
+          <div className="mt-2">
+            <ProvenanceDemo />
+          </div>
+        </HeroBand>
+      </section>
+
       {/* A 6-column grid so five cards land 3-then-2 instead of leaving a ragged hole in the last
           row of a 3-column grid: the first three span 2 columns each, the last two span 3. */}
       <section aria-labelledby="how-heading" className="mb-12 scroll-mt-20" id="how">
-        <h2 id="how-heading" className="font-heading text-2xl font-medium">
-          How it works
-        </h2>
-        <p className="mt-2 max-w-3xl text-sm text-muted-foreground">
-          Five steps from a cold install to a resume you would put your name on. The first three you
-          do once; the last two you repeat per job.
-        </p>
-        <ol aria-labelledby="how-heading" className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-6">
-          {STEPS.map(({ icon: Icon, title, body }, i) => (
-            <li key={title} className={i < 3 ? "lg:col-span-2" : "lg:col-span-3"}>
-              <Card className="h-full">
-                <CardHeader>
-                  <div className="mb-1 flex items-center gap-2.5">
-                    <span
-                      aria-hidden
-                      className="flex size-7 items-center justify-center rounded-full bg-primary font-mono text-xs font-medium text-primary-foreground"
-                    >
-                      {i + 1}
-                    </span>
-                    <Icon className="size-4 text-muted-foreground" aria-hidden />
-                  </div>
-                  <CardTitle className="text-base">{title}</CardTitle>
-                </CardHeader>
-                <CardContent className="text-sm text-muted-foreground">{body}</CardContent>
-              </Card>
-            </li>
-          ))}
-        </ol>
+        <HeroBand tone="mint" height="tall">
+          <h2 id="how-heading" className="font-heading text-2xl font-medium">
+            How it works
+          </h2>
+          <p className="mt-2 max-w-3xl text-sm text-muted-foreground">
+            Five steps from a cold install to a resume you would put your name on. The first three
+            you do once; the last two you repeat per job.
+          </p>
+          <ol aria-labelledby="how-heading" className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-6">
+            {STEPS.map(({ icon: Icon, title, body }, i) => (
+              <li key={title} className={i < 3 ? "lg:col-span-2" : "lg:col-span-3"}>
+                <Card className="h-full">
+                  <CardHeader>
+                    <div className="mb-1 flex items-center gap-2.5">
+                      <span
+                        aria-hidden
+                        className="flex size-7 items-center justify-center rounded-full bg-primary font-mono text-xs font-medium text-primary-foreground"
+                      >
+                        {i + 1}
+                      </span>
+                      <Icon className="size-4 text-muted-foreground" aria-hidden />
+                    </div>
+                    <CardTitle className="text-base">{title}</CardTitle>
+                  </CardHeader>
+                  <CardContent className="text-sm text-muted-foreground">{body}</CardContent>
+                </Card>
+              </li>
+            ))}
+          </ol>
+        </HeroBand>
       </section>
 
       <section aria-labelledby="honest" className="mb-10">
         <h2 id="honest" className="font-heading text-2xl font-medium">
           Before you start
         </h2>
-        <div className="mt-6 grid gap-4 md:grid-cols-2">
+        <div className="mt-6 grid gap-4 md:grid-cols-3">
           <Card className="h-full">
             <CardHeader>
               <span className="mb-1 flex size-9 items-center justify-center rounded-card bg-band-sand text-foreground">
@@ -256,6 +287,27 @@ export function Landing() {
                   Send your resume, your key, or your history anywhere except the model provider you
                   picked.
                 </li>
+              </ul>
+            </CardContent>
+          </Card>
+          {/* Item 5, the ease-of-use requirement: a brand-new account has nothing in it -- one
+              track at best, zero blocks, zero documents. The owner's wife hit exactly this: signed
+              in, saw jobs, and an empty dashboard. This says, before the CTA below, what to bring so
+              that surprise doesn't happen. Two lines of intro plus a three-item list, not a wall --
+              a person who is surprised by this closes the tab instead of going to get their CV. */}
+          <Card className="h-full">
+            <CardHeader>
+              <span className="mb-1 flex size-9 items-center justify-center rounded-card bg-band-mint text-foreground">
+                <ListChecks className="size-4.5" aria-hidden />
+              </span>
+              <CardTitle className="text-base">What you need first</CardTitle>
+            </CardHeader>
+            <CardContent className="text-sm text-muted-foreground">
+              <p>A new account starts empty. Before Rhapto can produce anything, bring:</p>
+              <ul className="mt-2 list-disc space-y-1.5 pl-4 marker:text-primary">
+                <li>A resume to upload, or a few blocks written by hand</li>
+                <li>One track &mdash; a field and a role</li>
+                <li>Contact details and where you are willing to work</li>
               </ul>
             </CardContent>
           </Card>
