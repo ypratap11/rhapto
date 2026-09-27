@@ -24,6 +24,8 @@ import { HeroBand } from "@/components/shell/HeroBand";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { SAME_ORIGIN_DEPLOYMENT } from "@/lib/api/client";
+import { ACCESS_REQUEST_MAILTO } from "./access";
+import { JourneyWalkthrough } from "./JourneyWalkthrough";
 import { ProvenanceDemo } from "./ProvenanceDemo";
 
 
@@ -56,7 +58,12 @@ const STEPS = [
     // onto a hosted instance: their resume is in that server's database and their provider key is
     // encrypted there too. A privacy claim that is only true for half the readers is the one kind of
     // copy that must never ship, because the people it misleads are deciding whether to upload a CV.
-    body: "Run it yourself and nothing leaves your machine — your resume and your provider key never go anywhere else. Or sign in to an instance you have been invited to, where your data lives on that server, encrypted, and walled off from every other account. Either way you bring your own LLM key and pay only your own usage.",
+    //
+    // The allowlist sentence is the other half of this task's fix: the previous body told people to
+    // sign in to an instance they had been invited to and said nothing about how anyone gets invited,
+    // which read as a closed door. It states a fact about the hosted instance, not a privacy claim,
+    // so it stays true for a self-hoster reading the sentence before it.
+    body: "Run it yourself and nothing leaves your machine — your resume and your provider key never go anywhere else. Or sign in to an instance you have been invited to, where your data lives on that server, encrypted, and walled off from every other account. Invites there are an allowlist the maintainer keeps by hand, so if you are not on it yet, asking is an email. Either way you bring your own LLM key and pay only your own usage.",
   },
   {
     // Describes what `main` does TODAY. Resume -> block library is the `resume-import` branch; when
@@ -107,21 +114,49 @@ export function Landing() {
             `Button render={<Link/>}` forces a choice between misreporting them as role="button"
             (`nativeButton={false}`) or a dev-mode console error. Same house style, neither cost —
             the pattern JobCard and RepostNotice already settled on. */}
-        <div className="mt-2 flex flex-wrap items-center gap-3">
+        <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-3">
           {/* Review finding I3: in access mode there is nothing to "connect" -- Cloudflare Access
               already signed this visitor in, and /settings' only connection card is hidden there
               (N1), so the token-mode wording sent an invited person to a page with nothing on it,
-              away from the route that seeds their account. */}
+              away from the route that seeds their account.
+              The label is "Sign in" rather than "Open your dashboard" because until today the page
+              told people to sign in and then offered them no way to: /dashboard sits behind
+              Cloudflare Access, so following this link IS the sign-in flow. There is no /login
+              route to point at, and inventing one would 404. */}
           <Link
             href={SAME_ORIGIN_DEPLOYMENT ? "/dashboard" : "/settings"}
             className={buttonVariants({ size: "lg" })}
           >
-            {SAME_ORIGIN_DEPLOYMENT ? "Open your dashboard" : "Get started"}
+            {SAME_ORIGIN_DEPLOYMENT ? "Sign in" : "Get started"}
           </Link>
-          <a href="#how" className={buttonVariants({ size: "lg", variant: "outline" })}>
-            See the five steps
+          {/* Hosted only, and the branch is load-bearing: a self-hoster has nobody to request access
+              from -- their instance is theirs -- so offering them this would be the same class of
+              dead end the "Sign in" fix above removes. */}
+          {SAME_ORIGIN_DEPLOYMENT ? (
+            <a
+              href={ACCESS_REQUEST_MAILTO}
+              className={buttonVariants({ size: "lg", variant: "outline" })}
+            >
+              Request access
+            </a>
+          ) : null}
+          {/* Demoted from an outline button to a text link: with a second real CTA beside the
+              primary one, three buttons of equal weight would leave a stranger with no idea which
+              one is the way in. */}
+          <a href="#how" className="text-sm text-primary underline underline-offset-4">
+            See how it works
           </a>
         </div>
+        {SAME_ORIGIN_DEPLOYMENT ? (
+          // Says out loud what the "Sign in" button cannot: there is no registration, and the reason
+          // an unknown email is refused is not a bug. No response time is promised here, because
+          // nobody has committed to one.
+          <p className="max-w-2xl text-sm text-muted-foreground">
+            Rhapto is invite-only today &mdash; sign-in is an allowlist the maintainer keeps by hand,
+            so an address that is not on it will be turned away. Requesting access emails him to add
+            yours.
+          </p>
+        ) : null}
         <p className="max-w-2xl text-sm text-muted-foreground">
           A new account starts empty. You will need a resume to upload (or a few blocks written by
           hand), one track, and your contact details before Rhapto can produce anything.{" "}
@@ -207,16 +242,23 @@ export function Landing() {
         </HeroBand>
       </section>
 
-      {/* A 6-column grid so five cards land 3-then-2 instead of leaving a ragged hole in the last
+      {/* The walkthrough goes first and the cards stay beneath it: the beats are the shape of the
+          thing, the cards are the detail, and the five step titles the tests pin are in the cards.
+          A 6-column grid so five cards land 3-then-2 instead of leaving a ragged hole in the last
           row of a 3-column grid: the first three span 2 columns each, the last two span 3. */}
       <section aria-labelledby="how-heading" className="mb-12 scroll-mt-20" id="how">
         <HeroBand tone="mint" height="tall">
           <h2 id="how-heading" className="font-heading text-2xl font-medium">
             How it works
           </h2>
-          <p className="mt-2 max-w-3xl text-sm text-muted-foreground">
-            Five steps from a cold install to a resume you would put your name on. The first three
-            you do once; the last two you repeat per job.
+          <div className="mt-4 max-w-3xl">
+            <JourneyWalkthrough />
+          </div>
+          {/* Six beats above, five cards below, and the reason is stated rather than left as a
+              discrepancy for the reader to trip over. */}
+          <p className="mt-10 max-w-3xl text-sm text-muted-foreground">
+            The same road in words, as five steps rather than six &mdash; the last card covers both
+            the tailoring and the send. The first three you do once; the last two you repeat per job.
           </p>
           <ol aria-labelledby="how-heading" className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-6">
             {STEPS.map(({ icon: Icon, title, body }, i) => (
@@ -323,13 +365,20 @@ export function Landing() {
       </section>
 
       <div className="flex flex-wrap items-center gap-4 border-t border-border pt-6">
-        {/* Same mode-awareness as the hero CTA above (review finding I3). */}
+        {/* Same mode-awareness as the hero CTA above (review finding I3), and the same pair of labels:
+            someone who has read the whole page should not have to scroll back up to find the way in,
+            and should not meet a different word for the same action down here. */}
         <Link
           href={SAME_ORIGIN_DEPLOYMENT ? "/dashboard" : "/settings"}
           className={buttonVariants()}
         >
-          {SAME_ORIGIN_DEPLOYMENT ? "Open your dashboard" : "Connect your instance"}
+          {SAME_ORIGIN_DEPLOYMENT ? "Sign in" : "Connect your instance"}
         </Link>
+        {SAME_ORIGIN_DEPLOYMENT ? (
+          <a href={ACCESS_REQUEST_MAILTO} className={buttonVariants({ variant: "outline" })}>
+            Request access
+          </a>
+        ) : null}
         <p className="text-sm text-muted-foreground">
           Already set up? Head to the{" "}
           <Link href="/dashboard" className="text-primary underline underline-offset-4">

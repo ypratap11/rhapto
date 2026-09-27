@@ -33,11 +33,15 @@ describe("AboutPage", () => {
   it("points the primary CTAs at the dashboard in access mode, not the token-mode settings form", () => {
     sameOriginFlag.value = true;
     render(<AboutPage />);
-    // Both the hero and footer CTAs are mode-aware (Landing.tsx), so both read "Open your
-    // dashboard" here.
-    const dashboardLinks = screen.getAllByRole("link", { name: /open your dashboard/i });
+    // Both the hero and footer CTAs are mode-aware (Landing.tsx). The href is the assertion this
+    // test was added for (review finding I3: /settings has nothing to connect in access mode); the
+    // label is now "Sign in" rather than "Open your dashboard", because /dashboard sits behind
+    // Cloudflare Access and following it IS the sign-in flow the page had been telling people to use
+    // while offering them no way to do it. The route, and therefore this test's point, is unchanged.
+    const dashboardLinks = screen.getAllByRole("link", { name: /^sign in$/i });
     expect(dashboardLinks).toHaveLength(2);
     for (const link of dashboardLinks) expect(link).toHaveAttribute("href", "/dashboard");
+    expect(screen.queryByRole("link", { name: /open your dashboard/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: /^get started$/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: /connect your instance/i })).not.toBeInTheDocument();
   });
