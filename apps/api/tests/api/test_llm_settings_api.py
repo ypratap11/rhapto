@@ -396,7 +396,9 @@ async def test_the_probe_may_still_use_the_deployments_key(
     fraction of a cent (`PROBE_MAX_TOKENS` plus a `Ping` schema). Gating it would refuse the probe
     of the very key someone is adding to escape the cap.
     """
-    response = await client.post(f"{URL}/test", json={"provider": "anthropic", "model": "claude-sonnet-5"})
+    response = await client.post(
+        f"{URL}/test", json={"provider": "anthropic", "model": "claude-sonnet-5"}
+    )
     assert response.status_code == 200, response.text
     assert response.json()["ok"] is True
     assert llm_factory.calls == [("anthropic", "claude-sonnet-5", "sk-test-env")]

@@ -341,7 +341,9 @@ def _import_proposal() -> ResumeImport:
                 role="technical-program-manager",
             )
         ],
-        location=ImportedLocation(location_home="Denver, CO", location_preferred=[], remote_ok=None),
+        location=ImportedLocation(
+            location_home="Denver, CO", location_preferred=[], remote_ok=None
+        ),
     )
 
 

@@ -69,9 +69,7 @@ def configured_trial_limit(settings: Settings) -> int | None:
     return None if limit < 0 else limit
 
 
-async def on_deployment_key(
-    session: AsyncSession, settings: Settings, user_id: uuid.UUID
-) -> bool:
+async def on_deployment_key(session: AsyncSession, settings: Settings, user_id: uuid.UUID) -> bool:
     """True when this user's next model call would be billed to the deployment's own key.
 
     The money-critical predicate. "No stored row ⇒ the environment pays" is exact rather than
@@ -140,9 +138,7 @@ async def check_trial_allowance(
         raise TrialLimitExceededError(used, limit)
 
 
-async def consume_trial_run(
-    session: AsyncSession, settings: Settings, user_id: uuid.UUID
-) -> None:
+async def consume_trial_run(session: AsyncSession, settings: Settings, user_id: uuid.UUID) -> None:
     """Consume one run atomically, or raise `TrialLimitExceededError`.
 
     THE CALLER MUST COMMIT before making the model call. A worker killed between the claim and the

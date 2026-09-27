@@ -154,9 +154,7 @@ async def put_llm_settings(
     body: LlmSettingsIn, user_id: UserDep, session: SessionDep, settings: SettingsDep
 ) -> LlmSettingsOut:
     info = known_provider(body.provider)
-    api_key = await _key_for_write(
-        session, settings, user_id, info, body.api_key, allow_env=False
-    )
+    api_key = await _key_for_write(session, settings, user_id, info, body.api_key, allow_env=False)
     await upsert_llm_settings(
         session,
         user_id,
@@ -196,9 +194,7 @@ async def test_llm_settings(
 ) -> LlmTestOut:
     """Ask the provider for one tiny structured answer. Nothing is stored either way."""
     info = known_provider(body.provider)
-    api_key = await _key_for_write(
-        session, settings, user_id, info, body.api_key, allow_env=True
-    )
+    api_key = await _key_for_write(session, settings, user_id, info, body.api_key, allow_env=True)
     model = model_for(info.id, body.model)
     try:
         llm = llm_factory(info.id, model, api_key)
