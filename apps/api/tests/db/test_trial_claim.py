@@ -87,29 +87,45 @@ async def test_two_concurrent_claims_never_both_take_the_last_run(
 ) -> None:
     """★ The race, at the last available run. Exactly one caller may win.
 
-    Two sessions, one run left, both claim, both commit. A read-then-write implementation (SELECT
-    the count, compare it in Python, UPDATE) hands both callers a success and leaves the stored
-    value at `limit + 1` -- one extra run on the maintainer's key per concurrent pair, which is
-    what the functional spec proposed accepting. The single conditional UPDATE makes the bound zero
-    instead: Postgres takes the row lock, and the loser re-evaluates its WHERE under READ COMMITTED
-    against the winner's committed value and finds it false.
+    Sequenced rather than left to the scheduler, because a test that merely `gather`s two claims and
+    hopes they interleave passes against a broken implementation whenever the first one happens to
+    finish first -- verified: the read-then-write mutant below survived that version of this test.
 
-    This is the evidence for architecture §4 -- that no advisory lock is needed here.
+    So the interleaving is forced. A claims (its UPDATE takes the row lock and is left uncommitted),
+    B claims on its own session and blocks on that lock, A commits, and only then is B allowed to
+    finish. The single conditional UPDATE re-evaluates its WHERE under READ COMMITTED against A's
+    committed value and finds it false, so B gets None: the bound on concurrent overrun is zero extra
+    runs, not one, and no advisory lock is needed (architecture §4).
+
+    A read-then-write implementation fails here for a reason worth stating: its SELECT does not block
+    on a row lock -- MVCC hands it the pre-commit value 2 straight away -- so it decides "2 < 3, go
+    ahead", blocks only on the UPDATE, and then writes anyway once A commits. B would be told it had
+    won the run A already took.
     """
     async with session_factory() as setup:
         await _set_used(setup, user.id, LIMIT - 1)
 
-    async def claim(session: AsyncSession) -> int | None:
-        got = await claim_trial_run(session, user.id, LIMIT)
-        await session.commit()
-        return got
-
     async with session_factory() as a, session_factory() as b:
-        first, second = await asyncio.gather(claim(a), claim(b))
+        first = await claim_trial_run(a, user.id, LIMIT)
+        assert first == LIMIT, "the first claimer takes the last run"
 
-    assert sorted([first, second], key=lambda v: v is None) == [LIMIT, None], (
-        f"exactly one claimer may win the last run, got {first!r} and {second!r}"
-    )
+        second_task = asyncio.create_task(claim_trial_run(b, user.id, LIMIT))
+        # Let B reach the database and queue behind A's uncommitted row lock. Polling `pg_locks`
+        # would need a third connection; "B has not finished" is the only property the assertions
+        # below need, and it is what makes them deterministic.
+        for _ in range(100):
+            await asyncio.sleep(0.02)
+            if second_task.done():
+                break
+        assert not second_task.done(), (
+            "B must still be queued behind A's row lock, not already finished"
+        )
+
+        await a.commit()
+        second = await second_task
+        await b.commit()
+
+    assert second is None, f"only one claimer may win the last run, B also got {second!r}"
     async with session_factory() as check:
         assert await trial_runs_used(check, user.id) == LIMIT
 
