@@ -42,6 +42,7 @@ from rhapto.services.profile_sync import block_row_to_model, load_profile_from_d
 from rhapto.services.scoring import rescore_user, score_and_store
 from rhapto.services.secrets import KeyUnreadableError, SecretsError, fernet_for
 from rhapto.services.storage import PackageStorage
+from rhapto.services.trial import TrialLimitExceededError, consume_trial_run
 
 logger = logging.getLogger("rhapto.worker")
 
@@ -57,7 +58,7 @@ LlmResolver = Callable[[AsyncSession, Settings, uuid.UUID], Awaitable[LLMProvide
 
 # A provider key the user has to fix: the task fails with the message alone, because the exception
 # class name tells them nothing they can act on.
-SETUP_ERRORS = (LLMNotConfiguredError, SecretsError, ProviderAuthError)
+SETUP_ERRORS = (LLMNotConfiguredError, SecretsError, ProviderAuthError, TrialLimitExceededError)
 
 
 @asynccontextmanager
@@ -119,7 +120,9 @@ async def tailor_job(ctx: dict[str, Any], task_id: str) -> None:
             task_repo.mark_running(active_task)
             await session.commit()
             user_id = active_task.user_id
-            settings = get_settings()
+            # ctx first (set by on_startup, and by the API tests' worker_ctx fixture); the
+            # `get_settings()` fallback keeps a hand-built ctx working. See worker/main.py.
+            settings: Settings = ctx.get("settings") or get_settings()
             secrets = await provider_secrets(session, settings, user_id)
             # Per task, not per worker: which provider runs this depends on whose task it is.
             resolver: LlmResolver = ctx.get("llm_resolver") or resolve_llm
@@ -163,6 +166,23 @@ async def tailor_job(ctx: dict[str, Any], task_id: str) -> None:
                 task_repo.set_step(active_task, step)
                 await session.commit()
                 await bus.publish(channel, {"event": "progress", "step": step})
+
+            # Money is about to be spent. Claim one run and get the claim COMMITTED before the
+            # first model call: a worker killed mid-run must not hand out a free one, and there is
+            # deliberately no refund path. Placed after the job, profile and (tune-mode) document
+            # loads, so a run that dies on a missing document or an unimportable profile burns
+            # nothing. The marker on the task row makes an arq re-delivery idempotent -- a retry
+            # re-runs the pipeline but must not be charged twice. Dict reassignment, not in-place
+            # mutation, matching `task_repo.set_step`: a plain JSONB column does not track in-place
+            # writes. Not inside `resolve_llm`, because that is swappable through
+            # ctx["llm_resolver"] -- a gate hidden in there is a gate the tests replace.
+            if not active_task.progress_json.get("trial_claimed"):
+                await consume_trial_run(session, settings, user_id)
+                active_task.progress_json = {
+                    **active_task.progress_json,
+                    "trial_claimed": True,
+                }
+                await session.commit()
 
             result = await tailor(
                 TailorRequest(

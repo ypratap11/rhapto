@@ -16,6 +16,7 @@ from rhapto.engine.types import EngineError, ProfileError
 from rhapto.services.jobtext import JobTextError
 from rhapto.services.llm import KEY_UNREADABLE_MESSAGE, LLMNotConfiguredError
 from rhapto.services.secrets import KeyUnreadableError, SecretsError
+from rhapto.services.trial import TrialLimitExceededError
 
 PROBLEM = "application/problem+json"
 logger = logging.getLogger("rhapto.api")
@@ -94,6 +95,25 @@ def install_error_handlers(app: FastAPI) -> None:
         # 409, not 422: the request was fine, the account is not set up yet. `code` lets the web
         # app route the user to Settings instead of showing a bare message.
         return problem(409, "Conflict", str(exc), code="llm_not_configured")
+
+    @app.exception_handler(TrialLimitExceededError)
+    async def _trial_limit(request: Request, exc: TrialLimitExceededError) -> JSONResponse:
+        # 409, not 402 or 429: the request was fine and the account is not out of *rate*, it is out
+        # of allowance until a setting changes -- the same shape as llm_not_configured, and the web
+        # app already routes a 409 with a `code` to Settings. Nothing here names the provider, the
+        # model, the key or an env var; `used` and `limit` are the user's own allowance, which the
+        # product is obliged to disclose (a refusal that will not say how many runs you had is not
+        # legible to a non-technical person). No `providers` list, unlike the SecretsError handler:
+        # the user's route is Settings, not a picker. Nothing is logged -- the exception carries two
+        # integers and a fixed sentence, and there is no failure here worth a line.
+        return problem(
+            409,
+            "Conflict",
+            str(exc),
+            code="trial_limit_reached",
+            used=exc.used,
+            limit=exc.limit,
+        )
 
     @app.exception_handler(SecretsError)
     async def _secrets(request: Request, exc: SecretsError) -> JSONResponse:

@@ -30,6 +30,7 @@ from rhapto.db.repositories.profile import get_track
 from rhapto.services.enqueue import Enqueuer
 from rhapto.services.eventbus import EventBus, task_channel
 from rhapto.services.llm import resolve_llm_config
+from rhapto.services.trial import check_trial_allowance
 
 router = APIRouter()
 FINISHED = {"succeeded", "failed"}
@@ -83,6 +84,12 @@ async def tailor_job_endpoint(
     # "set up your LLM in Settings" (see api.errors). Last of the checks, so a request that is also
     # malformed hears about that first.
     await resolve_llm_config(session, settings, user_id)
+    # And then: is this account still allowed to spend the DEPLOYMENT's key? Read-only -- nothing is
+    # consumed here and the worker's claim is the enforcement. Ordering is deliberate: a user with no
+    # key anywhere keeps hearing the 409 above, so the trial refusal is unreachable on a deployment
+    # that has no key of its own to protect. No task row, nothing enqueued: the person gets an
+    # immediate, explainable answer instead of a task that fails a minute later.
+    await check_trial_allowance(session, settings, user_id)
     # The worker loads the document itself (the bytes never travel through the task row), so
     # all the request carries is the resolved mode.
     mode = body.mode or ("tune" if has_document else "blocks")

@@ -50,6 +50,7 @@ from rhapto.services.profile_sync import (
 )
 from rhapto.services.storage import PackageStorage
 from rhapto.services.taxonomy import find_field, find_role, validate_track_taxonomy
+from rhapto.services.trial import consume_trial_run
 
 logger = logging.getLogger(__name__)
 
@@ -318,7 +319,7 @@ async def import_resume_endpoint(
     session: SessionDep,
     settings: SettingsDep,
 ) -> ResumeImportOut:
-    """Parse an uploaded resume into a proposed profile. Writes nothing.
+    """Parse an uploaded resume into a proposed profile. Writes nothing but the trial claim.
 
     The user reviews the proposal and accepts it through the existing block, track and answer
     endpoints, so there is exactly one code path that writes a profile.
@@ -337,6 +338,12 @@ async def import_resume_endpoint(
         ) from exc
 
     llm = await resolve_llm(session, settings, user_id)
+    # This endpoint spends a provider key synchronously, on the request path, on a whole uploaded
+    # resume -- and it writes no package row, so any mechanism that counted packages would leave it
+    # both invisible and unbounded. Same allowance, same sentence, same 409 as the tailoring path.
+    # The claim is committed before the call, not after it.
+    await consume_trial_run(session, settings, user_id)
+    await session.commit()
     try:
         proposal, _usage = await import_resume(document, llm)
     except ValueError as exc:
