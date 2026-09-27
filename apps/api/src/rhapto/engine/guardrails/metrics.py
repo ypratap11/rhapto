@@ -140,6 +140,9 @@ def check_metrics(ctx: GuardrailContext) -> list[Violation]:
             continue
         if not block.verified:
             message = (
+                # This exact wording is quoted on the public landing page
+                # (apps/web/src/components/landing/ProvenanceDemo.tsx) as proof the product refuses
+                # invented metrics. test_message_wording_is_exact pins it; change both or neither.
                 f"block {block.id!r} is not verified but the text contains "
                 f"metric(s): {', '.join(offending)}"
             )

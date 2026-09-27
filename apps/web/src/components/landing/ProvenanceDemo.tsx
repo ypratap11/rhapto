@@ -34,9 +34,13 @@ const ENTRIES = [
 ] as const;
 
 // Attached to ENTRIES[1] (Acme Analytics) when the toggle is on: a second bullet on that entry
-// that no verified block supports. The path has to match the document actually rendered above --
+// that no verified block supports. The path has to match the document actually rendered above:
 // entry index 1, and bullet index 1 because that entry renders exactly one real bullet. A path
-// pointing at a bullet the reader cannot count to is the one thing this demo cannot afford. Message and path shape match what
+// pointing at a bullet the reader cannot count to is the one thing this demo cannot afford.
+//
+// The block id names a block that is deliberately NOT in the document -- nothing from it was
+// rendered, because it is not verified. The verified reveals show their own block ids so the
+// reader has something to reconcile this one against. Message and path shape match what
 // `apps/api/src/rhapto/engine/guardrails/metrics.py::check_metrics` actually produces --
 // `f"block {block.id!r} is not verified but the text contains metric(s): {offending}"` -- not
 // invented copy.
@@ -113,9 +117,12 @@ export function ProvenanceDemo() {
                     id={sourceId}
                     className="mt-1.5 ml-2 rounded-card border border-diff-add/30 bg-diff-add-bg px-3 py-2.5 text-xs"
                   >
-                    <p className="flex items-center gap-1.5 font-mono font-medium text-diff-add">
-                      <BadgeCheck aria-hidden className="size-3.5" />
-                      verified: true
+                    <p className="flex flex-wrap items-center gap-x-2 gap-y-1 font-mono font-medium text-diff-add">
+                      <span className="flex items-center gap-1.5">
+                        <BadgeCheck aria-hidden className="size-3.5" />
+                        verified: true
+                      </span>
+                      <span className="font-normal text-foreground/70">block: {entry.id}</span>
                     </p>
                     <p className="mt-1 text-foreground/80">
                       {entry.org} &middot; {entry.role} &middot; {entry.period}
@@ -134,7 +141,10 @@ export function ProvenanceDemo() {
                       <>
                         <p className="flex items-start gap-2 px-2 text-sm text-muted-foreground">
                           <span aria-hidden className="size-3.5 shrink-0" />
-                          <span className="line-through">{INVENTED.bullet}</span>
+                          <span>
+                            <span className="sr-only">Rejected draft bullet: </span>
+                            <span className="line-through">{INVENTED.bullet}</span>
+                          </span>
                         </p>
                         <div className="mt-1.5 ml-2 rounded-card border border-destructive/30 bg-destructive/5 px-3 py-2.5 text-xs">
                           <p className="flex items-center gap-1.5 font-mono font-medium text-destructive">

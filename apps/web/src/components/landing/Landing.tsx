@@ -123,8 +123,8 @@ export function Landing() {
           </a>
         </div>
         <p className="max-w-2xl text-sm text-muted-foreground">
-          A new account starts empty. You will need a resume to upload, one track, and your contact
-          details before Rhapto can produce anything.{" "}
+          A new account starts empty. You will need a resume to upload (or a few blocks written by
+          hand), one track, and your contact details before Rhapto can produce anything.{" "}
           <a href="#honest" className="text-primary underline underline-offset-4">
             What that means
           </a>

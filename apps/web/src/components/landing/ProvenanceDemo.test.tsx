@@ -27,6 +27,9 @@ describe("ProvenanceDemo", () => {
     expect(region).toHaveClass("bg-diff-add-bg");
     const source = within(region!);
     expect(source.getByText("verified: true")).toBeInTheDocument();
+    // The refusal below names a block id, so a verified bullet has to show its own for the reader to
+    // have anything to reconcile it against. This is also product rule 2 made visible.
+    expect(source.getByText("block: acme-migration")).toBeInTheDocument();
     expect(source.getByText(/Acme Analytics/)).toBeInTheDocument();
     expect(source.getByText(/Senior Data Program Manager/)).toBeInTheDocument();
     expect(source.getByText(/2019.2023/)).toBeInTheDocument();
@@ -71,6 +74,10 @@ describe("ProvenanceDemo", () => {
     await user.click(toggle);
     expect(toggle).toHaveAttribute("aria-checked", "true");
     expect(screen.getByText(/increased forecast accuracy by 42%/i)).toBeInTheDocument();
+    // `line-through` is CSS; the accessibility tree never sees it, and role="status" announces this
+    // region atomically in DOM order -- fabricated sentence first. Without this text a screen reader
+    // states the unverified metric as plain prose before saying it was blocked.
+    expect(screen.getByText(/Rejected draft bullet:/)).toBeInTheDocument();
     expect(screen.getByText("no-unverified-metrics")).toBeInTheDocument();
     expect(screen.getByText("sections[0].entries[1].bullets[1]")).toBeInTheDocument();
     expect(
