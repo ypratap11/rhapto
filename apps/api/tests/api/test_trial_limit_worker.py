@@ -29,10 +29,11 @@ from rhapto.db.repositories.jobs import create_job
 from rhapto.db.repositories.llm_settings import upsert_llm_settings
 from rhapto.db.repositories.users import get_or_create_user, trial_runs_used
 from rhapto.engine.compose import AnswerItem, ComposeOutput
+from rhapto.engine.providers.errors import ProviderAuthError
 from rhapto.engine.providers.llm import LLMProvider, Message, StructuredResult, SystemBlock, T
 from rhapto.services.secrets import encrypt
 from rhapto.services.trial import trial_limit_message
-from rhapto.worker.tasks import tailor_job
+from rhapto.worker.tasks import SHARED_KEY_REJECTED_MESSAGE, tailor_job
 
 LIMIT = 3
 EMAIL = "worker-trial@example.com"
@@ -84,6 +85,25 @@ class ExplodingLLM:
     ) -> StructuredResult[T]:
         self.calls.append(output_schema.__name__)
         raise RuntimeError("the provider fell over mid-run")
+
+
+class RejectingLLM:
+    """Rejects the key with the provider's own words, the way a real SDK does."""
+
+    model: str | None = None
+
+    def __init__(self, message: str) -> None:
+        self.message = message
+
+    async def complete_structured(
+        self,
+        *,
+        system: list[SystemBlock],
+        messages: list[Message],
+        output_schema: type[T],
+        max_tokens: int = 4096,
+    ) -> StructuredResult[T]:
+        raise ProviderAuthError("openrouter", self.message)
 
 
 @pytest.fixture
@@ -190,6 +210,83 @@ async def test_the_worker_refuses_a_queued_task_without_spending_anything(
     for leak in (ENV_KEY, ENV_KEY[-4:], "anthropic", "claude-sonnet-5", "ANTHROPIC_API_KEY"):
         assert leak not in str(published), f"the event bus must not carry {leak!r}"
         assert leak not in (row.error or "")
+
+
+@pytest.mark.usefixtures("worker_profile")
+async def test_a_rejected_shared_key_does_not_relay_the_maintainers_provider_message(
+    worker_ctx: dict[str, Any],
+    session_factory: async_sessionmaker[AsyncSession],
+    trial_user: uuid.UUID,
+    event_bus: Any,
+) -> None:
+    """A ProviderAuthError carries the SDK's own words, and those words are the account holder's.
+
+    Right for someone debugging their own key; wrong when the key is the deployment's, because the
+    sentence then describes the MAINTAINER's provider account -- its billing state, its quota, its
+    balance. The owner of this deployment saw his own OpenRouter credit balance surface exactly this
+    way on 2026-09-27. An invited user would have read the same sentence about an account they can
+    neither see nor act on.
+
+    `trial_user` has no stored key, so it runs on the deployment's. The provider's text must not
+    reach them by any route: not the task row, not the event stream.
+    """
+    leaky = (
+        "402 This request requires more credits. Account acme-corp has $0.13 remaining; "
+        "top up at https://openrouter.ai/credits"
+    )
+    rejecting = RejectingLLM(leaky)
+
+    async def resolver(session: Any, settings: Any, user_id: uuid.UUID) -> LLMProvider:
+        return rejecting  # type: ignore[return-value]
+
+    worker_ctx["llm_resolver"] = resolver
+    task_id = await _queued_task(session_factory, trial_user)
+
+    await tailor_job(worker_ctx, task_id)
+
+    row = await _task(session_factory, task_id)
+    assert row.status == "failed"
+    assert row.error == SHARED_KEY_REJECTED_MESSAGE, row.error
+
+    published = str([event for _channel, event in event_bus.published])
+    for leak in ("402", "credits", "acme-corp", "0.13", "openrouter.ai"):
+        assert leak not in (row.error or ""), f"the task row must not carry {leak!r}"
+        assert leak not in published, f"the event bus must not carry {leak!r}"
+
+
+@pytest.mark.usefixtures("worker_profile")
+async def test_a_rejected_own_key_still_tells_the_user_what_the_provider_said(
+    worker_ctx: dict[str, Any],
+    session_factory: async_sessionmaker[AsyncSession],
+    trial_user: uuid.UUID,
+    api_settings: Any,
+) -> None:
+    """The other half. Without it the fix could be "suppress the provider message" outright, and a
+    user debugging their OWN key would lose the only sentence that tells them what is wrong.
+    """
+    async with session_factory() as session:
+        await upsert_llm_settings(
+            session,
+            trial_user,
+            provider="anthropic",
+            model="claude-sonnet-5",
+            api_key_encrypted=encrypt(api_settings, OWN_KEY),
+        )
+        await session.commit()
+
+    rejecting = RejectingLLM("invalid_api_key: check the key you entered")
+
+    async def resolver(session: Any, settings: Any, user_id: uuid.UUID) -> LLMProvider:
+        return rejecting  # type: ignore[return-value]
+
+    worker_ctx["llm_resolver"] = resolver
+    task_id = await _queued_task(session_factory, trial_user)
+
+    await tailor_job(worker_ctx, task_id)
+
+    row = await _task(session_factory, task_id)
+    assert row.status == "failed"
+    assert "invalid_api_key" in (row.error or ""), row.error
 
 
 @pytest.mark.usefixtures("worker_profile")

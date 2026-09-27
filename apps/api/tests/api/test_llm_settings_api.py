@@ -219,6 +219,25 @@ async def test_post_test_uses_the_stored_key_when_the_body_has_none(
     assert llm_factory.calls == [("openai", "gpt-5", KEY)]
 
 
+@pytest.mark.parametrize("env_llm_key", ["sk-test-env"], indirect=True)
+async def test_post_test_will_not_probe_on_the_deployments_key(
+    client: httpx.AsyncClient, llm_factory: FactorySpy
+) -> None:
+    """The probe used to fall back to the environment, which made it an unbounded money path.
+
+    QA drove 25 probes past an exhausted trial allowance: every one returned 200 and every one was
+    billed to the deployment, because nothing counts a probe and this API has no rate limit at all.
+    A user with no key of their own has nothing of their own to test, so the truthful answer is to
+    ask for one rather than quietly spend someone else's. The factory must not be reached.
+    """
+    response = await client.post(
+        f"{URL}/test", json={"provider": "anthropic", "model": "claude-sonnet-5"}
+    )
+    assert response.status_code == 422, response.text
+    assert "API key is required" in response.json()["detail"]
+    assert llm_factory.calls == []
+
+
 async def test_post_test_reports_a_rejected_key_as_not_ok(
     client: httpx.AsyncClient, llm_factory: FactorySpy
 ) -> None:
@@ -387,21 +406,27 @@ async def test_put_without_a_key_never_stores_the_deployments_own_key(
 
 
 @pytest.mark.parametrize("env_llm_key", ["sk-test-env"], indirect=True)
-async def test_the_probe_may_still_use_the_deployments_key(
+async def test_the_probe_still_works_for_a_key_the_user_is_adding(
     client: httpx.AsyncClient, llm_factory: FactorySpy
 ) -> None:
-    """The other half of C1: `POST /settings/llm/test` keeps the env fallback deliberately.
+    """This test used to assert the opposite, and its reasoning did not survive checking.
 
-    It is the "does this work" affordance a new user needs, it stores nothing, and each probe is a
-    fraction of a cent (`PROBE_MAX_TOKENS` plus a `Ping` schema). Gating it would refuse the probe
-    of the very key someone is adding to escape the cap.
+    It read: gating the probe "would refuse the probe of the very key someone is adding to escape
+    the cap". It would not. A key being added arrives in the request body and takes the `submitted`
+    branch of `_key_for_write` long before any fallback -- which is what this test now proves. The
+    only probe the change refuses is one with no key in the body and none stored, i.e. a probe of
+    the DEPLOYMENT's key, which is not the user's to test and which nothing counted or rate-limited.
+    The affordance the original test set out to protect is intact; what it also protected, without
+    saying so, was an unbounded charge to the maintainer.
     """
     response = await client.post(
-        f"{URL}/test", json={"provider": "anthropic", "model": "claude-sonnet-5"}
+        f"{URL}/test",
+        json={"provider": "anthropic", "model": "claude-sonnet-5", "api_key": "sk-mine"},
     )
     assert response.status_code == 200, response.text
     assert response.json()["ok"] is True
-    assert llm_factory.calls == [("anthropic", "claude-sonnet-5", "sk-test-env")]
+    assert llm_factory.calls == [("anthropic", "claude-sonnet-5", "sk-mine")]
+    assert "sk-test-env" not in response.text
 
 
 @pytest.mark.parametrize("env_llm_key", ["sk-test-env"], indirect=True)

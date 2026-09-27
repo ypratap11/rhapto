@@ -42,7 +42,11 @@ from rhapto.services.profile_sync import block_row_to_model, load_profile_from_d
 from rhapto.services.scoring import rescore_user, score_and_store
 from rhapto.services.secrets import KeyUnreadableError, SecretsError, fernet_for
 from rhapto.services.storage import PackageStorage
-from rhapto.services.trial import TrialLimitExceededError, consume_trial_run
+from rhapto.services.trial import (
+    TrialLimitExceededError,
+    consume_trial_run,
+    on_deployment_key,
+)
 
 logger = logging.getLogger("rhapto.worker")
 
@@ -59,6 +63,13 @@ LlmResolver = Callable[[AsyncSession, Settings, uuid.UUID], Awaitable[LLMProvide
 # A provider key the user has to fix: the task fails with the message alone, because the exception
 # class name tells them nothing they can act on.
 SETUP_ERRORS = (LLMNotConfiguredError, SecretsError, ProviderAuthError, TrialLimitExceededError)
+
+# Shown instead of the provider's own words when the rejected key belongs to the deployment rather
+# than to the person reading it. Names no provider, no model, no account and no balance.
+SHARED_KEY_REJECTED_MESSAGE = (
+    "This instance's shared LLM key was refused by its provider. Add your own key in Settings to "
+    "keep going, or ask whoever runs this instance to check it."
+)
 
 
 @asynccontextmanager
@@ -252,6 +263,17 @@ async def tailor_job(ctx: dict[str, Any], task_id: str) -> None:
             # re-enter-your-key wording the API sends. Every other SecretsError is the operator's
             # to fix and keeps its own message, exactly as `api/errors.py` decides it.
             reportable = KEY_UNREADABLE_MESSAGE if isinstance(exc, KeyUnreadableError) else str(exc)
+            # A ProviderAuthError carries the SDK's own message, which is the right thing to show
+            # someone debugging THEIR key and the wrong thing entirely when the key is the
+            # deployment's: it is the maintainer's provider account talking -- billing state,
+            # quota, project names. The owner saw his own OpenRouter credit balance this way; an
+            # invited user would have seen the same sentence about an account they cannot see, act
+            # on, or top up. Keep the detail in the task row for the operator; tell the user the one
+            # thing that is both true and theirs to act on.
+            if isinstance(exc, ProviderAuthError) and await on_deployment_key(
+                session, settings, user_id
+            ):
+                reportable = SHARED_KEY_REJECTED_MESSAGE
             detail = reportable if isinstance(exc, SETUP_ERRORS) else f"{type(exc).__name__}: {exc}"
             if failed_tid is not None:
                 failed_task = await session.get(Task, failed_tid)

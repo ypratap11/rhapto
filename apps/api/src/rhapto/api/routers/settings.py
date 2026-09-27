@@ -120,12 +120,19 @@ async def _key_for_write(
     """The key to use for this write or probe: the submitted one, then this user's stored one.
 
     `allow_env` is the deployment's key, and it is explicit per call site rather than a default
-    (C1). `True` for the `POST /settings/llm/test` probe: that is the "does this work" affordance a
-    new user needs, it stores nothing, and each probe costs a fraction of a cent. `False` for the
-    `PUT`, which persists what it is handed -- with the fallback in place, a keyless user who saved
-    the LLM form without typing a key had the maintainer's key Fernet-encrypted into their own
-    `llm_settings` row: a stored key they never had, spending money that was never theirs, and a
+    (C1). Now `False` at BOTH call sites, and no caller passes `True`.
+
+    The `PUT` persists what it is handed: with the fallback in place, a keyless user who saved the
+    LLM form without typing a key had the maintainer's key Fernet-encrypted into their own
+    `llm_settings` row -- a stored key they never had, spending money that was never theirs, and a
     self-service exemption from any cap conditioned on having one.
+
+    The `POST /settings/llm/test` probe used to allow it, on the reasoning that a probe costs a
+    fraction of a cent. That reasoning has no count side: QA drove 25 probes past an exhausted trial
+    allowance, every one returned 200, and every one was billed to the deployment. There is no rate
+    limit anywhere in this API. A user testing a key they typed still tests their own; a user with a
+    stored key still tests that; a user with neither has nothing of their own to test, and asking
+    them for a key is the truthful answer rather than quietly spending someone else's.
     """
     submitted = (body_key or "").strip()
     if submitted:
@@ -194,7 +201,7 @@ async def test_llm_settings(
 ) -> LlmTestOut:
     """Ask the provider for one tiny structured answer. Nothing is stored either way."""
     info = known_provider(body.provider)
-    api_key = await _key_for_write(session, settings, user_id, info, body.api_key, allow_env=True)
+    api_key = await _key_for_write(session, settings, user_id, info, body.api_key, allow_env=False)
     model = model_for(info.id, body.model)
     try:
         llm = llm_factory(info.id, model, api_key)
