@@ -18,10 +18,30 @@ set -uo pipefail
 
 HOST="${RHAPTO_HOST_URL:-https://rhapto.augaster.com}"
 
-# Public: the product's own shop window. No session required, nothing user-specific rendered.
-PUBLIC_PATHS=(/ /about)
-# Protected: every path that renders or returns somebody's data.
-PROTECTED_PATHS=(/jobs /pipeline /profile /resumes /settings /dashboard /api/v1/me /api/v1/dashboard /api/v1/jobs)
+# Both lists come from apps/web/src/lib/edge-visibility.json, which is also what
+# apps/web/src/lib/edge-visibility.test.ts asserts every route in the app is classified by. One
+# declaration, two enforcement points: the test fails at commit time when a route is unclassified,
+# this script fails at deploy time when Cloudflare does not match the declaration. Hardcoding the
+# lists here would let them drift from the app, and the whole risk of the prefix-based Access
+# configuration is a route nobody remembered.
+VISIBILITY="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/apps/web/src/lib/edge-visibility.json"
+[[ -f "$VISIBILITY" ]] || { echo "FATAL: $VISIBILITY not found" >&2; exit 1; }
+read -r -a PUBLIC_PATHS <<< "$(node -e 'const v=require(process.argv[1]);process.stdout.write(v.publicAtEdge.join(" "))' "$VISIBILITY")"
+read -r -a PROTECTED_PATHS <<< "$(node -e 'const v=require(process.argv[1]);process.stdout.write(v.protectedAtEdge.join(" "))' "$VISIBILITY")"
+[[ ${#PUBLIC_PATHS[@]} -gt 0 && ${#PROTECTED_PATHS[@]} -gt 0 ]] || { echo "FATAL: could not read the route lists" >&2; exit 1; }
+
+# Nested probes, appended to the protected set. Access matches path PREFIXES, so a single `/jobs` row
+# is supposed to cover an individual job and its package. "Supposed to" is why these are here: if
+# prefix matching ever stops covering sub-paths, seven rows would leave every job page world-readable
+# while the seven top-level checks above all still passed.
+PROTECTED_PATHS+=(
+  "/jobs/11111111-1111-1111-1111-111111111111"
+  "/jobs/11111111-1111-1111-1111-111111111111/packages/22222222-2222-2222-2222-222222222222"
+  "/pipeline/board"
+  "/api/v1/me"
+  "/api/v1/dashboard"
+  "/api/v1/profile/answers"
+)
 
 hdr="$(mktemp)"; body="$(mktemp)"
 trap 'rm -f "$hdr" "$body"' EXIT

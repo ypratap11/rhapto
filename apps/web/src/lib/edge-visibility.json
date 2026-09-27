@@ -1,0 +1,15 @@
+{
+  "_why": "The single declaration of which routes Cloudflare Access protects. Read by edge-visibility.test.ts, which fails when a route exists that is in neither list, and by scripts/check-access-boundary.sh, which verifies the live site matches. Adding a route to the app without classifying it here is a test failure rather than a silently public page.",
+  "_notPublicRoutes": "This is NOT TokenGate's PUBLIC_ROUTES. That set is about in-app gating and includes /settings so a self-hoster can reach the connection screen. This set is the Cloudflare bypass list, and /settings is deliberately absent from it: it is reachable in-app without a session but must never be reachable from the internet without one.",
+  "_whenYouAddARoute": "Add its top-level segment to protectedAtEdge here, AND add rhapto.augaster.com/<segment> to the destinations of the Cloudflare application that carries the Email Policy. The test catches the first omission; scripts/check-access-boundary.sh catches the second.",
+  "publicAtEdge": ["/", "/about"],
+  "protectedAtEdge": [
+    "/dashboard",
+    "/jobs",
+    "/pipeline",
+    "/profile",
+    "/resumes",
+    "/settings",
+    "/api"
+  ]
+}
