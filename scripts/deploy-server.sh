@@ -21,6 +21,18 @@ DEST="${RHAPTO_DEST:-/opt/rhapto}"
 # `HEAD` once meant a feature branch with an unapplied migration was one keystroke from production
 # because a rebase had left that branch checked out.
 REF="${RHAPTO_REF:-origin/main}"
+
+# Which ssh binary. On Windows this matters and the failure is baffling without knowing why: Git
+# Bash's /usr/bin/ssh cannot reach the Windows ssh-agent (SSH_AUTH_SOCK is unset; the agent lives
+# behind a named pipe), so it offers the public key, the server ACCEPTS it, and authentication then
+# fails anyway because the usable private key exists only in the agent -- reported simply as
+# "Permission denied (publickey)". An interactive shell resolves ssh.exe and works, while this
+# script, a non-interactive child, resolved /usr/bin/ssh and did not. Diagnosed by comparing the two
+# `ssh -v` auth trails: the working one says "agent returned 1 keys", the failing one does not.
+SSH="${RHAPTO_SSH:-ssh}"
+if [[ -x /c/Windows/System32/OpenSSH/ssh.exe ]]; then
+  SSH=/c/Windows/System32/OpenSSH/ssh.exe
+fi
 SERVICES=("${@:-web}")
 
 cd "$(git rev-parse --show-toplevel)"
@@ -45,18 +57,18 @@ read -r -p "    Deploy this to ${HOST}:${DEST}? [y/N] " reply
 
 echo "==> Backing up the files about to be replaced"
 BACKUP="/root/rhapto-predeploy-$(date -u +%Y%m%dT%H%M%SZ)"
-ssh "$HOST" "cp -a '$DEST' '$BACKUP' && echo '    backup: $BACKUP'"
+"$SSH" "$HOST" "cp -a '$DEST' '$BACKUP' && echo '    backup: $BACKUP'"
 
 echo "==> Syncing tracked source (excluding .env, profile/, .git)"
 # git archive gives exactly the tracked tree at REF — no working-tree edits, no build output, no
 # gitignored data, and in particular no profile/ even if it exists locally.
-git archive --format=tar "$REF" | ssh "$HOST" "cd '$DEST' && tar -xf - --exclude='.env' --exclude='profile/*'"
+git archive --format=tar "$REF" | "$SSH" "$HOST" "cd '$DEST' && tar -xf - --exclude='.env' --exclude='profile/*'"
 
 echo "==> Rebuilding: ${SERVICES[*]}"
-ssh "$HOST" "cd '$DEST' && docker compose build ${SERVICES[*]} && docker compose up -d ${SERVICES[*]}"
+"$SSH" "$HOST" "cd '$DEST' && docker compose build ${SERVICES[*]} && docker compose up -d ${SERVICES[*]}"
 
 echo "==> Verifying"
-ssh "$HOST" "cd '$DEST' && docker compose ps --format '{{.Service}} {{.State}}' && head -2 LICENSE"
+"$SSH" "$HOST" "cd '$DEST' && docker compose ps --format '{{.Service}} {{.State}}' && head -2 LICENSE"
 
 cat <<'DONE'
 
