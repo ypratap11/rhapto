@@ -38,6 +38,12 @@ async def on_startup(ctx: dict[str, Any]) -> None:
     settings = get_settings()
     warn_if_fake_llm(settings)
     engine = make_engine(settings.database_url)
+    # On the ctx, not read from `get_settings()` inside each task: that singleton is an
+    # `@lru_cache(maxsize=1)`, so a task running in-process under the API test suite would read the
+    # *process* environment while the app reads its own injected `Settings` -- and testing anything
+    # settings-dependent would mean monkeypatching env vars plus `get_settings.cache_clear()`, the
+    # documented source of spurious failures in this repo. Same seam shape as ctx["llm_resolver"].
+    ctx["settings"] = settings
     ctx["engine"] = engine
     ctx["session_factory"] = make_session_factory(engine)
     # No ctx["llm"]: tailor_job resolves the provider per task, from the task owner's settings.

@@ -127,6 +127,10 @@ def worker_ctx(
     api_settings: Settings,
 ) -> dict[str, Any]:
     return {
+        # C4: the task reads its settings from here, never from `get_settings()`. Without this the
+        # in-process worker would read the process environment while the app reads `api_settings`,
+        # and any test of a settings-dependent worker behaviour would need `get_settings.cache_clear()`.
+        "settings": api_settings,
         "session_factory": session_factory,
         "engine": engine,
         "llm_resolver": llm_resolver,
