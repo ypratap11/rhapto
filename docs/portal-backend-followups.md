@@ -129,10 +129,22 @@ Two items the review found and triaged as follow-ups, not blockers for this bran
   when it matters, in the order they are worth doing:
   1. A covering index on `(user_id, search_id, started_at DESC)`, which is the exact shape of this
      query.
-  2. A retention job. Note that deleting old rows changes an *answer*, not just a cost:
-     `ever_found` is `max(found) > 0` over the whole history, so pruning the run that once found
-     something would make a working search read as "has never returned a job". Any retention
-     policy has to keep a per-search summary, or keep the first successful run.
+  2. A retention job -- and the architect's §12.5 ruling (2026-09-28) makes this an order, not a
+     preference. Deleting old rows changes an *answer*, not a cost. `ever_found` is
+     `max(found) > 0` over the *whole history*, so pruning the run that once found something makes
+     a working search report "has never returned a job" -- manufacturing, gradually and silently as
+     history ages out, the exact false negative this branch was built to eliminate. No test would
+     fail.
+
+     Therefore: **a per-search success summary (`searches.first_found_at`, or a flag written at
+     ingest) is a precondition of retention, not an optimisation of it.** That is a migration, so
+     no retention job may run against `poll_runs` until it exists. Do the index first; retention
+     only after the summary column.
+
+     If retention ever ships without one, `SearchOut.ever_found` and
+     `JobsEmptyReasonOut.search_ever_found` must become `bool | None`, where `None` renders as
+     "not known" and never as "never found anything". Degrading to unknown is honest; degrading to
+     `false` is a confident lie.
 
 - **The keyless-source default disagrees with what the poller actually polls.** Condition C4; found
   by the architecture pass on this branch and deliberately **not** fixed here, because the fix is a
