@@ -161,3 +161,30 @@ Two items the review found and triaged as follow-ups, not blockers for this bran
   seeding `aggregators` rows on bootstrap, or making `build_specs` honour the display default — the
   second starts calling four external APIs for every account that never opened Settings, which is
   why it is the owner's call and not this branch's.
+
+## 7. Provider model lists have gone stale (queued 2026-09-28)
+
+`apps/api/src/rhapto/engine/providers/registry.py` hard-codes a `models` tuple and a `default` per
+provider. Those were written months ago and vendors retire ids quietly, so the dropdown a new user
+picks from offers models that are dead or several generations old.
+
+Confirmed against live vendor catalogues on 2026-09-27/28:
+
+- **Gemini** ships `("gemini-2.5-pro", "gemini-2.5-flash")`, default `gemini-2.5-pro`. Google's own
+  `v1beta/models` currently serves `gemini-3.8-flash`, `3.7`, `3.6`, `3.5-flash`, `3.1-pro-preview`
+  and more. Three generations behind.
+- **Groq** ships `llama-3.3-70b-versatile` as its default; that id and `moonshotai/kimi-k2-instruct`
+  both returned `model_not_found` for a real key. The default is dead on arrival.
+- **OpenRouter** ships `meta-llama/llama-3.3-70b-instruct`; unverified, same risk.
+
+Two fixes, and the second is the one that lasts:
+
+1. Refresh each provider's tuple and default against its live catalogue.
+2. Prefer vendor-maintained rolling aliases as the default wherever one exists -- Google publishes
+   `gemini-flash-latest` and `gemini-pro-latest`, which do not rot. A pinned id in a registry is a
+   thing that must be maintained forever; an alias is maintained by the vendor.
+
+Why it matters beyond tidiness: a new account's first action is choosing a provider and model, and a
+dead default produces a `model_not_found` at the first tailor -- after the LLM call has been paid
+for, deep in the worker. That is the cold-start failure the failure-visibility branch exists to
+remove, arriving through the one door that branch does not cover.
