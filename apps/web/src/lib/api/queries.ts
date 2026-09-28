@@ -897,6 +897,27 @@ export function useSaveSourceSettings() {
   });
 }
 
+/**
+ * Lift the poller's pause on one source: `POST /settings/sources/{source}/resume`.
+ *
+ * A named endpoint rather than re-saving the row, even though re-saving lifts a pause too. The
+ * side effect is a single `updated_at = now()` line in the PUT with nothing asserting it; a button
+ * that relied on it would break silently the day someone tidied that line away.
+ */
+export function useResumeSource() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (source: string) =>
+      unwrap(apiClient().POST("/api/v1/settings/sources/{source}/resume", { params: { path: { source } } })),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: portalKeys.sourceSettings });
+      void queryClient.invalidateQueries({ queryKey: ["discovery"] });
+      // The checklist's `job_sources` row reads the same source state.
+      void queryClient.invalidateQueries({ queryKey: portalKeys.dashboard });
+    },
+  });
+}
+
 export function useTestSource() {
   return useMutation({
     mutationFn: (source: string) => unwrap(apiClient().POST("/api/v1/settings/sources/{source}/test", { params: { path: { source } } })),

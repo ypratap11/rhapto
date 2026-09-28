@@ -9,14 +9,44 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { StatusBadge } from "@/components/ui/StatusBadge";
 import { Switch } from "@/components/ui/switch";
 import { TableSkeleton } from "@/components/ui/table-skeleton";
 import { ApiError } from "@/lib/api/client";
-import { useSaveSourceSettings, useSourceSettings, useTestSource, type SourceSetting } from "@/lib/api/queries";
+import { useResumeSource, useSaveSourceSettings, useSourceSettings, useTestSource, type SourceSetting } from "@/lib/api/queries";
 
 function statusLine(s: SourceSetting): string {
   if (!s.needs_key) return "Zero setup";
   return s.key_set ? "Key saved" : "Needs a key";
+}
+
+/**
+ * Why this source cannot bring anything in, when it cannot.
+ *
+ * `runnable` follows the POLLER's rule, not this page's `enabled` default — so a keyless source can
+ * read `enabled: true, runnable: false`, which looks contradictory and is the honest report of a real
+ * discrepancy: `GET /settings/sources` defaults keyless sources to on, while `build_specs` polls no
+ * aggregator at all for an account with no `aggregators` row. Saying "on" and fetching nothing is the
+ * silence this row exists to break; the row says which it is.
+ */
+function readinessLine(s: SourceSetting): string | null {
+  if (s.runnable) return null;
+  if (s.needs_key && !s.key_set) return "Add a key and this source will run on the next poll.";
+  if (!s.enabled) return "Switched off, so polls skip it.";
+  return "Not set up on this account yet — switch it on to include it in polls.";
+}
+
+/** What the last attempt actually did, in the source's own terms. */
+function lastRunLine(s: SourceSetting): string | null {
+  const run = s.last_run;
+  if (!run) return null;
+  // The search's own location string, never one composed here: the whole point of the join.
+  const asked = run.search_location ? ` for ${run.search_location}` : "";
+  const named = run.search_name ? ` (${run.search_name})` : "";
+  if (run.error) return `Last run failed${named}: ${run.error}`;
+  if (run.found === 0) return `Last run returned 0${asked}${named}.`;
+  const found = run.found === 1 ? "1 posting" : `${run.found} postings`;
+  return `Last run found ${found}${asked}${named}, ${run.new} new.`;
 }
 
 function message(e: unknown, fallback: string): string {
@@ -32,6 +62,7 @@ export function SourcesSection() {
   const sources = useSourceSettings();
   const save = useSaveSourceSettings();
   const test = useTestSource();
+  const resume = useResumeSource();
   const fieldRefs = useRef(new Map<string, HTMLInputElement>());
 
   // Same shape as every other query on this page (see resumes/page.tsx, pipeline/page.tsx): a
@@ -47,6 +78,15 @@ export function SourcesSection() {
       toast.success(`${source.label} ${source.enabled ? "disabled" : "enabled"}`);
     } catch (e) {
       toast.error(message(e, `Could not update ${source.label}`));
+    }
+  }
+
+  async function resumeSource(source: SourceSetting) {
+    try {
+      await resume.mutateAsync(source.id);
+      toast.success(`${source.label} will be retried on the next poll`);
+    } catch (e) {
+      toast.error(message(e, `Could not resume ${source.label}`));
     }
   }
 
@@ -99,11 +139,25 @@ export function SourcesSection() {
           sources.data.map((source) => (
             <fieldset key={source.id} role="group" aria-label={source.label} className="space-y-3 rounded-lg border border-border p-3">
               <div className="flex items-center justify-between gap-3">
-                <div>
-                  <p className="text-sm font-medium">{source.label}</p>
+                <div className="min-w-0 space-y-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="text-sm font-medium">{source.label}</p>
+                    {/* A paused source was buried in a run row on another page. It is a state, so it
+                        reads as one, and it comes with the control that lifts it. */}
+                    {source.paused ? <StatusBadge tone="danger">Paused</StatusBadge> : null}
+                  </div>
                   <p className="text-xs text-muted-foreground">{statusLine(source)}</p>
+                  {readinessLine(source) ? <p className="text-xs text-muted-foreground">{readinessLine(source)}</p> : null}
+                  {lastRunLine(source) ? <p className="text-xs text-muted-foreground">{lastRunLine(source)}</p> : null}
                 </div>
-                <Switch aria-label={source.label} checked={source.enabled} onCheckedChange={() => void toggle(source)} disabled={save.isPending} />
+                <div className="flex shrink-0 items-center gap-2">
+                  {source.paused ? (
+                    <Button size="sm" variant="outline" onClick={() => void resumeSource(source)} disabled={resume.isPending}>
+                      Resume
+                    </Button>
+                  ) : null}
+                  <Switch aria-label={source.label} checked={source.enabled} onCheckedChange={() => void toggle(source)} disabled={save.isPending} />
+                </div>
               </div>
               {source.fields.length > 0 ? (
                 <div className="space-y-2">

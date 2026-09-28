@@ -59,6 +59,26 @@ function message(e: unknown, fallback: string): string {
   return e instanceof ApiError ? e.message : fallback;
 }
 
+/**
+ * What this search's poll history says about it. Three states, and the middle one is the whole point:
+ * a search that has run and never returned anything used to look identical to one with nothing new.
+ *
+ * Read from `runs`/`ever_found`, which the API derives from `poll_runs` -- not from job rows, which
+ * cannot answer it (`jobs.search_id` is ON DELETE SET NULL and backfilled rows never carry it).
+ *
+ * No cause is asserted. An unrecognised location, keywords that are too narrow, a source with no
+ * coverage in that market and a market that genuinely has nothing all look identical from here, so
+ * naming one would be a guess dressed as a diagnosis.
+ */
+function historyLine(search: SearchOut): string {
+  if (search.runs === 0) return "Has not run yet";
+  if (!search.ever_found) {
+    const times = search.runs === 1 ? "once" : `${search.runs} times`;
+    return `Has run ${times} and never returned a job`;
+  }
+  return `Has found jobs before · ${search.runs} ${search.runs === 1 ? "run" : "runs"}`;
+}
+
 /** Every saved search as one row: name, its keywords/location/remote, a "from a track" badge when
  * `derived_from_track_id` is set, a Pause switch, and Edit (a Sheet) / Delete (an AlertDialog). */
 export function SavedSearchesSection() {
@@ -148,15 +168,19 @@ export function SavedSearchesSection() {
             {searches.data.map((search) => (
               <li key={search.id} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border p-3">
                 <div className="min-w-0 space-y-1">
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
                     <p className="truncate text-sm font-medium">{search.name}</p>
                     {search.derived_from_track_id ? <StatusBadge tone="muted">from a track</StatusBadge> : null}
+                    {/* A search that has polled and never matched is the silent zero this branch is
+                        about. It gets a visible state, not an absence of one. */}
+                    {search.runs > 0 && !search.ever_found ? <StatusBadge tone="danger">Never matched</StatusBadge> : null}
                   </div>
                   <p className="truncate text-xs text-muted-foreground">
                     {[search.keywords.length > 0 ? search.keywords.join(", ") : "Any keywords", search.location ?? "Anywhere", REMOTE_LABEL[search.remote]].join(
                       " · ",
                     )}
                   </p>
+                  <p className="truncate text-xs text-muted-foreground">{historyLine(search)}</p>
                 </div>
                 <div className="flex shrink-0 items-center gap-3">
                   <label className="flex items-center gap-2 text-xs text-muted-foreground">

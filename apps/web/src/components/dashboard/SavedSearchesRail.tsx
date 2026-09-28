@@ -71,7 +71,14 @@ export function SavedSearchesRail({
                 className="hover-lift flex items-center justify-between gap-2 rounded-control px-2 py-1.5 text-sm hover:bg-surface-muted"
               >
                 <span className="truncate">{search.name}</span>
-                {search.new_count > 0 ? <StatusBadge tone="primary">{`${search.new_count} new`}</StatusBadge> : null}
+                {search.new_count > 0 ? (
+                  <StatusBadge tone="primary">{`${search.new_count} new`}</StatusBadge>
+                ) : search.ever_found ? null : (
+                  // The badge is hidden at zero, so this is exactly where the silence lived: a search
+                  // that has never returned a job rendered identically to one the user had read.
+                  // `ever_found` comes from `poll_runs`, so it distinguishes them honestly.
+                  <StatusBadge tone="muted">Never matched</StatusBadge>
+                )}
               </Link>
             </li>
           ))}

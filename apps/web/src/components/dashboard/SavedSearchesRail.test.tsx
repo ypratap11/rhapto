@@ -41,3 +41,24 @@ describe("SavedSearchesRail", () => {
     expect(screen.queryByText(/save a search from the jobs page/i)).not.toBeInTheDocument();
   });
 });
+
+describe("SavedSearchesRail, the silence at zero", () => {
+  it("distinguishes a search with nothing new from one that has never matched", () => {
+    // The rail hides its badge at zero, so both rows looked identical. "Data roles" has never
+    // returned a job; that is a different thing to say, and `ever_found` is what says it.
+    render(<SavedSearchesRail searches={searches} />);
+    const never = screen.getByRole("link", { name: /data roles/i });
+    const active = screen.getByRole("link", { name: /pm roles/i });
+    expect(never).toHaveTextContent("Never matched");
+    expect(active).not.toHaveTextContent("Never matched");
+    expect(active).toHaveTextContent("4 new");
+  });
+
+  it("does not mark a search that has found jobs before but has nothing new right now", () => {
+    render(<SavedSearchesRail searches={[{ id: "s3", name: "Quiet roles", new_count: 0, ever_found: true }]} />);
+    const row = screen.getByRole("link", { name: /quiet roles/i });
+    expect(row).not.toHaveTextContent("Never matched");
+    expect(row).not.toHaveTextContent("new");
+  });
+});
+

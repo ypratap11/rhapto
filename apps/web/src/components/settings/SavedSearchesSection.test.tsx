@@ -162,3 +162,48 @@ describe("SavedSearchesSection", () => {
     expect(screen.getByText("Staff engineer")).toBeInTheDocument();
   });
 });
+
+describe("SavedSearchesSection, a search that has never matched", () => {
+  beforeEach(() => {
+    data = searches;
+    isLoading = false;
+    error = null;
+    isPaused = false;
+  });
+
+  it("marks the search that has polled and never returned a job, and not the one that has", () => {
+    // Both rows show no new-count. The distinction has to come from the run history, or the two are
+    // indistinguishable -- which is exactly how a misconfigured search hid for weeks.
+    render(<SavedSearchesSection />);
+    const never = screen.getByText("From backend track").closest("li")!;
+    const found = screen.getByText("Staff engineer").closest("li")!;
+    expect(within(never).getByText("Never matched")).toBeInTheDocument();
+    expect(within(never).getByText(/has run 3 times and never returned a job/i)).toBeInTheDocument();
+    expect(within(found).queryByText("Never matched")).not.toBeInTheDocument();
+    expect(within(found).getByText(/has found jobs before/i)).toBeInTheDocument();
+  });
+
+  it("says a search has not run yet rather than that it found nothing", () => {
+    data = [{ ...searches[0]!, runs: 0, ever_found: false, last_run_at: null }];
+    render(<SavedSearchesSection />);
+    expect(screen.getByText(/has not run yet/i)).toBeInTheDocument();
+    expect(screen.queryByText(/never returned a job/i)).not.toBeInTheDocument();
+    expect(screen.queryByText("Never matched")).not.toBeInTheDocument();
+  });
+
+  it("says once, not 1 times", () => {
+    data = [{ ...searches[0]!, runs: 1, ever_found: false }];
+    render(<SavedSearchesSection />);
+    expect(screen.getByText(/has run once and never returned a job/i)).toBeInTheDocument();
+  });
+
+  it("asserts no cause for the zero and suggests no other location", () => {
+    // Condition C7. `poll_runs` records `found = 0, error = NULL` whether the location was
+    // unrecognised, the keywords too narrow, the source uncovered or the market empty.
+    const { container } = render(<SavedSearchesSection />);
+    const text = container.textContent ?? "";
+    expect(text).not.toMatch(/may not be recognised|not recognised|unrecognised/i);
+    expect(text).not.toMatch(/try ['"]/i);
+  });
+});
+

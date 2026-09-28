@@ -41,12 +41,14 @@ let error: unknown = null;
 let isPaused = false;
 const save = vi.fn().mockResolvedValue({});
 const testSource = vi.fn<() => Promise<SourceTestOut>>().mockResolvedValue({ ok: true, found: 1 });
+const resumeSource = vi.fn();
 
 vi.mock("@/lib/api/queries", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/api/queries")>()),
   useSourceSettings: () => ({ data, isLoading, error, isPaused }),
   useSaveSourceSettings: () => ({ mutateAsync: save, isPending: false }),
   useTestSource: () => ({ mutateAsync: testSource, isPending: false }),
+  useResumeSource: () => ({ mutateAsync: resumeSource, isPending: false }),
 }));
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 
@@ -58,6 +60,7 @@ describe("SourcesSection", () => {
     isPaused = false;
     save.mockClear().mockResolvedValue({});
     testSource.mockClear().mockResolvedValue({ ok: true, found: 1 });
+    resumeSource.mockClear().mockResolvedValue({});
   });
 
   it("lists each source with its switch and says which need a key", () => {
@@ -154,3 +157,109 @@ describe("SourcesSection", () => {
     expect(screen.getByRole("group", { name: "The Muse" })).toBeInTheDocument();
   });
 });
+
+describe("SourcesSection, what a source last did and whether it can run", () => {
+  beforeEach(() => {
+    data = rows;
+    isLoading = false;
+    error = null;
+    isPaused = false;
+    save.mockClear().mockResolvedValue({});
+    resumeSource.mockClear().mockResolvedValue({});
+  });
+
+  it("says a keyless source is on but cannot run yet, which is the real state", () => {
+    // `enabled: true, runnable: false` looks contradictory and is honest: this page defaults keyless
+    // sources to on, while the poller polls no aggregator for an account with no row. The row says so
+    // instead of showing a switch that fetches nothing.
+    render(<SourcesSection />);
+    const muse = screen.getByRole("group", { name: "The Muse" });
+    expect(within(muse).getByRole("switch", { name: "The Muse" })).toBeChecked();
+    expect(within(muse).getByText(/switch it on to include it in polls/i)).toBeInTheDocument();
+  });
+
+  it("tells a keyed source with no key what is missing", () => {
+    render(<SourcesSection />);
+    const adzuna = screen.getByRole("group", { name: "Adzuna" });
+    expect(within(adzuna).getByText(/add a key and this source will run/i)).toBeInTheDocument();
+  });
+
+  it("says nothing about readiness for a source that is ready", () => {
+    // The contrasting fixture: JSearch is runnable, so no readiness line at all.
+    render(<SourcesSection />);
+    const jsearch = screen.getByRole("group", { name: "JSearch" });
+    expect(within(jsearch).queryByText(/will run on the next poll/i)).not.toBeInTheDocument();
+    expect(within(jsearch).queryByText(/switch it on/i)).not.toBeInTheDocument();
+  });
+
+  it("shows a Paused badge and a Resume button only for the paused source", async () => {
+    render(<SourcesSection />);
+    const jsearch = screen.getByRole("group", { name: "JSearch" });
+    expect(within(jsearch).getByText("Paused")).toBeInTheDocument();
+    // And not on the others, so the assertion is about the fixture rather than the component.
+    expect(within(screen.getByRole("group", { name: "The Muse" })).queryByText("Paused")).not.toBeInTheDocument();
+    expect(within(screen.getByRole("group", { name: "The Muse" })).queryByRole("button", { name: /resume/i })).not.toBeInTheDocument();
+
+    await userEvent.setup().click(within(jsearch).getByRole("button", { name: /resume/i }));
+    expect(resumeSource).toHaveBeenCalledWith("jsearch");
+  });
+
+  it("reports what the last run was asked for and what it returned", () => {
+    // The location is the search's own string, from the join. Without it the row can only say
+    // "returned 0", which is the silence this replaces.
+    render(<SourcesSection />);
+    const jsearch = screen.getByRole("group", { name: "JSearch" });
+    expect(within(jsearch).getByText(/paused after 3 failures/i)).toBeInTheDocument();
+  });
+
+  it("says a run returned zero, and for what, when it did not error", () => {
+    data = [
+      {
+        ...rows[0]!,
+        runnable: true,
+        last_run: {
+          started_at: "2026-09-26T12:00:00Z",
+          finished_at: "2026-09-26T12:00:01Z",
+          found: 0,
+          new: 0,
+          error: null,
+          search_id: "s2",
+          search_name: "Bay Area PM",
+          search_location: "San Francisco Bay Area",
+        },
+      },
+    ];
+    render(<SourcesSection />);
+    expect(screen.getByText(/last run returned 0 for San Francisco Bay Area \(Bay Area PM\)/i)).toBeInTheDocument();
+    // C7: the fact, and no suggested alternative. There is no gazetteer to produce one from.
+    expect(screen.queryByText(/try ['"]/i)).not.toBeInTheDocument();
+  });
+
+  it("says what a successful run found, so a working source does not read the same as a silent one", () => {
+    data = [
+      {
+        ...rows[0]!,
+        runnable: true,
+        last_run: {
+          started_at: "2026-09-26T12:00:00Z",
+          finished_at: "2026-09-26T12:00:01Z",
+          found: 12,
+          new: 3,
+          error: null,
+          search_id: null,
+          search_name: null,
+          search_location: null,
+        },
+      },
+    ];
+    render(<SourcesSection />);
+    expect(screen.getByText(/last run found 12 postings, 3 new/i)).toBeInTheDocument();
+  });
+
+  it("says nothing about a last run for a source that has never run", () => {
+    data = [{ ...rows[0]!, last_run: null }];
+    render(<SourcesSection />);
+    expect(screen.queryByText(/last run/i)).not.toBeInTheDocument();
+  });
+});
+
