@@ -3,7 +3,8 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import { createElement, type ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "./client";
-import { keys, PACKAGE_LIST_PARAMS, useLlmSettings, useMarkApplied, type JobFilters } from "./queries";
+import { keys, PACKAGE_LIST_PARAMS, useJobsEmptyReason, useLlmSettings, useMarkApplied, type JobFilters } from "./queries";
+import { DEFAULT_SEARCH_STATE } from "@/lib/search-state";
 
 const postMock = vi.fn();
 const patchMock = vi.fn();
@@ -149,3 +150,43 @@ describe("useLlmSettings", () => {
     expect(result.current.data).toEqual({ kind: "ok", settings });
   });
 });
+
+describe("useJobsEmptyReason", () => {
+  beforeEach(() => {
+    getMock.mockReset();
+  });
+
+  it("does not fire while the grid has rows", async () => {
+    // The contract the whole companion-endpoint design rests on. The diagnosis is N+1 aggregate
+    // counts over the user's corpus; paying for them on a page that already has rows is work whose
+    // answer is thrown away, and the architecture rejected putting the reason on the list response
+    // for exactly this reason. `enabled: false` is what makes that real rather than intended.
+    renderHook(() => useJobsEmptyReason(DEFAULT_SEARCH_STATE, { enabled: false }), { wrapper: queryWrapper() });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(getMock).not.toHaveBeenCalled();
+  });
+
+  it("asks the companion endpoint once the grid is empty", async () => {
+    getMock.mockResolvedValue({ data: { total: 0, cause: "no_jobs", user_field_names: [] }, response: { ok: true } });
+    const { result } = renderHook(() => useJobsEmptyReason(DEFAULT_SEARCH_STATE, { enabled: true }), {
+      wrapper: queryWrapper(),
+    });
+    await waitFor(() => expect(result.current.data).toBeDefined());
+    expect(getMock).toHaveBeenCalledWith("/api/v1/jobs/empty-reason", expect.anything());
+  });
+
+  it("sends the same filters the listing sent, so the diagnosis describes that exact query", async () => {
+    getMock.mockResolvedValue({ data: { total: 0, cause: "no_jobs", user_field_names: [] }, response: { ok: true } });
+    const state = { ...DEFAULT_SEARCH_STATE, posted_within: "24h" as const, sources: ["adzuna"], field: "engineering" };
+    const { result } = renderHook(() => useJobsEmptyReason(state, { enabled: true, searchId: "s1" }), {
+      wrapper: queryWrapper(),
+    });
+    await waitFor(() => expect(result.current.data).toBeDefined());
+    expect(getMock).toHaveBeenCalledWith("/api/v1/jobs/empty-reason", {
+      params: {
+        query: { sort: "relevance", posted_within: "24h", sources: "adzuna", field: "engineering", search_id: "s1" },
+      },
+    });
+  });
+});
+

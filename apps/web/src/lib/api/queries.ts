@@ -664,6 +664,13 @@ function asJobsQuery(q: Record<string, string>): JobsQueryParams {
   return q as unknown as JobsQueryParams;
 }
 
+/** The same bridge for `/jobs/empty-reason`, which resolves the identical `Depends(job_filters)` and
+ * therefore takes the identical query string. */
+type EmptyReasonParams = NonNullable<paths["/api/v1/jobs/empty-reason"]["get"]["parameters"]["query"]>;
+function asEmptyReasonQuery(q: Record<string, string>): EmptyReasonParams {
+  return q as unknown as EmptyReasonParams;
+}
+
 /**
  * Spec §6: the search returns immediately, known jobs already scored and new ones with
  * `best_fit: null`. Rather than block the grid on the worker, show every job at once and refetch
@@ -767,6 +774,32 @@ export function useJobsQuery(state: SearchState, options: { enabled?: boolean; s
         }),
       ),
     enabled: options.enabled ?? true,
+  });
+}
+
+/**
+ * Why the grid is empty, asked only when it IS empty.
+ *
+ * A companion endpoint rather than a field on `GET /jobs`: the diagnosis is a set of aggregate counts
+ * over the user's whole corpus, and `GET /jobs` has no pagination and carries full `jd_text` per row,
+ * so computing it on every non-empty response would be work whose answer is discarded.
+ *
+ * `enabled` is the whole contract. The caller passes false while the grid has rows, while the query
+ * is in flight, and when an API error already explains the emptiness -- so this must never fire on a
+ * non-empty grid. Its query key mirrors `useJobsQuery`'s, so the diagnosis is cached against exactly
+ * the filter set it describes and a filter change refetches it.
+ */
+export function useJobsEmptyReason(state: SearchState, options: { enabled: boolean; searchId?: string | null }) {
+  const searchId = options.searchId ?? null;
+  return useQuery({
+    queryKey: ["jobs", "empty-reason", toJobsQuery(state), searchId] as const,
+    queryFn: () =>
+      unwrap(
+        apiClient().GET("/api/v1/jobs/empty-reason", {
+          params: { query: asEmptyReasonQuery({ ...toJobsQuery(state), ...(searchId ? { search_id: searchId } : {}) }) },
+        }),
+      ),
+    enabled: options.enabled,
   });
 }
 

@@ -3,6 +3,7 @@
 import { Search } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useMemo, useState } from "react";
+import { EmptyJobsExplanation } from "@/components/jobs/EmptyJobsExplanation";
 import { FilterChips } from "@/components/jobs/FilterChips";
 import type { TrackInfo } from "@/components/jobs/JobCard";
 import { JobGrid } from "@/components/jobs/JobGrid";
@@ -16,7 +17,7 @@ import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { useJobsQuery, useLiveSearch, useSavedSearches, useSourceSettings, useTaxonomy, useTracks } from "@/lib/api/queries";
+import { useJobsEmptyReason, useJobsQuery, useLiveSearch, useSavedSearches, useSourceSettings, useTaxonomy, useTracks } from "@/lib/api/queries";
 import { fieldsWithTracks } from "@/lib/fields";
 import { decodeSearchState, encodeSearchState, passesFit, type SearchState } from "@/lib/search-state";
 
@@ -114,6 +115,19 @@ function JobsPageInner() {
   const hasIssue = live.status === "idle" ? Boolean(browse.error) || browse.isPaused : live.status === "error";
   const nothingToShow = jobs.length === 0 && hasIssue;
 
+  // Which layer is responsible for an empty grid, and therefore which layer explains it.
+  //
+  // `fit` is applied HERE, by `passesFit`, and the API has no equivalent — so when the API returned
+  // rows and none survived, this page already knows the answer and must not ask the server. The count
+  // comes from `passesFit`'s own output (rawJobs vs jobs), not from a second implementation of it.
+  const fitHiddenCount = rawJobs.length > 0 && jobs.length === 0 ? rawJobs.length : null;
+  // Otherwise the server decides the cause, and only when the grid really is empty: never while
+  // loading (the answer would describe a request still in flight) and never when `hasIssue` is set
+  // (the error banner already explains the emptiness — a diagnosis would contradict it). A live
+  // search's zero is explained by SourceReport/per_source, so it bypasses diagnosis entirely.
+  const diagnose = live.status === "idle" && rawJobs.length === 0 && !loading && !hasIssue;
+  const emptyReason = useJobsEmptyReason(state, { enabled: diagnose, searchId });
+
   // Client-side paging over the already-fetched, already-filtered set (Task 5b brief §3): no
   // server-side offset/limit. `pageCount` is clamped to at least 1 so an (unusual) stale `page` from
   // the URL — e.g. Back to a page that no longer has that many results — never slices past the end.
@@ -185,7 +199,16 @@ function JobsPageInner() {
           nothingToShow ? (
             <EmptyState icon={Search} title="Couldn&rsquo;t load jobs" description="Try refreshing the page." />
           ) : (
-            <EmptyState icon={Search} title="No jobs yet" description="Search above, or let your saved searches fill this in." />
+            <EmptyJobsExplanation
+              reason={emptyReason.data}
+              loading={diagnose && emptyReason.isLoading}
+              fitHiddenCount={fitHiddenCount}
+              state={state}
+              onChange={updateState}
+              // `search_id` is a URL parameter, not part of `SearchState`, so clearing it is a
+              // navigation rather than a state change.
+              onClearSavedSearch={() => router.replace(`/jobs?${encodeSearchState(state).toString()}`)}
+            />
           )
         }
       />

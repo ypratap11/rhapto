@@ -5,10 +5,17 @@ import type { JobOut } from "@/lib/api/queries";
 import JobsPage, { BROWSE_PAGE_SIZE } from "./page";
 
 vi.mock("@/components/jobs/NotInterestedButton", () => ({ NotInterestedButton: () => <button>Not interested</button> }));
+// Needs a QueryClient of its own, and what it does (POST /searches/{id}/viewed) is not what any test
+// here is about. It has its own test file.
+vi.mock("@/components/jobs/MarkSearchViewed", () => ({ MarkSearchViewed: () => null }));
 
 const run = vi.fn();
 const saveSearch = vi.fn().mockResolvedValue({ id: "s1", name: "pm" });
 const jobsQuery = vi.fn();
+// Recorded rather than ignored: the page must decide WHETHER to ask for a diagnosis, and that
+// decision is the whole call discipline (never on a non-empty grid, never while loading, never when
+// an error banner already explains the emptiness).
+const emptyReason = vi.fn();
 // A faithful-enough stand-in for the App Router: `push`/`replace` both update the "current URL",
 // same as the real router, so the page's `useSearchParams()` reads the value a navigation just wrote
 // — this is what lets `currentPage` (page.tsx) be derived straight from `searchParams` instead of
@@ -28,6 +35,7 @@ vi.mock("@/lib/api/queries", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/api/queries")>()),
   useLiveSearch: () => ({ run, jobs: [], perSource: null, status: "idle", error: null }),
   useJobsQuery: () => jobsQuery(),
+  useJobsEmptyReason: (...args: unknown[]) => emptyReason(...args),
   useTracks: () => ({ data: [{ id: "t1", name: "Data PM", min_fit: 60 }] }),
   useTaxonomy: () => ({ data: { fields: [{ id: "engineering", name: "Engineering", roles: [] }] } }),
   useSourceSettings: () => ({ data: [{ source: "themuse", label: "The Muse", enabled: true, needs_key: false, key_set: false }] }),
@@ -65,10 +73,19 @@ function job(id: string): JobOut {
 
 beforeEach(() => {
   jobsQuery.mockReturnValue({ data: [], isLoading: false, error: null });
+  emptyReason.mockReset();
+  emptyReason.mockReturnValue({ data: undefined, isLoading: false });
   currentSearch = new URLSearchParams();
   routerReplace.mockClear();
   routerPush.mockClear();
 });
+
+/** What the page asked `useJobsEmptyReason` for on its last render. */
+function lastDiagnosisOptions(): { enabled: boolean; searchId?: string | null } {
+  const call = emptyReason.mock.calls.at(-1);
+  if (!call) throw new Error("useJobsEmptyReason was never called");
+  return call[1] as { enabled: boolean; searchId?: string | null };
+}
 
 describe("Jobs page", () => {
   it("puts the search form in a mint band and runs a live search", async () => {
@@ -93,6 +110,89 @@ describe("Jobs page", () => {
   it("says the grid is empty rather than showing nothing", () => {
     render(<JobsPage />);
     expect(screen.getByText(/no jobs yet/i)).toBeInTheDocument();
+  });
+
+  describe("asking why the grid is empty", () => {
+    it("asks for a diagnosis when the grid really is empty", () => {
+      render(<JobsPage />);
+      expect(lastDiagnosisOptions().enabled).toBe(true);
+    });
+
+    it("does not ask while the grid has rows", () => {
+      // The reason the diagnosis is a companion endpoint at all: it is aggregate counts over the
+      // whole corpus, and a page that already has rows must not pay for them.
+      jobsQuery.mockReturnValue({ data: [job("j1")], isLoading: false, error: null });
+      render(<JobsPage />);
+      expect(lastDiagnosisOptions().enabled).toBe(false);
+    });
+
+    it("does not ask while the listing is still loading", () => {
+      // A diagnosis of a request still in flight would describe a state that does not exist yet.
+      jobsQuery.mockReturnValue({ data: undefined, isLoading: true, error: null });
+      render(<JobsPage />);
+      expect(lastDiagnosisOptions().enabled).toBe(false);
+    });
+
+    it("does not ask when an API error already explains the emptiness", () => {
+      // The banner is already up. A cause on top of it would contradict it.
+      jobsQuery.mockReturnValue({ data: undefined, isLoading: false, error: "boom" });
+      render(<JobsPage />);
+      expect(lastDiagnosisOptions().enabled).toBe(false);
+    });
+
+    it("does not ask when the query is paused rather than errored", () => {
+      // TanStack's paused state has isLoading false, error null and data undefined -- the same shape
+      // a genuinely empty result has, which is exactly the confusion this page already guards.
+      jobsQuery.mockReturnValue({ data: undefined, isLoading: false, error: null, isPaused: true });
+      render(<JobsPage />);
+      expect(lastDiagnosisOptions().enabled).toBe(false);
+    });
+
+    it("passes the saved search id along, so the diagnosis is about that search", () => {
+      currentSearch = new URLSearchParams("search_id=s1");
+      render(<JobsPage />);
+      expect(lastDiagnosisOptions().searchId).toBe("s1");
+    });
+
+    it("renders the explanation the diagnosis returned, not the old generic copy", () => {
+      emptyReason.mockReturnValue({
+        data: {
+          total: 12,
+          cause: "field_without_tracks",
+          filter_id: null,
+          filter_value: null,
+          would_match: null,
+          field_name: "Engineering",
+          user_field_names: ["Program and Project Management"],
+          search_name: null,
+          search_location: null,
+          search_runs: null,
+          search_ever_found: null,
+        },
+        isLoading: false,
+      });
+      render(<JobsPage />);
+      expect(screen.getByText(/no tracks in Engineering/i)).toBeInTheDocument();
+      expect(screen.queryByText(/let your saved searches fill this in/i)).not.toBeInTheDocument();
+    });
+
+    it("explains the client-side fit filter itself instead of asking the server", () => {
+      // `fit` is applied by `passesFit` in this page and the API has no equivalent, so the page
+      // already knows the answer. Asking would get a cause about a result that was not empty.
+      currentSearch = new URLSearchParams("fit=75");
+      // Two jobs the API happily returned, both scoring below the threshold this page applies.
+      jobsQuery.mockReturnValue({
+        data: [
+          { ...job("j1"), best_fit: 40 },
+          { ...job("j2"), best_fit: 55 },
+        ],
+        isLoading: false,
+        error: null,
+      });
+      render(<JobsPage />);
+      expect(lastDiagnosisOptions().enabled).toBe(false);
+      expect(screen.getByText(/2 jobs hidden by the fit filter/i)).toBeInTheDocument();
+    });
   });
 
   describe("Browse paging", () => {
