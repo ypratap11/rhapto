@@ -2008,6 +2008,11 @@ export interface components {
             name: string;
             /** New Count */
             new_count: number;
+            /**
+             * Runs
+             * @default 0
+             */
+            runs: number;
         };
         /**
          * SearchIn
@@ -2153,6 +2158,11 @@ export interface components {
         };
         /** SourceSettingOut */
         SourceSettingOut: {
+            /**
+             * Configured
+             * @default false
+             */
+            configured: boolean;
             /** Enabled */
             enabled: boolean;
             /** Fields */

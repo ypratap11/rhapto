@@ -92,9 +92,11 @@ async def dashboard(
                 id=s.id,
                 name=s.name,
                 new_count=counts.get(s.id, 0),
-                # The rail's badge is hidden when `new_count` is 0, so without this a search that
-                # has never found anything renders exactly like one the user has already read.
+                # The rail's badge is hidden when `new_count` is 0, so without these a search that
+                # has never found anything renders exactly like one the user has already read --
+                # and `runs` is what separates that from one created a moment ago.
                 ever_found=run_stats.get(s.id, NEVER_RUN).ever_found,
+                runs=run_stats.get(s.id, NEVER_RUN).runs,
             )
             for s in searches
         ],

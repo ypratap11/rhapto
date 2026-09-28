@@ -73,12 +73,17 @@ export function SavedSearchesRail({
                 <span className="truncate">{search.name}</span>
                 {search.new_count > 0 ? (
                   <StatusBadge tone="primary">{`${search.new_count} new`}</StatusBadge>
-                ) : search.ever_found ? null : (
+                ) : search.runs > 0 && !search.ever_found ? (
                   // The badge is hidden at zero, so this is exactly where the silence lived: a search
                   // that has never returned a job rendered identically to one the user had read.
                   // `ever_found` comes from `poll_runs`, so it distinguishes them honestly.
+                  //
+                  // `runs > 0` matters as much: without it a search created five seconds ago is
+                  // labelled "Never matched", which is true and useless. A search that has not been
+                  // polled yet gets no badge — there is nothing to report about it, and the checklist
+                  // is where "no source can run" belongs.
                   <StatusBadge tone="muted">Never matched</StatusBadge>
-                )}
+                ) : null}
               </Link>
             </li>
           ))}

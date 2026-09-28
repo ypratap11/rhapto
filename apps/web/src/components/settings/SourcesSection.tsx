@@ -21,22 +21,29 @@ function statusLine(s: SourceSetting): string {
 }
 
 /**
- * Why this source cannot bring anything in, when it cannot.
+ * What this source is doing, in one line. Three states, never two.
  *
- * `runnable` follows the POLLER's rule, not this page's `enabled` default — so a keyless source can
- * read `enabled: true, runnable: false`, which looks contradictory and is the honest report of a real
- * discrepancy: `GET /settings/sources` defaults keyless sources to on, while `build_specs` polls no
- * aggregator at all for an account with no `aggregators` row. Saying "on" and fetching nothing is the
- * silence this row exists to break; the row says which it is.
+ * `configured` is the pause-free setup question and follows the POLLER's rule, not this page's
+ * `enabled` default — so a keyless source can read `enabled: true, configured: false`, which looks
+ * contradictory and is the honest report of a real discrepancy: `GET /settings/sources` defaults
+ * keyless sources to on, while `build_specs` polls no aggregator at all for an account with no
+ * `aggregators` row.
+ *
+ * `runnable` is `configured && !paused` — the present-tense claim about the next poll. Reading only
+ * one of the two would collapse "not set up" into "paused", or "paused" into "running", which is
+ * what made the middle and last states indistinguishable before (architecture §12.1).
  */
-function readinessLine(s: SourceSetting): string | null {
-  if (s.runnable) return null;
-  if (s.needs_key && !s.key_set) return "Add a key and this source will run on the next poll.";
-  if (!s.enabled) return "Switched off, so polls skip it.";
-  // The switch above reads on and polls still skip it, so the line has to name that contradiction
-  // rather than say something that looks wrong. Saving the setting is what creates the row the
-  // poller requires.
-  return "Shown on by default, but this account has no setting saved for it yet, so polls skip it — flip the switch to save it.";
+function statusDetail(s: SourceSetting): string | null {
+  if (!s.configured) {
+    if (s.needs_key && !s.key_set) return "Add a key and this source will run on the next poll.";
+    if (!s.enabled) return "Switched off, so polls skip it.";
+    // The switch above reads on and polls still skip it, so the line has to name that contradiction
+    // rather than say something that looks wrong. Saving the setting is what creates the row the
+    // poller requires.
+    return "Shown on by default, but this account has no setting saved for it yet, so polls skip it — flip the switch to save it.";
+  }
+  if (s.paused) return "Paused after repeated failures, so the next poll will skip it — Resume to retry.";
+  return "Will run on the next poll.";
 }
 
 /** What the last attempt actually did, in the source's own terms. */
@@ -150,7 +157,7 @@ export function SourcesSection() {
                     {source.paused ? <StatusBadge tone="danger">Paused</StatusBadge> : null}
                   </div>
                   <p className="text-xs text-muted-foreground">{statusLine(source)}</p>
-                  {readinessLine(source) ? <p className="text-xs text-muted-foreground">{readinessLine(source)}</p> : null}
+                  {statusDetail(source) ? <p className="text-xs text-muted-foreground">{statusDetail(source)}</p> : null}
                   {lastRunLine(source) ? <p className="text-xs text-muted-foreground">{lastRunLine(source)}</p> : null}
                 </div>
                 <div className="flex shrink-0 items-center gap-2">

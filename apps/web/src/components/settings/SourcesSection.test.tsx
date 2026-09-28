@@ -9,8 +9,8 @@ import type { SourceSetting, SourceTestOut } from "@/lib/api/queries";
 // (`runnable: false`); Adzuna is off and keyless-less; JSearch is configured, runnable, and
 // currently being refused by the poller.
 const rows: SourceSetting[] = [
-  { id: "themuse", label: "The Muse", enabled: true, needs_key: false, key_set: false, fields: [], runnable: false, paused: false, last_run: null },
-  { id: "adzuna", label: "Adzuna", enabled: false, needs_key: true, key_set: false, fields: ["app_id", "app_key"], runnable: false, paused: false, last_run: null },
+  { id: "themuse", label: "The Muse", enabled: true, needs_key: false, key_set: false, fields: [], configured: false, paused: false, runnable: false, last_run: null },
+  { id: "adzuna", label: "Adzuna", enabled: false, needs_key: true, key_set: false, fields: ["app_id", "app_key"], configured: false, paused: false, runnable: false, last_run: null },
   {
     id: "jsearch",
     label: "JSearch",
@@ -18,8 +18,10 @@ const rows: SourceSetting[] = [
     needs_key: true,
     key_set: true,
     fields: ["api_key"],
-    runnable: true,
+    // Set up AND currently refused by the poller: `configured` stays true, `runnable` does not.
+    configured: true,
     paused: true,
+    runnable: false,
     last_run: {
       started_at: "2026-09-26T12:00:00Z",
       finished_at: "2026-09-26T12:00:01Z",
@@ -184,12 +186,14 @@ describe("SourcesSection, what a source last did and whether it can run", () => 
     expect(within(adzuna).getByText(/add a key and this source will run/i)).toBeInTheDocument();
   });
 
-  it("says nothing about readiness for a source that is ready", () => {
+  it("says a configured but paused source is paused, not running and not unset", () => {
     // The contrasting fixture: JSearch is runnable, so no readiness line at all.
     render(<SourcesSection />);
     const jsearch = screen.getByRole("group", { name: "JSearch" });
+    // Configured but paused: it must say paused, not "will run" and not "not set up".
+    expect(within(jsearch).getByText(/paused after repeated failures/i)).toBeInTheDocument();
     expect(within(jsearch).queryByText(/will run on the next poll/i)).not.toBeInTheDocument();
-    expect(within(jsearch).queryByText(/polls skip it/i)).not.toBeInTheDocument();
+    expect(within(jsearch).queryByText(/no setting saved/i)).not.toBeInTheDocument();
   });
 
   it("shows a Paused badge and a Resume button only for the paused source", async () => {
@@ -216,6 +220,7 @@ describe("SourcesSection, what a source last did and whether it can run", () => 
     data = [
       {
         ...rows[0]!,
+        configured: true,
         runnable: true,
         last_run: {
           started_at: "2026-09-26T12:00:00Z",
@@ -239,6 +244,7 @@ describe("SourcesSection, what a source last did and whether it can run", () => 
     data = [
       {
         ...rows[0]!,
+        configured: true,
         runnable: true,
         last_run: {
           started_at: "2026-09-26T12:00:00Z",

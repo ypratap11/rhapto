@@ -19,14 +19,17 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from rhapto.db.models import Aggregator, PollRun
+from rhapto.db.repositories import profile as profile_repo
 from rhapto.db.repositories import searches as searches_repo
+from rhapto.db.repositories import source_credentials as creds_repo
 from rhapto.engine.providers.fake import FakeEmbeddingProvider
 from rhapto.services.discovery.http import FakeDiscoveryHttp
 from rhapto.services.discovery.poller import PAUSED_MESSAGE, SourceSpec, poll_sources
 from rhapto.services.discovery.posting import Posting
 from rhapto.services.discovery.search import SearchSpec
-from rhapto.services.discovery.sources import SOURCES
+from rhapto.services.discovery.sources import SOURCES, aggregator_sources
 from rhapto.services.discovery.sources.base import SourceInfo
+from rhapto.services.discovery.sources.status import usable_source_ids
 
 STUB = "fake-pausable"
 SOURCES_URL = "/api/v1/settings/sources"
@@ -81,18 +84,18 @@ async def _aggregator(session: AsyncSession, user_id: uuid.UUID, source: str) ->
     return row
 
 
-# --- runnable: the poller's rule, not the display default -------------------------------------
+# --- configured: the poller's rule, not the display default -----------------------------------
 
 
-async def test_a_user_with_no_aggregator_rows_has_no_runnable_source(
+async def test_a_user_with_no_aggregator_rows_has_no_configured_source(
     client: httpx.AsyncClient,
 ) -> None:
     """The defect this pass found, pinned as the honest answer.
 
     `GET /settings/sources` reports the four keyless sources as `enabled = true` for an account with
     no `aggregators` rows, while `poller.build_specs` returns early with board specs only when the
-    enabled list is empty -- so such an account polls no aggregators at all. `runnable` follows the
-    poller, so `enabled = true` and `runnable = false` appear together, which is exactly the
+    enabled list is empty -- so such an account polls no aggregators at all. `configured` follows the
+    poller, so `enabled = true` and `configured = false` appear together, which is exactly the
     discrepancy made visible. The behaviour itself is unchanged: see
     docs/portal-backend-followups.md.
     """
@@ -100,23 +103,30 @@ async def test_a_user_with_no_aggregator_rows_has_no_runnable_source(
     keyless = [r for r in rows if not r["needs_key"]]
     assert keyless, "the registry should ship at least one keyless source"
     assert all(r["enabled"] is True for r in keyless)
+    assert all(r["configured"] is False for r in rows)
+    # Nothing is set up, so nothing will run either.
     assert all(r["runnable"] is False for r in rows)
 
 
-async def test_enabling_a_keyless_source_makes_it_runnable(client: httpx.AsyncClient) -> None:
+async def test_enabling_a_keyless_source_makes_it_configured_and_runnable(
+    client: httpx.AsyncClient,
+) -> None:
     """The real condition: a row now exists and is enabled, which is what `build_specs` requires."""
-    assert (await _row(client, "themuse"))["runnable"] is False
+    assert (await _row(client, "themuse"))["configured"] is False
     assert (await client.put(f"{SOURCES_URL}/themuse", json={"enabled": True})).status_code == 200
-    assert (await _row(client, "themuse"))["runnable"] is True
+    after = await _row(client, "themuse")
+    # Set up, and nothing has failed, so it will run on the next poll.
+    assert after["configured"] is True and after["runnable"] is True
 
 
-async def test_a_disabled_row_is_not_runnable(client: httpx.AsyncClient) -> None:
+async def test_a_disabled_row_is_neither_configured_nor_runnable(client: httpx.AsyncClient) -> None:
     await client.put(f"{SOURCES_URL}/themuse", json={"enabled": True})
     await client.put(f"{SOURCES_URL}/themuse", json={"enabled": False})
-    assert (await _row(client, "themuse"))["runnable"] is False
+    off = await _row(client, "themuse")
+    assert off["configured"] is False and off["runnable"] is False
 
 
-async def test_a_keyed_source_is_not_runnable_until_its_credentials_are_stored(
+async def test_a_keyed_source_is_not_configured_until_its_credentials_are_stored(
     client: httpx.AsyncClient, session_factory: async_sessionmaker[AsyncSession], user_id: uuid.UUID
 ) -> None:
     """A row saying "enabled" describing something that cannot run is the `resume_template` defect.
@@ -132,7 +142,7 @@ async def test_a_keyed_source_is_not_runnable_until_its_credentials_are_stored(
     row = await _row(client, "adzuna")
     assert row["enabled"] is True
     assert row["key_set"] is False
-    assert row["runnable"] is False
+    assert row["configured"] is False and row["runnable"] is False
 
     assert (
         await client.put(
@@ -141,7 +151,66 @@ async def test_a_keyed_source_is_not_runnable_until_its_credentials_are_stored(
         )
     ).status_code == 200
     after = await _row(client, "adzuna")
-    assert after["key_set"] is True and after["runnable"] is True
+    assert after["key_set"] is True
+    assert after["configured"] is True and after["runnable"] is True
+
+
+async def test_configured_equals_usable_source_ids_for_the_same_fixture(
+    client: httpx.AsyncClient, session_factory: async_sessionmaker[AsyncSession], user_id: uuid.UUID
+) -> None:
+    """Architecture 12.1 point 4.
+
+    2.2 claims "the checklist and the Settings page cannot disagree about what ready means" because
+    both call `usable_source_ids`. That was an assertion about the code, not something a test could
+    check, until `configured` carried the pause-free predicate on its own. Now it is checkable: the
+    wire field must equal the pure function, computed here from the same rows the endpoint read.
+    """
+    await client.put(f"{SOURCES_URL}/themuse", json={"enabled": True})
+    await client.put(
+        f"{SOURCES_URL}/adzuna",
+        json={"enabled": True, "credentials": {"app_id": "a", "app_key": "b"}},
+    )
+    await client.put(f"{SOURCES_URL}/remotive", json={"enabled": False})
+
+    async with session_factory() as session:
+        rows = {r.source: r for r in await profile_repo.list_aggregators(session, user_id)}
+        credentialled = await creds_repo.credentialled_sources(session, user_id)
+    expected = usable_source_ids(rows, credentialled, aggregator_sources())
+
+    settings_rows = (await client.get(SOURCES_URL)).json()
+    assert {r["id"] for r in settings_rows if r["configured"]} == expected
+    # And the fixture is not trivially empty on either side, or the equality would prove nothing.
+    assert len(expected) == 2, sorted(expected)
+
+    # The checklist counts the same set, through the same function on a different read path.
+    checklist = (await client.get("/api/v1/dashboard")).json()["checklist"]
+    assert checklist["usable_sources"] == len(expected)
+    assert checklist["job_sources"] is True
+
+
+async def test_a_paused_source_is_still_configured_so_the_checklist_does_not_flip(
+    client: httpx.AsyncClient, session_factory: async_sessionmaker[AsyncSession], user_id: uuid.UUID
+) -> None:
+    """Architecture 12.1 point 3, and it is the reason `configured` exists rather than `runnable`
+    simply gaining the pause term.
+
+    A paused source is a setup that IS done and a pipeline that has stopped. Those are different rows
+    on different screens, and the checklist must not read "not done" because one poll cycle failed --
+    that would send a user to Settings to fix something they already did. C4 is untouched.
+    """
+    search_id, entry_updated_at = await _pause_fixture(client, session_factory, user_id)
+    async with session_factory() as session:
+        assert await _poll(session, user_id, _spec(search_id, entry_updated_at)) == PAUSED_MESSAGE
+
+    row = await _row(client, STUB)
+    assert row["paused"] is True and row["runnable"] is False
+    assert row["configured"] is True
+
+    checklist = (await client.get("/api/v1/dashboard")).json()["checklist"]
+    assert checklist["job_sources"] is True, (
+        "a transient pause must not undo a completed setup step"
+    )
+    assert checklist["usable_sources"] == 1
 
 
 # --- Row 4: a source that returned zero for a location ----------------------------------------
@@ -382,11 +451,14 @@ async def test_paused_then_resumed_verified_by_running_the_poller_both_times(
     row = await _row(client, STUB)
     assert row["paused"] is True
     assert row["last_run"]["error"] == PAUSED_MESSAGE
-    # `runnable` deliberately EXCLUDES pause: it answers "is setup done", and pause is scoped per
-    # (source, board, search_id) so one boolean per source cannot carry it. The row is still
-    # configured and credentialled, so it is runnable AND currently paused -- two different
-    # questions, which is why there are two fields.
-    assert row["runnable"] is True
+    # `configured` deliberately EXCLUDES pause: it answers "is setup done", and pause is scoped per
+    # (source, board, search_id) so one boolean per source cannot carry it. The row is still set up
+    # and credentialled, so `configured` stays true.
+    assert row["configured"] is True
+    # `runnable` is the present-tense claim, so it MUST account for pause: the poller will refuse
+    # this source on the next poll, and a field saying otherwise would be asserting something about
+    # a state it does not check (architecture 12.1).
+    assert row["runnable"] is False
 
     # 3. Resume.
     resumed = await client.post(f"{SOURCES_URL}/{STUB}/resume")

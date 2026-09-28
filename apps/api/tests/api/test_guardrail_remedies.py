@@ -4,6 +4,12 @@ A blocked package says which rule fired, what it said and which bullet, and then
 not an explanation, and a rule added without a remedy would put the product straight back there --
 which is why this discovers the rules from the package rather than from a list someone has to
 remember to update.
+
+NOTE ON LOCATION. These are pure functions with no database and no HTTP, so `tests/unit/` is where
+they belong by shape. They live under `tests/api/` because that is where the *gate* looks: the brief,
+architecture condition C10 and every report use `uv run pytest tests/api tests/db`, this repository
+has no CI, and a guard nothing runs is not a guard. What they assert is an API contract anyway --
+`JobFilterId` is a wire type and the remedies are attached at response time.
 """
 
 from __future__ import annotations

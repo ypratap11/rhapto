@@ -76,10 +76,19 @@ export const WIDEN: Record<JobFilterId, Widen> = {
   bucket: { label: () => "Any fit bucket", apply: null },
 };
 
-/** Everything the Jobs page sends to `GET /jobs`, cleared. Used by the `combination` cause, where no
- * single filter is to blame and so no single widen helps. */
+/**
+ * Every filter the Jobs page sends to `GET /jobs`, cleared. Used by the `combination` cause, where no
+ * single filter is to blame and so no single widen helps.
+ *
+ * `hidden` is deliberately NOT cleared. It is a boolean MODE, not a filter that can be absent: the
+ * API has no way to express "hidden and not hidden", so setting it to `false` picks the
+ * exclude-hidden side rather than removing the constraint. For a corpus that is entirely hidden,
+ * "clear all filters" therefore left the grid exactly as empty with exactly the same message — a
+ * dead end presented as a fix. The hidden toggle is offered as its own control instead, which is the
+ * only thing that actually reaches those rows.
+ */
 export function clearAllFilters(state: SearchState): SearchState {
-  return { ...state, sources: [], field: null, posted_within: "any", hidden: false, fit: "all" };
+  return { ...state, sources: [], field: null, posted_within: "any", fit: "all" };
 }
 
 /** Is anything the Jobs page controls actually narrowing the result right now?

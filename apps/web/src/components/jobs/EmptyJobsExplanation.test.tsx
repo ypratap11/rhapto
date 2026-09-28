@@ -118,14 +118,131 @@ describe("EmptyJobsExplanation, a filter that excluded everything", () => {
 });
 
 describe("EmptyJobsExplanation, a combination", () => {
-  it("blames nobody and offers to clear everything", async () => {
-    const state: SearchState = { ...DEFAULT_SEARCH_STATE, sources: ["adzuna"], posted_within: "24h" };
-    const { onChange } = setup({ state, reason: reason({ cause: "combination", filter_id: null }) });
+  it("says removing any single filter still leaves nothing, which is what the cause means", () => {
+    // `combination` is returned when EVERY leave-one-out count is zero. The description therefore
+    // has to say that removing any one filter changes nothing — the previous copy said the
+    // opposite ("each filter on its own leaves something") and then advised widening them one at a
+    // time, which cannot work for this cause by construction.
+    setup({
+      state: { ...DEFAULT_SEARCH_STATE, sources: ["adzuna"], posted_within: "24h" },
+      reason: reason({ cause: "combination", filter_id: null, total: 12 }),
+    });
     expect(screen.getByText(/all of these filters together/i)).toBeInTheDocument();
+    expect(screen.getByText(/removing any single one of them still leaves nothing/i)).toBeInTheDocument();
+    // And it must NOT claim the opposite.
+    expect(screen.queryByText(/on its own leaves something/i)).not.toBeInTheDocument();
     // No filter is named, because none is responsible.
     expect(screen.queryByText(/excluded everything/i)).not.toBeInTheDocument();
-    await userEvent.setup().click(screen.getByRole("button", { name: /clear all filters/i }));
-    expect(onChange).toHaveBeenCalledWith({ ...state, sources: [], posted_within: "any", field: null, hidden: false, fit: "all" });
+  });
+
+  it("counts the user's own jobs in the sentence, from the response", () => {
+    // A second fixture with a different total, so the number cannot be a literal.
+    setup({ reason: reason({ cause: "combination", filter_id: null, total: 1 }) });
+    expect(screen.getByText(/you have 1 job, and none matches/i)).toBeInTheDocument();
+  });
+
+  it("does not promise the grid will fill, and clears only the filters", async () => {
+    const state: SearchState = { ...DEFAULT_SEARCH_STATE, sources: ["adzuna"], posted_within: "24h" };
+    const { onChange } = setup({ state, reason: reason({ cause: "combination", filter_id: null }) });
+    await userEvent.setup().click(screen.getByRole("button", { name: /clear these filters/i }));
+    // `hidden` is NOT touched. It is a mode, not a filter that can be absent: the API cannot express
+    // "hidden and not hidden", so setting it to false picks the exclude-hidden side rather than
+    // removing the constraint — which for an entirely-hidden corpus left the grid exactly as empty
+    // with exactly the same message.
+    expect(onChange).toHaveBeenCalledWith({ ...state, sources: [], posted_within: "any", field: null, fit: "all" });
+  });
+
+  it("offers the hidden toggle, which is the one control cleared filters cannot replace", async () => {
+    // The dead end QA reproduced: a corpus that is entirely hidden and entirely over 90 days old.
+    // Clearing the filters leaves it empty; flipping the mode is what reaches those rows.
+    const { onChange } = setup({ reason: reason({ cause: "combination", filter_id: null }) });
+    await userEvent.setup().click(screen.getByRole("button", { name: /include hidden jobs/i }));
+    expect(onChange).toHaveBeenCalledWith({ ...DEFAULT_SEARCH_STATE, hidden: true });
+  });
+});
+
+describe("EmptyJobsExplanation, a never-matched search sharing the blame", () => {
+  it("still says the search has never matched when the cause is a combination", () => {
+    // The compound case: the rest of the corpus is excluded too, so `filter_id` is null and a check
+    // on `filter_id === "search_id"` alone went silent — while `search_runs` and `search_ever_found`
+    // were sitting in the response the whole time.
+    setup({
+      reason: reason({
+        cause: "combination",
+        filter_id: null,
+        search_name: "Bay Area PM",
+        search_location: "San Francisco Bay Area",
+        search_runs: 3,
+        search_ever_found: false,
+      }),
+    });
+    expect(screen.getByText(/Bay Area PM has run 3 times and never returned a job/i)).toBeInTheDocument();
+    expect(screen.queryByText(/removing any single one of them/i)).not.toBeInTheDocument();
+  });
+
+  it("does not override a more specific blame on a different filter", () => {
+    // `posted_within` is blamed and widening it would reveal ten jobs. That is more actionable than
+    // the search's history, so the one-click fix must not be buried.
+    setup({
+      reason: reason({
+        cause: "filter",
+        filter_id: "posted_within",
+        filter_value: "24h",
+        would_match: 10,
+        search_name: "Bay Area PM",
+        search_runs: 3,
+        search_ever_found: false,
+      }),
+    });
+    expect(screen.getByText(/date filter excluded everything/i)).toBeInTheDocument();
+    expect(screen.queryByText(/never returned a job/i)).not.toBeInTheDocument();
+  });
+
+  it("stays quiet for a combination when the search HAS matched before", () => {
+    setup({
+      reason: reason({ cause: "combination", filter_id: null, search_runs: 9, search_ever_found: true }),
+    });
+    expect(screen.queryByText(/never returned a job/i)).not.toBeInTheDocument();
+    expect(screen.getByText(/removing any single one of them still leaves nothing/i)).toBeInTheDocument();
+  });
+});
+
+describe("EmptyJobsExplanation, names rather than identifiers", () => {
+  it("names the saved search instead of printing its UUID", () => {
+    // `filter_value` for `search_id` is `str(p.search_id)` on the server — correct there, one
+    // definition per filter — but the response already carries `search_name` for the sentence.
+    setup({
+      reason: reason({
+        cause: "filter",
+        filter_id: "search_id",
+        filter_value: "3f2a1b8c-7d4e-4f10-9b22-0a1c2d3e4f50",
+        would_match: 6,
+        search_name: "Bay Area PM",
+        search_runs: 9,
+        search_ever_found: true,
+      }),
+    });
+    expect(screen.getByText(/saved search: Bay Area PM/)).toBeInTheDocument();
+    expect(screen.queryByText(/3f2a1b8c/)).not.toBeInTheDocument();
+  });
+
+  it("names the taxonomy field instead of printing its id", () => {
+    setup({
+      reason: reason({
+        cause: "filter",
+        filter_id: "field",
+        filter_value: "program-project-management",
+        would_match: 4,
+        field_name: "Program and Project Management",
+      }),
+    });
+    expect(screen.getByText(/field: Program and Project Management/)).toBeInTheDocument();
+    expect(screen.queryByText(/program-project-management/)).not.toBeInTheDocument();
+  });
+
+  it("falls back to the raw value when no name was sent", () => {
+    setup({ reason: reason({ cause: "filter", filter_id: "sources", filter_value: "adzuna", would_match: 3 }) });
+    expect(screen.getByText(/source: adzuna/)).toBeInTheDocument();
   });
 });
 

@@ -184,12 +184,15 @@ async def test_saved_searches_carry_their_new_counts(
     # row, and the run history is the only honest record of what a poll ever returned. A job row
     # can arrive by backfill or be detached by a delete, which is why the job-row proxy was
     # rejected for this question.
+    # `runs: 0` is the other half, and it is why the rail does not label this "Never matched": the
+    # search has not been polled, which is a different state from polled-and-found-nothing.
     assert body["saved_searches"] == [
         {
             "id": created["id"],
             "name": "program manager",
             "new_count": 1,
             "ever_found": False,
+            "runs": 0,
         }
     ]
 

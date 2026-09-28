@@ -6,8 +6,8 @@ import { SavedSearchesRail } from "./SavedSearchesRail";
 // Two searches with contrasting histories, because both render a zero badge: "Data roles" has
 // polled and never found a posting, which is a different thing to say than "nothing new".
 const searches: DashboardSavedSearch[] = [
-  { id: "s1", name: "PM roles", new_count: 4, ever_found: true },
-  { id: "s2", name: "Data roles", new_count: 0, ever_found: false },
+  { id: "s1", name: "PM roles", new_count: 4, ever_found: true, runs: 12 },
+  { id: "s2", name: "Data roles", new_count: 0, ever_found: false, runs: 3 },
 ];
 
 describe("SavedSearchesRail", () => {
@@ -55,10 +55,25 @@ describe("SavedSearchesRail, the silence at zero", () => {
   });
 
   it("does not mark a search that has found jobs before but has nothing new right now", () => {
-    render(<SavedSearchesRail searches={[{ id: "s3", name: "Quiet roles", new_count: 0, ever_found: true }]} />);
+    render(<SavedSearchesRail searches={[{ id: "s3", name: "Quiet roles", new_count: 0, ever_found: true, runs: 9 }]} />);
     const row = screen.getByRole("link", { name: /quiet roles/i });
     expect(row).not.toHaveTextContent("Never matched");
     expect(row).not.toHaveTextContent("new");
   });
 });
 
+describe("SavedSearchesRail, a search that has not been polled yet", () => {
+  it("does not label a brand-new search 'Never matched'", () => {
+    // True and useless: a search created five seconds ago has never matched because nothing has
+    // asked yet. `runs` is what separates "asked and got nothing" from "not asked".
+    render(<SavedSearchesRail searches={[{ id: "s4", name: "Brand new", new_count: 0, ever_found: false, runs: 0 }]} />);
+    const row = screen.getByRole("link", { name: /brand new/i });
+    expect(row).not.toHaveTextContent("Never matched");
+  });
+
+  it("still labels one that has been polled and found nothing", () => {
+    // The contrasting fixture, differing only in `runs`, so the assertion is about that field.
+    render(<SavedSearchesRail searches={[{ id: "s5", name: "Asked and empty", new_count: 0, ever_found: false, runs: 4 }]} />);
+    expect(screen.getByRole("link", { name: /asked and empty/i })).toHaveTextContent("Never matched");
+  });
+});

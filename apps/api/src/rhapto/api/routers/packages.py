@@ -57,6 +57,10 @@ def package_to_out(row: Package) -> PackageOut:
             cache_creation_input_tokens=row.cache_creation_tokens,
         ),
     )
+    # Bound before the constructor, not inside it: `guardrail_remedies` reads this, and a walrus in
+    # one keyword argument that the next one depends on is correct only while the arguments stay in
+    # this order. A reorder or an argument-sorting formatter would break it silently.
+    report = GuardrailReport.model_validate(row.guardrail_report_json)
     return PackageOut(
         id=row.id,
         job_id=row.job_id,
@@ -67,7 +71,7 @@ def package_to_out(row: Package) -> PackageOut:
         cover_note=row.cover_note,
         change_log=row.change_log,
         answers=dict(row.answers_json),
-        guardrail_report=(report := GuardrailReport.model_validate(row.guardrail_report_json)),
+        guardrail_report=report,
         guardrail_remedies=remedies_for(v.rule for v in report.violations),
         jd_extract=JDExtract.model_validate(row.jd_extract_json),
         llm_calls=row.llm_calls,

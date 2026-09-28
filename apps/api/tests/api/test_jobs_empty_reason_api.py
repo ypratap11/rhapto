@@ -365,3 +365,76 @@ async def test_an_unknown_taxonomy_field_is_422_on_both_endpoints(
     """The shared `Depends(job_filters)` is what makes this true of both endpoints at once."""
     assert (await client.get(f"{REASON}?field={field}")).status_code == 422
     assert (await client.get(f"/api/v1/jobs?field={field}")).status_code == 422
+
+
+# --- C2 as a test, not a grep ------------------------------------------------------------------
+
+#: Filter sets spanning the parameters the Jobs page really sends, plus a couple it does not, chosen
+#: to produce empty and non-empty results and several different blamed filters.
+FILTER_SETS = [
+    "",
+    "?posted_within=24h",
+    "?posted_within=any",
+    "?sources=adzuna",
+    "?sources=themuse",
+    "?sources=themuse,adzuna",
+    "?field=program-project-management",
+    "?field=engineering",
+    "?hidden=true",
+    "?hidden=true&posted_within=24h",
+    "?sources=adzuna&posted_within=24h",
+    "?sources=themuse&posted_within=any",
+    "?field=engineering&sources=themuse",
+    "?recommended=true",
+    "?track=tpm",
+    "?bucket=low",
+]
+
+
+async def test_the_listing_is_empty_exactly_when_the_diagnosis_says_it_is(
+    client: httpx.AsyncClient, session_factory: async_sessionmaker[AsyncSession], user_id: uuid.UUID
+) -> None:
+    """Condition C2, enforced by behaviour rather than by a grep in a report.
+
+    Nothing today fails if someone re-adds an inline `query = query.where(...)` to `list_jobs` for a
+    predicate that is not in `JOB_FILTERS`: the listing would narrow by it and the diagnosis would
+    not know, so an empty grid would come back with `cause = "nothing_matched"` -- the endpoint saying
+    "there are rows for these filters" about a grid with none.
+
+    That is precisely what this asserts, over sixteen filter sets: `GET /jobs` returns rows if and
+    only if the diagnosis declines to explain an empty result. One statement of the registry's whole
+    purpose, and it cannot be satisfied by a duplicated predicate.
+    """
+    async with session_factory() as session:
+        await _track(session, user_id, "tpm", "program-project-management")
+        # A spread that makes several of the sets above empty and several non-empty: two fresh, one
+        # old and dateless, one hidden, one on a second source.
+        fresh = await _job(session, user_id, key="fresh", source="themuse", track="tpm")
+        await _job(session, user_id, key="second", source="adzuna", track="tpm")
+        old_id = await _job(session, user_id, key="old", source="themuse", track="tpm")
+        old = await jobs_repo.get_job(session, user_id, old_id)
+        assert old is not None
+        old.posted_at, old.discovered_at = None, datetime.now(UTC) - timedelta(days=200)
+        hidden_id = await _job(session, user_id, key="hidden", source="themuse", track="tpm")
+        hidden = await jobs_repo.get_job(session, user_id, hidden_id)
+        assert hidden is not None
+        jobs_repo.set_hidden(hidden, True)
+        assert fresh is not None
+        await session.commit()
+
+    empty_sets: list[str] = []
+    for query in FILTER_SETS:
+        rows = (await client.get(f"/api/v1/jobs{query}")).json()
+        body = (await client.get(f"{REASON}{query}")).json()
+        listing_empty = len(rows) == 0
+        diagnosis_explains = body["cause"] != "nothing_matched"
+        assert listing_empty == diagnosis_explains, (
+            f"{query or '(no filters)'}: GET /jobs returned {len(rows)} row(s) while "
+            f"empty-reason said cause={body['cause']!r}"
+        )
+        if listing_empty:
+            empty_sets.append(query)
+
+    # The fixture has to exercise both sides, or the biconditional above is vacuously true.
+    assert empty_sets, "no filter set produced an empty grid; the fixture proves nothing"
+    assert len(empty_sets) < len(FILTER_SETS), "every filter set was empty; same problem"

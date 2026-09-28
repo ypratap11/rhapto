@@ -20,6 +20,23 @@ function plural(n: number, word: string): string {
 }
 
 /**
+ * The blamed filter's value as a person would recognise it.
+ *
+ * `filter_value` is rendered by the filter's own registry entry, which is the right thing on the
+ * server — one definition, and no display concern leaking into the query layer. But two of those
+ * values are identifiers: `search_id` renders a UUID and `field` renders a taxonomy id. The response
+ * already carries `search_name` and `field_name` for exactly this, so a sentence reading
+ * "(saved search: 3f2a1b8c-…)" was using the wrong field, not missing one.
+ *
+ * Still never a literal: every branch returns something the API sent.
+ */
+function displayValue(reason: JobsEmptyReason): string | null {
+  if (reason.filter_id === "search_id") return reason.search_name ?? reason.filter_value ?? null;
+  if (reason.filter_id === "field") return reason.field_name ?? reason.filter_value ?? null;
+  return reason.filter_value ?? null;
+}
+
+/**
  * Why this grid is empty, and the one click that would change it.
  *
  * Every sentence here is built from values the API sent -- `field_name` and `user_field_names` come
@@ -116,7 +133,18 @@ export function EmptyJobsExplanation({
 
   // A saved search that has run and never returned anything is a different thing to say than
   // "this filter excluded everything", so it is checked before the generic filter branch.
-  if (reason.filter_id === "search_id" && reason.search_runs != null && !reason.search_ever_found) {
+  //
+  // Gated on `search_id` being blamed OR nothing being blamed at all. The second half matters: when
+  // the rest of the corpus is excluded too, the cause is `combination` and `filter_id` is null, so a
+  // check on `filter_id === "search_id"` alone went quiet in exactly the compound case — even though
+  // the run history is already sitting in the response. It deliberately does NOT fire when some
+  // OTHER filter is blamed with a positive `would_match`: that blame is more specific and more
+  // actionable, and overriding it would bury a one-click fix.
+  if (
+    (reason.filter_id === "search_id" || reason.cause === "combination") &&
+    reason.search_runs != null &&
+    !reason.search_ever_found
+  ) {
     const runs = reason.search_runs;
     const name = reason.search_name ?? "This search";
     const where = reason.search_location ? ` for ${reason.search_location}` : "";
@@ -148,7 +176,7 @@ export function EmptyJobsExplanation({
 
   if (reason.cause === "filter" && reason.filter_id) {
     const label = FILTER_LABEL[reason.filter_id];
-    const value = reason.filter_value;
+    const value = displayValue(reason);
     const found = reason.would_match ?? 0;
     return (
       <Explanation
@@ -163,15 +191,30 @@ export function EmptyJobsExplanation({
     return (
       <Explanation
         title="No job matches all of these filters together"
-        // No culprit, because there is none: removing any one of them still leaves nothing. Naming
-        // one here would be a guess.
-        description="Each filter on its own leaves something, but not the combination. Try clearing them and narrowing again."
+        // TRUE BY CONSTRUCTION, which the previous wording was not. `combination` is returned when
+        // every leave-one-out count is zero — removing any single filter still leaves nothing. The
+        // old sentence ("each filter on its own leaves something") asserted the exact opposite of
+        // the condition it was rendered for, and the advice that followed it — widen them one at a
+        // time — could not work.
+        description={`You have ${plural(reason.total, "job")}, and none matches all of these filters. Removing any single one of them still leaves nothing, so there is no one filter to widen.`}
         action={
-          hasActiveFilters(state) ? (
-            <Button size="sm" variant="outline" onClick={() => onChange(clearAllFilters(state))}>
-              Clear all filters
+          <div className="flex flex-wrap gap-2">
+            {/* Labelled by what it DOES, not by what it achieves. Clearing the filters cannot be
+                promised to fill the grid — for a corpus that is entirely hidden it provably does
+                not — so the copy above no longer promises it. */}
+            {hasActiveFilters(state) ? (
+              <Button size="sm" variant="outline" onClick={() => onChange(clearAllFilters(state))}>
+                Clear these filters
+              </Button>
+            ) : null}
+            {/* The hidden switch is a MODE, not a filter that can be absent: `clearAllFilters`
+                cannot express "hidden and not hidden", so clearing it only ever picks one side. That
+                is why the toggle is offered separately — it is the one control that reaches a corpus
+                the cleared filters still cannot show. */}
+            <Button size="sm" variant="outline" onClick={() => onChange(WIDEN.hidden.apply!(state))}>
+              {WIDEN.hidden.label(state)}
             </Button>
-          ) : null
+          </div>
         }
       />
     );

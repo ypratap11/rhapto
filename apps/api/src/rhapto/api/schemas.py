@@ -486,12 +486,16 @@ class SourceSettingOut(BaseModel):
     fields: list[str]
     enabled: bool
     key_set: bool
-    #: Could this source actually return a posting on the next poll? Follows the poller's rule (an
-    #: `aggregators` row must exist and be enabled, and a keyed source must have credentials), not
-    #: this endpoint's own `enabled` default -- which is why a user who has never opened Settings
-    #: sees `enabled = true, runnable = false`. That discrepancy is real and is recorded in
-    #: docs/portal-backend-followups.md; making it visible is this branch's job, fixing it is not.
-    runnable: bool = False
+    #: Is this source SET UP -- follows the poller's rule (an `aggregators` row must exist and be
+    #: enabled, and a keyed source must have credentials), not this endpoint's own `enabled` default,
+    #: which is why a user who has never opened Settings sees `enabled = true, configured = false`.
+    #: That discrepancy is real and is recorded in docs/portal-backend-followups.md; making it
+    #: visible is this branch's job, fixing it is not.
+    #:
+    #: Deliberately pause-free (§2.2): pause is scoped per `(source, board, search_id)`, so one
+    #: boolean per source cannot carry it, and `ChecklistOut.job_sources` uses this same predicate so
+    #: a transient pause does not flip a setup row to "not done".
+    configured: bool = False
     #: Paused **as of the last run**: at least one of this source's scopes was refused with
     #: `PAUSED_MESSAGE` on its most recent attempt, and that attempt started after the row was last
     #: saved. There is no `paused` column -- pause is decided at poll time -- so this lags the third
@@ -499,6 +503,17 @@ class SourceSettingOut(BaseModel):
     #: board sources (greenhouse/lever/ashby/workday) also pause, per watchlist entry, and their
     #: surface is the watchlist, which already resets every streak on save.
     paused: bool = False
+    #: Will this source run on the NEXT poll? `configured and not paused` -- a present-tense
+    #: capability claim, which is why it has to account for pause: a `runnable` reading true for a
+    #: source the poller will refuse would be a value asserting something about a state it does not
+    #: check, which is the `resume_template` defect this whole branch exists to remove
+    #: (architect's ruling, architecture §12.1).
+    #:
+    #: Residual proxy (§9 item 5): `paused` is "at least one scope paused", so this reads false for a
+    #: source paused for some but not all of its saved searches -- it says "stopped" when it is partly
+    #: working. Conservative in the direction of surfacing a real failure, which is the right bias
+    #: here, and `last_run.error` names the failing scope.
+    runnable: bool = False
     last_run: SourceRunOut | None = None
 
 
@@ -659,6 +674,11 @@ class SavedSearchCountOut(BaseModel):
     #: The rail hides its badge when `new_count` is 0, which is exactly where the silence lives: a
     #: search that has never found anything looks identical to one the user has already read.
     ever_found: bool = False
+    #: Poll attempts recorded for this search. Needed alongside `ever_found` because `!ever_found`
+    #: alone cannot tell "polled and never matched" from "created a moment ago and not yet polled",
+    #: and labelling the second one "never matched" is true and useless. Free: the dashboard already
+    #: holds the `search_run_stats` row this comes from.
+    runs: int = 0
 
 
 class FollowUpOut(BaseModel):

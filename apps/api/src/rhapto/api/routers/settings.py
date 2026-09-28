@@ -298,8 +298,8 @@ async def _source_settings(session: AsyncSession, user_id: uuid.UUID) -> list[So
     stored = await creds_repo.credentialled_sources(session, user_id)
     registry = aggregator_sources()
     runs = await latest_runs_with_search(session, user_id)
-    # `runnable` and the checklist's `job_sources` are the same function, so the Settings page and
-    # the dashboard cannot disagree about what "ready" means.
+    # `configured` and the checklist's `job_sources` are the same function, so the Settings page and
+    # the dashboard cannot disagree about what "set up" means.
     usable = usable_source_ids(rows, stored, registry)
     by_source: dict[str, list[LatestRun]] = {}
     for entry in runs:
@@ -311,6 +311,11 @@ async def _source_settings(session: AsyncSession, user_id: uuid.UUID) -> list[So
             row.enabled if row is not None else (KEYLESS_DEFAULT_ENABLED and not info.needs_key)
         )
         scopes = by_source.get(info.name, [])
+        configured = info.name in usable
+        paused = paused_as_of_last_run(
+            [(e.run.error, e.run.started_at) for e in scopes],
+            row.updated_at if row is not None else None,
+        )
         out.append(
             SourceSettingOut(
                 id=info.name,
@@ -319,11 +324,12 @@ async def _source_settings(session: AsyncSession, user_id: uuid.UUID) -> list[So
                 fields=list(info.fields),
                 enabled=enabled,
                 key_set=info.name in stored,
-                runnable=info.name in usable,
-                paused=paused_as_of_last_run(
-                    [(e.run.error, e.run.started_at) for e in scopes],
-                    row.updated_at if row is not None else None,
-                ),
+                configured=configured,
+                paused=paused,
+                # One `and`, no extra query: both inputs are already here. "Runnable" is a
+                # present-tense claim about the next poll, so it has to account for pause --
+                # architecture §12.1.
+                runnable=configured and not paused,
                 # `latest_runs_with_search` is sorted newest first, so the head of this source's
                 # scopes is its newest run across all of them.
                 last_run=_run_out(scopes[0]) if scopes else None,

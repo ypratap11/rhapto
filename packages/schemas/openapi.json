@@ -2617,6 +2617,11 @@
           "new_count": {
             "title": "New Count",
             "type": "integer"
+          },
+          "runs": {
+            "default": 0,
+            "title": "Runs",
+            "type": "integer"
           }
         },
         "required": [
@@ -2989,6 +2994,11 @@
       },
       "SourceSettingOut": {
         "properties": {
+          "configured": {
+            "default": false,
+            "title": "Configured",
+            "type": "boolean"
+          },
           "enabled": {
             "title": "Enabled",
             "type": "boolean"

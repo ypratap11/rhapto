@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import func, select
+from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from rhapto.db.models import Job, JobScore, PollRun, SearchRow
@@ -52,7 +52,15 @@ async def latest_runs_with_search(session: AsyncSession, user_id: uuid.UUID) -> 
     """
     rows = await session.execute(
         select(PollRun, SearchRow.name, SearchRow.location)
-        .outerjoin(SearchRow, SearchRow.id == PollRun.search_id)
+        # `SearchRow.user_id == user_id` is in the ON clause, not left to data integrity. Nothing
+        # writes another user's `search_id` onto a `poll_runs` row today -- `build_specs` only ever
+        # sees this user's searches -- but architecture §3 says every read is scoped by `user_id`, and
+        # a join scoped by "that could not happen" is a tenancy guarantee resting on an invariant no
+        # constraint enforces. It costs nothing.
+        .outerjoin(
+            SearchRow,
+            and_(SearchRow.id == PollRun.search_id, SearchRow.user_id == user_id),
+        )
         .where(PollRun.user_id == user_id)
         .order_by(PollRun.source, PollRun.board, PollRun.search_id, PollRun.started_at.desc())
         .distinct(PollRun.source, PollRun.board, PollRun.search_id)

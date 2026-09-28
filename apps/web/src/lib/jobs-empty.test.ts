@@ -86,9 +86,16 @@ describe("clearAllFilters", () => {
       sources: [],
       field: null,
       posted_within: "any",
-      hidden: false,
       fit: "all",
     });
+  });
+
+  it("leaves the hidden MODE alone, because clearing it picks a side rather than removing it", () => {
+    // The API has no tri-state for `hidden`, so `hidden: false` is the exclude-hidden view, not the
+    // absence of the constraint. For a corpus that is entirely hidden, "clear all filters" that also
+    // set `hidden: false` left the grid exactly as empty with exactly the same message.
+    expect(clearAllFilters({ ...DEFAULT_SEARCH_STATE, hidden: true }).hidden).toBe(true);
+    expect(clearAllFilters({ ...DEFAULT_SEARCH_STATE, hidden: false }).hidden).toBe(false);
   });
 
   it("leaves the query, location, remote, sort and page alone", () => {

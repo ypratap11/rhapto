@@ -94,8 +94,8 @@ async def test_the_checklist_and_the_settings_page_agree_about_what_is_ready(
     await client.put("/api/v1/settings/sources/themuse", json={"enabled": True})
     await client.put("/api/v1/settings/sources/remotive", json={"enabled": True})
     rows = (await client.get("/api/v1/settings/sources")).json()
-    runnable = [r["id"] for r in rows if r["runnable"]]
-    assert (await _checklist(client))["usable_sources"] == len(runnable)
+    configured = [r["id"] for r in rows if r["configured"]]
+    assert (await _checklist(client))["usable_sources"] == len(configured)
 
 
 # --- saved_searches --------------------------------------------------------------------------
