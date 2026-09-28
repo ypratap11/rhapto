@@ -111,7 +111,9 @@ async def live(
                 len(result.new_job_ids),
             )
     session.expire_all()
-    rows = await jobs_repo.list_jobs(session, user_id, ids=ids, sort="fit")
+    rows = await jobs_repo.list_jobs(
+        session, jobs_repo.JobFilterParams(user_id=user_id, ids=tuple(ids), sort="fit")
+    )
     return LiveSearchOut(
         jobs=await _outs(session, user_id, rows),
         per_source={

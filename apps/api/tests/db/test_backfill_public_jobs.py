@@ -283,7 +283,7 @@ async def test_unscored_backfilled_rows_stay_in_the_default_fit_bucket(
     list_jobs returns list[tuple[Job, str | None]] (job, search name), verified against
     db/repositories/jobs.py:63 -- the earlier draft of this test indexed it as if it returned bare
     Job rows."""
-    from rhapto.db.repositories.jobs import list_jobs
+    from rhapto.db.repositories.jobs import JobFilterParams, list_jobs
 
     owner = await get_or_create_user(session, "owner@example.com")
     newcomer = await get_or_create_user(session, "newcomer@example.com")
@@ -292,7 +292,7 @@ async def test_unscored_backfilled_rows_stay_in_the_default_fit_bucket(
     await backfill_public_jobs(session, newcomer.id, public_sources=PUBLIC_SOURCES)
     await session.commit()
 
-    rows = await list_jobs(session, newcomer.id, bucket="fit")
+    rows = await list_jobs(session, JobFilterParams(user_id=newcomer.id, bucket="fit"))
     assert len(rows) == 1
     job, _search_name = rows[0]
     assert job.best_fit is None

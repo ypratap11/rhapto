@@ -4697,7 +4697,7 @@
     },
     "/api/v1/me/bootstrap": {
       "post": {
-        "description": "Idempotent, cheap on every call after the first: the web app calls this once per session,\nand it only ever does real work the one time `users.seeded_at` is still NULL. Kept entirely\nout of `current_user` (plan-review C6) so no other endpoint's request pays for it and no\nfailure here can present as an auth failure.\n\nThe claim is a single atomic `UPDATE ... WHERE seeded_at IS NULL RETURNING id`, not a read-\nthen-write: Postgres's row-level locking means at most one of two concurrent callers ever gets\na row back, so the backfill runs exactly once per account even under a real race -- no\nadvisory lock, no new engine-access plumbing needed.",
+        "description": "Idempotent, cheap on every call after the first: the web app calls this once per session,\nand it only ever does real work the one time `users.seeded_at` is still NULL. Kept entirely\nout of `current_user` (plan-review C6) so no other endpoint's request pays for it and no\nfailure here can present as an auth failure.\n\nThe claim (`claim_seed`, `db/repositories/users.py`) is a single atomic\n`UPDATE ... WHERE seeded_at IS NULL RETURNING id`, not a read-then-write: Postgres's row-level\nlocking means at most one of two concurrent callers ever gets a row back, so the backfill runs\nexactly once per account even under a real race -- no advisory lock, no new engine-access\nplumbing needed.\n\nIf the claim was won but there was nothing to copy yet (a fresh instance with no public jobs\ndiscovered), the claim is rolled back along with it rather than kept: a permanently-seeded\naccount that got nothing is worse than one cheap re-attempt next session, once the poller has\nactually ingested something (plan-review M3).",
         "operationId": "bootstrap_api_v1_me_bootstrap_post",
         "parameters": [
           {
@@ -6064,7 +6064,7 @@
     },
     "/api/v1/profile/import-resume": {
       "post": {
-        "description": "Parse an uploaded resume into a proposed profile. Writes nothing.\n\nThe user reviews the proposal and accepts it through the existing block, track and answer\nendpoints, so there is exactly one code path that writes a profile.",
+        "description": "Parse an uploaded resume into a proposed profile. Writes nothing but the trial claim.\n\nThe user reviews the proposal and accepts it through the existing block, track and answer\nendpoints, so there is exactly one code path that writes a profile.",
         "operationId": "import_resume_endpoint_api_v1_profile_import_resume_post",
         "parameters": [
           {

@@ -286,10 +286,16 @@ export interface paths {
          *     out of `current_user` (plan-review C6) so no other endpoint's request pays for it and no
          *     failure here can present as an auth failure.
          *
-         *     The claim is a single atomic `UPDATE ... WHERE seeded_at IS NULL RETURNING id`, not a read-
-         *     then-write: Postgres's row-level locking means at most one of two concurrent callers ever gets
-         *     a row back, so the backfill runs exactly once per account even under a real race -- no
-         *     advisory lock, no new engine-access plumbing needed.
+         *     The claim (`claim_seed`, `db/repositories/users.py`) is a single atomic
+         *     `UPDATE ... WHERE seeded_at IS NULL RETURNING id`, not a read-then-write: Postgres's row-level
+         *     locking means at most one of two concurrent callers ever gets a row back, so the backfill runs
+         *     exactly once per account even under a real race -- no advisory lock, no new engine-access
+         *     plumbing needed.
+         *
+         *     If the claim was won but there was nothing to copy yet (a fresh instance with no public jobs
+         *     discovered), the claim is rolled back along with it rather than kept: a permanently-seeded
+         *     account that got nothing is worse than one cheap re-attempt next session, once the poller has
+         *     actually ingested something (plan-review M3).
          */
         post: operations["bootstrap_api_v1_me_bootstrap_post"];
         delete?: never;
@@ -584,7 +590,7 @@ export interface paths {
         put?: never;
         /**
          * Import Resume Endpoint
-         * @description Parse an uploaded resume into a proposed profile. Writes nothing.
+         * @description Parse an uploaded resume into a proposed profile. Writes nothing but the trial claim.
          *
          *     The user reviews the proposal and accepts it through the existing block, track and answer
          *     endpoints, so there is exactly one code path that writes a profile.

@@ -1,12 +1,16 @@
 from __future__ import annotations
 
 import uuid
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
+from dataclasses import dataclass
+from dataclasses import field as dataclass_field
 from datetime import UTC, datetime, timedelta
 from typing import Any, cast
 
 from sqlalchemy import CursorResult, and_, delete, func, not_, nulls_last, or_, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.sql.elements import ColumnElement
+from sqlalchemy.sql.selectable import Subquery
 
 from rhapto.db.hashing import dedupe_hash
 from rhapto.db.models import Application, Job, Package, SearchRow, Track
@@ -144,96 +148,276 @@ RECENCY_DECAY = 0.2
 RECENCY_DECAY_CAP_DAYS = 90.0
 
 
-async def list_jobs(
-    session: AsyncSession,
-    user_id: uuid.UUID,
-    *,
-    search: str | None = None,
-    track: str | None = None,
-    bucket: str | None = None,
-    region: str = "any",
-    sort: str = "fit",
-    ids: list[uuid.UUID] | None = None,
-    hidden: bool = False,
-    search_id: uuid.UUID | None = None,
-    posted_within: str = "any",
-    sources: list[str] | None = None,
-    track_ids: list[str] | None = None,
-    recommended: bool = False,
-) -> list[tuple[Job, str | None]]:
-    tracks = select(Track.track_id, Track.min_fit).where(Track.user_id == user_id).subquery()
+@dataclass(frozen=True)
+class JobFilterParams:
+    """Every input `GET /api/v1/jobs` narrows its result by, as one object.
+
+    One object rather than fourteen keyword arguments so that `GET /jobs` and
+    `GET /jobs/empty-reason` cannot be given different inputs: both resolve the same
+    `Depends(job_filters)`, so a parameter that exists on one exists on the other by construction.
+
+    Defaults are the *repository's* historical defaults, not the router's -- `sort="fit"` and
+    `posted_within="any"` -- because the live-search refetch (`routers/search.py`) relies on them.
+    The router passes its own `Query(...)` defaults explicitly.
+
+    `user_id`, `hidden` and `sort` are the three fields with no one-to-one registry entry, and
+    `test_job_filter_registry.py` excludes exactly those three by name:
+    `user_id` is the base tenancy predicate (never removable, see `list_jobs`), `hidden` is a mode
+    switch whose registry entry is always active, and `sort` is not a filter at all.
+    """
+
+    user_id: uuid.UUID
+    search: str | None = None
+    track: str | None = None
+    bucket: str | None = None
+    region: str = "any"
+    sort: str = "fit"
+    ids: tuple[uuid.UUID, ...] | None = None
+    hidden: bool = False
+    search_id: uuid.UUID | None = None
+    posted_within: str = "any"
+    sources: tuple[str, ...] | None = None
+    field: str | None = None
+    recommended: bool = False
+
+
+@dataclass(frozen=True)
+class FilterCtx:
+    """What a filter clause needs that is not a request parameter.
+
+    `min_fit` is a column over whichever `tracks` subquery the enclosing statement joined, so a
+    `FilterCtx` can only be built by the code that owns that statement -- see `filter_context`.
+    """
+
+    #: `params.field` resolved to this user's track ids. `None` when no field was requested; an
+    #: EMPTY tuple means "the user has no track in that field", which is an empty result rather
+    #: than "no filter" -- the distinction `GET /jobs/empty-reason` reports as
+    #: `cause = "field_without_tracks"`.
+    track_ids: tuple[str, ...] | None
+    #: The per-track fit threshold, coalesced above any real min_fit (0-100). `best_track_id` has
+    #: no FK, so a scored job whose track was deleted or renamed outer-joins to a NULL min_fit;
+    #: coalescing keeps the comparison a definite boolean, so an orphaned track counts as low fit
+    #: instead of silently vanishing from both buckets.
+    min_fit: ColumnElement[int]
+
+
+def _tracks_subquery(user_id: uuid.UUID) -> Subquery:
+    return select(Track.track_id, Track.min_fit).where(Track.user_id == user_id).subquery()
+
+
+def filter_context(
+    user_id: uuid.UUID, track_ids: tuple[str, ...] | None
+) -> tuple[Subquery, FilterCtx]:
+    """The `tracks` subquery a statement must join, and the `FilterCtx` built over it.
+
+    Returned as a pair because the caller has to join the subquery itself; handing back a
+    `FilterCtx` whose `min_fit` referenced a subquery the statement never joined would compile to
+    a cartesian product.
+    """
+    tracks = _tracks_subquery(user_id)
+    return tracks, FilterCtx(track_ids=track_ids, min_fit=func.coalesce(tracks.c.min_fit, 101))
+
+
+async def field_track_ids(
+    session: AsyncSession, user_id: uuid.UUID, field: str | None
+) -> tuple[str, ...] | None:
+    """This user's track ids in one taxonomy field, or None when no field was asked for.
+
+    Resolved here rather than in the router so `list_jobs` and the empty-reason diagnosis resolve
+    it the same way -- a second resolution is a second place "the user has no track in that field"
+    could be decided differently.
+    """
+    if field is None:
+        return None
+    return tuple(
+        t.track_id
+        for t in await session.scalars(select(Track).where(Track.user_id == user_id))
+        if t.field == field
+    )
+
+
+def _fit_condition(ctx: FilterCtx) -> ColumnElement[bool]:
+    return or_(Job.rescued.is_(True), and_(Job.best_fit.is_not(None), Job.best_fit >= ctx.min_fit))
+
+
+def _posted_cutoff(posted_within: str) -> datetime | None:
+    days = POSTED_WITHIN_DAYS.get(posted_within)
+    return None if days is None else datetime.now(UTC) - timedelta(days=days)
+
+
+def _search_clause(term: str) -> ColumnElement[bool]:
+    # Escape LIKE metacharacters so a search for "100%" is a literal, not a wildcard.
+    escaped = term.lower().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+    pattern = f"%{escaped}%"
+    return or_(
+        Job.company.ilike(pattern, escape="\\"),
+        Job.title.ilike(pattern, escape="\\"),
+        Job.jd_text.ilike(pattern, escape="\\"),
+    )
+
+
+def _recommended_clause(user_id: uuid.UUID) -> ColumnElement[bool]:
+    has_package = select(Package.id).where(Package.user_id == user_id, Package.job_id == Job.id)
+    has_application = select(Application.id).where(
+        Application.user_id == user_id, Application.job_id == Job.id
+    )
+    return and_(Job.unlisted_at.is_(None), ~has_package.exists(), ~has_application.exists())
+
+
+#: `location_tier` is NULL on rows scored before location priority shipped and on rows the scorer
+#: has not reached; those read as "unknown", so they stay visible under "us" and only the
+#: deliberately narrow "preferred" filter hides them.
+def _tier() -> ColumnElement[str]:
+    return func.coalesce(Job.location_tier, "unknown")
+
+
+US_TIERS = ("preferred", "remote", "country", "unknown")
+
+
+@dataclass(frozen=True)
+class JobFilter:
+    """One predicate `GET /jobs` narrows by, defined once and consumed twice.
+
+    `list_jobs` builds its WHERE clause from this registry and `GET /jobs/empty-reason` blames one
+    of these entries by re-running the same `clause` with one entry left out. There is therefore
+    exactly one definition of "which jobs does this filter exclude", which is the whole point: two
+    implementations of it would disagree, and the disagreement would be invisible.
+    """
+
+    #: Also the wire value of `JobsEmptyReasonOut.filter_id` for every blamable entry.
+    id: str
+    #: Is this filter narrowing anything right now? An inactive filter is neither applied nor blamed.
+    active: Callable[[JobFilterParams], bool]
+    clause: Callable[[JobFilterParams, FilterCtx], ColumnElement[bool]]
+    #: False for `ids`, which is a refetch-by-id mechanism, not a filter a user chose: it is applied
+    #: like any other entry but never blamed, and so is deliberately absent from `JobFilterId`.
+    blamable: bool = True
+    #: The filter's current value, rendered for the explanation sentence.
+    value: Callable[[JobFilterParams], str | None] = dataclass_field(
+        default=lambda _p: None, repr=False
+    )
+
+
+JOB_FILTERS: tuple[JobFilter, ...] = (
+    JobFilter(
+        id="ids",
+        active=lambda p: p.ids is not None,
+        clause=lambda p, _c: Job.id.in_(p.ids or ()),
+        blamable=False,
+    ),
+    # `hidden` is a switch, not a filter that can be off: the grid's default view must not show
+    # jobs the user said no to, and "Show hidden" wants exactly those and nothing else. It is
+    # therefore ALWAYS active -- which is also why the registry-coverage test excludes it.
+    JobFilter(
+        id="hidden",
+        active=lambda _p: True,
+        clause=lambda p, _c: Job.hidden_at.is_not(None) if p.hidden else Job.hidden_at.is_(None),
+        value=lambda p: "true" if p.hidden else "false",
+    ),
+    JobFilter(
+        id="search_id",
+        active=lambda p: p.search_id is not None,
+        clause=lambda p, _c: Job.search_id == p.search_id,
+        value=lambda p: str(p.search_id) if p.search_id else None,
+    ),
+    JobFilter(
+        id="sources",
+        active=lambda p: bool(p.sources),
+        clause=lambda p, _c: Job.source.in_(p.sources or ()),
+        value=lambda p: ", ".join(p.sources) if p.sources else None,
+    ),
+    JobFilter(
+        id="field",
+        active=lambda p: p.field is not None,
+        # `ctx.track_ids` may be empty, which compiles to `best_track_id IN ()` -- an empty result.
+        clause=lambda _p, c: Job.best_track_id.in_(c.track_ids or ()),
+        value=lambda p: p.field,
+    ),
+    # A posting with no date from the source is judged by when Rhapto first saw it, which is the
+    # only honest answer available.
+    JobFilter(
+        id="posted_within",
+        active=lambda p: p.posted_within in POSTED_WITHIN_DAYS,
+        clause=lambda p, _c: (
+            func.coalesce(Job.posted_at, Job.discovered_at) >= _posted_cutoff(p.posted_within)
+        ),
+        value=lambda p: p.posted_within,
+    ),
+    JobFilter(
+        id="recommended",
+        active=lambda p: p.recommended,
+        clause=lambda p, _c: _recommended_clause(p.user_id),
+        value=lambda p: "true" if p.recommended else None,
+    ),
+    JobFilter(
+        id="search",
+        active=lambda p: bool(p.search),
+        clause=lambda p, _c: _search_clause(p.search or ""),
+        value=lambda p: p.search,
+    ),
+    JobFilter(
+        id="track",
+        active=lambda p: bool(p.track),
+        clause=lambda p, _c: Job.best_track_id == p.track,
+        value=lambda p: p.track,
+    ),
+    JobFilter(
+        id="region",
+        active=lambda p: p.region in ("preferred", "us"),
+        clause=lambda p, _c: (
+            _tier() == "preferred" if p.region == "preferred" else _tier().in_(US_TIERS)
+        ),
+        value=lambda p: p.region,
+    ),
+    JobFilter(
+        id="bucket",
+        # unscored jobs stay visible in the "fit" bucket
+        active=lambda p: p.bucket in ("fit", "low"),
+        clause=lambda p, c: (
+            or_(Job.best_fit.is_(None), _fit_condition(c))
+            if p.bucket == "fit"
+            else and_(Job.best_fit.is_not(None), not_(_fit_condition(c)))
+        ),
+        value=lambda p: p.bucket,
+    ),
+)
+
+#: By id, for the diagnosis's leave-one-out pass.
+JOB_FILTERS_BY_ID = {f.id: f for f in JOB_FILTERS}
+
+
+def active_filters(params: JobFilterParams) -> tuple[JobFilter, ...]:
+    """Every registry entry that is narrowing the result right now, in registry order."""
+    return tuple(f for f in JOB_FILTERS if f.active(params))
+
+
+def active_clauses(
+    params: JobFilterParams, ctx: FilterCtx, *, without: str | None = None
+) -> list[ColumnElement[bool]]:
+    """The WHERE terms for the active filters, optionally leaving one out by id.
+
+    `without` is what makes the diagnosis a leave-one-out over the *same* predicates the listing
+    applies, rather than a second implementation of them.
+    """
+    return [f.clause(params, ctx) for f in active_filters(params) if f.id != without]
+
+
+async def list_jobs(session: AsyncSession, params: JobFilterParams) -> list[tuple[Job, str | None]]:
+    track_ids = await field_track_ids(session, params.user_id, params.field)
+    tracks, ctx = filter_context(params.user_id, track_ids)
     query = (
         select(Job, SearchRow.name)
         .outerjoin(tracks, tracks.c.track_id == Job.best_track_id)
         .outerjoin(SearchRow, SearchRow.id == Job.search_id)
-        .where(Job.user_id == user_id)
+        # Tenancy is a base predicate, applied here and not as a registry entry, so no
+        # leave-one-out in `empty-reason` can ever remove it.
+        .where(Job.user_id == params.user_id)
     )
-    if ids is not None:
-        query = query.where(Job.id.in_(ids))
-    # `hidden` is a switch, not a filter that can be off: the grid's default view must not show
-    # jobs the user said no to, and "Show hidden" wants exactly those and nothing else.
-    query = query.where(Job.hidden_at.is_not(None) if hidden else Job.hidden_at.is_(None))
-    if search_id is not None:
-        query = query.where(Job.search_id == search_id)
-    if sources:
-        query = query.where(Job.source.in_(sources))
-    if track_ids is not None:
-        # An empty list means "the user has no track in that field", which is an empty result,
-        # not "no filter" -- hence the `is not None` test rather than a truthiness test.
-        query = query.where(Job.best_track_id.in_(track_ids))
-    days = POSTED_WITHIN_DAYS.get(posted_within)
-    if days is not None:
-        cutoff = datetime.now(UTC) - timedelta(days=days)
-        # A posting with no date from the source is judged by when Rhapto first saw it, which is
-        # the only honest answer available.
-        query = query.where(func.coalesce(Job.posted_at, Job.discovered_at) >= cutoff)
-    if recommended:
-        has_package = select(Package.id).where(Package.user_id == user_id, Package.job_id == Job.id)
-        has_application = select(Application.id).where(
-            Application.user_id == user_id, Application.job_id == Job.id
-        )
-        query = query.where(
-            Job.unlisted_at.is_(None),
-            ~has_package.exists(),
-            ~has_application.exists(),
-        )
-    if search:
-        # Escape LIKE metacharacters so a search for "100%" is a literal, not a wildcard.
-        escaped = search.lower().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
-        pattern = f"%{escaped}%"
-        query = query.where(
-            or_(
-                Job.company.ilike(pattern, escape="\\"),
-                Job.title.ilike(pattern, escape="\\"),
-                Job.jd_text.ilike(pattern, escape="\\"),
-            )
-        )
-    if track:
-        query = query.where(Job.best_track_id == track)
-    # `location_tier` is NULL on rows scored before location priority shipped and on rows the
-    # scorer has not reached; those read as "unknown", so they stay visible under "us" and
-    # only the deliberately narrow "preferred" filter hides them.
-    tier = func.coalesce(Job.location_tier, "unknown")
-    if region == "preferred":
-        query = query.where(tier == "preferred")
-    elif region == "us":
-        query = query.where(tier.in_(("preferred", "remote", "country", "unknown")))
-    # `best_track_id` has no FK, so a scored job whose track was deleted or renamed
-    # outer-joins to a NULL min_fit. Coalesce to a value above any real min_fit (0-100)
-    # so the comparison is always a definite boolean rather than NULL: an orphaned
-    # track can never satisfy `best_fit >= min_fit` and the job counts as low fit,
-    # per the brief, instead of silently vanishing from both buckets.
-    min_fit = func.coalesce(tracks.c.min_fit, 101)
-    fit_condition = or_(
-        Job.rescued.is_(True), and_(Job.best_fit.is_not(None), Job.best_fit >= min_fit)
-    )
-    if bucket == "fit":
-        query = query.where(
-            or_(Job.best_fit.is_(None), fit_condition)
-        )  # unscored jobs stay visible
-    elif bucket == "low":
-        query = query.where(Job.best_fit.is_not(None), not_(fit_condition))
-    if sort == "relevance":
+    # The one and only place this function narrows by a user-chosen filter. Every predicate comes
+    # from JOB_FILTERS; adding an `if x: query = query.where(...)` back here is what condition C2
+    # forbids, because the diagnosis would not know about it.
+    query = query.where(*active_clauses(params, ctx))
+    if params.sort == "relevance":
         # Fit and recency together, because either alone is wrong: sorting by fit buries a strong
         # match posted today under one from three months ago, and sorting by date buries the job
         # worth applying to under fifty that are not. Fit decays with age rather than being
@@ -252,7 +436,7 @@ async def list_jobs(
             func.coalesce(Job.posted_at, Job.discovered_at).desc(),
             Job.id,
         )
-    elif sort == "newest":
+    elif params.sort == "newest":
         # A posting with its own date sorts by that; a manual or dateless one falls back to when
         # Rhapto discovered it -- the same coalesce `posted_within` judges recency by above.
         query = query.order_by(

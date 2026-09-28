@@ -206,10 +206,8 @@ async def create_job(
     return await _out(session, user_id, refreshed)
 
 
-@router.get("", response_model=list[JobOut])
-async def list_jobs(
+def job_filters(
     user_id: UserDep,
-    session: SessionDep,
     search: str | None = Query(default=None),
     track: str | None = Query(default=None),
     bucket: Literal["fit", "low"] | None = Query(default=None),
@@ -225,31 +223,40 @@ async def list_jobs(
         default=False,
         description="only jobs with no resume, no application, not hidden and not unlisted",
     ),
-) -> list[JobOut]:
-    track_ids: list[str] | None = None
-    if field is not None:
-        if find_field(field) is None:
-            raise HTTPException(status_code=422, detail=f"unknown taxonomy field {field!r}")
-        track_ids = [
-            t.track_id for t in await profile_repo.list_tracks(session, user_id) if t.field == field
-        ]
-    rows = await repo.list_jobs(
-        session,
-        user_id,
+) -> repo.JobFilterParams:
+    """The one place `GET /jobs`' query string becomes filter inputs.
+
+    Both `GET /jobs` and `GET /jobs/empty-reason` resolve this single dependency, so the diagnosis
+    is always asked about exactly the filters the listing applied -- a parameter cannot be added to
+    one endpoint and forgotten on the other.
+    """
+    if field is not None and find_field(field) is None:
+        raise HTTPException(status_code=422, detail=f"unknown taxonomy field {field!r}")
+    parsed_ids = parse_ids(ids)
+    parsed_sources = parse_csv(sources)
+    return repo.JobFilterParams(
+        user_id=user_id,
         search=search,
         track=track,
         bucket=bucket,
         region=region,
         sort=sort,
-        ids=parse_ids(ids),
+        ids=None if parsed_ids is None else tuple(parsed_ids),
         hidden=hidden,
         search_id=search_id,
         posted_within=posted_within,
-        sources=parse_csv(sources),
-        track_ids=track_ids,
+        sources=None if parsed_sources is None else tuple(parsed_sources),
+        field=field,
         recommended=recommended,
     )
-    return await _outs(session, user_id, rows)
+
+
+FiltersDep = Annotated[repo.JobFilterParams, Depends(job_filters)]
+
+
+@router.get("", response_model=list[JobOut])
+async def list_jobs(user_id: UserDep, session: SessionDep, filters: FiltersDep) -> list[JobOut]:
+    return await _outs(session, user_id, await repo.list_jobs(session, filters))
 
 
 @router.get("/{job_id}", response_model=JobOut)
