@@ -2803,6 +2803,93 @@
         "title": "SourceInfoOut",
         "type": "object"
       },
+      "SourceRunOut": {
+        "description": "This source's most recent poll attempt, and what it was asked for.\n\n`found = 0` with `error = None` is the state the spec's \u00a78 row 4 is about: the source answered\nand had nothing. `search_location` is the search's own string, so the row can say what was asked\nrather than only that nothing came back.\n\nThere is deliberately no field for a suggested alternative location. Nothing in this repo can\nproduce one -- no normaliser, no gazetteer, no per-source location vocabulary -- so any \"Try X\"\nwould be a hard-coded string or an invention. `POST /searches/validate-location` (spec \u00a79, part\n2) is what would make a real suggestion possible.",
+        "properties": {
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          },
+          "found": {
+            "title": "Found",
+            "type": "integer"
+          },
+          "new": {
+            "title": "New",
+            "type": "integer"
+          },
+          "search_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Search Id"
+          },
+          "search_location": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Search Location"
+          },
+          "search_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Search Name"
+          },
+          "started_at": {
+            "format": "date-time",
+            "title": "Started At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "started_at",
+          "finished_at",
+          "found",
+          "new",
+          "error",
+          "search_id",
+          "search_name",
+          "search_location"
+        ],
+        "title": "SourceRunOut",
+        "type": "object"
+      },
       "SourceSettingIn": {
         "properties": {
           "credentials": {
@@ -2855,8 +2942,28 @@
             "title": "Label",
             "type": "string"
           },
+          "last_run": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SourceRunOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "needs_key": {
             "title": "Needs Key",
+            "type": "boolean"
+          },
+          "paused": {
+            "default": false,
+            "title": "Paused",
+            "type": "boolean"
+          },
+          "runnable": {
+            "default": false,
+            "title": "Runnable",
             "type": "boolean"
           }
         },
@@ -7696,6 +7803,65 @@
           }
         },
         "summary": "Put Source Setting",
+        "tags": [
+          "settings"
+        ]
+      }
+    },
+    "/api/v1/settings/sources/{source}/resume": {
+      "post": {
+        "description": "Lift the poller's pause on one source: give it a fresh three attempts.\n\nIt does exactly one thing -- set `aggregators.updated_at = now()` -- because that is precisely\nwhat lifts a pause. `poller._is_paused` counts only failures started AFTER `entry_updated_at`,\nso bumping it restarts every one of this source's streaks at once.\n\nThat behaviour already existed, as an incidental side effect of the one `row.updated_at = ...`\nline in `PUT /settings/sources/{source}`. A named endpoint with its own test is worth five lines:\nthe side effect was a single line with nothing asserting it, which a tidy-up could have removed\nwithout any test noticing, silently making a paused source unrecoverable from the UI.\n\n404 on an unknown source, and 404 when the user has no row for it -- there is no pause to lift\non a source that has never been configured, and reporting success would be a lie about state.",
+        "operationId": "resume_source_api_v1_settings_sources__source__resume_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "source",
+            "required": true,
+            "schema": {
+              "title": "Source",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SourceSettingOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Resume Source",
         "tags": [
           "settings"
         ]

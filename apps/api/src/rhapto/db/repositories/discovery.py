@@ -9,7 +9,7 @@ from typing import Any
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from rhapto.db.models import Job, JobScore, PollRun
+from rhapto.db.models import Job, JobScore, PollRun, SearchRow
 
 
 async def start_run(
@@ -26,21 +26,55 @@ def finish_run(run: PollRun, *, found: int, new: int, error: str | None) -> None
     run.finished_at = datetime.now(UTC)
 
 
-async def latest_runs(session: AsyncSession, user_id: uuid.UUID) -> list[PollRun]:
-    """Newest run per (source, board, search_id).
+@dataclass(frozen=True)
+class LatestRun:
+    """One scope's newest poll run, with the saved search it was run for."""
 
-    A board poll always has ``search_id`` NULL, so this is a no-op refinement for boards;
+    run: PollRun
+    #: From a LEFT JOIN on `searches`, so a board run (or a search since deleted) reads None rather
+    #: than needing a second query per row.
+    search_name: str | None
+    #: What the source was actually asked for. This is the location in "<Source> returned 0 for
+    #: '<location>'" -- the search's own string, never one this code composed.
+    search_location: str | None
+
+
+async def latest_runs_with_search(session: AsyncSession, user_id: uuid.UUID) -> list[LatestRun]:
+    """Newest run per (source, board, search_id), joined to the search it was run for.
+
+    A board poll always has ``search_id`` NULL, so the scope is a no-op refinement for boards;
     a keyless aggregator driven by several saved searches shares ``(source, board=None)``
-    but not ``search_id``, so each search's own runs now survive here instead of collapsing
+    but not ``search_id``, so each search's own runs survive here instead of collapsing
     into whichever one happened to start last.
+
+    The join is what lets a Settings row say what the source was asked for. Without it the row can
+    only say "returned 0", which is the silence the spec's §8 row 4 is about.
     """
-    rows = await session.scalars(
-        select(PollRun)
+    rows = await session.execute(
+        select(PollRun, SearchRow.name, SearchRow.location)
+        .outerjoin(SearchRow, SearchRow.id == PollRun.search_id)
         .where(PollRun.user_id == user_id)
         .order_by(PollRun.source, PollRun.board, PollRun.search_id, PollRun.started_at.desc())
         .distinct(PollRun.source, PollRun.board, PollRun.search_id)
     )
-    return sorted(rows, key=lambda r: r.started_at, reverse=True)
+    return sorted(
+        (
+            LatestRun(run=run, search_name=name, search_location=location)
+            for run, name, location in rows.all()
+        ),
+        key=lambda r: r.run.started_at,
+        reverse=True,
+    )
+
+
+async def latest_runs(session: AsyncSession, user_id: uuid.UUID) -> list[PollRun]:
+    """Newest run per scope, for callers that do not need the search.
+
+    A projection of `latest_runs_with_search`, not a second statement: "newest run per scope" is
+    decided in exactly one place, so the poller's pause check and the Settings page's cannot start
+    disagreeing about which run is the latest.
+    """
+    return [entry.run for entry in await latest_runs_with_search(session, user_id)]
 
 
 @dataclass(frozen=True)

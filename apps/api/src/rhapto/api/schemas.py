@@ -445,6 +445,29 @@ class SearchOut(BaseModel):
     last_run_at: datetime | None = None
 
 
+class SourceRunOut(BaseModel):
+    """This source's most recent poll attempt, and what it was asked for.
+
+    `found = 0` with `error = None` is the state the spec's §8 row 4 is about: the source answered
+    and had nothing. `search_location` is the search's own string, so the row can say what was asked
+    rather than only that nothing came back.
+
+    There is deliberately no field for a suggested alternative location. Nothing in this repo can
+    produce one -- no normaliser, no gazetteer, no per-source location vocabulary -- so any "Try X"
+    would be a hard-coded string or an invention. `POST /searches/validate-location` (spec §9, part
+    2) is what would make a real suggestion possible.
+    """
+
+    started_at: datetime
+    finished_at: datetime | None
+    found: int
+    new: int
+    error: str | None
+    search_id: uuid.UUID | None
+    search_name: str | None
+    search_location: str | None
+
+
 class SourceSettingOut(BaseModel):
     id: str
     label: str
@@ -452,6 +475,20 @@ class SourceSettingOut(BaseModel):
     fields: list[str]
     enabled: bool
     key_set: bool
+    #: Could this source actually return a posting on the next poll? Follows the poller's rule (an
+    #: `aggregators` row must exist and be enabled, and a keyed source must have credentials), not
+    #: this endpoint's own `enabled` default -- which is why a user who has never opened Settings
+    #: sees `enabled = true, runnable = false`. That discrepancy is real and is recorded in
+    #: docs/portal-backend-followups.md; making it visible is this branch's job, fixing it is not.
+    runnable: bool = False
+    #: Paused **as of the last run**: at least one of this source's scopes was refused with
+    #: `PAUSED_MESSAGE` on its most recent attempt, and that attempt started after the row was last
+    #: saved. There is no `paused` column -- pause is decided at poll time -- so this lags the third
+    #: failure by one poll cycle, self-correcting on the next one. Covers aggregator sources only:
+    #: board sources (greenhouse/lever/ashby/workday) also pause, per watchlist entry, and their
+    #: surface is the watchlist, which already resets every streak on save.
+    paused: bool = False
+    last_run: SourceRunOut | None = None
 
 
 class SourceSettingIn(BaseModel):

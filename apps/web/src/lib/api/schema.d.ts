@@ -871,6 +871,38 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/settings/sources/{source}/resume": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Resume Source
+         * @description Lift the poller's pause on one source: give it a fresh three attempts.
+         *
+         *     It does exactly one thing -- set `aggregators.updated_at = now()` -- because that is precisely
+         *     what lifts a pause. `poller._is_paused` counts only failures started AFTER `entry_updated_at`,
+         *     so bumping it restarts every one of this source's streaks at once.
+         *
+         *     That behaviour already existed, as an incidental side effect of the one `row.updated_at = ...`
+         *     line in `PUT /settings/sources/{source}`. A named endpoint with its own test is worth five lines:
+         *     the side effect was a single line with nothing asserting it, which a tidy-up could have removed
+         *     without any test noticing, silently making a paused source unrecoverable from the UI.
+         *
+         *     404 on an unknown source, and 404 when the user has no row for it -- there is no pause to lift
+         *     on a source that has never been configured, and reporting success would be a lie about state.
+         */
+        post: operations["resume_source_api_v1_settings_sources__source__resume_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/settings/sources/{source}/test": {
         parameters: {
             query?: never;
@@ -2013,6 +2045,40 @@ export interface components {
             /** Needs Board */
             needs_board: boolean;
         };
+        /**
+         * SourceRunOut
+         * @description This source's most recent poll attempt, and what it was asked for.
+         *
+         *     `found = 0` with `error = None` is the state the spec's §8 row 4 is about: the source answered
+         *     and had nothing. `search_location` is the search's own string, so the row can say what was asked
+         *     rather than only that nothing came back.
+         *
+         *     There is deliberately no field for a suggested alternative location. Nothing in this repo can
+         *     produce one -- no normaliser, no gazetteer, no per-source location vocabulary -- so any "Try X"
+         *     would be a hard-coded string or an invention. `POST /searches/validate-location` (spec §9, part
+         *     2) is what would make a real suggestion possible.
+         */
+        SourceRunOut: {
+            /** Error */
+            error: string | null;
+            /** Finished At */
+            finished_at: string | null;
+            /** Found */
+            found: number;
+            /** New */
+            new: number;
+            /** Search Id */
+            search_id: string | null;
+            /** Search Location */
+            search_location: string | null;
+            /** Search Name */
+            search_name: string | null;
+            /**
+             * Started At
+             * Format: date-time
+             */
+            started_at: string;
+        };
         /** SourceSettingIn */
         SourceSettingIn: {
             /** Credentials */
@@ -2034,8 +2100,19 @@ export interface components {
             key_set: boolean;
             /** Label */
             label: string;
+            last_run?: components["schemas"]["SourceRunOut"] | null;
             /** Needs Key */
             needs_key: boolean;
+            /**
+             * Paused
+             * @default false
+             */
+            paused: boolean;
+            /**
+             * Runnable
+             * @default false
+             */
+            runnable: boolean;
         };
         /** SourceTestOut */
         SourceTestOut: {
@@ -4516,6 +4593,39 @@ export interface operations {
                 "application/json": components["schemas"]["SourceSettingIn"];
             };
         };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SourceSettingOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    resume_source_api_v1_settings_sources__source__resume_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                source: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
         responses: {
             /** @description Successful Response */
             200: {

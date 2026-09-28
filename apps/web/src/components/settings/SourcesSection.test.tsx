@@ -4,10 +4,33 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { SourcesSection } from "./SourcesSection";
 import type { SourceSetting, SourceTestOut } from "@/lib/api/queries";
 
+// Three contrasting states, because the point of these fields is that they differ from `enabled`:
+// The Muse shows the keyless default (`enabled: true`) with no row behind it, so nothing polls it
+// (`runnable: false`); Adzuna is off and keyless-less; JSearch is configured, runnable, and
+// currently being refused by the poller.
 const rows: SourceSetting[] = [
-  { id: "themuse", label: "The Muse", enabled: true, needs_key: false, key_set: false, fields: [] },
-  { id: "adzuna", label: "Adzuna", enabled: false, needs_key: true, key_set: false, fields: ["app_id", "app_key"] },
-  { id: "jsearch", label: "JSearch", enabled: true, needs_key: true, key_set: true, fields: ["api_key"] },
+  { id: "themuse", label: "The Muse", enabled: true, needs_key: false, key_set: false, fields: [], runnable: false, paused: false, last_run: null },
+  { id: "adzuna", label: "Adzuna", enabled: false, needs_key: true, key_set: false, fields: ["app_id", "app_key"], runnable: false, paused: false, last_run: null },
+  {
+    id: "jsearch",
+    label: "JSearch",
+    enabled: true,
+    needs_key: true,
+    key_set: true,
+    fields: ["api_key"],
+    runnable: true,
+    paused: true,
+    last_run: {
+      started_at: "2026-09-26T12:00:00Z",
+      finished_at: "2026-09-26T12:00:01Z",
+      found: 0,
+      new: 0,
+      error: "paused after 3 failures; save the watchlist entry to retry",
+      search_id: "s1",
+      search_name: "Bay Area PM",
+      search_location: "San Francisco Bay Area",
+    },
+  },
 ];
 
 // Mutable, per-test module state (not a static top-of-file mock): each test below overwrites these

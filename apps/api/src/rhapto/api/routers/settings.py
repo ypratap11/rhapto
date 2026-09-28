@@ -35,6 +35,7 @@ from rhapto.api.schemas import (
     LlmSettingsOut,
     LlmTestIn,
     LlmTestOut,
+    SourceRunOut,
     SourceSettingIn,
     SourceSettingOut,
     SourceTestOut,
@@ -46,11 +47,13 @@ from rhapto.config import Settings
 from rhapto.db.models import Aggregator
 from rhapto.db.repositories import profile as profile_repo
 from rhapto.db.repositories import source_credentials as creds_repo
+from rhapto.db.repositories.discovery import LatestRun, latest_runs_with_search
 from rhapto.db.repositories.llm_settings import delete_llm_settings, upsert_llm_settings
 from rhapto.engine.providers.llm import Message, SystemBlock
 from rhapto.engine.providers.registry import PROVIDERS, ProviderInfo, model_for
 from rhapto.services.discovery.search import SearchSpec
 from rhapto.services.discovery.sources import aggregator_sources, get_aggregator
+from rhapto.services.discovery.sources.status import paused_as_of_last_run, usable_source_ids
 from rhapto.services.llm import env_llm_config, key_hint, redact, stored_llm_config
 from rhapto.services.secrets import encrypt, fernet_for
 from rhapto.services.usage import UsageSummary, usage_report
@@ -266,16 +269,48 @@ async def _source_rows(session: AsyncSession, user_id: uuid.UUID) -> dict[str, A
     return {row.source: row for row in await profile_repo.list_aggregators(session, user_id)}
 
 
-@router.get("/settings/sources", response_model=list[SourceSettingOut])
-async def list_source_settings(user_id: UserDep, session: SessionDep) -> list[SourceSettingOut]:
+def _one_source(rows: list[SourceSettingOut], source: str) -> SourceSettingOut:
+    """The one row a write is about. `_source_settings` always includes every registered source, so
+    a miss here would be a programming error, not a user error."""
+    return next(r for r in rows if r.id == source)
+
+
+def _run_out(entry: LatestRun) -> SourceRunOut:
+    return SourceRunOut(
+        started_at=entry.run.started_at,
+        finished_at=entry.run.finished_at,
+        found=entry.run.found,
+        new=entry.run.new,
+        error=entry.run.error,
+        search_id=entry.run.search_id,
+        search_name=entry.search_name,
+        search_location=entry.search_location,
+    )
+
+
+async def _source_settings(session: AsyncSession, user_id: uuid.UUID) -> list[SourceSettingOut]:
+    """Every configured source with its enable switch, credential state, and what it last did.
+
+    One read each of `aggregators`, `source_credentials` and `latest_runs_with_search`; the
+    per-source derivation is then pure Python over those three, so adding a source adds no query.
+    """
     rows = await _source_rows(session, user_id)
     stored = await creds_repo.credentialled_sources(session, user_id)
+    registry = aggregator_sources()
+    runs = await latest_runs_with_search(session, user_id)
+    # `runnable` and the checklist's `job_sources` are the same function, so the Settings page and
+    # the dashboard cannot disagree about what "ready" means.
+    usable = usable_source_ids(rows, stored, registry)
+    by_source: dict[str, list[LatestRun]] = {}
+    for entry in runs:
+        by_source.setdefault(entry.run.source, []).append(entry)
     out: list[SourceSettingOut] = []
-    for info in aggregator_sources():
+    for info in registry:
         row = rows.get(info.name)
         enabled = (
             row.enabled if row is not None else (KEYLESS_DEFAULT_ENABLED and not info.needs_key)
         )
+        scopes = by_source.get(info.name, [])
         out.append(
             SourceSettingOut(
                 id=info.name,
@@ -284,9 +319,22 @@ async def list_source_settings(user_id: UserDep, session: SessionDep) -> list[So
                 fields=list(info.fields),
                 enabled=enabled,
                 key_set=info.name in stored,
+                runnable=info.name in usable,
+                paused=paused_as_of_last_run(
+                    [(e.run.error, e.run.started_at) for e in scopes],
+                    row.updated_at if row is not None else None,
+                ),
+                # `latest_runs_with_search` is sorted newest first, so the head of this source's
+                # scopes is its newest run across all of them.
+                last_run=_run_out(scopes[0]) if scopes else None,
             )
         )
     return out
+
+
+@router.get("/settings/sources", response_model=list[SourceSettingOut])
+async def list_source_settings(user_id: UserDep, session: SessionDep) -> list[SourceSettingOut]:
+    return await _source_settings(session, user_id)
 
 
 @router.put("/settings/sources/{source}", response_model=SourceSettingOut)
@@ -315,15 +363,40 @@ async def put_source_setting(
         row.enabled = body.enabled
     row.updated_at = datetime.now(UTC)
     await session.commit()
-    stored_sources = await creds_repo.credentialled_sources(session, user_id)
-    return SourceSettingOut(
-        id=info.name,
-        label=info.label,
-        needs_key=info.needs_key,
-        fields=list(info.fields),
-        enabled=body.enabled,
-        key_set=info.name in stored_sources,
-    )
+    # Re-derived rather than reconstructed by hand: a second construction is a second place
+    # `runnable` and `paused` could be computed differently from the GET's. It also means this
+    # write's own `updated_at` bump is already reflected -- which is what lifts a pause today, as an
+    # incidental side effect. `POST /settings/sources/{source}/resume` makes that deliberate.
+    return _one_source(await _source_settings(session, user_id), info.name)
+
+
+@router.post("/settings/sources/{source}/resume", response_model=SourceSettingOut)
+async def resume_source(source: str, user_id: UserDep, session: SessionDep) -> SourceSettingOut:
+    """Lift the poller's pause on one source: give it a fresh three attempts.
+
+    It does exactly one thing -- set `aggregators.updated_at = now()` -- because that is precisely
+    what lifts a pause. `poller._is_paused` counts only failures started AFTER `entry_updated_at`,
+    so bumping it restarts every one of this source's streaks at once.
+
+    That behaviour already existed, as an incidental side effect of the one `row.updated_at = ...`
+    line in `PUT /settings/sources/{source}`. A named endpoint with its own test is worth five lines:
+    the side effect was a single line with nothing asserting it, which a tidy-up could have removed
+    without any test noticing, silently making a paused source unrecoverable from the UI.
+
+    404 on an unknown source, and 404 when the user has no row for it -- there is no pause to lift
+    on a source that has never been configured, and reporting success would be a lie about state.
+    """
+    info = next((i for i in aggregator_sources() if i.name == source), None)
+    if info is None:
+        raise HTTPException(status_code=404, detail=f"unknown source {source!r}")
+    row = (await _source_rows(session, user_id)).get(source)
+    if row is None:
+        raise HTTPException(
+            status_code=404, detail=f"{info.label} is not configured for this account"
+        )
+    row.updated_at = datetime.now(UTC)
+    await session.commit()
+    return _one_source(await _source_settings(session, user_id), info.name)
 
 
 @router.post("/settings/sources/{source}/test", response_model=SourceTestOut)
