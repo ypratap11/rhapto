@@ -20,6 +20,8 @@ its own change, with user ids and counts only.
 from __future__ import annotations
 
 import uuid
+from dataclasses import dataclass
+from typing import Literal
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -96,10 +98,14 @@ async def on_deployment_key(session: AsyncSession, settings: Settings, user_id: 
     return same_key(stored.api_key, env.api_key)
 
 
-async def trial_limit_for(
-    session: AsyncSession, settings: Settings, user_id: uuid.UUID
-) -> int | None:
-    """The cap that applies to this user right now, or None when no cap applies at all."""
+def deployment_key_trial_limit(settings: Settings) -> int | None:
+    """The cap that would apply to a user who IS on the deployment's key, or None if none can.
+
+    The three operator-level exemptions, in one place, so that `trial_limit_for` and
+    `llm_setup_status` cannot answer "does a cap apply" differently. Split out of `trial_limit_for`
+    for exactly that reason: the checklist has already resolved the stored row and must not re-derive
+    these, nor pay for a second read of it.
+    """
     # 1. Token mode is a single-account, self-hosted deployment whose one user is the operator
     #    (`api/deps.py`'s token branch hands every request the one bootstrapped `state.user_id`).
     #    The env key is their own. Capping it would break every self-hoster and every e2e stack on
@@ -112,10 +118,17 @@ async def trial_limit_for(
     #    a stored key, exactly as it already outranks it for provider selection.
     if settings.rhapto_llm_provider == FAKE_PROVIDER_ID and env_llm_config(settings) is not None:
         return None
-    limit = configured_trial_limit(settings)
+    return configured_trial_limit(settings)
+
+
+async def trial_limit_for(
+    session: AsyncSession, settings: Settings, user_id: uuid.UUID
+) -> int | None:
+    """The cap that applies to this user right now, or None when no cap applies at all."""
+    limit = deployment_key_trial_limit(settings)
     if limit is None:
         return None
-    # 4. The user pays for their own calls.
+    # 4. The user pays for their own calls. Checked last, because it is the only branch that reads.
     if not await on_deployment_key(session, settings, user_id):
         return None
     return limit
@@ -150,3 +163,85 @@ async def consume_trial_run(session: AsyncSession, settings: Settings, user_id: 
         return
     if await claim_trial_run(session, user_id, limit) is None:
         raise TrialLimitExceededError(await trial_runs_used(session, user_id), limit)
+
+
+#: Whose key a user's next model call would be billed to.
+#:
+#: "settings" = their own stored key. "env" = this instance's key with no cap in force (a
+#: self-hoster, token mode, the fake provider, or an operator who disabled the cap). "trial" = this
+#: instance's key with a cap. "none" = nothing usable anywhere, which includes a stored key that no
+#: longer decrypts.
+LlmKeySource = Literal["settings", "env", "trial", "none"]
+
+
+@dataclass(frozen=True)
+class LlmSetupStatus:
+    """Whether a tailoring run would be admitted right now, and on whose money.
+
+    Two questions, not one, and the checklist needs both. "Is there a key" is the question that lies:
+    a user on the deployment's key has no row and is not blocked, a row whose ciphertext no longer
+    decrypts exists and blocks every run, and a hand-seeded copy of the environment's key is still
+    the environment's key.
+    """
+
+    #: A tailoring run would be admitted right now. NOT "a key exists".
+    llm_key: bool
+    llm_key_source: LlmKeySource
+    #: Runs left on this instance's key, only when a cap is in force.
+    trial_runs_left: int | None = None
+
+
+async def llm_setup_status(
+    session: AsyncSession,
+    settings: Settings,
+    user_id: uuid.UUID,
+    *,
+    runs_used: int | None = None,
+) -> LlmSetupStatus:
+    """The checklist's LLM row, composed from the predicates that already govern real runs.
+
+    Nothing here is reimplemented: it composes `stored_llm_config`, `env_llm_config`, `same_key`,
+    `deployment_key_trial_limit` (which holds the three exemptions) and `trial_runs_used`. A test
+    asserts `llm_setup_status(...).llm_key == await is_llm_configured(...)` across the eight-state
+    matrix, so this predicate is validated against the one that already gates `/me` rather than
+    against a restatement of its own premise.
+
+    `runs_used` lets the dashboard pass the count it already selected in its checklist composite,
+    instead of paying for a second statement. Left None, it reads the counter itself.
+
+    Reads the stored row exactly once. `trial_limit_for` is deliberately NOT called, because it would
+    read that row again through `on_deployment_key`; the shared part -- the exemptions -- is
+    `deployment_key_trial_limit`, and the "is this user on the deployment's key" part is the one line
+    below that mirrors `on_deployment_key`'s only three branches.
+
+    No key material and no `key_hint` is exposed. `settings.py`'s C2 rule (the deployment's key gets
+    no hint) is preserved by not carrying a hint at all.
+    """
+    env = env_llm_config(settings)
+    try:
+        stored = await stored_llm_config(session, settings, user_id)
+    except SecretsError:
+        # An undecryptable stored key never reaches a provider: `resolve_llm_config` raises before
+        # any call. The user has to re-enter it, so the row is not done and there is no next action
+        # other than that.
+        return LlmSetupStatus(llm_key=False, llm_key_source="none")
+    if stored is None and env is None:
+        return LlmSetupStatus(llm_key=False, llm_key_source="none")
+    # The same three branches as `on_deployment_key`: no env key means nothing of the maintainer's is
+    # at stake; no stored row means the environment pays; and a stored COPY of the environment's key
+    # is still the environment's key, which is why this compares digests rather than reading "has a
+    # row".
+    on_deployment = env is not None and (stored is None or same_key(stored.api_key, env.api_key))
+    if not on_deployment:
+        # Their own key. Note one nuance: with `RHAPTO_LLM_PROVIDER=fake` the deployment runs
+        # everything on the fake regardless, so "settings" here means "the key you stored", not
+        # "the key this call will use". Nobody's money is spent either way.
+        return LlmSetupStatus(llm_key=True, llm_key_source="settings")
+    limit = deployment_key_trial_limit(settings)
+    if limit is None:
+        return LlmSetupStatus(llm_key=True, llm_key_source="env")
+    used = runs_used if runs_used is not None else await trial_runs_used(session, user_id)
+    left = max(0, limit - used)
+    # `llm_key` flips to False at zero because at that point the user IS blocked, and the row's job
+    # is to give them the next action -- "add your own key" -- rather than read done.
+    return LlmSetupStatus(llm_key=left > 0, llm_key_source="trial", trial_runs_left=left)
