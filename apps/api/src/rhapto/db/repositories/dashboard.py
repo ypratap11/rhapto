@@ -1,8 +1,10 @@
-"""The five numbers the Dashboard reports, one aggregate query each.
+"""The numbers the Dashboard reports, one aggregate query each.
 
-Everything here is deliberately a single statement per answer. The dashboard is the first screen
-a user sees on every visit; doing it with per-row follow-ups would make the landing page the
-slowest thing in the product.
+Everything here is deliberately a single statement per answer, and every value added for the setup
+checklist is a scalar subquery on a statement that already ran rather than a new one. The dashboard
+is the first screen a user sees on every visit; doing it with per-row follow-ups would make the
+landing page the slowest thing in the product -- which is why the test that guards this asserts the
+SELECT count does not change with the number of saved searches, not merely that it is under a cap.
 """
 
 from __future__ import annotations

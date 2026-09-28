@@ -1,7 +1,9 @@
 """Everything the Dashboard shows, in one call.
 
-Five reads, no N+1: `tests/api/test_dashboard_api.py` asserts the whole request stays inside
-eight SELECTs, so this endpoint cannot quietly become a loop.
+Ten reads, no N+1. `tests/api/test_dashboard_api.py` caps the request at ten SELECTs
+(`MAX_DASHBOARD_SELECTS`, itemised there) and — the part that matters — asserts the count is the
+SAME with one saved search as with five. The cap alone stops being a guard the moment someone
+raises the constant; the invariance test is what actually forbids a per-row loop.
 """
 
 from __future__ import annotations
