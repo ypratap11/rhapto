@@ -23,6 +23,7 @@ from rhapto.api.schemas import (
 )
 from rhapto.db.repositories import dashboard as repo
 from rhapto.db.repositories import searches as searches_repo
+from rhapto.db.repositories.discovery import NEVER_RUN, search_run_stats
 from rhapto.services.storage import PackageStorage
 
 router = APIRouter()
@@ -45,6 +46,7 @@ async def dashboard(user_id: UserDep, session: SessionDep, storage: StorageDep) 
     )
     counts = await searches_repo.new_counts(session, user_id)
     searches = await searches_repo.list_searches(session, user_id)
+    run_stats = await search_run_stats(session, user_id)
     followups = await repo.due_followups(session, user_id)
     return DashboardOut(
         new_fit_count=await repo.new_fit_count(session, user_id),
@@ -60,7 +62,14 @@ async def dashboard(user_id: UserDep, session: SessionDep, storage: StorageDep) 
             total_blocks=checklist.total_blocks,
         ),
         saved_searches=[
-            SavedSearchCountOut(id=s.id, name=s.name, new_count=counts.get(s.id, 0))
+            SavedSearchCountOut(
+                id=s.id,
+                name=s.name,
+                new_count=counts.get(s.id, 0),
+                # The rail's badge is hidden when `new_count` is 0, so without this a search that
+                # has never found anything renders exactly like one the user has already read.
+                ever_found=run_stats.get(s.id, NEVER_RUN).ever_found,
+            )
             for s in searches
         ],
         due_followups=[

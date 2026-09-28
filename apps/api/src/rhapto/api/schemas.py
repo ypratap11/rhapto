@@ -434,6 +434,15 @@ class SearchOut(BaseModel):
     last_viewed_at: datetime | None = None
     #: Jobs this search found since `last_viewed_at`, excluding hidden and unlisted ones.
     new_count: int = 0
+    #: Poll attempts recorded for this search. 0 means it has not run yet -- which is a different
+    #: thing to say than "it found nothing", and the difference is why this is on the wire.
+    runs: int = 0
+    #: True when at least one of those attempts returned a posting. Read from `poll_runs`, not from
+    #: `jobs.search_id`: that column is ON DELETE SET NULL and backfilled rows do not carry it, so
+    #: it answers "has ever matched" wrongly. `runs > 0 and not ever_found` is the state spec §8
+    #: calls "this search has never returned a job".
+    ever_found: bool = False
+    last_run_at: datetime | None = None
 
 
 class SourceSettingOut(BaseModel):
@@ -565,6 +574,9 @@ class SavedSearchCountOut(BaseModel):
     id: uuid.UUID
     name: str
     new_count: int
+    #: The rail hides its badge when `new_count` is 0, which is exactly where the silence lives: a
+    #: search that has never found anything looks identical to one the user has already read.
+    ever_found: bool = False
 
 
 class FollowUpOut(BaseModel):

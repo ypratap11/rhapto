@@ -11,6 +11,7 @@ from rhapto.api.errors import not_found
 from rhapto.api.schemas import SearchIn, SearchOut
 from rhapto.db.models import SearchRow
 from rhapto.db.repositories import searches as repo
+from rhapto.db.repositories.discovery import NEVER_RUN, SearchRunStats, search_run_stats
 from rhapto.services.discovery.search import derive_searches
 
 router = APIRouter(prefix="/searches")
@@ -19,7 +20,11 @@ UserDep = Annotated[uuid.UUID, Depends(current_user)]
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
 
 
-def search_to_out(row: SearchRow, new_count: int = 0) -> SearchOut:
+def search_to_out(
+    row: SearchRow, new_count: int = 0, stats: SearchRunStats = NEVER_RUN
+) -> SearchOut:
+    """`stats` defaults to NEVER_RUN so a freshly created search reports "has not run yet" rather
+    than a value invented here; the list paths pass the real history."""
     return SearchOut(
         id=row.id,
         name=row.name,
@@ -31,14 +36,19 @@ def search_to_out(row: SearchRow, new_count: int = 0) -> SearchOut:
         created_at=row.created_at,
         last_viewed_at=row.last_viewed_at,
         new_count=new_count,
+        runs=stats.runs,
+        ever_found=stats.ever_found,
+        last_run_at=stats.last_run_at,
     )
 
 
 @router.get("", response_model=list[SearchOut])
 async def list_searches(user_id: UserDep, session: SessionDep) -> list[SearchOut]:
     counts = await repo.new_counts(session, user_id)
+    stats = await search_run_stats(session, user_id)
     return [
-        search_to_out(r, counts.get(r.id, 0)) for r in await repo.list_searches(session, user_id)
+        search_to_out(r, counts.get(r.id, 0), stats.get(r.id, NEVER_RUN))
+        for r in await repo.list_searches(session, user_id)
     ]
 
 
@@ -82,7 +92,8 @@ async def update_search(
     )
     await session.commit()
     counts = await repo.new_counts(session, user_id)
-    return search_to_out(row, counts.get(row.id, 0))
+    stats = await search_run_stats(session, user_id)
+    return search_to_out(row, counts.get(row.id, 0), stats.get(row.id, NEVER_RUN))
 
 
 @router.post("/{search_id}/viewed", response_model=SearchOut)
@@ -94,7 +105,8 @@ async def mark_viewed(search_id: uuid.UUID, user_id: UserDep, session: SessionDe
     repo.mark_viewed(row)
     await session.commit()
     counts = await repo.new_counts(session, user_id)
-    return search_to_out(row, counts.get(row.id, 0))
+    stats = await search_run_stats(session, user_id)
+    return search_to_out(row, counts.get(row.id, 0), stats.get(row.id, NEVER_RUN))
 
 
 @router.delete("/{search_id}", status_code=204)

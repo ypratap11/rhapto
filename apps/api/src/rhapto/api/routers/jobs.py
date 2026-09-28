@@ -21,7 +21,7 @@ from rhapto.db.models import Application, Job, JobScore, Package
 from rhapto.db.repositories import jobs as repo
 from rhapto.db.repositories import profile as profile_repo
 from rhapto.db.repositories import searches as searches_repo
-from rhapto.db.repositories.discovery import scores_for_jobs
+from rhapto.db.repositories.discovery import NEVER_RUN, scores_for_jobs, search_run_stats
 from rhapto.engine.scoring import LocationTier
 from rhapto.models.jd_extract import JDExtract
 from rhapto.services.enqueue import Enqueuer
@@ -284,11 +284,14 @@ async def jobs_empty_reason(
     resolved = await repo.field_tracks(session, user_id, filters.field)
     reason = await repo.empty_reason(session, filters, resolved)
     field = find_field(filters.field)
-    search = (
-        await searches_repo.get_search(session, user_id, filters.search_id)
-        if filters.search_id is not None
-        else None
-    )
+    search = None
+    stats = None
+    if (search_id := filters.search_id) is not None:
+        search = await searches_repo.get_search(session, user_id, search_id)
+        if search is not None:
+            # Only reached when the grid is empty AND a saved search is selected, so the grouped
+            # `poll_runs` read is not on any hot path.
+            stats = (await search_run_stats(session, user_id)).get(search_id, NEVER_RUN)
     return JobsEmptyReasonOut(
         total=reason.total,
         cause=cast(
@@ -306,11 +309,11 @@ async def jobs_empty_reason(
         ),
         search_name=search.name if search is not None else None,
         search_location=search.location if search is not None else None,
-        # Task 3 fills these from `poll_runs`; a search's run history is the only thing that can
-        # tell "has never matched" from "nothing new", and `jobs.search_id` cannot (it is
-        # ON DELETE SET NULL and backfilled rows deliberately drop it).
-        search_runs=None,
-        search_ever_found=None,
+        # From `poll_runs`, via the one `search_run_stats` every surface shares. A search's run
+        # history is the only thing that can tell "has never matched" from "nothing new";
+        # `jobs.search_id` cannot, being ON DELETE SET NULL and absent on backfilled rows.
+        search_runs=stats.runs if stats is not None else None,
+        search_ever_found=stats.ever_found if stats is not None else None,
     )
 
 

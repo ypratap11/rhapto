@@ -165,8 +165,17 @@ async def test_saved_searches_carry_their_new_counts(
         )
         await session.commit()
     body = (await client.get("/api/v1/dashboard")).json()
+    # `ever_found` is False even though a job carries this `search_id`: there is no `poll_runs`
+    # row, and the run history is the only honest record of what a poll ever returned. A job row
+    # can arrive by backfill or be detached by a delete, which is why the job-row proxy was
+    # rejected for this question.
     assert body["saved_searches"] == [
-        {"id": created["id"], "name": "program manager", "new_count": 1}
+        {
+            "id": created["id"],
+            "name": "program manager",
+            "new_count": 1,
+            "ever_found": False,
+        }
     ]
 
 

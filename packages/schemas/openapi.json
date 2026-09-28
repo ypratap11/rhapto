@@ -2530,6 +2530,11 @@
       },
       "SavedSearchCountOut": {
         "properties": {
+          "ever_found": {
+            "default": false,
+            "title": "Ever Found",
+            "type": "boolean"
+          },
           "id": {
             "format": "uuid",
             "title": "Id",
@@ -2647,6 +2652,11 @@
             ],
             "title": "Derived From Track Id"
           },
+          "ever_found": {
+            "default": false,
+            "title": "Ever Found",
+            "type": "boolean"
+          },
           "id": {
             "format": "uuid",
             "title": "Id",
@@ -2658,6 +2668,18 @@
             },
             "title": "Keywords",
             "type": "array"
+          },
+          "last_run_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Run At"
           },
           "last_viewed_at": {
             "anyOf": [
@@ -2699,6 +2721,11 @@
             ],
             "title": "Remote",
             "type": "string"
+          },
+          "runs": {
+            "default": 0,
+            "title": "Runs",
+            "type": "integer"
           }
         },
         "required": [

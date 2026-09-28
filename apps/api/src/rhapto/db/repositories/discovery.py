@@ -2,10 +2,11 @@ from __future__ import annotations
 
 import uuid
 from collections import defaultdict
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from rhapto.db.models import Job, JobScore, PollRun
@@ -40,6 +41,63 @@ async def latest_runs(session: AsyncSession, user_id: uuid.UUID) -> list[PollRun
         .distinct(PollRun.source, PollRun.board, PollRun.search_id)
     )
     return sorted(rows, key=lambda r: r.started_at, reverse=True)
+
+
+@dataclass(frozen=True)
+class SearchRunStats:
+    """What one saved search's poll history says about it."""
+
+    #: Attempts recorded for this search, across every source it was run against.
+    runs: int
+    #: The largest `found` any of those attempts returned. 0 means no attempt has ever returned a
+    #: posting, which is what "this search has never returned a job" actually means.
+    best: int
+    last_run_at: datetime | None
+
+    @property
+    def ever_found(self) -> bool:
+        return self.best > 0
+
+
+async def search_run_stats(
+    session: AsyncSession, user_id: uuid.UUID
+) -> dict[uuid.UUID, SearchRunStats]:
+    """Per saved search: how many times it has polled, and whether any poll ever found anything.
+
+    Read from `poll_runs`, NOT from `jobs.search_id`, and that choice is the whole point.
+    `EXISTS (jobs WHERE search_id = s.id)` is a proxy that lies in three ways: `jobs.search_id` is
+    `ON DELETE SET NULL` (`alembic/versions/0006_searches.py`), so deleting a search detaches its
+    history; job rows are deletable; and `backfill_public_jobs` deliberately does not copy
+    `search_id`. `searches.new_counts` is worse for this purpose -- it counts only jobs newer than
+    `last_viewed_at`, so it returns 0 for "never matched" and for "you have seen them all" alike.
+
+    `poll_runs` persists one row per attempt with `found`, and a successful fetch that returned
+    nothing is stored as `found = 0, error IS NULL`. That is the only record that can tell "has
+    never matched" from "nothing new".
+
+    One grouped statement for every search, not one per row: the dashboard, the Searches tab and
+    the Jobs-page diagnosis all want the whole set at once. Searches with no runs are simply absent
+    from the mapping -- the caller reads that as `runs = 0`, "has not run yet".
+    """
+    rows = await session.execute(
+        select(
+            PollRun.search_id,
+            func.count().label("runs"),
+            func.max(PollRun.found).label("best"),
+            func.max(PollRun.started_at).label("last_run_at"),
+        )
+        .where(PollRun.user_id == user_id, PollRun.search_id.is_not(None))
+        .group_by(PollRun.search_id)
+    )
+    return {
+        search_id: SearchRunStats(runs=int(runs or 0), best=int(best or 0), last_run_at=last_run_at)
+        for search_id, runs, best, last_run_at in rows.all()
+        if search_id is not None
+    }
+
+
+#: What a search with no `poll_runs` rows at all reads as: never attempted, never found.
+NEVER_RUN = SearchRunStats(runs=0, best=0, last_run_at=None)
 
 
 #: The poller pauses a source/board after this many consecutive failed runs

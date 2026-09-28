@@ -1900,6 +1900,11 @@ export interface components {
         /** SavedSearchCountOut */
         SavedSearchCountOut: {
             /**
+             * Ever Found
+             * @default false
+             */
+            ever_found: boolean;
+            /**
              * Id
              * Format: uuid
              */
@@ -1950,12 +1955,19 @@ export interface components {
             /** Derived From Track Id */
             derived_from_track_id: string | null;
             /**
+             * Ever Found
+             * @default false
+             */
+            ever_found: boolean;
+            /**
              * Id
              * Format: uuid
              */
             id: string;
             /** Keywords */
             keywords: string[];
+            /** Last Run At */
+            last_run_at?: string | null;
             /** Last Viewed At */
             last_viewed_at?: string | null;
             /** Location */
@@ -1972,6 +1984,11 @@ export interface components {
              * @enum {string}
              */
             remote: "include" | "only" | "exclude";
+            /**
+             * Runs
+             * @default 0
+             */
+            runs: number;
         };
         /** SourceDocument */
         SourceDocument: {

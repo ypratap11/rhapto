@@ -113,3 +113,39 @@ Two items the review found and triaged as follow-ups, not blockers for this bran
   (`for (const file of [..., "RunsDrawer.tsx", "AddJobDialog.tsx"]) expect(jobs).toContain(file)`)
   — deleting the components without first updating that test would just trade one inconsistency
   for another, and the test itself is what a future cleanup pass needs to touch first.
+
+## 6. From the failure-visibility branch (2026-09-27)
+
+- **`poll_runs` grows without bound and now has a grouped read over it.** Condition C6 of
+  `.superpowers/sdd/2026-09-27-failure-visibility/architecture.md`. `search_run_stats`
+  (`apps/api/src/rhapto/db/repositories/discovery.py`) aggregates
+  `poll_runs WHERE user_id = :u AND search_id IS NOT NULL GROUP BY search_id`, and is called by
+  `GET /searches`, `GET /dashboard` and `GET /jobs/empty-reason`. `poll_runs` has **no retention
+  policy**: it gains one row per (source x active search) per poll, forever. It is the one query on
+  this branch that grows without bound.
+
+  Not a blocker today — the existing `ix_poll_runs_lookup (user_id, source, board, started_at DESC)`
+  already restricts the scan to one user, and the table holds thousands of rows. Two ways to fix it
+  when it matters, in the order they are worth doing:
+  1. A covering index on `(user_id, search_id, started_at DESC)`, which is the exact shape of this
+     query.
+  2. A retention job. Note that deleting old rows changes an *answer*, not just a cost:
+     `ever_found` is `max(found) > 0` over the whole history, so pruning the run that once found
+     something would make a working search read as "has never returned a job". Any retention
+     policy has to keep a per-search summary, or keep the first successful run.
+
+- **The keyless-source default disagrees with what the poller actually polls.** Condition C4; found
+  by the architecture pass on this branch and deliberately **not** fixed here, because the fix is a
+  behaviour decision for the owner.
+  - `GET /settings/sources` reports `enabled = KEYLESS_DEFAULT_ENABLED and not needs_key` for a
+    user with no `aggregators` row (`apps/api/src/rhapto/api/routers/settings.py`).
+  - `build_specs` takes `enabled = [a for a in list_aggregators(...) if a.enabled]` and **returns
+    early with board specs only when that list is empty**
+    (`apps/api/src/rhapto/services/discovery/poller.py`). A user with zero `aggregators` rows
+    therefore polls **no aggregators at all**, while Settings shows four keyless sources as on.
+
+  This branch makes it visible (`SourceSettingOut.runnable = false`, `checklist.job_sources = false`,
+  "No source can run yet") and changes nothing about what gets polled. The two candidate fixes are
+  seeding `aggregators` rows on bootstrap, or making `build_specs` honour the display default — the
+  second starts calling four external APIs for every account that never opened Settings, which is
+  why it is the owner's call and not this branch's.
