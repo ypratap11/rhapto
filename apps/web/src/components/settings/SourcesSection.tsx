@@ -33,7 +33,10 @@ function readinessLine(s: SourceSetting): string | null {
   if (s.runnable) return null;
   if (s.needs_key && !s.key_set) return "Add a key and this source will run on the next poll.";
   if (!s.enabled) return "Switched off, so polls skip it.";
-  return "Not set up on this account yet — switch it on to include it in polls.";
+  // The switch above reads on and polls still skip it, so the line has to name that contradiction
+  // rather than say something that looks wrong. Saving the setting is what creates the row the
+  // poller requires.
+  return "Shown on by default, but this account has no setting saved for it yet, so polls skip it — flip the switch to save it.";
 }
 
 /** What the last attempt actually did, in the source's own terms. */

@@ -175,7 +175,7 @@ describe("SourcesSection, what a source last did and whether it can run", () => 
     render(<SourcesSection />);
     const muse = screen.getByRole("group", { name: "The Muse" });
     expect(within(muse).getByRole("switch", { name: "The Muse" })).toBeChecked();
-    expect(within(muse).getByText(/switch it on to include it in polls/i)).toBeInTheDocument();
+    expect(within(muse).getByText(/no setting saved for it yet, so polls skip it/i)).toBeInTheDocument();
   });
 
   it("tells a keyed source with no key what is missing", () => {
@@ -189,7 +189,7 @@ describe("SourcesSection, what a source last did and whether it can run", () => 
     render(<SourcesSection />);
     const jsearch = screen.getByRole("group", { name: "JSearch" });
     expect(within(jsearch).queryByText(/will run on the next poll/i)).not.toBeInTheDocument();
-    expect(within(jsearch).queryByText(/switch it on/i)).not.toBeInTheDocument();
+    expect(within(jsearch).queryByText(/polls skip it/i)).not.toBeInTheDocument();
   });
 
   it("shows a Paused badge and a Resume button only for the paused source", async () => {
