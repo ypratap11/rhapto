@@ -26,6 +26,9 @@ const reason = (over: Partial<JobsEmptyReason>): JobsEmptyReason => ({
   search_location: null,
   search_runs: null,
   search_ever_found: null,
+  // Empty by default: most causes have no leave-one-out map worth carrying, and a test that wants a
+  // widen offered has to say so, which is the point of gating on it.
+  would_match_without: {},
   ...over,
 });
 
@@ -152,12 +155,28 @@ describe("EmptyJobsExplanation, a combination", () => {
     expect(onChange).toHaveBeenCalledWith({ ...state, sources: [], posted_within: "any", field: null, fit: "all" });
   });
 
-  it("offers the hidden toggle, which is the one control cleared filters cannot replace", async () => {
+  it("offers the hidden toggle when the API says flipping it would reveal rows", async () => {
     // The dead end QA reproduced: a corpus that is entirely hidden and entirely over 90 days old.
-    // Clearing the filters leaves it empty; flipping the mode is what reaches those rows.
-    const { onChange } = setup({ reason: reason({ cause: "combination", filter_id: null }) });
+    // Clearing the filters leaves it empty; flipping the mode is what reaches those rows — and the
+    // leave-one-out count is how the client knows that, rather than guessing.
+    const { onChange } = setup({
+      reason: reason({ cause: "combination", filter_id: null, would_match_without: { hidden: 3 } }),
+    });
     await userEvent.setup().click(screen.getByRole("button", { name: /include hidden jobs/i }));
     expect(onChange).toHaveBeenCalledWith({ ...DEFAULT_SEARCH_STATE, hidden: true });
+  });
+
+  it("does not offer the hidden toggle when flipping it would reveal nothing", () => {
+    // Nothing is hidden, so the toggle would be inert. The client cannot know that from the state —
+    // only from the count the server already computed, which is why it is on the wire.
+    setup({ reason: reason({ cause: "combination", filter_id: null, would_match_without: { hidden: 0 } }) });
+    expect(screen.queryByRole("button", { name: /hidden jobs/i })).not.toBeInTheDocument();
+  });
+
+  it("does not offer it when the API sent no counts at all", () => {
+    // An older API, or a cause that carries no map: absent must mean "do not offer", not "offer".
+    setup({ reason: reason({ cause: "combination", filter_id: null }) });
+    expect(screen.queryByRole("button", { name: /hidden jobs/i })).not.toBeInTheDocument();
   });
 });
 

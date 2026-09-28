@@ -1566,6 +1566,13 @@ export interface components {
             user_field_names: string[];
             /** Would Match */
             would_match?: number | null;
+            /**
+             * Would Match Without
+             * @default {}
+             */
+            would_match_without: {
+                [key: string]: number;
+            };
         };
         /**
          * LiveSearchIn

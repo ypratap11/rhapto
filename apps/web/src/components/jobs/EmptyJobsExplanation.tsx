@@ -5,7 +5,7 @@ import Link from "next/link";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Skeleton } from "@/components/ui/skeleton";
-import { clearAllFilters, FILTER_LABEL, hasActiveFilters, WIDEN, type JobsEmptyReason } from "@/lib/jobs-empty";
+import { applicableWiden, clearAllFilters, FILTER_LABEL, hasActiveFilters, WIDEN, type JobsEmptyReason } from "@/lib/jobs-empty";
 import type { FitFilter, SearchState } from "@/lib/search-state";
 
 /** A list of names as a person would read it. */
@@ -188,6 +188,7 @@ export function EmptyJobsExplanation({
   }
 
   if (reason.cause === "combination") {
+    const hiddenWiden = applicableWiden("hidden");
     return (
       <Explanation
         title="No job matches all of these filters together"
@@ -210,10 +211,17 @@ export function EmptyJobsExplanation({
             {/* The hidden switch is a MODE, not a filter that can be absent: `clearAllFilters`
                 cannot express "hidden and not hidden", so clearing it only ever picks one side. That
                 is why the toggle is offered separately — it is the one control that reaches a corpus
-                the cleared filters still cannot show. */}
-            <Button size="sm" variant="outline" onClick={() => onChange(WIDEN.hidden.apply!(state))}>
-              {WIDEN.hidden.label(state)}
-            </Button>
+                the cleared filters still cannot show.
+                Offered only when the API says flipping it would actually reveal rows. Under
+                `combination` every leave-one-out count is 0, so the toggle is normally absent; it
+                appears in the one case that is not covered by that — `hidden` narrowing a corpus the
+                other filters also exclude. Gated on the count rather than on a guess, because the
+                client cannot know otherwise. */}
+            {hiddenWiden && (reason.would_match_without.hidden ?? 0) > 0 ? (
+              <Button size="sm" variant="outline" onClick={() => onChange(hiddenWiden.apply(state))}>
+                {hiddenWiden.label(state)}
+              </Button>
+            ) : null}
           </div>
         }
       />

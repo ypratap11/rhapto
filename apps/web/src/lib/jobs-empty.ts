@@ -44,6 +44,19 @@ export type Widen = {
   clearsSavedSearch?: boolean;
 };
 
+/** A widen that is known to be applicable: `apply` narrowed to non-null by a check, not asserted.
+ *
+ * `WIDEN[id].apply` is `((s) => SearchState) | null`, and a non-null assertion on it is the one shape
+ * in this module where a future `null` becomes a runtime crash instead of a compile error — the
+ * inverse of the idiom the rest of the branch is built on. `applicableWiden` is the guard that keeps
+ * the narrowing honest. */
+export type ApplicableWiden = Widen & { apply: (state: SearchState) => SearchState };
+
+export function applicableWiden(id: JobFilterId): ApplicableWiden | null {
+  const widen = WIDEN[id];
+  return widen.apply ? { ...widen, apply: widen.apply } : null;
+}
+
 export const WIDEN: Record<JobFilterId, Widen> = {
   hidden: {
     // Both directions are real: the default view hides what the user said no to (so the widen is

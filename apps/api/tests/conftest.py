@@ -5,6 +5,7 @@ import base64
 import hashlib
 import logging
 import os
+import secrets
 from collections.abc import AsyncIterator, Iterator
 from pathlib import Path
 
@@ -99,18 +100,54 @@ def _dsn(url: str) -> str:
     return url.replace("postgresql+asyncpg://", "postgresql://")
 
 
+def _per_run_url(base: str) -> str:
+    """`base` with a suffix unique to this pytest process.
+
+    Two pytest runs sharing one database do not merely interleave -- the `session_factory` teardown
+    `TRUNCATE`s every table, so each run deletes the other run's rows mid-test. The failures that
+    produces are scattered, plausible and entirely fictional: three separate runs were misread that
+    way in one day, and the obvious next move each time was to "fix" code that was correct.
+
+    A per-run database removes the race rather than serialising around it, so two runs stay
+    genuinely parallel. The pid is enough to be unique among live processes; the random suffix keeps
+    a recycled pid from colliding with a database a crashed run left behind.
+    """
+    prefix, _, dbname = base.rpartition("/")
+    return f"{prefix}/{dbname}_{os.getpid()}_{secrets.token_hex(3)}"
+
+
 @pytest.fixture(scope="session")
-def test_db_url() -> str:
-    url = os.environ.get("RHAPTO_TEST_DATABASE_URL", DEFAULT_TEST_URL)
+def test_db_url() -> Iterator[str]:
+    """A database this run owns, created now and dropped at the end.
+
+    `RHAPTO_TEST_DATABASE_URL` overrides it and is then used verbatim and NOT dropped: an explicit
+    URL is someone's deliberate choice (CI, a container, a database they want to inspect after a
+    failure), and a fixture that dropped it would be a nasty surprise.
+    """
+    explicit = os.environ.get("RHAPTO_TEST_DATABASE_URL", "").strip()
+    url = explicit or _per_run_url(DEFAULT_TEST_URL)
     admin = _dsn(url).rsplit("/", 1)[0] + "/postgres"
     dbname = url.rsplit("/", 1)[1]
 
     async def ensure() -> None:
         conn = await asyncpg.connect(admin)
         try:
-            exists = await conn.fetchval("SELECT 1 FROM pg_database WHERE datname = $1", dbname)
-            if not exists:
+            if explicit:
+                exists = await conn.fetchval("SELECT 1 FROM pg_database WHERE datname = $1", dbname)
+                if not exists:
+                    await conn.execute(f'CREATE DATABASE "{dbname}"')
+            else:
+                # Ours by construction, so a leftover of the same name can only be our own from a
+                # crashed run. Start clean rather than migrating on top of unknown state.
+                await conn.execute(f'DROP DATABASE IF EXISTS "{dbname}"')
                 await conn.execute(f'CREATE DATABASE "{dbname}"')
+        finally:
+            await conn.close()
+
+    async def drop() -> None:
+        conn = await asyncpg.connect(admin)
+        try:
+            await conn.execute(f'DROP DATABASE IF EXISTS "{dbname}" WITH (FORCE)')
         finally:
             await conn.close()
 
@@ -120,7 +157,13 @@ def test_db_url() -> str:
         pytest.skip(
             f"Postgres not reachable at {admin}: {exc}. Run `docker compose up -d db redis`."
         )
-    return url
+    yield url
+    if not explicit:
+        try:
+            asyncio.run(drop())
+        except Exception:  # noqa: BLE001 - housekeeping must never fail a green run
+            # A stray database is untidy, not wrong. CONTRIBUTING.md has the one-liner to clean up.
+            pass
 
 
 @pytest.fixture(scope="session")
@@ -155,6 +198,15 @@ async def session(session_factory: async_sessionmaker[AsyncSession]) -> AsyncIte
 
 @pytest.fixture
 async def user(session: AsyncSession) -> User:
+    """A bare account row, deliberately NOT seeded.
+
+    `get_or_create_user`, not `services.accounts.ensure_account`: this is the minimal database fixture,
+    and an account with no `aggregators` rows is a state worth being able to construct -- it is what an
+    account created before seeding existed looks like, and several poller tests insert their own
+    aggregator rows and would collide with a seed. The API-level `user_id` fixture in
+    `tests/api/conftest.py` comes from the app's own lifespan and therefore IS seeded, which is the
+    realistic path.
+    """
     u = await get_or_create_user(session, "test@example.com")
     await session.commit()
     return u

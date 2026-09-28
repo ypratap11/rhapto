@@ -586,6 +586,14 @@ class JobsEmptyReasonOut(BaseModel):
     filter_value: str | None = None
     #: Rows that appear if that one filter is widened.
     would_match: int | None = None
+    #: Per blamable ACTIVE filter id, the rows that appear if that ONE filter is widened. The same
+    #: leave-one-out counts the blame is chosen from, so it costs no extra query; an inactive filter
+    #: is absent, and under `cause = "combination"` every value is 0 by definition.
+    #:
+    #: A client needs these to avoid offering a widen that would reveal nothing -- it has no other way
+    #: to know. Counts only: nothing here asserts a cause or proposes a value the user did not choose,
+    #: so C7 is unaffected.
+    would_match_without: dict[JobFilterId, int] = {}
     #: Display name of the requested taxonomy field, from `services.taxonomy`.
     field_name: str | None = None
     #: Display names of the fields this user does have tracks in.

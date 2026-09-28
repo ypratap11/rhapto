@@ -1,8 +1,10 @@
 """Is a job source actually able to bring anything in, and is it currently being refused?
 
 Two questions the Settings page and the dashboard checklist both ask, answered in one place so they
-cannot disagree about what "ready" means. `GET /settings/sources`' `runnable` field and
-`ChecklistOut.job_sources` are the same function.
+cannot disagree about what "set up" means. `usable_source_ids` backs BOTH
+`GET /settings/sources`' `configured` field and `ChecklistOut.job_sources` -- one function, two
+surfaces. It is not what backs `runnable`, which is `configured and not paused` and is therefore a
+claim about the next poll rather than about setup (architecture §12.1).
 
 Both functions here are pure: no I/O, no session. The callers do the reading.
 """
@@ -14,9 +16,27 @@ from datetime import datetime
 from typing import Protocol
 
 from rhapto.services.discovery.poller import PAUSED_MESSAGE
+from rhapto.services.discovery.sources import aggregator_sources
 from rhapto.services.discovery.sources.base import SourceInfo
 
-__all__ = ["PAUSED_MESSAGE", "SourceRow", "paused_as_of_last_run", "usable_source_ids"]
+__all__ = [
+    "PAUSED_MESSAGE",
+    "SourceRow",
+    "keyless_source_names",
+    "paused_as_of_last_run",
+    "usable_source_ids",
+]
+
+
+def keyless_source_names() -> tuple[str, ...]:
+    """Aggregator sources that need no credentials, so they can be switched on for a new account.
+
+    The seed list for `services.accounts.ensure_account`. Derived from the registry rather than
+    written down, so a keyless source added to `aggregator_sources()` is seeded for new accounts
+    without anyone remembering to update a list -- and a source that starts needing a key drops out of
+    it on the same edit that sets `needs_key`.
+    """
+    return tuple(info.name for info in aggregator_sources() if not info.needs_key)
 
 
 class SourceRow(Protocol):
@@ -35,23 +55,22 @@ def usable_source_ids(
     credentialled: Collection[str],
     registry: Iterable[SourceInfo],
 ) -> set[str]:
-    """Which sources could actually return a posting on the next poll.
+    """Which sources are set up well enough to return a posting on the next poll.
 
-    Follows the POLLER's rule, not the Settings page's display default, and the difference is a live
-    defect this pass found rather than a nicety:
+    Follows the POLLER's rule: a row must EXIST (`rows.get(name) is not None`) and be enabled, because
+    `poller.build_specs` builds its work list only from `aggregators` rows that exist and are enabled.
 
-    - `GET /settings/sources` shows `enabled = KEYLESS_DEFAULT_ENABLED and not needs_key` for a user
-      with **no** `aggregators` row at all.
-    - `poller.build_specs` takes `enabled = [a for a in list_aggregators(...) if a.enabled]` and
-      **returns early with board specs only when that list is empty**. A user with zero
-      `aggregators` rows therefore polls no aggregators whatsoever.
+    That used to disagree with what the Settings page displayed. `GET /settings/sources` defaulted a
+    keyless source to `enabled = true` when the user had no row, so a new account saw four sources
+    switched on and polled none of them — and on the live instance the second real account had zero
+    rows and had been polling no aggregators at all. Both halves are now fixed rather than merely
+    reported: `services.accounts.ensure_account` seeds enabled rows for the keyless sources at account
+    creation, and the display no longer defaults, so what it shows is the row the poller reads. Absent
+    row means off on both sides, which is why they can no longer disagree even if a seed is missed.
 
-    So a row must EXIST (`rows.get(name) is not None`), not merely default to on. That is why this
-    reports `runnable = False` and `job_sources = False` for an account that has never opened
-    Settings, which is the honest answer about what that account's next poll will fetch. Changing
-    `build_specs` to honour the display default would start calling four external APIs for every
-    such account, which is the owner's decision and is recorded in
-    `docs/portal-backend-followups.md`, not made here.
+    The credential check is the `resume_template` lesson applied to sources: a keyed source with no
+    stored credentials is a row that says "enabled" describing something that cannot run -- the
+    poller writes `NO_API_KEY_MESSAGE` and nothing can ever arrive.
 
     The credential check is the `resume_template` lesson applied to sources: a keyed source with no
     stored credentials is a row that says "enabled" describing something that cannot run -- the

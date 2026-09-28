@@ -29,20 +29,23 @@ function statusLine(s: SourceSetting): string {
  * keyless sources to on, while `build_specs` polls no aggregator at all for an account with no
  * `aggregators` row.
  *
- * `runnable` is `configured && !paused` — the present-tense claim about the next poll. Reading only
- * one of the two would collapse "not set up" into "paused", or "paused" into "running", which is
- * what made the middle and last states indistinguishable before (architecture §12.1).
+ * `runnable` is the present-tense claim about the next poll, and this READS it rather than
+ * recomputing `configured && !paused`. That distinction is the whole point of the field: `runnable`
+ * exists so the claim has exactly one definition, and §9 item 5 already anticipates it becoming more
+ * exact (a per-scope pause count; board-source pause or a credential-decrypt term would do the same).
+ * Re-deriving it here would be a second implementation that silently stopped following the first —
+ * the drift this branch exists to remove, reintroduced in the client.
  */
 function statusDetail(s: SourceSetting): string | null {
   if (!s.configured) {
     if (s.needs_key && !s.key_set) return "Add a key and this source will run on the next poll.";
     if (!s.enabled) return "Switched off, so polls skip it.";
-    // The switch above reads on and polls still skip it, so the line has to name that contradiction
-    // rather than say something that looks wrong. Saving the setting is what creates the row the
-    // poller requires.
-    return "Shown on by default, but this account has no setting saved for it yet, so polls skip it — flip the switch to save it.";
+    // Set up is the thing missing, and the switch is what saves it.
+    return "Not saved for this account yet, so polls skip it — flip the switch to save it.";
   }
-  if (s.paused) return "Paused after repeated failures, so the next poll will skip it — Resume to retry.";
+  // Set up but not runnable: pause is the only thing that can do that today, and if a future term is
+  // added to `runnable` this branch follows it without being edited.
+  if (!s.runnable) return "Paused after repeated failures, so the next poll will skip it — Resume to retry.";
   return "Will run on the next poll.";
 }
 

@@ -301,6 +301,7 @@ async def jobs_empty_reason(
         filter_id=cast("JobFilterId | None", reason.filter_id),
         filter_value=reason.filter_value,
         would_match=reason.would_match,
+        would_match_without=cast("dict[JobFilterId, int]", reason.would_match_without),
         # Display names come from the taxonomy and the user's own tracks -- never a literal.
         field_name=field.name if field is not None else None,
         # Sorted by display name, which is the order a user reads them in.

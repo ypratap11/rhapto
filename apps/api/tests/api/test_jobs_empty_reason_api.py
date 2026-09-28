@@ -367,6 +367,100 @@ async def test_an_unknown_taxonomy_field_is_422_on_both_endpoints(
     assert (await client.get(f"/api/v1/jobs?field={field}")).status_code == 422
 
 
+# --- the per-filter leave-one-out counts (QA N1) ------------------------------------------------
+
+
+async def test_the_leave_one_out_counts_are_on_the_wire_per_active_filter(
+    client: httpx.AsyncClient, session_factory: async_sessionmaker[AsyncSession], user_id: uuid.UUID
+) -> None:
+    """A client offering a widen has no other way to know the widen would reveal nothing.
+
+    These are the same counts the blame is chosen from, so they cost no extra query. Exposing them is
+    what lets the Jobs page stop offering an inert "include hidden jobs" button.
+    """
+    async with session_factory() as session:
+        for i in range(10):
+            job_id = await _job(session, user_id, key=f"old{i}", source="themuse")
+            job = await jobs_repo.get_job(session, user_id, job_id)
+            assert job is not None
+            job.posted_at, job.discovered_at = None, datetime.now(UTC) - timedelta(days=200)
+        await session.commit()
+
+    body = (await client.get(f"{REASON}?posted_within=24h&sources=themuse")).json()
+    counts = body["would_match_without"]
+    # Widening the date reveals all ten; widening the source reveals none, because every job is on
+    # `themuse` already; unhiding reveals none, because none is hidden.
+    assert counts["posted_within"] == 10
+    assert counts["sources"] == 0
+    assert counts["hidden"] == 0
+    # Inactive filters are absent rather than zero: absent means "not narrowing anything".
+    assert "field" not in counts and "search_id" not in counts
+
+
+async def test_the_blamed_count_is_the_same_number_as_its_entry_in_the_map(
+    client: httpx.AsyncClient, session_factory: async_sessionmaker[AsyncSession], user_id: uuid.UUID
+) -> None:
+    """`would_match` and `would_match_without[filter_id]` are two representations of one number, so
+    they are pinned equal -- otherwise they are two things that can drift."""
+    async with session_factory() as session:
+        for i in range(4):
+            job_id = await _job(session, user_id, key=f"old{i}")
+            job = await jobs_repo.get_job(session, user_id, job_id)
+            assert job is not None
+            job.posted_at, job.discovered_at = None, datetime.now(UTC) - timedelta(days=200)
+        await session.commit()
+
+    body = (await client.get(f"{REASON}?posted_within=24h")).json()
+    assert body["cause"] == "filter"
+    assert body["would_match"] == body["would_match_without"][body["filter_id"]]
+
+
+async def test_every_count_is_zero_when_no_single_widen_helps(
+    client: httpx.AsyncClient, session_factory: async_sessionmaker[AsyncSession], user_id: uuid.UUID
+) -> None:
+    """`combination` means exactly this, and now says so in numbers rather than only in a cause."""
+    async with session_factory() as session:
+        for i in range(3):
+            job_id = await _job(session, user_id, key=f"old{i}", source="themuse")
+            job = await jobs_repo.get_job(session, user_id, job_id)
+            assert job is not None
+            job.posted_at, job.discovered_at = None, datetime.now(UTC) - timedelta(days=200)
+        await session.commit()
+
+    body = (await client.get(f"{REASON}?sources=adzuna&posted_within=24h")).json()
+    assert body["cause"] == "combination"
+    assert set(body["would_match_without"].values()) == {0}
+
+
+async def test_unhiding_is_reported_as_useful_only_when_something_is_hidden(
+    client: httpx.AsyncClient, session_factory: async_sessionmaker[AsyncSession], user_id: uuid.UUID
+) -> None:
+    """The exact case QA found inert, driven from both sides.
+
+    With nothing hidden the count is 0 and the client must not offer the toggle; with the same filters
+    over a hidden corpus it is positive and the toggle is the one thing that helps.
+    """
+    async with session_factory() as session:
+        job_id = await _job(session, user_id, key="stale", source="themuse")
+        job = await jobs_repo.get_job(session, user_id, job_id)
+        assert job is not None
+        job.posted_at, job.discovered_at = None, datetime.now(UTC) - timedelta(days=200)
+        await session.commit()
+
+    visible = (await client.get(f"{REASON}?sources=adzuna&posted_within=24h")).json()
+    assert visible["would_match_without"]["hidden"] == 0
+
+    async with session_factory() as session:
+        fresh_id = await _job(session, user_id, key="hidden-fresh", source="adzuna")
+        fresh = await jobs_repo.get_job(session, user_id, fresh_id)
+        assert fresh is not None
+        jobs_repo.set_hidden(fresh, True)
+        await session.commit()
+
+    now_hidden = (await client.get(f"{REASON}?sources=adzuna&posted_within=24h")).json()
+    assert now_hidden["would_match_without"]["hidden"] == 1
+
+
 # --- C2 as a test, not a grep ------------------------------------------------------------------
 
 #: Filter sets spanning the parameters the Jobs page really sends, plus a couple it does not, chosen

@@ -483,6 +483,14 @@ class EmptyReason:
     filter_value: str | None = None
     #: Rows that appear if that one filter is widened and nothing else changes.
     would_match: int | None = None
+    #: Per blamable ACTIVE filter, how many rows appear if that one filter is widened and nothing else
+    #: changes -- the same leave-one-out counts the blame is chosen from, so this costs nothing extra.
+    #:
+    #: Exposed because a client offering a widen has no other way to know the widen would reveal
+    #: nothing: under `cause = "combination"` every entry here is 0 by definition, and an inactive
+    #: filter is simply absent. It is a count, not a suggestion, so C7 is untouched -- nothing here
+    #: asserts a cause or proposes a value the user did not already choose.
+    would_match_without: dict[str, int] = dataclass_field(default_factory=dict)
 
 
 async def empty_reason(
@@ -540,20 +548,24 @@ async def empty_reason(
         # The client asked for a diagnosis of a result that is not empty. Not an error: the honest
         # answer is "there are rows for these filters".
         return EmptyReason(total=total, cause="nothing_matched")
+    # Every active blamable filter's leave-one-out count, kept rather than reduced to the maximum:
+    # the blame needs only the largest, but a client deciding whether a widen is worth offering needs
+    # each one. Same statement, same numbers.
+    without = {entry.id: int(getattr(row, f"without_{entry.id}") or 0) for entry in blamable}
     best: JobFilter | None = None
     best_count = 0
     for entry in blamable:
-        count = int(getattr(row, f"without_{entry.id}") or 0)
-        if count > best_count:
-            best, best_count = entry, count
+        if without[entry.id] > best_count:
+            best, best_count = entry, without[entry.id]
     if best is None:
-        return EmptyReason(total=total, cause="combination")
+        return EmptyReason(total=total, cause="combination", would_match_without=without)
     return EmptyReason(
         total=total,
         cause="filter",
         filter_id=best.id,
         filter_value=best.value(params),
         would_match=best_count,
+        would_match_without=without,
     )
 
 

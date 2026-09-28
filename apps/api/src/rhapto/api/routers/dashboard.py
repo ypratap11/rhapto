@@ -58,8 +58,10 @@ async def dashboard(
     run_stats = await search_run_stats(session, user_id)
     # `runs_used` comes from the checklist composite, so this does not add a statement of its own.
     llm = await llm_setup_status(session, settings, user_id, runs_used=checklist.trial_runs_used)
-    # The same pure function `GET /settings/sources` uses for `runnable`, so the checklist and the
-    # Settings page cannot disagree about what "ready" means.
+    # The same pure function `GET /settings/sources` uses for `configured`, so the checklist and the
+    # Settings page cannot disagree about what "set up" means. Deliberately NOT `runnable`: that adds
+    # pause, and a transient pause must not flip a completed setup step to "not done"
+    # (architecture §12.1 point 3).
     sources = await repo.source_setup(session, user_id)
     usable = usable_source_ids(
         sources, {s for s, row in sources.items() if row.key_set}, aggregator_sources()

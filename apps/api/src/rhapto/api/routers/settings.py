@@ -260,11 +260,6 @@ async def get_usage(user_id: UserDep, session: SessionDep) -> UsageOut:
     )
 
 
-#: A keyless source works out of the box, so it defaults to enabled; a keyed one needs the user
-#: to add credentials first, so it defaults to disabled until they do.
-KEYLESS_DEFAULT_ENABLED = True
-
-
 async def _source_rows(session: AsyncSession, user_id: uuid.UUID) -> dict[str, Aggregator]:
     return {row.source: row for row in await profile_repo.list_aggregators(session, user_id)}
 
@@ -307,9 +302,13 @@ async def _source_settings(session: AsyncSession, user_id: uuid.UUID) -> list[So
     out: list[SourceSettingOut] = []
     for info in registry:
         row = rows.get(info.name)
-        enabled = (
-            row.enabled if row is not None else (KEYLESS_DEFAULT_ENABLED and not info.needs_key)
-        )
+        # No default. A keyless source used to display as enabled when the user had no `aggregators`
+        # row, while `poller.build_specs` polled only rows that exist -- so a new account saw four
+        # sources on and fetched from none of them. `ensure_account` now seeds those rows, and this
+        # reads the row and nothing else, so what the page shows is what the poller will use. Absent
+        # row means off on both sides, which is why they can no longer disagree even if a seed is
+        # missed.
+        enabled = row.enabled if row is not None else False
         scopes = by_source.get(info.name, [])
         configured = info.name in usable
         paused = paused_as_of_last_run(

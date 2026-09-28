@@ -5,9 +5,10 @@ import { SourcesSection } from "./SourcesSection";
 import type { SourceSetting, SourceTestOut } from "@/lib/api/queries";
 
 // Three contrasting states, because the point of these fields is that they differ from `enabled`:
-// The Muse shows the keyless default (`enabled: true`) with no row behind it, so nothing polls it
-// (`runnable: false`); Adzuna is off and keyless-less; JSearch is configured, runnable, and
-// currently being refused by the poller.
+// The Muse is on but has no `aggregators` row behind it, so it is not set up and nothing polls it
+// (`configured: false`); Adzuna is switched off and has no key; JSearch IS set up
+// (`configured: true`) and is currently being refused by the poller, so it is paused and therefore
+// not runnable.
 const rows: SourceSetting[] = [
   { id: "themuse", label: "The Muse", enabled: true, needs_key: false, key_set: false, fields: [], configured: false, paused: false, runnable: false, last_run: null },
   { id: "adzuna", label: "Adzuna", enabled: false, needs_key: true, key_set: false, fields: ["app_id", "app_key"], configured: false, paused: false, runnable: false, last_run: null },
@@ -177,7 +178,7 @@ describe("SourcesSection, what a source last did and whether it can run", () => 
     render(<SourcesSection />);
     const muse = screen.getByRole("group", { name: "The Muse" });
     expect(within(muse).getByRole("switch", { name: "The Muse" })).toBeChecked();
-    expect(within(muse).getByText(/no setting saved for it yet, so polls skip it/i)).toBeInTheDocument();
+    expect(within(muse).getByText(/not saved for this account yet, so polls skip it/i)).toBeInTheDocument();
   });
 
   it("tells a keyed source with no key what is missing", () => {
@@ -193,7 +194,7 @@ describe("SourcesSection, what a source last did and whether it can run", () => 
     // Configured but paused: it must say paused, not "will run" and not "not set up".
     expect(within(jsearch).getByText(/paused after repeated failures/i)).toBeInTheDocument();
     expect(within(jsearch).queryByText(/will run on the next poll/i)).not.toBeInTheDocument();
-    expect(within(jsearch).queryByText(/no setting saved/i)).not.toBeInTheDocument();
+    expect(within(jsearch).queryByText(/not saved for this account/i)).not.toBeInTheDocument();
   });
 
   it("shows a Paused badge and a Resume button only for the paused source", async () => {
@@ -269,3 +270,29 @@ describe("SourcesSection, what a source last did and whether it can run", () => 
   });
 });
 
+describe("SourcesSection, reading runnable rather than re-deriving it", () => {
+  beforeEach(() => {
+    isLoading = false;
+    error = null;
+    isPaused = false;
+  });
+
+  it("treats a configured source the API calls not-runnable as stopped, even with paused false", () => {
+    // The anti-drift assertion. `runnable` is `configured && !paused` TODAY, but it exists so the
+    // present-tense claim has one definition, and §9 item 5 anticipates it gaining terms (a per-scope
+    // pause count, board-source pause, a credential-decrypt check). This fixture is that future:
+    // `paused: false` with `runnable: false`. A component that recomputed `configured && !paused`
+    // would call this source running, which is exactly the drift the field was added to prevent.
+    data = [{ ...rows[0]!, configured: true, paused: false, runnable: false }];
+    render(<SourcesSection />);
+    expect(screen.getByText(/the next poll will skip it/i)).toBeInTheDocument();
+    expect(screen.queryByText(/will run on the next poll/i)).not.toBeInTheDocument();
+  });
+
+  it("says a configured, unpaused, runnable source will run", () => {
+    // The contrasting fixture, differing only in `runnable`.
+    data = [{ ...rows[0]!, configured: true, paused: false, runnable: true }];
+    render(<SourcesSection />);
+    expect(screen.getByText(/will run on the next poll/i)).toBeInTheDocument();
+  });
+});

@@ -28,9 +28,9 @@ from rhapto.api.routers import (
 from rhapto.api.routers import settings as settings_router
 from rhapto.config import Settings, get_settings
 from rhapto.db.models import User
-from rhapto.db.repositories.users import get_or_create_user
 from rhapto.db.session import make_engine, make_session_factory
 from rhapto.engine.providers.registry import build_llm
+from rhapto.services.accounts import ensure_account
 from rhapto.services.discovery.http import DiscoveryHttp
 from rhapto.services.enqueue import ArqEnqueuer, Enqueuer
 from rhapto.services.eventbus import EventBus, RedisEventBus
@@ -118,7 +118,7 @@ def create_app(
                 )
         else:
             async with state.session_factory() as session:
-                user = await get_or_create_user(session, settings.rhapto_user_email)
+                user = await ensure_account(session, settings.rhapto_user_email)
                 await session.commit()
                 state.user_id = user.id
         try:

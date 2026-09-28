@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { clearAllFilters, FILTER_LABEL, hasActiveFilters, WIDEN, type JobFilterId } from "./jobs-empty";
+import { applicableWiden, clearAllFilters, FILTER_LABEL, hasActiveFilters, WIDEN, type JobFilterId } from "./jobs-empty";
 import { DEFAULT_SEARCH_STATE, type SearchState } from "./search-state";
 
 /**
@@ -135,5 +135,31 @@ describe("hasActiveFilters", () => {
     expect(hasActiveFilters({ ...DEFAULT_SEARCH_STATE, posted_within: "24h" })).toBe(true);
     expect(hasActiveFilters({ ...DEFAULT_SEARCH_STATE, hidden: true })).toBe(true);
     expect(hasActiveFilters({ ...DEFAULT_SEARCH_STATE, fit: "75" })).toBe(true);
+  });
+});
+
+describe("applicableWiden", () => {
+  it("returns a widen whose apply is non-null by narrowing, not by assertion", () => {
+    // `WIDEN[id].apply` is `((s) => SearchState) | null`. A non-null assertion at the call site is the
+    // one shape in this module where a future `null` becomes a runtime crash instead of a compile
+    // error — the inverse of the idiom the branch is built on. This is the guard that replaces it.
+    const widen = applicableWiden("hidden");
+    expect(widen).not.toBeNull();
+    expect(widen!.apply({ ...DEFAULT_SEARCH_STATE, hidden: false }).hidden).toBe(true);
+  });
+
+  it("returns null for a filter this page cannot widen", () => {
+    for (const id of ["recommended", "search", "track", "region", "bucket"] as const) {
+      expect(applicableWiden(id), id).toBeNull();
+    }
+  });
+
+  it("returns a usable widen for every filter the Jobs page can send", () => {
+    for (const id of ["hidden", "search_id", "sources", "field", "posted_within"] as const) {
+      const widen = applicableWiden(id);
+      expect(widen, id).not.toBeNull();
+      // Callable without an assertion, which is the whole point.
+      expect(typeof widen!.apply).toBe("function");
+    }
   });
 });

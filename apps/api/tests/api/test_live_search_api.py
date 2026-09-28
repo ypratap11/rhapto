@@ -5,6 +5,7 @@ from typing import Any
 
 import httpx
 import pytest
+from sqlalchemy import delete
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from rhapto.db.models import Aggregator
@@ -65,10 +66,21 @@ def _posting(n: int) -> Posting:
 async def _enable(
     session_factory: async_sessionmaker[AsyncSession], user_id: Any, *sources: str
 ) -> None:
-    # The pydantic AggregatorEntry model restricts `source` to the real, registered aggregator
-    # ids (see test_poller.py), so these throwaway test ids are inserted straight through the
-    # ORM row instead of profile_repo.replace_aggregators.
+    """Make this account's enabled aggregators EXACTLY `sources`, and nothing else.
+
+    Existing rows are cleared first, which matters for two reasons. `ensure_account` seeds an enabled
+    row for every keyless source at account creation -- and these test doubles register themselves as
+    keyless aggregators, so the seed includes them and a blind insert hits
+    `aggregators_user_id_source_key`. More importantly, a test about which sources a live search fans
+    out to should say which sources are enabled rather than inherit whatever the seed happened to
+    create.
+
+    The pydantic AggregatorEntry model restricts `source` to the real, registered aggregator ids (see
+    test_poller.py), so these throwaway test ids are inserted straight through the ORM row instead of
+    profile_repo.replace_aggregators.
+    """
     async with session_factory() as session:
+        await session.execute(delete(Aggregator).where(Aggregator.user_id == user_id))
         for source in sources:
             session.add(Aggregator(user_id=user_id, source=source, enabled=True, keywords=[]))
         await session.commit()

@@ -17,7 +17,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from alembic import command
 from rhapto.config import Settings, get_settings
-from rhapto.db.repositories.users import get_or_create_user
 from rhapto.db.session import make_engine, make_session_factory
 from rhapto.engine.document import parse_docx
 from rhapto.engine.pipeline import LLMBudgetExceeded, TailorResult, tailor
@@ -36,6 +35,7 @@ from rhapto.engine.scoring import (
 )
 from rhapto.engine.types import Profile, ProfileError, TailorRequest
 from rhapto.profile.loader import load_profile
+from rhapto.services.accounts import ensure_account
 from rhapto.services.discovery.http import DiscoveryHttp
 from rhapto.services.discovery.posting import Posting
 from rhapto.services.discovery.sources import get_source
@@ -316,7 +316,7 @@ async def _with_user(
     engine = make_engine(database_url)
     try:
         async with make_session_factory(engine)() as session:
-            user = await get_or_create_user(session, email)
+            user = await ensure_account(session, email)
             result = await fn(session, user.id)
             await session.commit()
             return result

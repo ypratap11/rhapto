@@ -15,7 +15,7 @@ from typing import Any
 
 import httpx
 import pytest
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from rhapto.db.models import Aggregator, PollRun
@@ -29,7 +29,7 @@ from rhapto.services.discovery.posting import Posting
 from rhapto.services.discovery.search import SearchSpec
 from rhapto.services.discovery.sources import SOURCES, aggregator_sources
 from rhapto.services.discovery.sources.base import SourceInfo
-from rhapto.services.discovery.sources.status import usable_source_ids
+from rhapto.services.discovery.sources.status import keyless_source_names, usable_source_ids
 
 STUB = "fake-pausable"
 SOURCES_URL = "/api/v1/settings/sources"
@@ -87,31 +87,63 @@ async def _aggregator(session: AsyncSession, user_id: uuid.UUID, source: str) ->
 # --- configured: the poller's rule, not the display default -----------------------------------
 
 
-async def test_a_user_with_no_aggregator_rows_has_no_configured_source(
-    client: httpx.AsyncClient,
+async def test_a_new_account_starts_with_every_keyless_source_set_up(
+    client: httpx.AsyncClient, session_factory: async_sessionmaker[AsyncSession], user_id: uuid.UUID
 ) -> None:
-    """The defect this pass found, pinned as the honest answer.
+    """The defect this branch found, now FIXED (the owner chose seeding over the alternative).
 
-    `GET /settings/sources` reports the four keyless sources as `enabled = true` for an account with
-    no `aggregators` rows, while `poller.build_specs` returns early with board specs only when the
-    enabled list is empty -- so such an account polls no aggregators at all. `configured` follows the
-    poller, so `enabled = true` and `configured = false` appear together, which is exactly the
-    discrepancy made visible. The behaviour itself is unchanged: see
-    docs/portal-backend-followups.md.
+    `GET /settings/sources` used to report the keyless sources as `enabled = true` for an account with
+    no `aggregators` rows, while `poller.build_specs` builds its work list only from rows that exist --
+    so the account polled no aggregators at all. `ensure_account` seeds those rows, so `enabled` and
+    `configured` now agree, and both are backed by the row the poller will read.
     """
     rows = (await client.get(SOURCES_URL)).json()
     keyless = [r for r in rows if not r["needs_key"]]
     assert keyless, "the registry should ship at least one keyless source"
     assert all(r["enabled"] is True for r in keyless)
-    assert all(r["configured"] is False for r in rows)
-    # Nothing is set up, so nothing will run either.
-    assert all(r["runnable"] is False for r in rows)
+    assert all(r["configured"] is True for r in keyless)
+    assert all(r["runnable"] is True for r in keyless)
+    # Keyed sources are NOT seeded: enabling one without credentials would only produce failing polls.
+    assert all(r["configured"] is False for r in rows if r["needs_key"])
+
+    # The rows really exist, which is the whole point -- `configured` reading true off a default would
+    # be the same lie in the other direction.
+    async with session_factory() as session:
+        seeded = {r.source for r in await profile_repo.list_aggregators(session, user_id)}
+    assert seeded == set(keyless_source_names())
 
 
-async def test_enabling_a_keyless_source_makes_it_configured_and_runnable(
+async def test_a_source_with_no_row_is_never_displayed_as_enabled(
+    client: httpx.AsyncClient, session_factory: async_sessionmaker[AsyncSession], user_id: uuid.UUID
+) -> None:
+    """The invariant that makes a missed seed harmless, and it is the real fix.
+
+    Seeding is a convenience performed at account creation; this is what guarantees the display and
+    the poller can never disagree again. With the row deleted -- the state an account created before
+    seeding existed is in, and the state a future account-creation path that forgot to seed would be
+    in -- the page must show the source OFF, matching what the poller will do, rather than defaulting
+    it to on.
+    """
+    async with session_factory() as session:
+        await session.execute(
+            delete(Aggregator).where(Aggregator.user_id == user_id, Aggregator.source == "themuse")
+        )
+        await session.commit()
+
+    row = await _row(client, "themuse")
+    assert row["enabled"] is False, "a source with no row must not display as enabled"
+    assert row["configured"] is False and row["runnable"] is False
+
+
+async def test_enabling_a_keyless_source_again_makes_it_configured_and_runnable(
     client: httpx.AsyncClient,
 ) -> None:
-    """The real condition: a row now exists and is enabled, which is what `build_specs` requires."""
+    """The real condition: a row exists and is enabled, which is what `build_specs` requires.
+
+    Driven from OFF rather than from the seeded default, so the assertion is about the row rather than
+    about the seed.
+    """
+    await client.put(f"{SOURCES_URL}/themuse", json={"enabled": False})
     assert (await _row(client, "themuse"))["configured"] is False
     assert (await client.put(f"{SOURCES_URL}/themuse", json={"enabled": True})).status_code == 200
     after = await _row(client, "themuse")
@@ -120,9 +152,9 @@ async def test_enabling_a_keyless_source_makes_it_configured_and_runnable(
 
 
 async def test_a_disabled_row_is_neither_configured_nor_runnable(client: httpx.AsyncClient) -> None:
-    await client.put(f"{SOURCES_URL}/themuse", json={"enabled": True})
     await client.put(f"{SOURCES_URL}/themuse", json={"enabled": False})
     off = await _row(client, "themuse")
+    assert off["enabled"] is False
     assert off["configured"] is False and off["runnable"] is False
 
 
@@ -179,8 +211,10 @@ async def test_configured_equals_usable_source_ids_for_the_same_fixture(
 
     settings_rows = (await client.get(SOURCES_URL)).json()
     assert {r["id"] for r in settings_rows if r["configured"]} == expected
-    # And the fixture is not trivially empty on either side, or the equality would prove nothing.
-    assert len(expected) == 2, sorted(expected)
+    # The fixture exercises both directions, or the equality would prove nothing: a keyed source that
+    # became usable by gaining credentials is in, and a keyless one switched off is out.
+    assert "adzuna" in expected
+    assert "remotive" not in expected
 
     # The checklist counts the same set, through the same function on a different read path.
     checklist = (await client.get("/api/v1/dashboard")).json()["checklist"]
@@ -210,7 +244,9 @@ async def test_a_paused_source_is_still_configured_so_the_checklist_does_not_fli
     assert checklist["job_sources"] is True, (
         "a transient pause must not undo a completed setup step"
     )
-    assert checklist["usable_sources"] == 1
+    # The paused source is itself still counted as set up, which is the assertion -- not how many
+    # other sources the registry happens to seed alongside it.
+    assert row["id"] == STUB and row["configured"] is True
 
 
 # --- Row 4: a source that returned zero for a location ----------------------------------------
@@ -542,8 +578,11 @@ async def test_resume_is_404_when_the_user_has_no_row_for_that_source(
     client: httpx.AsyncClient,
 ) -> None:
     """There is no pause to lift on a source that was never configured, and answering 200 would be a
-    lie about state -- the UI would show a Resume button that silently did nothing."""
-    assert (await client.post(f"{SOURCES_URL}/themuse/resume")).status_code == 404
+    lie about state -- the UI would show a Resume button that silently did nothing.
+
+    Uses a KEYED source: the keyless ones are seeded at account creation, so they always have a row.
+    """
+    assert (await client.post(f"{SOURCES_URL}/adzuna/resume")).status_code == 404
 
 
 async def test_resume_only_touches_updated_at(

@@ -18,6 +18,7 @@ from rhapto.db.models import Aggregator, ResumeBlock
 from rhapto.db.repositories import jobs as jobs_repo
 from rhapto.db.repositories import searches as searches_repo
 from rhapto.db.repositories.users import get_or_create_user
+from rhapto.services.discovery.sources.status import keyless_source_names
 
 
 async def _checklist(client: httpx.AsyncClient) -> dict[str, object]:
@@ -49,42 +50,61 @@ async def _job(
 # --- job_sources -----------------------------------------------------------------------------
 
 
-async def test_no_aggregator_rows_means_no_usable_source(client: httpx.AsyncClient) -> None:
-    """Condition C4, on the checklist side. The account has never opened Settings, so no
-    `aggregators` row exists, so `poller.build_specs` polls no aggregator -- and this says so,
-    rather than echoing the Settings page's keyless-enabled default."""
-    checklist = await _checklist(client)
-    assert checklist["job_sources"] is False
-    assert checklist["usable_sources"] == 0
+async def test_a_new_account_is_seeded_with_the_keyless_sources(client: httpx.AsyncClient) -> None:
+    """Condition C4, now FIXED rather than merely reported (the owner chose seeding).
 
-
-async def test_enabling_a_keyless_source_makes_the_row_done(client: httpx.AsyncClient) -> None:
-    await client.put("/api/v1/settings/sources/themuse", json={"enabled": True})
+    An account used to start with no `aggregators` rows, so `poller.build_specs` polled no aggregator
+    while Settings displayed four keyless sources as on. `ensure_account` seeds them, so the row the
+    poller reads and the row the page shows are the same row from the first request.
+    """
     checklist = await _checklist(client)
     assert checklist["job_sources"] is True
-    assert checklist["usable_sources"] == 1
+    assert checklist["usable_sources"] == len(keyless_source_names())
+
+
+async def test_turning_every_keyless_source_off_makes_the_row_not_done(
+    client: httpx.AsyncClient,
+) -> None:
+    """The seed is a starting point, not a floor: a user who switches everything off has no usable
+    source, and the checklist must say so rather than report the seed."""
+    for source in keyless_source_names():
+        assert (
+            await client.put(f"/api/v1/settings/sources/{source}", json={"enabled": False})
+        ).status_code == 200
+
+    off = await _checklist(client)
+    assert off["job_sources"] is False and off["usable_sources"] == 0
+
+    first = keyless_source_names()[0]
+    await client.put(f"/api/v1/settings/sources/{first}", json={"enabled": True})
+    back = await _checklist(client)
+    assert back["job_sources"] is True and back["usable_sources"] == 1
 
 
 async def test_a_keyed_source_with_no_credentials_is_not_a_usable_source(
     client: httpx.AsyncClient, session_factory: async_sessionmaker[AsyncSession], user_id: uuid.UUID
 ) -> None:
     """A row saying "enabled" describing something that cannot run. The poller would write
-    NO_API_KEY_MESSAGE and nothing could ever arrive, so reporting setup done would be the
-    `resume_template` defect in a new place."""
+    NO_API_KEY_MESSAGE and nothing could ever arrive, so counting it would be the `resume_template`
+    defect in a new place.
+
+    Counted as a delta against the seeded baseline, so the assertion is about the keyed source rather
+    than about how many keyless ones the registry happens to ship.
+    """
+    baseline = int((await _checklist(client))["usable_sources"])  # type: ignore[call-overload]
     async with session_factory() as session:
         session.add(Aggregator(user_id=user_id, source="adzuna", enabled=True, keywords=[]))
         await session.commit()
 
-    checklist = await _checklist(client)
-    assert checklist["job_sources"] is False
-    assert checklist["usable_sources"] == 0
+    assert (await _checklist(client))["usable_sources"] == baseline, (
+        "an enabled keyed source with no credentials cannot run, so it must not count"
+    )
 
     await client.put(
         "/api/v1/settings/sources/adzuna",
         json={"enabled": True, "credentials": {"app_id": "a", "app_key": "b"}},
     )
-    after = await _checklist(client)
-    assert after["job_sources"] is True and after["usable_sources"] == 1
+    assert (await _checklist(client))["usable_sources"] == baseline + 1
 
 
 async def test_the_checklist_and_the_settings_page_agree_about_what_is_ready(

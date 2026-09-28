@@ -13,9 +13,9 @@ from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 from rhapto.api.auth import Principal, is_allowed_email, resolve_principal
 from rhapto.config import Settings
 from rhapto.db.models import User
-from rhapto.db.repositories.users import get_or_create_user
 from rhapto.engine.providers.llm import LLMProvider
 from rhapto.engine.providers.registry import build_llm
+from rhapto.services.accounts import ensure_account
 from rhapto.services.discovery.http import DiscoveryHttp
 from rhapto.services.enqueue import Enqueuer
 from rhapto.services.eventbus import EventBus
@@ -127,7 +127,7 @@ async def current_user(
         principal.email, settings.rhapto_allowed_emails, settings.rhapto_allowed_email_domains
     ):
         raise HTTPException(status_code=403, detail="this instance is invite-only")
-    user = await get_or_create_user(session, principal.email)
+    user = await ensure_account(session, principal.email)
     # The account row is committed on its own, before the idp_subject write below is even
     # attempted -- see _record_idp_subject's docstring (N1) for why sharing one transaction
     # between the two turned a rare subject collision into a permanent account lockout.

@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from rhapto.db.repositories import jobs as jobs_repo
 from rhapto.db.repositories import profile as profile_repo
 from rhapto.models.profile.tracks import Track
+from rhapto.services.discovery.sources.status import keyless_source_names
 from rhapto.services.storage import PackageStorage
 
 
@@ -36,10 +37,12 @@ async def test_an_empty_account_reports_zeroes_and_an_empty_checklist(
         "llm_key": True,
         "llm_key_source": "env",
         "trial_runs_left": None,
-        # No `aggregators` row exists, so `build_specs` would poll no aggregator at all -- which is
-        # what this reports, even though `GET /settings/sources` shows the keyless sources as on.
-        "job_sources": False,
-        "usable_sources": 0,
+        # `ensure_account` seeds an enabled row for every keyless source, so a brand-new account can
+        # actually poll something -- and the row the poller reads is the row Settings shows. Counted
+        # from the registry rather than hard-coded, so adding a keyless source does not make this a
+        # false expectation.
+        "job_sources": True,
+        "usable_sources": len(keyless_source_names()),
         "saved_searches": False,
         "active_searches": 0,
         "jobs_found": False,

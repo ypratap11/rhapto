@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 import uuid
+from collections.abc import Sequence
 from datetime import UTC, datetime, timedelta
 from typing import Any, cast
 
 from sqlalchemy import CursorResult, delete, func, select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from rhapto.db.base import new_uuid
 from rhapto.db.models import (
     Aggregator,
     Answers,
@@ -308,6 +311,52 @@ async def list_aggregators(session: AsyncSession, user_id: uuid.UUID) -> list[Ag
             select(Aggregator).where(Aggregator.user_id == user_id).order_by(Aggregator.created_at)
         )
     )
+
+
+async def seed_keyless_aggregators(
+    session: AsyncSession, user_id: uuid.UUID, *, keyless_sources: Sequence[str]
+) -> int:
+    """Create enabled `aggregators` rows for the keyless sources. Returns how many were inserted.
+
+    Why an account needs this at all: `poller.build_specs` builds its work list only from rows that
+    exist and are enabled, so an account with no rows polls no aggregators. That was live -- the
+    instance's second real account had zero rows and had been fetching from nothing while Settings
+    showed four sources switched on. The owner chose seeding over teaching `build_specs` to honour the
+    display default, which would have started calling four external APIs for every account that never
+    opened Settings.
+
+    `ON CONFLICT DO NOTHING` on `(user_id, source)`, so it is idempotent and safe under the same
+    concurrent-first-request race `get_or_create_user` documents: a brand-new browser tab fires
+    several requests in parallel, and the loser's insert must be a no-op rather than an IntegrityError
+    on the invited person's first request. It also means re-running it never re-enables a source the
+    user has since switched off -- the row already exists, so nothing is written.
+
+    `keyless_sources` is supplied by the caller for the same reason `backfill_public_jobs` takes
+    `public_sources`: this module takes no import on `services.discovery.sources`, whose `__init__`
+    imports eleven concrete source modules purely for `@register` side effects.
+    """
+    if not keyless_sources:
+        return 0
+    result = cast(
+        "CursorResult[Any]",
+        await session.execute(
+            pg_insert(Aggregator)
+            .values(
+                [
+                    {
+                        "id": new_uuid(),
+                        "user_id": user_id,
+                        "source": source,
+                        "enabled": True,
+                        "keywords": [],
+                    }
+                    for source in keyless_sources
+                ]
+            )
+            .on_conflict_do_nothing(index_elements=["user_id", "source"])
+        ),
+    )
+    return result.rowcount or 0
 
 
 async def replace_aggregators(

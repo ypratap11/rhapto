@@ -52,6 +52,25 @@ it fabricated output and proves the rejection is not finished.
 From `apps/api`: `uv run pytest`, `uv run ruff check .`, `uv run ruff format --check .`,
 `uv run mypy src`, `uv run lint-imports`. API tests need the compose `db`.
 
+**Each pytest run gets its own database, and you should let it.** `tests/conftest.py` derives a
+database name from the process (`rhapto_test_<pid>_<random>`), creates it, migrates it, and drops it
+at the end. Two runs against one database do not merely interleave: the per-test teardown
+`TRUNCATE`s every table, so each run deletes the other's rows mid-test. The failures that produces
+are scattered, plausible and entirely fictional — it cost three misread runs in a single day, and
+each time the obvious next move was to "fix" code that was correct. So: run as many suites at once as
+you like, but do not point two of them at the same database.
+
+`RHAPTO_TEST_DATABASE_URL` overrides the per-run database and is then used verbatim and never
+dropped — for CI, or when you want to inspect the data after a failure. If you use it, make sure only
+one run has it at a time. A crashed run can leave a stray database behind; they are harmless, and
+this drops them:
+
+```sh
+psql -h localhost -U rhapto -d postgres -tAc \
+  "SELECT datname FROM pg_database WHERE datname LIKE 'rhapto\_test\_%'" \
+  | xargs -r -I{} psql -h localhost -U rhapto -d postgres -c 'DROP DATABASE IF EXISTS "{}"'
+```
+
 From `apps/web`: `pnpm test`, `pnpm typecheck`, `pnpm lint`.
 
 Generated files are never hand-edited — `packages/schemas` models, `openapi.json`, `schema.d.ts` come

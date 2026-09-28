@@ -1445,6 +1445,28 @@
               }
             ],
             "title": "Would Match"
+          },
+          "would_match_without": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "default": {},
+            "propertyNames": {
+              "enum": [
+                "hidden",
+                "search_id",
+                "sources",
+                "field",
+                "posted_within",
+                "recommended",
+                "search",
+                "track",
+                "region",
+                "bucket"
+              ]
+            },
+            "title": "Would Match Without",
+            "type": "object"
           }
         },
         "required": [
