@@ -3,9 +3,11 @@ import { describe, expect, it } from "vitest";
 import type { DashboardSavedSearch } from "@/lib/api/queries";
 import { SavedSearchesRail } from "./SavedSearchesRail";
 
+// Two searches with contrasting histories, because both render a zero badge: "Data roles" has
+// polled and never found a posting, which is a different thing to say than "nothing new".
 const searches: DashboardSavedSearch[] = [
-  { id: "s1", name: "PM roles", new_count: 4 },
-  { id: "s2", name: "Data roles", new_count: 0 },
+  { id: "s1", name: "PM roles", new_count: 4, ever_found: true },
+  { id: "s2", name: "Data roles", new_count: 0, ever_found: false },
 ];
 
 describe("SavedSearchesRail", () => {

@@ -16,6 +16,10 @@ const searches: SearchOut[] = [
     new_count: 2,
     created_at: "2026-09-01T00:00:00Z",
     last_viewed_at: null,
+    // Has polled and has found postings before: today's zero is "nothing new".
+    runs: 12,
+    ever_found: true,
+    last_run_at: "2026-09-26T00:00:00Z",
   },
   {
     id: "s2",
@@ -28,6 +32,10 @@ const searches: SearchOut[] = [
     new_count: 0,
     created_at: "2026-09-02T00:00:00Z",
     last_viewed_at: null,
+    // Has polled three times and never found a posting -- spec section 8's own sentence.
+    runs: 3,
+    ever_found: false,
+    last_run_at: "2026-09-26T00:00:00Z",
   },
 ];
 
