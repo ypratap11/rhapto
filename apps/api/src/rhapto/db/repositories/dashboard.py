@@ -11,11 +11,12 @@ import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import and_, func, or_, select
+from sqlalchemy import and_, exists, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from rhapto.db.models import (
     APPLIED_STATUSES,
+    Aggregator,
     Answers,
     Application,
     Guardrail,
@@ -23,7 +24,10 @@ from rhapto.db.models import (
     Package,
     ResumeBlock,
     ResumeDocumentRow,
+    SearchRow,
+    SourceCredentialRow,
     Track,
+    User,
 )
 
 #: How long a job counts as "new" on the dashboard.
@@ -44,6 +48,49 @@ class Checklist:
     location_preferences: bool
     verified_blocks: int
     total_blocks: int
+    # --- the setup checks, all computed; no migration ---
+    #: At least one job that is neither hidden nor retired. `EXISTS`, not `COUNT`: see `checklist`.
+    jobs_found: bool = False
+    #: Blocks with no usable period. Counted, because the row's job is "N need a period".
+    dateless_blocks: int = 0
+    #: Saved searches with `active = true` -- the only ones `poller.build_specs` runs.
+    active_searches: int = 0
+    #: This user's consumed trial runs, selected here so `llm_setup_status` does not need its own
+    #: statement on the dashboard's hot path.
+    trial_runs_used: int = 0
+
+
+@dataclass(frozen=True)
+class SourceSetup:
+    """One `aggregators` row plus whether credentials exist for it."""
+
+    source: str
+    enabled: bool
+    key_set: bool
+
+
+async def source_setup(session: AsyncSession, user_id: uuid.UUID) -> dict[str, SourceSetup]:
+    """This user's configured sources and whether each has stored credentials, in one statement.
+
+    A LEFT JOIN from `aggregators`, so a `source_credentials` row with no `aggregators` row behind it
+    is absent -- which is correct rather than lossy: `usable_source_ids` requires the `aggregators`
+    row to exist before it looks at credentials at all, because the poller does.
+    """
+    rows = await session.execute(
+        select(Aggregator.source, Aggregator.enabled, SourceCredentialRow.id)
+        .outerjoin(
+            SourceCredentialRow,
+            and_(
+                SourceCredentialRow.user_id == Aggregator.user_id,
+                SourceCredentialRow.source == Aggregator.source,
+            ),
+        )
+        .where(Aggregator.user_id == user_id)
+    )
+    return {
+        source: SourceSetup(source=source, enabled=bool(enabled), key_set=credential_id is not None)
+        for source, enabled, credential_id in rows.all()
+    }
 
 
 async def new_fit_count(session: AsyncSession, user_id: uuid.UUID) -> int:
@@ -100,10 +147,21 @@ async def needs_review_count(session: AsyncSession, user_id: uuid.UUID) -> int:
 
 
 async def checklist(session: AsyncSession, user_id: uuid.UUID) -> Checklist:
-    """The six profile-setup tests from spec §7, plus the verified-block tally.
+    """The six profile-setup tests from spec §7, the verified-block tally, and the setup counts.
 
-    Two statements: one row of counts and existence flags, and one read of the answers JSON,
-    which has to come back whole because the two answer rows test different keys.
+    Still two statements: one row of counts and existence flags, and one read of the answers JSON,
+    which has to come back whole because the two answer rows test different keys. The four setup
+    values added here are scalar subqueries on the existing composite, not new statements.
+
+    `jobs_found` is `EXISTS`, not `COUNT`, and that is why no job count is exposed on the checklist:
+    a `COUNT(*)` over a user's jobs is fine at a couple of thousand rows and is a per-user scan at a
+    million. `EXISTS` stops at the first row forever. The number the user wants lives on the Jobs
+    page, which is the surface that can also explain it.
+
+    `jobs_found` deliberately ignores the grid's default 90-day window. A corpus entirely older than
+    90 days reads `jobs_found = true` while the default grid is empty -- and that case is answered
+    correctly and specifically by `GET /jobs/empty-reason`, which names `posted_within` and offers a
+    one-click widen. Folding a UI default into a setup check would give two mechanisms one concern.
     """
     row = (
         await session.execute(
@@ -121,21 +179,63 @@ async def checklist(session: AsyncSession, user_id: uuid.UUID) -> Checklist:
                 select(func.count(ResumeBlock.id))
                 .where(ResumeBlock.user_id == user_id, ResumeBlock.verified.is_(True))
                 .scalar_subquery(),
+                # A job the user hid or a source retired is not a job that "arrived": the default
+                # grid shows neither, so counting them would report the step done over an empty grid.
+                select(
+                    exists().where(
+                        Job.user_id == user_id,
+                        Job.hidden_at.is_(None),
+                        Job.unlisted_at.is_(None),
+                    )
+                ).scalar_subquery(),
+                # `btrim(period) = ''` as well as NULL: `resume_blocks.period` is nullable free text
+                # (String(50)), and while the `Block.period` regex cannot admit "" through
+                # `PUT /profile/blocks/{id}`, nothing constrains a row written by an older import or
+                # by hand. A blank period is as dateless as a missing one.
+                select(func.count(ResumeBlock.id))
+                .where(
+                    ResumeBlock.user_id == user_id,
+                    or_(
+                        ResumeBlock.period.is_(None),
+                        func.btrim(ResumeBlock.period) == "",
+                    ),
+                )
+                .scalar_subquery(),
+                # Only `active` searches: `build_specs` filters on exactly this flag, so an
+                # all-inactive set polls nothing while a bare `count(searches) > 0` would read done.
+                select(func.count(SearchRow.id))
+                .where(SearchRow.user_id == user_id, SearchRow.active.is_(True))
+                .scalar_subquery(),
+                select(User.trial_runs_used).where(User.id == user_id).scalar_subquery(),
             )
         )
     ).one()
-    documents, tracks, guardrails, total_blocks, verified_blocks = (int(v or 0) for v in row)
+    (
+        documents,
+        tracks,
+        guardrails,
+        total_blocks,
+        verified_blocks,
+        has_usable_jobs,
+        dateless_blocks,
+        active_searches,
+        trial_runs_used_count,
+    ) = row
     answers_row = await session.scalar(select(Answers).where(Answers.user_id == user_id))
     answers = dict(answers_row.answers_json) if answers_row is not None else {}
     return Checklist(
-        resume_template=documents > 0,
+        resume_template=int(documents or 0) > 0,
         contact_answers=all((answers.get(k) or "").strip() for k in CONTACT_KEYS),
-        tracks=tracks > 0,
-        blocks_verified=verified_blocks > 0,
-        guardrails=guardrails > 0,
+        tracks=int(tracks or 0) > 0,
+        blocks_verified=int(verified_blocks or 0) > 0,
+        guardrails=int(guardrails or 0) > 0,
         location_preferences=all((answers.get(k) or "").strip() for k in LOCATION_KEYS),
-        verified_blocks=verified_blocks,
-        total_blocks=total_blocks,
+        verified_blocks=int(verified_blocks or 0),
+        total_blocks=int(total_blocks or 0),
+        jobs_found=bool(has_usable_jobs),
+        dateless_blocks=int(dateless_blocks or 0),
+        active_searches=int(active_searches or 0),
+        trial_runs_used=int(trial_runs_used_count or 0),
     )
 
 

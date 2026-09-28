@@ -29,6 +29,21 @@ async def test_an_empty_account_reports_zeroes_and_an_empty_checklist(
         "location_preferences": False,
         "verified_blocks": 0,
         "total_blocks": 0,
+        # The suite runs in token mode, which is the single-account self-hoster: the environment's
+        # key IS theirs, so no cap applies and the source is "env", not "trial". A brand-new account
+        # on a hosted instance (`access` mode) gets "trial" with a countdown instead --
+        # `test_llm_setup_status.py` drives all eight states.
+        "llm_key": True,
+        "llm_key_source": "env",
+        "trial_runs_left": None,
+        # No `aggregators` row exists, so `build_specs` would poll no aggregator at all -- which is
+        # what this reports, even though `GET /settings/sources` shows the keyless sources as on.
+        "job_sources": False,
+        "usable_sources": 0,
+        "saved_searches": False,
+        "active_searches": 0,
+        "jobs_found": False,
+        "dateless_blocks": 0,
     }
 
 
@@ -205,9 +220,59 @@ async def test_due_followups_are_today_or_earlier_soonest_first(
     assert due[0]["job"]["title"] == "overdue"
 
 
-async def test_the_dashboard_is_at_most_eight_selects(
+#: The dashboard's statement budget. Ten, itemised, because a magic number that only ever goes up
+#: is not a guard:
+#:   1 checklist composite (now carrying four more scalar subqueries: the usable-jobs EXISTS, the
+#:     dateless-blocks COUNT, the active-searches COUNT and `users.trial_runs_used`)
+#:   2 answers read -- has to come back whole, two rows test different keys
+#:   3 new_counts        4 list_searches        5 due_followups
+#:   6 new_fit_count     7 needs_review_count
+#:   8 llm_settings row -- must come back as a row; the ciphertext is decrypted in Python, and
+#:     `llm_setup_status` takes `runs_used` from the checklist composite so it needs no second read
+#:   9 aggregators LEFT JOIN source_credentials -- one statement for every source
+#:  10 search_run_stats -- one grouped read of poll_runs for every saved search
+#: None of the three new ones folds into another: 8 returns a row this process must decrypt, and 9
+#: and 10 are aggregates over different tables at different grains.
+MAX_DASHBOARD_SELECTS = 10
+
+
+async def test_the_dashboard_is_at_most_ten_selects(
     client: httpx.AsyncClient, imported_profile: None, select_counter: list[str]
 ) -> None:
     select_counter.clear()
     assert (await client.get("/api/v1/dashboard")).status_code == 200
-    assert len(select_counter) <= 8, "\n".join(select_counter)
+    assert len(select_counter) <= MAX_DASHBOARD_SELECTS, "\n".join(select_counter)
+
+
+async def test_the_dashboard_issues_the_same_selects_with_one_and_five_searches(
+    client: httpx.AsyncClient, imported_profile: None, select_counter: list[str]
+) -> None:
+    """The real guard, and the one raising a constant cannot satisfy.
+
+    A count cap catches an N+1 only until someone raises the number. This asserts the request does
+    not grow with the data, which is the property the cap was written to protect. Every value this
+    branch added is either a scalar subquery on an existing statement or one grouped aggregate over
+    the whole set -- never a read per row.
+    """
+    await client.post(
+        "/api/v1/searches",
+        json={"query": "search 0", "location": None, "remote": "include", "active": True},
+    )
+    select_counter.clear()
+    assert (await client.get("/api/v1/dashboard")).status_code == 200
+    with_one = len(select_counter)
+
+    for i in range(1, 5):
+        await client.post(
+            "/api/v1/searches",
+            json={"query": f"search {i}", "location": None, "remote": "include", "active": True},
+        )
+    assert len((await client.get("/api/v1/searches")).json()) == 5
+    select_counter.clear()
+    assert (await client.get("/api/v1/dashboard")).status_code == 200
+    with_five = len(select_counter)
+
+    assert with_one == with_five, (
+        f"{with_one} SELECT(s) with 1 saved search, {with_five} with 5:\n"
+        + "\n".join(select_counter)
+    )

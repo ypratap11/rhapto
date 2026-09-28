@@ -14,6 +14,7 @@ import { StatusBadge } from "@/components/ui/StatusBadge";
 import { Textarea } from "@/components/ui/textarea";
 import { ApiError } from "@/lib/api/client";
 import { packageKeys, useBlocks, useDeleteBlock, usePutBlock, type Block } from "@/lib/api/queries";
+import { datelessBlocks } from "@/lib/blocks";
 import { BLOCK_TYPES, blockToForm, emptyBlockForm, formToBlock, validateBlockForm, type BlockForm } from "@/lib/profile-forms";
 import { EntityTable } from "./EntityTable";
 import { CheckboxField } from "./fields";
@@ -166,7 +167,8 @@ export function BlocksTab() {
   );
 
   const allBlocks = blocks.data ?? [];
-  const missingPeriod = allBlocks.filter((b) => !b.period);
+  // Shared with the API's `dateless_blocks` count via one definition; see lib/blocks.ts.
+  const missingPeriod = datelessBlocks(allBlocks);
   const rows = showOnlyMissingPeriod ? missingPeriod : allBlocks;
 
   return (

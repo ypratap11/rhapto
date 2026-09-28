@@ -14,6 +14,7 @@ from rhapto.models.jd_extract import JDExtract
 from rhapto.models.profile.blocks import Block
 from rhapto.models.resume_document import ResumeDocument
 from rhapto.models.source_document import Edit, SourceDocument
+from rhapto.services.trial import LlmKeySource
 
 
 class HealthOut(BaseModel):
@@ -595,7 +596,16 @@ class TaxonomySuggestionOut(BaseModel):
 
 
 class ChecklistOut(BaseModel):
-    """Six setup tests plus the verified-block tally, rendered as "18 of 23 verified"."""
+    """Six profile tests plus the verified-block tally, and five setup rows so a stranger always
+    has a next action.
+
+    Every new field is COMPUTED from columns that already exist. No migration.
+
+    Each one checks the real condition rather than a row that describes it, which is the standard
+    `resume_template` had to learn the hard way (it reports the file on disk, not just the database
+    row, because this deployment told its owner he was set up for three days after his upload was
+    gone).
+    """
 
     resume_template: bool
     contact_answers: bool
@@ -605,6 +615,31 @@ class ChecklistOut(BaseModel):
     location_preferences: bool
     verified_blocks: int
     total_blocks: int
+    # --- setup, all computed ---
+    #: A tailoring run would be admitted right now. NOT "a key exists": a user on this instance's
+    #: key has no row and is not blocked, and a row whose ciphertext no longer decrypts blocks every
+    #: run. See `services.trial.llm_setup_status`.
+    llm_key: bool = False
+    llm_key_source: LlmKeySource = "none"
+    #: Runs left on this instance's key, only when a cap is in force. The row reads done while runs
+    #: remain and flips to not-done at zero, because at zero the user is blocked.
+    trial_runs_left: int | None = None
+    #: At least one source could actually return a posting on the next poll. Follows the poller's
+    #: rule, not the Settings page's display default -- so an account that has never opened Settings
+    #: reads false even though Settings shows four keyless sources as enabled. That discrepancy is
+    #: real; see docs/portal-backend-followups.md. Excludes pause, by design: pause is scoped per
+    #: (source, board, search_id) and is answered by `SourceSettingOut.paused`.
+    job_sources: bool = False
+    usable_sources: int = 0
+    #: At least one ACTIVE saved search. An all-inactive set polls nothing, because
+    #: `poller.build_specs` filters on `active`.
+    saved_searches: bool = False
+    active_searches: int = 0
+    #: At least one job that is neither hidden nor retired. No count is exposed: the number belongs
+    #: on the Jobs page, which is the surface that can also explain it.
+    jobs_found: bool = False
+    #: Blocks with a missing or blank `period`. Spec §8 row 7: dateless blocks were invisible.
+    dateless_blocks: int = 0
 
 
 class SavedSearchCountOut(BaseModel):

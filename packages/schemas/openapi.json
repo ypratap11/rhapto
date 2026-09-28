@@ -407,8 +407,13 @@
         "type": "object"
       },
       "ChecklistOut": {
-        "description": "Six setup tests plus the verified-block tally, rendered as \"18 of 23 verified\".",
+        "description": "Six profile tests plus the verified-block tally, and five setup rows so a stranger always\nhas a next action.\n\nEvery new field is COMPUTED from columns that already exist. No migration.\n\nEach one checks the real condition rather than a row that describes it, which is the standard\n`resume_template` had to learn the hard way (it reports the file on disk, not just the database\nrow, because this deployment told its owner he was set up for three days after his upload was\ngone).",
         "properties": {
+          "active_searches": {
+            "default": 0,
+            "title": "Active Searches",
+            "type": "integer"
+          },
           "blocks_verified": {
             "title": "Blocks Verified",
             "type": "boolean"
@@ -417,9 +422,40 @@
             "title": "Contact Answers",
             "type": "boolean"
           },
+          "dateless_blocks": {
+            "default": 0,
+            "title": "Dateless Blocks",
+            "type": "integer"
+          },
           "guardrails": {
             "title": "Guardrails",
             "type": "boolean"
+          },
+          "job_sources": {
+            "default": false,
+            "title": "Job Sources",
+            "type": "boolean"
+          },
+          "jobs_found": {
+            "default": false,
+            "title": "Jobs Found",
+            "type": "boolean"
+          },
+          "llm_key": {
+            "default": false,
+            "title": "Llm Key",
+            "type": "boolean"
+          },
+          "llm_key_source": {
+            "default": "none",
+            "enum": [
+              "settings",
+              "env",
+              "trial",
+              "none"
+            ],
+            "title": "Llm Key Source",
+            "type": "string"
           },
           "location_preferences": {
             "title": "Location Preferences",
@@ -429,6 +465,11 @@
             "title": "Resume Template",
             "type": "boolean"
           },
+          "saved_searches": {
+            "default": false,
+            "title": "Saved Searches",
+            "type": "boolean"
+          },
           "total_blocks": {
             "title": "Total Blocks",
             "type": "integer"
@@ -436,6 +477,22 @@
           "tracks": {
             "title": "Tracks",
             "type": "boolean"
+          },
+          "trial_runs_left": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trial Runs Left"
+          },
+          "usable_sources": {
+            "default": 0,
+            "title": "Usable Sources",
+            "type": "integer"
           },
           "verified_blocks": {
             "title": "Verified Blocks",

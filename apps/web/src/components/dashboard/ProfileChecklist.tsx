@@ -11,6 +11,33 @@ type Row = {
   href: string;
 };
 
+function plural(n: number, word: string): string {
+  return `${n} ${word}${n === 1 ? "" : "s"}`;
+}
+
+/**
+ * Four states, because "is there a key" is the question that lies. A user on this instance's key has
+ * no key of their own and is not blocked; a user whose free runs are gone has a key configured and
+ * IS blocked. Saying "configured" to both hides the ceiling one of them is about to hit, and saying
+ * "no LLM key" to the first is simply false — they can tailor right now.
+ *
+ * The API decides which state applies (`services/trial.py::llm_setup_status`); this only words it.
+ */
+function llmKeyDetail(c: DashboardChecklist): string {
+  switch (c.llm_key_source) {
+    case "settings":
+      return "Your own key";
+    case "env":
+      return "This instance's key";
+    case "trial": {
+      const left = c.trial_runs_left ?? 0;
+      return left > 0 ? `${plural(left, "free run")} left on this instance's key` : "Free runs used — add your own key";
+    }
+    default:
+      return "Add a provider key";
+  }
+}
+
 // Fixed order per spec §2: setup steps first, then the two "quality" checks, then preferences.
 const ROWS: Row[] = [
   {
@@ -49,10 +76,44 @@ const ROWS: Row[] = [
     detail: (c) => (c.location_preferences ? "Set" : "Home, preferred areas, remote"),
     href: "/profile?card=location",
   },
+  // The five setup rows. Every detail string below is built from a value the API sent — never from
+  // a second guess at the same condition — so the row cannot claim something the API disagrees with.
+  {
+    label: "LLM key",
+    done: (c) => c.llm_key,
+    detail: llmKeyDetail,
+    href: "/settings",
+  },
+  {
+    label: "Job sources",
+    done: (c) => c.job_sources,
+    detail: (c) => (c.job_sources ? `${plural(c.usable_sources, "source")} ready` : "No source can run yet"),
+    href: "/settings",
+  },
+  {
+    label: "Saved searches",
+    done: (c) => c.saved_searches,
+    detail: (c) => (c.saved_searches ? `${c.active_searches} active` : "Save a search so polls have something to run"),
+    href: "/settings",
+  },
+  {
+    label: "Jobs found",
+    done: (c) => c.jobs_found,
+    detail: (c) => (c.jobs_found ? "Jobs are arriving" : "No jobs yet — run a poll"),
+    href: "/jobs",
+  },
+  {
+    label: "Block dates",
+    done: (c) => c.dateless_blocks === 0,
+    detail: (c) => (c.dateless_blocks === 0 ? "Every block has a period" : `${c.dateless_blocks} need a period`),
+    href: "/profile?card=blocks",
+  },
 ];
 
 /**
- * Spec §2: six checks, each an "Edit" deep link into the Profile page's matching card.
+ * Spec §2 plus §8: six profile checks and five setup rows, each an "Edit" deep link into the place
+ * that fixes it. The setup rows exist so a stranger on a dashboard of zeroes always has a next
+ * action instead of a screen that says nothing.
  *
  * Three states share the one `checklist` prop, and a caller must keep them apart: `loading` (the
  * `useDashboard()` call is still in flight — render a skeleton, not a row of false "not done"
@@ -80,7 +141,10 @@ export function ProfileChecklist({
           Profile checklist
         </h2>
         <ul className="space-y-2" aria-hidden="true">
-          {Array.from({ length: 6 }).map((_, i) => (
+          {/* `ROWS.length`, not a literal: a skeleton that is shorter than the list it stands in
+              for makes the page jump on every load, and a hard-coded count silently stops matching
+              the moment a row is added. */}
+          {Array.from({ length: ROWS.length }).map((_, i) => (
             <li key={i} className="flex items-center justify-between gap-3">
               <div className="flex min-w-0 items-center gap-2">
                 <Skeleton className="size-4 shrink-0 rounded-full" />

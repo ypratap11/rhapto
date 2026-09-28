@@ -1168,23 +1168,74 @@ export interface components {
         };
         /**
          * ChecklistOut
-         * @description Six setup tests plus the verified-block tally, rendered as "18 of 23 verified".
+         * @description Six profile tests plus the verified-block tally, and five setup rows so a stranger always
+         *     has a next action.
+         *
+         *     Every new field is COMPUTED from columns that already exist. No migration.
+         *
+         *     Each one checks the real condition rather than a row that describes it, which is the standard
+         *     `resume_template` had to learn the hard way (it reports the file on disk, not just the database
+         *     row, because this deployment told its owner he was set up for three days after his upload was
+         *     gone).
          */
         ChecklistOut: {
+            /**
+             * Active Searches
+             * @default 0
+             */
+            active_searches: number;
             /** Blocks Verified */
             blocks_verified: boolean;
             /** Contact Answers */
             contact_answers: boolean;
+            /**
+             * Dateless Blocks
+             * @default 0
+             */
+            dateless_blocks: number;
             /** Guardrails */
             guardrails: boolean;
+            /**
+             * Job Sources
+             * @default false
+             */
+            job_sources: boolean;
+            /**
+             * Jobs Found
+             * @default false
+             */
+            jobs_found: boolean;
+            /**
+             * Llm Key
+             * @default false
+             */
+            llm_key: boolean;
+            /**
+             * Llm Key Source
+             * @default none
+             * @enum {string}
+             */
+            llm_key_source: "settings" | "env" | "trial" | "none";
             /** Location Preferences */
             location_preferences: boolean;
             /** Resume Template */
             resume_template: boolean;
+            /**
+             * Saved Searches
+             * @default false
+             */
+            saved_searches: boolean;
             /** Total Blocks */
             total_blocks: number;
             /** Tracks */
             tracks: boolean;
+            /** Trial Runs Left */
+            trial_runs_left?: number | null;
+            /**
+             * Usable Sources
+             * @default 0
+             */
+            usable_sources: number;
             /** Verified Blocks */
             verified_blocks: number;
         };

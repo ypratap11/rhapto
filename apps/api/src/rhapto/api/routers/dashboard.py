@@ -13,7 +13,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from rhapto.api.deps import current_user, get_session, get_storage
+from rhapto.api.deps import current_user, get_session, get_settings_dep, get_storage
 from rhapto.api.schemas import (
     ChecklistOut,
     DashboardOut,
@@ -21,20 +21,27 @@ from rhapto.api.schemas import (
     JobRef,
     SavedSearchCountOut,
 )
+from rhapto.config import Settings
 from rhapto.db.repositories import dashboard as repo
 from rhapto.db.repositories import searches as searches_repo
 from rhapto.db.repositories.discovery import NEVER_RUN, search_run_stats
+from rhapto.services.discovery.sources import aggregator_sources
+from rhapto.services.discovery.sources.status import usable_source_ids
 from rhapto.services.storage import PackageStorage
+from rhapto.services.trial import llm_setup_status
 
 router = APIRouter()
 
 UserDep = Annotated[uuid.UUID, Depends(current_user)]
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
 StorageDep = Annotated[PackageStorage, Depends(get_storage)]
+SettingsDep = Annotated[Settings, Depends(get_settings_dep)]
 
 
 @router.get("/dashboard", response_model=DashboardOut)
-async def dashboard(user_id: UserDep, session: SessionDep, storage: StorageDep) -> DashboardOut:
+async def dashboard(
+    user_id: UserDep, session: SessionDep, storage: StorageDep, settings: SettingsDep
+) -> DashboardOut:
     checklist = await repo.checklist(session, user_id)
     # The repository counts `resume_documents` rows, which is all SQL can see. A row whose file has
     # vanished from the volume is not a usable template: `documents.load_source` already treats that
@@ -47,6 +54,14 @@ async def dashboard(user_id: UserDep, session: SessionDep, storage: StorageDep) 
     counts = await searches_repo.new_counts(session, user_id)
     searches = await searches_repo.list_searches(session, user_id)
     run_stats = await search_run_stats(session, user_id)
+    # `runs_used` comes from the checklist composite, so this does not add a statement of its own.
+    llm = await llm_setup_status(session, settings, user_id, runs_used=checklist.trial_runs_used)
+    # The same pure function `GET /settings/sources` uses for `runnable`, so the checklist and the
+    # Settings page cannot disagree about what "ready" means.
+    sources = await repo.source_setup(session, user_id)
+    usable = usable_source_ids(
+        sources, {s for s, row in sources.items() if row.key_set}, aggregator_sources()
+    )
     followups = await repo.due_followups(session, user_id)
     return DashboardOut(
         new_fit_count=await repo.new_fit_count(session, user_id),
@@ -60,6 +75,15 @@ async def dashboard(user_id: UserDep, session: SessionDep, storage: StorageDep) 
             location_preferences=checklist.location_preferences,
             verified_blocks=checklist.verified_blocks,
             total_blocks=checklist.total_blocks,
+            llm_key=llm.llm_key,
+            llm_key_source=llm.llm_key_source,
+            trial_runs_left=llm.trial_runs_left,
+            job_sources=len(usable) > 0,
+            usable_sources=len(usable),
+            saved_searches=checklist.active_searches > 0,
+            active_searches=checklist.active_searches,
+            jobs_found=checklist.jobs_found,
+            dateless_blocks=checklist.dateless_blocks,
         ),
         saved_searches=[
             SavedSearchCountOut(
