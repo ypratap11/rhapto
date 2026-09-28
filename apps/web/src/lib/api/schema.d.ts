@@ -144,6 +144,31 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/jobs/empty-reason": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Jobs Empty Reason
+         * @description Why `GET /jobs` with exactly these filters returned nothing.
+         *
+         *     A companion endpoint rather than a field on the list response: the diagnosis is a set of
+         *     aggregate counts over the user's whole corpus, and paying for those on every non-empty response
+         *     (which has no pagination and carries full `jd_text` per row) would be work whose answer is
+         *     thrown away. The client calls this only when the grid is empty.
+         */
+        get: operations["jobs_empty_reason_api_v1_jobs_empty_reason_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/jobs/{job_id}": {
         parameters: {
             query?: never;
@@ -1412,6 +1437,54 @@ export interface components {
             track_id: string;
         };
         /**
+         * JobsEmptyReasonOut
+         * @description Why `GET /jobs` returned nothing for exactly these filters.
+         *
+         *     Computed from the same `JOB_FILTERS` registry `list_jobs` filters with, so the explanation
+         *     cannot describe a filter the query did not apply.
+         *
+         *     Structured, not prose: the API owns the *cause* and the web app owns the wording. The one-click
+         *     widen needs a filter identity and a target value, which is structural rather than a sentence;
+         *     and nothing here may be a hard-coded field name or city, which a server-rendered sentence would
+         *     tempt. `field_name` and `user_field_names` come from the taxonomy and the user's own tracks.
+         *
+         *     There is deliberately NO field for a suggested alternative location and none for an asserted
+         *     cause of a zero-returning saved search. Neither is knowable: nothing in this codebase
+         *     distinguishes an unrecognised location from an empty market, and there is no gazetteer to draw
+         *     an alternative from. A test asserts no such field appears, so a later implementer cannot quietly
+         *     fill one with a literal.
+         */
+        JobsEmptyReasonOut: {
+            /**
+             * Cause
+             * @enum {string}
+             */
+            cause: "no_jobs" | "field_without_tracks" | "filter" | "combination" | "nothing_matched";
+            /** Field Name */
+            field_name?: string | null;
+            /** Filter Id */
+            filter_id?: ("hidden" | "search_id" | "sources" | "field" | "posted_within" | "recommended" | "search" | "track" | "region" | "bucket") | null;
+            /** Filter Value */
+            filter_value?: string | null;
+            /** Search Ever Found */
+            search_ever_found?: boolean | null;
+            /** Search Location */
+            search_location?: string | null;
+            /** Search Name */
+            search_name?: string | null;
+            /** Search Runs */
+            search_runs?: number | null;
+            /** Total */
+            total: number;
+            /**
+             * User Field Names
+             * @default []
+             */
+            user_field_names: string[];
+            /** Would Match */
+            would_match?: number | null;
+        };
+        /**
          * LiveSearchIn
          * @description The search form: one free-text query plus the filter chips.
          */
@@ -2602,6 +2675,55 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    jobs_empty_reason_api_v1_jobs_empty_reason_get: {
+        parameters: {
+            query?: {
+                search?: string | null;
+                track?: string | null;
+                bucket?: ("fit" | "low") | null;
+                region?: "preferred" | "us" | "any";
+                sort?: "fit" | "newest" | "relevance";
+                /** @description comma-separated job ids, at most 200 */
+                ids?: string | null;
+                /** @description show only hidden jobs */
+                hidden?: boolean;
+                search_id?: string | null;
+                posted_within?: "24h" | "7d" | "30d" | "90d" | "any";
+                /** @description comma-separated source ids */
+                sources?: string | null;
+                /** @description taxonomy field id */
+                field?: string | null;
+                /** @description only jobs with no resume, no application, not hidden and not unlisted */
+                recommended?: boolean;
+            };
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobsEmptyReasonOut"];
                 };
             };
             /** @description Validation Error */

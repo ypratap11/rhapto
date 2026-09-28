@@ -469,6 +469,63 @@ class LiveSearchIn(BaseModel):
     sources: list[str] | None = None
 
 
+#: Every filter `GET /jobs` can be blamed for. Exactly the blamable ids in
+#: `db.repositories.jobs.JOB_FILTERS` -- pinned by `tests/unit/test_job_filter_registry.py`, so a
+#: new server-side filter cannot ship without the web app's widen map gaining a case for it. `ids`
+#: is absent on purpose: it is a refetch mechanism, not a filter a user chose.
+JobFilterId = Literal[
+    "hidden",
+    "search_id",
+    "sources",
+    "field",
+    "posted_within",
+    "recommended",
+    "search",
+    "track",
+    "region",
+    "bucket",
+]
+
+
+class JobsEmptyReasonOut(BaseModel):
+    """Why `GET /jobs` returned nothing for exactly these filters.
+
+    Computed from the same `JOB_FILTERS` registry `list_jobs` filters with, so the explanation
+    cannot describe a filter the query did not apply.
+
+    Structured, not prose: the API owns the *cause* and the web app owns the wording. The one-click
+    widen needs a filter identity and a target value, which is structural rather than a sentence;
+    and nothing here may be a hard-coded field name or city, which a server-rendered sentence would
+    tempt. `field_name` and `user_field_names` come from the taxonomy and the user's own tracks.
+
+    There is deliberately NO field for a suggested alternative location and none for an asserted
+    cause of a zero-returning saved search. Neither is knowable: nothing in this codebase
+    distinguishes an unrecognised location from an empty market, and there is no gazetteer to draw
+    an alternative from. A test asserts no such field appears, so a later implementer cannot quietly
+    fill one with a literal.
+    """
+
+    #: Every job this user owns, ignoring every filter. 0 means the corpus itself is empty.
+    total: int
+    cause: Literal["no_jobs", "field_without_tracks", "filter", "combination", "nothing_matched"]
+    #: The blamed filter, only when `cause == "filter"`.
+    filter_id: JobFilterId | None = None
+    #: Its current value, for the sentence.
+    filter_value: str | None = None
+    #: Rows that appear if that one filter is widened.
+    would_match: int | None = None
+    #: Display name of the requested taxonomy field, from `services.taxonomy`.
+    field_name: str | None = None
+    #: Display names of the fields this user does have tracks in.
+    user_field_names: list[str] = []
+    #: Set when `search_id` is: the saved search's own name and location, how many times it has
+    #: polled, and whether any of those polls ever returned a posting.
+    search_name: str | None = None
+    search_location: str | None = None
+    search_runs: int | None = None
+    search_ever_found: bool | None = None
+
+
 class PerSourceOut(BaseModel):
     found: int
     new: int

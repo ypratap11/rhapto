@@ -9,10 +9,18 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from rhapto.api.deps import current_user, get_enqueuer, get_fetch_text, get_session, get_storage
 from rhapto.api.errors import not_found, problem
-from rhapto.api.schemas import JobCreate, JobOut, JobScoreOut, PackageSummary
+from rhapto.api.schemas import (
+    JobCreate,
+    JobFilterId,
+    JobOut,
+    JobScoreOut,
+    JobsEmptyReasonOut,
+    PackageSummary,
+)
 from rhapto.db.models import Application, Job, JobScore, Package
 from rhapto.db.repositories import jobs as repo
 from rhapto.db.repositories import profile as profile_repo
+from rhapto.db.repositories import searches as searches_repo
 from rhapto.db.repositories.discovery import scores_for_jobs
 from rhapto.engine.scoring import LocationTier
 from rhapto.models.jd_extract import JDExtract
@@ -257,6 +265,53 @@ FiltersDep = Annotated[repo.JobFilterParams, Depends(job_filters)]
 @router.get("", response_model=list[JobOut])
 async def list_jobs(user_id: UserDep, session: SessionDep, filters: FiltersDep) -> list[JobOut]:
     return await _outs(session, user_id, await repo.list_jobs(session, filters))
+
+
+# MUST stay declared before `/{job_id}`: FastAPI matches routes in declaration order, so the path
+# parameter would swallow "empty-reason" and answer 422 on a value that is not a UUID.
+# `test_empty_reason_route_is_not_shadowed_by_the_job_id_route` fails if this ever moves.
+@router.get("/empty-reason", response_model=JobsEmptyReasonOut)
+async def jobs_empty_reason(
+    user_id: UserDep, session: SessionDep, filters: FiltersDep
+) -> JobsEmptyReasonOut:
+    """Why `GET /jobs` with exactly these filters returned nothing.
+
+    A companion endpoint rather than a field on the list response: the diagnosis is a set of
+    aggregate counts over the user's whole corpus, and paying for those on every non-empty response
+    (which has no pagination and carries full `jd_text` per row) would be work whose answer is
+    thrown away. The client calls this only when the grid is empty.
+    """
+    resolved = await repo.field_tracks(session, user_id, filters.field)
+    reason = await repo.empty_reason(session, filters, resolved)
+    field = find_field(filters.field)
+    search = (
+        await searches_repo.get_search(session, user_id, filters.search_id)
+        if filters.search_id is not None
+        else None
+    )
+    return JobsEmptyReasonOut(
+        total=reason.total,
+        cause=cast(
+            "Literal['no_jobs', 'field_without_tracks', 'filter', 'combination', 'nothing_matched']",
+            reason.cause,
+        ),
+        filter_id=cast("JobFilterId | None", reason.filter_id),
+        filter_value=reason.filter_value,
+        would_match=reason.would_match,
+        # Display names come from the taxonomy and the user's own tracks -- never a literal.
+        field_name=field.name if field is not None else None,
+        # Sorted by display name, which is the order a user reads them in.
+        user_field_names=sorted(
+            found.name for f in resolved.user_fields if (found := find_field(f)) is not None
+        ),
+        search_name=search.name if search is not None else None,
+        search_location=search.location if search is not None else None,
+        # Task 3 fills these from `poll_runs`; a search's run history is the only thing that can
+        # tell "has never matched" from "nothing new", and `jobs.search_id` cannot (it is
+        # ON DELETE SET NULL and backfilled rows deliberately drop it).
+        search_runs=None,
+        search_ever_found=None,
+    )
 
 
 @router.get("/{job_id}", response_model=JobOut)

@@ -1263,6 +1263,140 @@
         "title": "JobScoreOut",
         "type": "object"
       },
+      "JobsEmptyReasonOut": {
+        "description": "Why `GET /jobs` returned nothing for exactly these filters.\n\nComputed from the same `JOB_FILTERS` registry `list_jobs` filters with, so the explanation\ncannot describe a filter the query did not apply.\n\nStructured, not prose: the API owns the *cause* and the web app owns the wording. The one-click\nwiden needs a filter identity and a target value, which is structural rather than a sentence;\nand nothing here may be a hard-coded field name or city, which a server-rendered sentence would\ntempt. `field_name` and `user_field_names` come from the taxonomy and the user's own tracks.\n\nThere is deliberately NO field for a suggested alternative location and none for an asserted\ncause of a zero-returning saved search. Neither is knowable: nothing in this codebase\ndistinguishes an unrecognised location from an empty market, and there is no gazetteer to draw\nan alternative from. A test asserts no such field appears, so a later implementer cannot quietly\nfill one with a literal.",
+        "properties": {
+          "cause": {
+            "enum": [
+              "no_jobs",
+              "field_without_tracks",
+              "filter",
+              "combination",
+              "nothing_matched"
+            ],
+            "title": "Cause",
+            "type": "string"
+          },
+          "field_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Field Name"
+          },
+          "filter_id": {
+            "anyOf": [
+              {
+                "enum": [
+                  "hidden",
+                  "search_id",
+                  "sources",
+                  "field",
+                  "posted_within",
+                  "recommended",
+                  "search",
+                  "track",
+                  "region",
+                  "bucket"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Filter Id"
+          },
+          "filter_value": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Filter Value"
+          },
+          "search_ever_found": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Search Ever Found"
+          },
+          "search_location": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Search Location"
+          },
+          "search_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Search Name"
+          },
+          "search_runs": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Search Runs"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          },
+          "user_field_names": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "User Field Names",
+            "type": "array"
+          },
+          "would_match": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Would Match"
+          }
+        },
+        "required": [
+          "total",
+          "cause"
+        ],
+        "title": "JobsEmptyReasonOut",
+        "type": "object"
+      },
       "LiveSearchIn": {
         "description": "The search form: one free-text query plus the filter chips.",
         "properties": {
@@ -4221,6 +4355,250 @@
           }
         },
         "summary": "Create Job",
+        "tags": [
+          "jobs"
+        ]
+      }
+    },
+    "/api/v1/jobs/empty-reason": {
+      "get": {
+        "description": "Why `GET /jobs` with exactly these filters returned nothing.\n\nA companion endpoint rather than a field on the list response: the diagnosis is a set of\naggregate counts over the user's whole corpus, and paying for those on every non-empty response\n(which has no pagination and carries full `jd_text` per row) would be work whose answer is\nthrown away. The client calls this only when the grid is empty.",
+        "operationId": "jobs_empty_reason_api_v1_jobs_empty_reason_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "search",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Search"
+            }
+          },
+          {
+            "in": "query",
+            "name": "track",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Track"
+            }
+          },
+          {
+            "in": "query",
+            "name": "bucket",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "fit",
+                    "low"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Bucket"
+            }
+          },
+          {
+            "in": "query",
+            "name": "region",
+            "required": false,
+            "schema": {
+              "default": "any",
+              "enum": [
+                "preferred",
+                "us",
+                "any"
+              ],
+              "title": "Region",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sort",
+            "required": false,
+            "schema": {
+              "default": "relevance",
+              "enum": [
+                "fit",
+                "newest",
+                "relevance"
+              ],
+              "title": "Sort",
+              "type": "string"
+            }
+          },
+          {
+            "description": "comma-separated job ids, at most 200",
+            "in": "query",
+            "name": "ids",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "comma-separated job ids, at most 200",
+              "title": "Ids"
+            }
+          },
+          {
+            "description": "show only hidden jobs",
+            "in": "query",
+            "name": "hidden",
+            "required": false,
+            "schema": {
+              "default": false,
+              "description": "show only hidden jobs",
+              "title": "Hidden",
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
+            "name": "search_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Search Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "posted_within",
+            "required": false,
+            "schema": {
+              "default": "90d",
+              "enum": [
+                "24h",
+                "7d",
+                "30d",
+                "90d",
+                "any"
+              ],
+              "title": "Posted Within",
+              "type": "string"
+            }
+          },
+          {
+            "description": "comma-separated source ids",
+            "in": "query",
+            "name": "sources",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "comma-separated source ids",
+              "title": "Sources"
+            }
+          },
+          {
+            "description": "taxonomy field id",
+            "in": "query",
+            "name": "field",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "taxonomy field id",
+              "title": "Field"
+            }
+          },
+          {
+            "description": "only jobs with no resume, no application, not hidden and not unlisted",
+            "in": "query",
+            "name": "recommended",
+            "required": false,
+            "schema": {
+              "default": false,
+              "description": "only jobs with no resume, no application, not hidden and not unlisted",
+              "title": "Recommended",
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobsEmptyReasonOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Jobs Empty Reason",
         "tags": [
           "jobs"
         ]

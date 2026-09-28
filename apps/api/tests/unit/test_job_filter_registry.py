@@ -11,7 +11,9 @@ from __future__ import annotations
 
 import dataclasses
 import uuid
+from typing import get_args
 
+from rhapto.api.schemas import JobFilterId
 from rhapto.db.repositories.jobs import (
     JOB_FILTERS,
     POSTED_WITHIN_DAYS,
@@ -44,6 +46,14 @@ def test_every_filter_parameter_has_a_registry_entry_and_vice_versa() -> None:
 def test_registry_ids_are_unique() -> None:
     ids = [f.id for f in JOB_FILTERS]
     assert len(ids) == len(set(ids))
+
+
+def test_every_blamable_id_is_one_the_wire_can_carry() -> None:
+    """The other half of the coverage guard: a blamable registry id that is not in `JobFilterId`
+    could never reach the client, so the grid would be empty with no explanation. `JobFilterId` is
+    also what the web app's widen map is keyed by, so this is the Python end of a check whose other
+    end is a TypeScript compile error."""
+    assert {f.id for f in JOB_FILTERS if f.blamable} == set(get_args(JobFilterId))
 
 
 def test_only_ids_is_unblamable() -> None:

@@ -7,7 +7,18 @@ from dataclasses import field as dataclass_field
 from datetime import UTC, datetime, timedelta
 from typing import Any, cast
 
-from sqlalchemy import CursorResult, and_, delete, func, not_, nulls_last, or_, select, text
+from sqlalchemy import (
+    CursorResult,
+    and_,
+    delete,
+    func,
+    not_,
+    nulls_last,
+    or_,
+    select,
+    text,
+    true,
+)
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql.elements import ColumnElement
 from sqlalchemy.sql.selectable import Subquery
@@ -218,21 +229,30 @@ def filter_context(
     return tracks, FilterCtx(track_ids=track_ids, min_fit=func.coalesce(tracks.c.min_fit, 101))
 
 
-async def field_track_ids(
-    session: AsyncSession, user_id: uuid.UUID, field: str | None
-) -> tuple[str, ...] | None:
-    """This user's track ids in one taxonomy field, or None when no field was asked for.
+@dataclass(frozen=True)
+class TrackFields:
+    """One read of this user's tracks, answering both questions the Field filter raises."""
 
-    Resolved here rather than in the router so `list_jobs` and the empty-reason diagnosis resolve
-    it the same way -- a second resolution is a second place "the user has no track in that field"
-    could be decided differently.
+    #: Track ids in the requested field. `None` when no field was requested; an EMPTY tuple means
+    #: the user has no track in that field, which is an empty result rather than "no filter".
+    track_ids: tuple[str, ...] | None
+    #: Every taxonomy field this user actually has a track in, in a stable order. What the
+    #: field-without-tracks explanation names instead of the field the user asked for.
+    user_fields: tuple[str, ...]
+
+
+async def field_tracks(session: AsyncSession, user_id: uuid.UUID, field: str | None) -> TrackFields:
+    """Resolve `field` against this user's tracks, and list the fields they do have.
+
+    One function rather than one per caller so `list_jobs` and the empty-reason diagnosis decide
+    "the user has no track in that field" the same way. A second resolution is a second place that
+    verdict could differ, and the disagreement would be invisible -- the listing would return
+    nothing while the explanation said the filter was fine.
     """
-    if field is None:
-        return None
-    return tuple(
-        t.track_id
-        for t in await session.scalars(select(Track).where(Track.user_id == user_id))
-        if t.field == field
+    rows = list(await session.scalars(select(Track).where(Track.user_id == user_id)))
+    return TrackFields(
+        track_ids=None if field is None else tuple(t.track_id for t in rows if t.field == field),
+        user_fields=tuple(sorted({t.field for t in rows if t.field})),
     )
 
 
@@ -403,8 +423,8 @@ def active_clauses(
 
 
 async def list_jobs(session: AsyncSession, params: JobFilterParams) -> list[tuple[Job, str | None]]:
-    track_ids = await field_track_ids(session, params.user_id, params.field)
-    tracks, ctx = filter_context(params.user_id, track_ids)
+    resolved = await field_tracks(session, params.user_id, params.field)
+    tracks, ctx = filter_context(params.user_id, resolved.track_ids)
     query = (
         select(Job, SearchRow.name)
         .outerjoin(tracks, tracks.c.track_id == Job.best_track_id)
@@ -447,6 +467,94 @@ async def list_jobs(session: AsyncSession, params: JobFilterParams) -> list[tupl
     else:
         query = query.order_by(nulls_last(Job.best_fit.desc()), Job.discovered_at.desc(), Job.id)
     return [(job, name) for job, name in (await session.execute(query)).all()]
+
+
+@dataclass(frozen=True)
+class EmptyReason:
+    """Why exactly these filters matched nothing, decided from the registry that filtered."""
+
+    #: Every job this user owns, ignoring every filter. 0 means the corpus itself is empty.
+    total: int
+    #: One of the `JobsEmptyReasonOut.cause` values; the schema holds the closed set.
+    cause: str
+    #: The blamed registry id, only when `cause == "filter"`.
+    filter_id: str | None = None
+    #: That filter's current value, rendered by its own registry entry -- never restated here.
+    filter_value: str | None = None
+    #: Rows that appear if that one filter is widened and nothing else changes.
+    would_match: int | None = None
+
+
+async def empty_reason(
+    session: AsyncSession, params: JobFilterParams, resolved: TrackFields
+) -> EmptyReason:
+    """Diagnose an empty `GET /jobs` result, using the same clauses that produced it.
+
+    One statement: the user's total, the count for the full active clause set, and one
+    leave-one-out count per blamable active filter, as `count(*) FILTER (WHERE ...)` aggregates
+    over a single scan of this user's jobs.
+
+    The blame goes to the filter whose removal reveals the MOST rows, not the first one that
+    reveals any. That is deliberate and deterministic: it names the most restrictive filter, which
+    is the one a user wants widened. Ties break by registry order.
+
+    When no single removal reveals anything, the honest answer is `"combination"` -- two filters
+    together excluded everything and no one of them is responsible. Inventing a culprit there would
+    be the same class of fabrication as inventing a city name.
+    """
+    tracks, ctx = filter_context(params.user_id, resolved.track_ids)
+    active = active_filters(params)
+    blamable = [f for f in active if f.blamable]
+    columns: list[Any] = [
+        # Tenancy only, nothing else: this is the "is the corpus empty at all" answer.
+        func.count().label("total"),
+        func.count().filter(and_(true(), *active_clauses(params, ctx))).label("matched"),
+    ]
+    for entry in blamable:
+        columns.append(
+            func.count()
+            .filter(and_(true(), *active_clauses(params, ctx, without=entry.id)))
+            .label(f"without_{entry.id}")
+        )
+    row = (
+        await session.execute(
+            select(*columns)
+            .select_from(Job)
+            # `bucket` compares against this subquery's min_fit, so the statement must join it for
+            # the same reason `list_jobs` does.
+            .outerjoin(tracks, tracks.c.track_id == Job.best_track_id)
+            # The one predicate no leave-one-out can remove.
+            .where(Job.user_id == params.user_id)
+        )
+    ).one()
+    total = int(row.total or 0)
+    matched = int(row.matched or 0)
+    if total == 0:
+        return EmptyReason(total=total, cause="no_jobs")
+    # Checked before the counts because it is categorically different: not "a filter excluded
+    # everything" but "this filter can never match", which is the distinction the empty states
+    # exist to make.
+    if params.field is not None and not resolved.track_ids:
+        return EmptyReason(total=total, cause="field_without_tracks")
+    if matched != 0:
+        # The client asked for a diagnosis of a result that is not empty. Not an error: the honest
+        # answer is "there are rows for these filters".
+        return EmptyReason(total=total, cause="nothing_matched")
+    best: JobFilter | None = None
+    best_count = 0
+    for entry in blamable:
+        count = int(getattr(row, f"without_{entry.id}") or 0)
+        if count > best_count:
+            best, best_count = entry, count
+    if best is None:
+        return EmptyReason(total=total, cause="combination")
+    return EmptyReason(
+        total=total,
+        cause="filter",
+        filter_id=best.id,
+        filter_value=best.value(params),
+        would_match=best_count,
+    )
 
 
 async def search_name_for(
