@@ -1706,6 +1706,11 @@ export interface components {
             title: string | null;
             /** Version */
             version: number;
+            /**
+             * Violations
+             * @default 0
+             */
+            violations: number;
         };
         /** PackageOut */
         PackageOut: {
@@ -1730,6 +1735,13 @@ export interface components {
             created_at: string;
             /** Edits */
             edits: components["schemas"]["Edit"][];
+            /**
+             * Guardrail Remedies
+             * @default {}
+             */
+            guardrail_remedies: {
+                [key: string]: string;
+            };
             guardrail_report: components["schemas"]["GuardrailReport"];
             /** Has Docx */
             has_docx: boolean;

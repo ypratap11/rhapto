@@ -90,7 +90,13 @@ function PackageReviewPageInner() {
   const tune = pkg.data.mode === "tune";
   // A tune-mode violation path is `edits[<i>]`, which addresses a change card rather than a
   // resume path, so selecting one scrolls the card into view instead of driving the pane.
-  const guardrailPanel = <GuardrailPanel report={pkg.data.guardrail_report} onSelect={tune ? scrollToChange : setSelectedPath} />;
+  const guardrailPanel = (
+    <GuardrailPanel
+      report={pkg.data.guardrail_report}
+      remedies={pkg.data.guardrail_remedies}
+      onSelect={tune ? scrollToChange : setSelectedPath}
+    />
+  );
 
   function saveNewVersion(created: { id: string; status: string; version: number }): void {
     toast.success(created.status === "blocked" ? "Saved as v" + created.version + ", but guardrails blocked it" : "Saved as v" + created.version);

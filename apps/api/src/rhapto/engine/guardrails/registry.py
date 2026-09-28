@@ -38,6 +38,57 @@ RULES: dict[str, Rule] = {
 }
 
 
+#: What to DO about each rule, one short sentence, written by whoever owns the rule.
+#:
+#: A blocked package already tells the user which rule fired, what it said and which bullet -- and
+#: then stops, leaving "blocked" as the whole of the explanation on every list surface. This is the
+#: missing half: the action.
+#:
+#: NOT part of `GuardrailReport`. That model is generated from `packages/schemas/guardrail_report.json`
+#: with `extra="forbid"` and is PERSISTED as JSONB, so adding a field there would leave every existing
+#: row without it. These are attached at response time instead, restricted to the rules that actually
+#: appear in the report being returned.
+#:
+#: `test_guardrail_remedies.py` asserts this covers every `RULE_NAME` in `engine/guardrails/`, so a
+#: seventh rule cannot ship with "blocked" and no next step.
+REMEDIES: dict[str, str] = {
+    PROVENANCE: (
+        "Every bullet has to come from a block in your library. Regenerate, or add the claim as a "
+        "block first so the sentence has a source."
+    ),
+    METRICS: (
+        "A number appeared that no verified block contains. Either mark the block holding that "
+        "figure as verified, or regenerate so the bullet stops asserting it."
+    ),
+    ENTITIES: (
+        "A company, product or tool was named that is not in your profile or the job description. "
+        "Regenerate, or add it to the block it belongs to."
+    ),
+    DATES: (
+        "The dates do not line up with the block's own period. Fix the period on that block, then "
+        "regenerate."
+    ),
+    ATTRIBUTION: (
+        "Work that was a team's is written as yours alone. Set the block's attribution, then "
+        "regenerate."
+    ),
+    VISIBILITY: (
+        "A claim needs the context that makes it true -- scope, team size or scale. Add it to the "
+        "block, then regenerate."
+    ),
+}
+
+
+def remedies_for(rules: Iterable[str]) -> dict[str, str]:
+    """The remedies for exactly the rules named, skipping any with none.
+
+    Restricted rather than returned whole so a response carries only what its own report needs, and
+    so a rule with no remedy degrades to an absent key -- which the UI renders as the rule id and
+    message alone -- rather than to a missing row or a crash.
+    """
+    return {rule: REMEDIES[rule] for rule in dict.fromkeys(rules) if rule in REMEDIES}
+
+
 class UnknownGuardrailError(EngineError):
     """guardrails.yaml names a rule this build does not ship."""
 

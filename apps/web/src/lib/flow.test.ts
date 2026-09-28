@@ -12,7 +12,7 @@ const base = (over: Partial<JobOut>): JobOut => ({
 const row = (over: Partial<PackageListItem>): PackageListItem => ({
   id: "p", job_id: "j", company: "ExampleCo", title: "Data PM", status: "draft", version: 1,
   created_at: "2026-09-01T00:00:00Z", best_fit: 70, best_track_id: "data-pm", application_status: null,
-  mode: "blocks",
+  mode: "blocks", violations: 0,
   ...over,
 });
 

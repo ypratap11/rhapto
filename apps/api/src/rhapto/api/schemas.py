@@ -236,6 +236,12 @@ class PackageOut(BaseModel):
     mode: Literal["blocks", "tune"]
     edits: list[Edit]
     source_document: SourceDocument | None
+    #: What to do about each rule that fired here, keyed by rule id. Built at response time from
+    #: `engine.guardrails.registry.REMEDIES` and restricted to the rules in THIS report -- never
+    #: stored, because `GuardrailReport` is persisted JSONB with `extra="forbid"` and adding a field
+    #: there would leave every existing row without it. A rule with no remedy is simply absent, and
+    #: the panel then shows the rule id, message and path alone rather than dropping the row.
+    guardrail_remedies: dict[str, str] = {}
 
 
 class EditPatch(BaseModel):
@@ -282,6 +288,10 @@ class PackageListItem(BaseModel):
     best_track_id: str | None
     created_at: datetime
     archived_at: datetime | None = None
+    #: Error-severity guardrail violations on this package. The Resumes "Blocked" tab and the job
+    #: card carried `status` alone, so a blocked row said "blocked" and nothing else. Read from the
+    #: JSONB the list query already loads; no extra query.
+    violations: int = 0
 
 
 class ResumeDocumentOut(BaseModel):

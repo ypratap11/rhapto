@@ -1853,6 +1853,11 @@
           "version": {
             "title": "Version",
             "type": "integer"
+          },
+          "violations": {
+            "default": 0,
+            "title": "Violations",
+            "type": "integer"
           }
         },
         "required": [
@@ -1918,6 +1923,14 @@
             },
             "title": "Edits",
             "type": "array"
+          },
+          "guardrail_remedies": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "default": {},
+            "title": "Guardrail Remedies",
+            "type": "object"
           },
           "guardrail_report": {
             "$ref": "#/components/schemas/GuardrailReport"

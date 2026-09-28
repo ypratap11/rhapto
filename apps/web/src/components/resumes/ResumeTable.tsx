@@ -61,7 +61,18 @@ export function ResumeTable({
                 </div>
               </TableCell>
               <TableCell>
-                <StatusBadge tone={PACKAGE_STATUS_TONE[row.status] ?? "neutral"}>{`v${row.version} · ${row.status}`}</StatusBadge>
+                <div className="flex flex-col items-start gap-1">
+                  <StatusBadge tone={PACKAGE_STATUS_TONE[row.status] ?? "neutral"}>{`v${row.version} · ${row.status}`}</StatusBadge>
+                  {/* "blocked" on its own is the empty state this branch exists to remove: the row
+                      said the draft was refused and nothing about why or how much. The count is the
+                      smallest honest thing a list row can carry; the panel on the package itself
+                      names the rule, the bullet and what to do. */}
+                  {row.violations > 0 ? (
+                    <span className="text-xs text-muted-foreground">
+                      {row.violations === 1 ? "1 guardrail violation" : `${row.violations} guardrail violations`}
+                    </span>
+                  ) : null}
+                </div>
               </TableCell>
               <TableCell>
                 <StatusBadge tone="muted">{row.mode}</StatusBadge>

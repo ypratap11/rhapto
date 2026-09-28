@@ -36,6 +36,8 @@ const blockedRow: PackageListItem = {
   mode: "blocks",
   application_status: null,
   created_at: "2026-09-01T00:00:00Z",
+  // A blocked row with two error-severity violations: "blocked" alone is what this branch removes.
+  violations: 2,
 };
 
 describe("ResumesPage", () => {

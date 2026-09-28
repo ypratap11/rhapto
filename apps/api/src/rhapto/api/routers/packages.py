@@ -17,7 +17,7 @@ from rhapto.db.repositories import packages as repo
 from rhapto.db.repositories import profile as profile_repo
 from rhapto.engine.compose import build_header
 from rhapto.engine.document import apply_edits, to_resume_document
-from rhapto.engine.guardrails.registry import run_guardrails
+from rhapto.engine.guardrails.registry import remedies_for, run_guardrails
 from rhapto.engine.guardrails.tune import run_tune_guardrails
 from rhapto.engine.providers.llm import TokenUsage
 from rhapto.engine.render.docx import OrphanBulletError, render_docx
@@ -67,7 +67,8 @@ def package_to_out(row: Package) -> PackageOut:
         cover_note=row.cover_note,
         change_log=row.change_log,
         answers=dict(row.answers_json),
-        guardrail_report=GuardrailReport.model_validate(row.guardrail_report_json),
+        guardrail_report=(report := GuardrailReport.model_validate(row.guardrail_report_json)),
+        guardrail_remedies=remedies_for(v.rule for v in report.violations),
         jd_extract=JDExtract.model_validate(row.jd_extract_json),
         llm_calls=row.llm_calls,
         input_tokens=row.input_tokens,
@@ -104,6 +105,19 @@ def blocked_note(report: GuardrailReport) -> str:
             f"- **{violation.rule}** ({violation.severity}) at `{violation.path}`: {violation.message}"
         )
     return "\n".join(lines) + "\n"
+
+
+def error_violations(report_json: dict[str, Any] | None) -> int:
+    """Error-severity violations in a stored report, read straight off the JSONB.
+
+    Tolerant of a malformed or absent report rather than raising: this runs on every row of a list
+    view, and one unparseable historical report must not 500 the whole Resumes queue. `GuardrailReport`
+    validation stays where it belongs, on the single-package path.
+    """
+    violations = (report_json or {}).get("violations") or []
+    if not isinstance(violations, list):
+        return 0
+    return sum(1 for v in violations if isinstance(v, dict) and v.get("severity") == "error")
 
 
 async def _get_package(session: AsyncSession, user_id: uuid.UUID, package_id: uuid.UUID) -> Package:
@@ -143,6 +157,7 @@ async def list_all_packages(
             best_track_id=j.best_track_id,
             created_at=p.created_at,
             archived_at=p.archived_at,
+            violations=error_violations(p.guardrail_report_json),
         )
         for p, j, a in rows
     ]

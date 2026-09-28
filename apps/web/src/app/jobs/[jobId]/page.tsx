@@ -112,6 +112,7 @@ export default function JobPage() {
             pkg.data ? (
               <GuardrailPanel
                 report={pkg.data.guardrail_report}
+                remedies={pkg.data.guardrail_remedies}
                 // The review page reads this back (see its own `path` search param handling) to
                 // land the reviewer on the specific violation, not just the package — "here is
                 // what to fix" is the whole point of surfacing guardrails on the job page.
