@@ -9,17 +9,19 @@ vi.mock("@/lib/api/queries", () => ({
   usePollNow: () => ({ mutateAsync, isPending }),
 }));
 
-vi.mock("./TaskProgress", async () => {
-  const { useEffect } = await import("react");
-  return {
-    TaskProgress: ({ taskId, onFinished }: { taskId: string; onFinished: (state: { status: string }) => void }) => {
-      useEffect(() => {
-        onFinished({ status: "succeeded" });
-      }, [onFinished]);
-      return <div>progress:{taskId}</div>;
-    },
-  };
-});
+// The fake finishes only when told to. Finishing on mount raced the assertion below: PollNowButton
+// clears the progress line the moment the task finishes, so "progress:t1" could vanish before
+// findByText saw it (green on one CI run, red on the next).
+vi.mock("./TaskProgress", () => ({
+  TaskProgress: ({ taskId, onFinished }: { taskId: string; onFinished: (state: { status: string }) => void }) => (
+    <div>
+      progress:{taskId}
+      <button type="button" onClick={() => onFinished({ status: "succeeded" })}>
+        finish task
+      </button>
+    </div>
+  ),
+}));
 
 describe("PollNowButton", () => {
   it("disables while pending, then starts polling and reports the task id and finish", async () => {
@@ -37,6 +39,13 @@ describe("PollNowButton", () => {
     await user.click(screen.getByRole("button", { name: /poll now/i }));
 
     expect(await screen.findByText("progress:t1")).toBeInTheDocument();
-    expect(onFinished).toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: /poll now/i })).toBeDisabled();
+    expect(onFinished).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole("button", { name: "finish task" }));
+
+    expect(onFinished).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText("progress:t1")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /poll now/i })).toBeEnabled();
   });
 });
