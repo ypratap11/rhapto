@@ -45,12 +45,31 @@ def _mapped_error(exc: Exception) -> EngineError:
     return EngineError(message)
 
 
-class GeminiProvider:
-    """Structured output via `response_mime_type=application/json` plus a `response_schema`.
+# Content-policy stops. Each leaves partial or no JSON behind, so without this the run would fail as
+# "did not return valid JSON" and hide the reason.
+_SAFETY_STOPS = frozenset({"SAFETY", "BLOCKLIST", "PROHIBITED_CONTENT", "SPII"})
 
-    The schema is the Pydantic class itself: `google-genai` converts it (inlining `$defs`, turning
-    optional unions into `nullable`, a single-value `Literal` into an `enum`) into the OpenAPI
-    dialect Gemini wants, so this adapter deliberately owns no schema translation of its own.
+
+def _finish_reason(response: Any) -> str:
+    """The first candidate's finish reason as a plain name ("STOP", "MAX_TOKENS", ...), or ""."""
+    candidates = getattr(response, "candidates", None) or []
+    if not candidates:
+        return ""
+    reason = getattr(candidates[0], "finish_reason", None)
+    if reason is None:
+        return ""
+    return str(getattr(reason, "name", reason))
+
+
+class GeminiProvider:
+    """Structured output via `response_mime_type=application/json` plus a `response_json_schema`.
+
+    The schema goes over as the model's own JSON Schema (`model_json_schema()`, a dict the SDK
+    forwards untouched), NOT as `response_schema`. That older field takes Gemini's OpenAPI subset,
+    and the SDK's conversion into it carries `additionalProperties` through as
+    `additional_properties`, which the API rejects -- so every schema with `extra="forbid"`
+    (JDExtract, ComposeOutput) failed with a 400 on every live call until 2026-09-29, while the unit
+    tests, which never built the wire request, stayed green.
 
     Gemini has no per-block cache control (implicit caching applies to long prefixes), so the system
     blocks are joined into one `system_instruction` and `SystemBlock.cache` is advisory.
@@ -81,7 +100,7 @@ class GeminiProvider:
         ]
         config: dict[str, Any] = {
             "response_mime_type": "application/json",
-            "response_schema": output_schema,
+            "response_json_schema": output_schema.model_json_schema(),
             "max_output_tokens": max_tokens,
         }
         if system:
@@ -93,6 +112,15 @@ class GeminiProvider:
             )
         except Exception as exc:
             raise _mapped_error(exc) from exc
+        name = output_schema.__name__
+        finish = _finish_reason(response)
+        if finish == "MAX_TOKENS":
+            # Thinking tokens count against max_output_tokens, so a long answer can run out early.
+            raise MalformedOutputError(f"Gemini hit the token cap before finishing {name}")
+        if finish in _SAFETY_STOPS:
+            raise MalformedOutputError(f"Gemini stopped on its safety filter before {name}")
+        if finish == "RECITATION":
+            raise MalformedOutputError(f"Gemini stopped on its recitation check before {name}")
         text = response.text
         if not text:
             raise MalformedOutputError(

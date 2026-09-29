@@ -27,7 +27,7 @@ dependencies = [
     "trafilatura>=1.12",
     "python-multipart>=0.0.9",
     "openai>=3.13",
-    "google-genai>=1.0",
+    "google-genai>=2.23.0",
     "cryptography>=42",
     "pyjwt[crypto]>=2.9",
 ]

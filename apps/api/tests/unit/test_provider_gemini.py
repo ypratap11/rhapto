@@ -1,18 +1,24 @@
+import os
 from types import SimpleNamespace
 from typing import Any
 
 import pytest
 from google import genai
-from google.genai import _transformers, errors, types
+from google.genai import errors, models, types
 from pydantic import BaseModel
 
+from rhapto.api.routers.settings import Ping
 from rhapto.engine.compose import ComposeOutput
+from rhapto.engine.import_resume import ResumeImport
 from rhapto.engine.providers.errors import ProviderAuthError
 from rhapto.engine.providers.gemini import GeminiProvider
 from rhapto.engine.providers.llm import MalformedOutputError, Message, SystemBlock
 from rhapto.engine.tune import TuneOutput
 from rhapto.engine.types import EngineError
 from rhapto.models.jd_extract import JDExtract
+
+#: Every schema the engine (and the Settings connection test) sends through this adapter.
+ENGINE_SCHEMAS: list[type[BaseModel]] = [JDExtract, ComposeOutput, TuneOutput, ResumeImport, Ping]
 
 TUNE_JSON = (
     '{"edits": [{"paragraph_id": "p1", "text": "Shipped it", "reason": "keyword"}],'
@@ -21,9 +27,16 @@ TUNE_JSON = (
 
 
 class _FakeModels:
-    def __init__(self, *, text: str | None = TUNE_JSON, error: Exception | None = None) -> None:
+    def __init__(
+        self,
+        *,
+        text: str | None = TUNE_JSON,
+        error: Exception | None = None,
+        finish_reason: Any = types.FinishReason.STOP,
+    ) -> None:
         self._text = text
         self._error = error
+        self._finish_reason = finish_reason
         self.kwargs: dict[str, Any] = {}
 
     async def generate_content(self, **kwargs: Any) -> Any:
@@ -32,6 +45,7 @@ class _FakeModels:
             raise self._error
         return SimpleNamespace(
             text=self._text,
+            candidates=[SimpleNamespace(finish_reason=self._finish_reason)],
             usage_metadata=SimpleNamespace(
                 prompt_token_count=200,
                 candidates_token_count=40,
@@ -76,8 +90,11 @@ async def test_gemini_parses_the_json_response_and_reports_usage() -> None:
     assert config["system_instruction"] == "rules\n\ndoc"
     assert config["response_mime_type"] == "application/json"
     assert config["max_output_tokens"] == 555
-    # The SDK owns the JSON-Schema -> Gemini conversion: it gets the Pydantic class itself.
-    assert config["response_schema"] is TuneOutput
+    # A plain JSON Schema dict: the SDK forwards it untouched, so a class here would reach the wire
+    # unconverted. And never `response_schema` -- see the wire tests below.
+    assert isinstance(config["response_json_schema"], dict)
+    assert config["response_json_schema"] == TuneOutput.model_json_schema()
+    assert "response_schema" not in config
 
 
 async def test_gemini_omits_system_instruction_when_there_are_no_blocks() -> None:
@@ -88,29 +105,106 @@ async def test_gemini_omits_system_instruction_when_there_are_no_blocks() -> Non
     assert "system_instruction" not in models.kwargs["config"]
 
 
-@pytest.mark.parametrize("schema", [JDExtract, ComposeOutput, TuneOutput])
-def test_the_sdk_converts_every_engine_schema_without_complaint(schema: type[BaseModel]) -> None:
-    """Pins the SDK-owned conversion: `$defs` inlined, optional unions nullable, no forbidden keys."""
-    # A real Developer-API client (no network: only its `vertexai` flag is read) so the SDK's
-    # unsupported-property check runs, exactly as it does on a live call.
+def _wire_config(config: dict[str, Any]) -> str:
+    """The generation config exactly as the SDK builds it for the Developer API request body.
+
+    Runs the SDK's own request builder (no network: a real client is needed only for its
+    `vertexai` flag), then dumps any SDK model objects the way the request serializer does.
+    """
     client = genai.Client(api_key="sk-test")
-    converted = _transformers.t_schema(client._api_client, schema)
-    assert isinstance(converted, types.Schema)
-    assert converted.type == types.Type.OBJECT
-    dumped = converted.model_dump(exclude_none=True, mode="json")
-    assert "$defs" not in repr(dumped) and "$ref" not in repr(dumped)
+    wire = models._GenerateContentConfig_to_mldev(client._api_client, config, parent_object={})
+
+    def plain(value: Any) -> Any:
+        if isinstance(value, BaseModel):
+            return plain(value.model_dump(exclude_none=True, mode="json"))
+        if isinstance(value, dict):
+            return {k: plain(v) for k, v in value.items()}
+        if isinstance(value, list):
+            return [plain(v) for v in value]
+        return value
+
+    return repr(plain(wire))
 
 
-def test_the_adapters_config_is_a_valid_generate_content_config() -> None:
-    config = {
-        "system_instruction": "rules",
-        "response_mime_type": "application/json",
-        "response_schema": ComposeOutput,
-        "max_output_tokens": 4096,
-    }
-    assert types.GenerateContentConfig.model_validate(config).response_mime_type == (
-        "application/json"
+async def _adapter_config(schema: type[BaseModel]) -> dict[str, Any]:
+    fake = _FakeModels(text=None)
+    with pytest.raises(MalformedOutputError):  # the fake returns no text; only the request matters
+        await _provider(fake).complete_structured(
+            system=[], messages=[Message(role="user", content="go")], output_schema=schema
+        )
+    config: dict[str, Any] = fake.kwargs["config"]
+    return config
+
+
+@pytest.mark.parametrize("schema", [JDExtract, ComposeOutput])
+def test_the_openapi_response_schema_path_sends_what_the_api_rejects(
+    schema: type[BaseModel],
+) -> None:
+    """Known-bad input, pinned: this is the request that failed live on 2026-09-29 with
+    `Unknown name "additional_properties" at 'generation_config.response_schema...'`.
+
+    `extra="forbid"` becomes `additionalProperties: false`; the SDK's local guard only checks that
+    value for truthiness, so it forwards it inside `responseSchema`, which the API refuses. If this
+    ever stops holding, the SDK changed -- revisit the adapter rather than deleting the test.
+    """
+    wire = _wire_config({"response_mime_type": "application/json", "response_schema": schema})
+    assert "responseSchema" in wire
+    assert "additional_properties" in wire
+
+
+@pytest.mark.parametrize("schema", ENGINE_SCHEMAS)
+async def test_the_adapter_sends_every_engine_schema_as_json_schema_on_the_wire(
+    schema: type[BaseModel],
+) -> None:
+    wire = _wire_config(await _adapter_config(schema))
+    assert "responseJsonSchema" in wire
+    assert "responseSchema" not in wire
+    assert "additional_properties" not in wire
+
+
+@pytest.mark.parametrize("schema", ENGINE_SCHEMAS)
+async def test_the_adapters_config_is_a_valid_generate_content_config(
+    schema: type[BaseModel],
+) -> None:
+    config = await _adapter_config(schema)
+    validated = types.GenerateContentConfig.model_validate(config)
+    assert validated.response_mime_type == "application/json"
+    assert validated.response_json_schema == schema.model_json_schema()
+
+
+@pytest.mark.parametrize(
+    ("finish_reason", "match"),
+    [
+        (types.FinishReason.MAX_TOKENS, "token cap"),
+        (types.FinishReason.SAFETY, "safety"),
+        (types.FinishReason.RECITATION, "recitation"),
+    ],
+)
+async def test_gemini_names_why_it_stopped_early(finish_reason: Any, match: str) -> None:
+    """A truncated or filtered answer says so, rather than surfacing as a vague JSON error."""
+    provider = _provider(_FakeModels(text='{"edits": [', finish_reason=finish_reason))
+    with pytest.raises(MalformedOutputError, match=match):
+        await provider.complete_structured(
+            system=[], messages=[Message(role="user", content="go")], output_schema=TuneOutput
+        )
+
+
+@pytest.mark.skipif(
+    not os.environ.get("GEMINI_API_KEY"),
+    reason="live Gemini call; set GEMINI_API_KEY (and optionally GEMINI_TEST_MODEL) to run",
+)
+@pytest.mark.parametrize("schema", ENGINE_SCHEMAS)
+async def test_live_gemini_accepts_every_engine_schema(schema: type[BaseModel]) -> None:
+    provider = GeminiProvider(
+        model=os.environ.get("GEMINI_TEST_MODEL", "gemini-3.7-flash"),
+        api_key=os.environ["GEMINI_API_KEY"],
     )
+    result = await provider.complete_structured(
+        system=[],
+        messages=[Message(role="user", content="Return a small, valid example object.")],
+        output_schema=schema,
+    )
+    assert isinstance(result.value, schema)
 
 
 @pytest.mark.parametrize("text", ["not json at all", '{"edits": 3}', "", None])
