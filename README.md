@@ -45,7 +45,7 @@ uv run rhapto tailor --jd path/to/jd.txt --profile ../../profile --out ../../out
 
 `tailor` writes `out/<company>-<role>/resume.docx`, `resume.pdf` (when LibreOffice is installed, otherwise skipped),
 `cover-note.md`, and `package.json` with the guardrail report and change log. Exit code 3 means the guardrails
-blocked the draft; the files are still written so you can see why. Exit code 1 is an error; 2 is a usage error from
+blocked the draft; no `resume.docx`/`resume.pdf` is written, and `package.json` holds the report and the rejected draft. Exit code 1 is an error; 2 is a usage error from
 the command-line parser.
 
 Pass `--document your-resume.docx` to tailor your own resume instead of the block library: `tailor` then edits your
@@ -85,7 +85,7 @@ Every request except `/api/v1/health`, `/api/v1/openapi.json` and `/api/v1/docs`
 `GET /api/v1/tasks/{id}/events` (Server-Sent Events), then fetch, edit, or download the package under `/api/v1/packages`.
 Editing a package re-runs the guardrails and creates a new version; a `blocked` status means a guardrail failed and the
 report says why. Downloads of a blocked package carry `X-Rhapto-Guardrails: blocked` and a `GUARDRAILS-BLOCKED.md` in
-the zip, so a blocked draft cannot be mistaken for a clean one. PDFs for edited versions are rendered by the worker a few seconds after the edit; the DOCX is
+the zip, and no resume document, so a blocked draft cannot be mistaken for a clean one. PDFs for edited versions are rendered by the worker a few seconds after the edit; the DOCX is
 immediate. The tracker lives under `/api/v1/applications`. Nothing here submits an application anywhere.
 
 **Inviting other people onto a running instance:** set `RHAPTO_AUTH_MODE=access` instead of the
