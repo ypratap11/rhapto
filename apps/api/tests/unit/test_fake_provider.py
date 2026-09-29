@@ -17,6 +17,7 @@ from rhapto.engine.providers.registry import (
 )
 from rhapto.engine.tune import TuneOutput
 from rhapto.models.jd_extract import JDExtract
+from rhapto.models.profile.blocks import Block
 from rhapto.profile.loader import load_profile
 from rhapto.services.llm import env_llm_config, warn_if_fake_llm
 
@@ -123,6 +124,22 @@ async def test_compose_cites_only_selected_blocks_and_copies_them_verbatim(
     assert output.cover_note and output.change_log
 
 
+async def test_every_mandatory_block_of_the_demo_profile_gets_an_entry(
+    demo_profile_dir: object,
+) -> None:
+    """Review C-2 (2026-09-29). The fake skips any unverified block whose content holds a digit,
+    and (before this fixture change) `side-llm-tool` and `cred-pmp` both did, so the demo stack
+    produced a resume with two selected blocks missing. Every role, project and credential block
+    in `profile.example` must be one the fake can place."""
+    profile = load_profile(demo_profile_dir)  # type: ignore[arg-type]
+    blocks = [b.model_dump(mode="json", exclude_none=True) for b in profile.blocks]
+    output = await _compose(json.dumps(blocks), [b["id"] for b in blocks])
+    cited = {e.source_block_id for s in output.sections for e in s.entries}
+    mandatory = {b.id for b in profile.blocks if b.type in ("role", "project", "credential")}
+    assert mandatory == {"acme-data-pm", "side-llm-tool", "cred-pmp"}, "fixture drifted"
+    assert mandatory <= cited, sorted(mandatory - cited)
+
+
 async def test_a_block_outside_the_selection_is_never_cited(demo_profile_dir: object) -> None:
     profile = load_profile(demo_profile_dir)  # type: ignore[arg-type]
     blocks = [b.model_dump(mode="json", exclude_none=True) for b in profile.blocks]
@@ -143,6 +160,33 @@ async def test_the_composed_resume_passes_every_guardrail(demo_profile_dir: obje
     extract = JDExtract(company="ExampleCo", title="Technical Program Manager")
     report = run_guardrails(resume, profile, selected, extract, cover_note=output.cover_note)
     assert report.passed, [v.model_dump() for v in report.violations]
+    assert "completeness" in report.rules_run
+
+
+async def test_a_mandatory_block_the_fake_cannot_place_blocks_instead_of_vanishing(
+    demo_profile_dir: object,
+) -> None:
+    """A known-bad input for the check above. An unverified project with a number and no
+    role/title is one the fake skips (it writes no words of its own and will not risk the
+    metrics rule); the completeness rule must turn that silence into a blocked report. If this
+    passes, the guard in the test above proves nothing."""
+    from rhapto.engine.compose import assemble_resume
+
+    base = load_profile(demo_profile_dir)  # type: ignore[arg-type]
+    trap = Block(
+        id="trap-project", type="project", org="Independent", content="Shipped to 300 users."
+    )
+    profile = base.model_copy(update={"blocks": [*base.blocks, trap]})
+    blocks = [b.model_dump(mode="json", exclude_none=True) for b in profile.blocks]
+    selected = [b["id"] for b in blocks]
+    output = await _compose(json.dumps(blocks), selected)
+    assert "trap-project" not in {e.source_block_id for s in output.sections for e in s.entries}
+    extract = JDExtract(company="ExampleCo", title="Technical Program Manager")
+    report = run_guardrails(
+        assemble_resume(output, profile), profile, selected, extract, cover_note=output.cover_note
+    )
+    assert not report.passed
+    assert [v.block_id for v in report.violations if v.rule == "completeness"] == ["trap-project"]
 
 
 async def test_a_period_nested_inside_another_entrys_period_is_skipped_and_recorded(

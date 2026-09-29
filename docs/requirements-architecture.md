@@ -165,7 +165,7 @@ guardrails(id, user_id, rule_type, config_json, active)
 1. **Extract** (1 call): JD → structured requirements (must/nice/location/seniority/keywords/likely knockouts).
 2. **Select** (deterministic + embeddings): rank resume blocks against extracted requirements; take top-K per section within the track's base.
 3. **Compose** (1 call, cached system context): selected blocks + JD extract + style rules → resume JSON (sections, bullets each with `source_block_id`), cover note, change log.
-4. **Validate** (deterministic): guardrail engine checks provenance, metrics, attribution, dates. Fail → auto-repair call (1 retry) → else surface violations in UI.
+4. **Validate** (deterministic): guardrail engine checks provenance, metrics, completeness (every selected role, project and credential appears), attribution, dates. Fail → auto-repair call (1 retry) → else surface violations in UI.
 5. **Render** (deterministic): resume JSON → DOCX (python-docx, ATS-safe template) + PDF.
 
 ~2–3 LLM calls per application; static context (blocks + rules) is prompt-cached.

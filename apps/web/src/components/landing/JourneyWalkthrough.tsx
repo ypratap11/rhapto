@@ -70,21 +70,16 @@ const BEATS = [
   {
     icon: FileText,
     title: "Rhapto tailors one",
-    // Every clause checked against `engine/pipeline.py`, because the first version of this sentence
-    // said an unverified number "never reaches the file" and that is FALSE in blocks mode. What the
-    // engine actually does, in both modes:
-    //   - provenance: blocks mode catches `OrphanBulletError` around `render_docx` and sets
-    //     `docx = b""`; tune mode writes `b""` unless `report.passed`. So an untraceable bullet does
-    //     stop the file being produced, in both.
-    //   - unverified metric: blocks mode renders and persists the DOCX anyway, with
-    //     `status == "blocked"` and the violation in the report -- pinned deliberately by
-    //     `tests/unit/test_pipeline.py` ("still rendered for review; the orphan check is the only
-    //     hard stop"). What it cannot do is become ready: `routers/packages.py` 409s mark-ready on a
-    //     blocked package. Tune mode writes nothing at all.
-    // So "blocked, and it cannot be marked ready" is the strongest claim true of both, and promising
-    // the file is never produced would be this page contradicting the engine on guardrail rule 3.
-    // (Whether blocks mode should persist that DOCX at all is a live product question for the owner
-    // -- CLAUDE.md says it must not, in any mode -- but the copy has to match the code as it is.)
+    // Every clause checked against `engine/pipeline.py`. The first version of this sentence said an
+    // unverified number "never reaches the file", which was then false in blocks mode. What the
+    // engine does now, in both modes:
+    //   - any failing guardrail report (provenance, unverified metric, completeness, or a configured
+    //     rule) yields `docx = b""`: nothing is persisted, and `routers/packages.py` also refuses to
+    //     serve a resume document for a blocked package stored before that rule (409) -- pinned by
+    //     `tests/unit/test_pipeline.py` and `tests/unit/test_package_serving.py`.
+    //   - a blocked package still cannot be marked ready (mark-ready 409s).
+    // So the sentence below is true, and now under-claims: an unverified number also stops the file
+    // being produced. It is left as is because it is not false; strengthening it is a copy decision.
     body: "One click drafts a resume and a cover note for a single posting — editing your uploaded document's own wording rather than writing over it, or composing from your blocks. The guardrails run before you see it: a bullet that cannot be traced back to something you wrote stops the file being produced at all, and a number you have not verified marks the whole package blocked and keeps it from being marked ready.",
   },
   {

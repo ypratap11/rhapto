@@ -19,9 +19,11 @@ blocks:
   - id: side-llm-tool
     type: project
     org: Independent
-    content: Built an open-source LLM eval harness (1.2k GitHub stars).
+    role: Creator and maintainer
+    content: Built an open-source LLM eval harness.
     tags: [ai, oss]
   - id: cred-pmp
     type: credential
+    verified: true
     content: PMP certification (2021).
     tags: [credential]

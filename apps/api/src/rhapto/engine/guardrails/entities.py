@@ -1,9 +1,8 @@
 from __future__ import annotations
 
-from rapidfuzz import fuzz
-
 from rhapto.engine.guardrails.base import (
     GuardrailContext,
+    fuzzy_entity_match,
     iter_entries,
     normalize_entity,
     violation,
@@ -12,26 +11,6 @@ from rhapto.models.guardrail_report import Violation
 
 RULE_NAME = "no-invented-entities"
 DEFAULT_THRESHOLD = 90
-
-
-def _tokens(normalized: str) -> list[str]:
-    return normalized.replace("-", " ").split()
-
-
-def _fuzzy_match(candidate: str, source: str, threshold: int) -> bool:
-    """The ratio absorbs case, dash and spacing differences; the token check rejects added words.
-
-    "Sr Product Manager", "Product Manager II" and "Acme Analytica" all clear the ratio floor
-    against "Product Manager" / "Acme Analytics", but each carries a token the source does not
-    have, which is exactly the title and org inflation this rule exists to stop.
-    """
-    a, b = normalize_entity(candidate), normalize_entity(source)
-    if a == b:
-        return True
-    if fuzz.ratio(a, b) < threshold:
-        return False
-    source_tokens = set(_tokens(b))
-    return all(token in source_tokens for token in _tokens(a))
 
 
 def check_entities(ctx: GuardrailContext) -> list[Violation]:
@@ -56,7 +35,7 @@ def check_entities(ctx: GuardrailContext) -> list[Violation]:
                         )
                     )
                 continue
-            if source is None or not _fuzzy_match(value, source, threshold):
+            if source is None or not fuzzy_entity_match(value, source, threshold):
                 out.append(
                     violation(
                         RULE_NAME,

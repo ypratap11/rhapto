@@ -157,6 +157,12 @@ class DeterministicFakeProvider:
       entry (this provider never merges bullets, so it cannot fold an achievement into its role's
       own entry the way the real prompt does) is skipped for the same reason -- and named in
       `change_log`, so the drop is visible rather than silent.
+
+      Either skip is a hazard for a selected role, project or credential block: the
+      `completeness` guardrail turns the omission into a blocked package. `profile.example` is
+      therefore written so that never happens (its project block carries a role and no number, its
+      credential is verified), and `test_every_mandatory_block_of_the_demo_profile_gets_an_entry`
+      fails if that stops being true.
     * **Tune** proposes no edits at all. Zero edits is the only rewrite of a human's own document
       that is guaranteed not to invent anything.
     * The cover note is deliberately bland: no company name, no numbers, nothing for a guardrail

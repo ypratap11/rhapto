@@ -1,3 +1,4 @@
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -77,7 +78,16 @@ def test_flags_number_from_unverified_block_even_if_present_in_source(
     resume.sections[1].entries[0].bullets[0] = bullet(
         "Built an LLM eval harness with 1.2k GitHub stars.", "side-llm-tool"
     )
-    violations = check_metrics(make_ctx(demo_profile_dir, resume))
+    ctx = make_ctx(demo_profile_dir, resume)
+    # `profile.example`'s side-llm-tool carries no number any more (the fake provider has to be
+    # able to copy it), so this test builds its own unverified block whose SOURCE does hold
+    # the number -- the case its name is about.
+    block = ctx.blocks["side-llm-tool"].model_copy(
+        update={"content": "Built an open-source LLM eval harness (1.2k GitHub stars)."}
+    )
+    assert not block.verified and "1.2k" in block.content
+    ctx = replace(ctx, blocks={**ctx.blocks, "side-llm-tool": block})
+    violations = check_metrics(ctx)
     assert len(violations) == 1 and "not verified" in violations[0].message
 
 

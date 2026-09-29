@@ -57,6 +57,13 @@ class TailorResult(BaseModel):
     docx: bytes
     selection: Selection
     edits: list[Edit] = Field(default_factory=list)
+    # Blocks mode only. `package.guardrail_report` is always the POST-repair report, so on its own
+    # a model that dropped a role and repaired it looks the same as one that never dropped
+    # anything. `pre_repair_report` is the first compose's report, set only when that report
+    # failed; `repaired` is True only when a repair call actually returned an output (not when
+    # the budget or a malformed answer skipped it). Phase 4 measurement reads both.
+    pre_repair_report: GuardrailReport | None = None
+    repaired: bool = False
 
 
 async def _notify(on_step: ProgressCallback | None, step: str) -> None:
@@ -79,6 +86,28 @@ async def _structured_call[R](
         budget.after_call(TokenUsage())
         budget.before_call()
         value, usage = await call()
+    budget.after_call(usage)
+    return value
+
+
+async def _repair_call[R](
+    budget: CallBudget, call: Callable[[], Awaitable[tuple[R, TokenUsage]]]
+) -> R | None:
+    """The one repair attempt both modes make, or None when it cannot happen or failed.
+
+    Unlike `_structured_call` it never raises and never retries: with no calls left, or with a
+    malformed answer (which still counts as a call), the caller keeps its blocked draft so the
+    human sees the report instead of a failed task.
+    """
+    try:
+        budget.before_call()
+    except LLMBudgetExceeded:
+        return None
+    try:
+        value, usage = await call()
+    except MalformedOutputError:
+        budget.after_call(TokenUsage())
+        return None
     budget.after_call(usage)
     return value
 
@@ -168,29 +197,31 @@ async def tailor(
         resume, profile, selection.block_ids, jd_extract, cover_note=output.cover_note
     )
 
+    pre_repair_report: GuardrailReport | None = None
+    was_repaired = False
     if not report.passed:
+        pre_repair_report = report
         await _notify(on_step, "repair")
-        budget.before_call()
-        try:
-            repaired, usage = await repair(
-                output, report, build_system_blocks(profile, track, selection), llm
-            )
-        except MalformedOutputError:
-            # The retry budget is spent; keep the blocked draft so the human sees the report.
-            budget.after_call(TokenUsage())
-        else:
-            budget.after_call(usage)
-            output = repaired
+        blocked = output
+        fixed = await _repair_call(
+            budget,
+            lambda: repair(blocked, report, build_system_blocks(profile, track, selection), llm),
+        )
+        if fixed is not None:
+            output = fixed
+            was_repaired = True
             resume = assemble_resume(output, profile)
             report = run_guardrails(
                 resume, profile, selection.block_ids, jd_extract, cover_note=output.cover_note
             )
 
     await _notify(on_step, "render")
-    try:
-        docx = render_docx(resume, profile.block_map(), profile.base_for(track).style)
-    except OrphanBulletError:
-        docx = b""  # provenance violation is already in the report; nothing safe to render
+    docx = b""
+    if report.passed:
+        try:
+            docx = render_docx(resume, profile.block_map(), profile.base_for(track).style)
+        except OrphanBulletError:
+            docx = b""  # provenance violation is already in the report; nothing safe to render
 
     package = _build_package(
         request,
@@ -204,7 +235,13 @@ async def tailor(
         budget,
         llm,
     )
-    return TailorResult(package=package, docx=docx, selection=selection)
+    return TailorResult(
+        package=package,
+        docx=docx,
+        selection=selection,
+        pre_repair_report=pre_repair_report,
+        repaired=was_repaired,
+    )
 
 
 async def _tune_branch(
@@ -236,15 +273,13 @@ async def _tune_branch(
 
     if not report.passed:
         await _notify(on_step, "repair")
-        budget.before_call()
-        try:
-            repaired, usage = await tune_repair(output, report, build_tune_system_blocks(doc), llm)
-        except MalformedOutputError:
-            # The retry budget is spent; keep the blocked draft so the human sees the report.
-            budget.after_call(TokenUsage())
-        else:
-            budget.after_call(usage)
-            output = repaired
+        blocked_tune = output
+        fixed_tune = await _repair_call(
+            budget,
+            lambda: tune_repair(blocked_tune, report, build_tune_system_blocks(doc), llm),
+        )
+        if fixed_tune is not None:
+            output = fixed_tune
             edits = to_edits(doc, output)
             report = run_tune_guardrails(
                 doc, edits, jd_extract, profile.guardrails, cover_note=output.cover_note

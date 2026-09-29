@@ -8,7 +8,7 @@ from rhapto.models.profile.guardrails import GuardrailRule
 from rhapto.profile.loader import load_profile
 
 
-def test_both_unconditional_rules_run_with_no_configured_rules(demo_profile_dir: Path) -> None:
+def test_all_unconditional_rules_run_with_no_configured_rules(demo_profile_dir: Path) -> None:
     """An account with an empty `guardrails` table still gets BOTH product promises.
 
     This asserted `["provenance"]` until 2026-09-26, which was the true behaviour and the defect:
@@ -20,7 +20,7 @@ def test_both_unconditional_rules_run_with_no_configured_rules(demo_profile_dir:
     resume = demo_resume()
     resume.summary.append(bullet("Made up.", "ghost"))
     report = run_guardrails(resume, profile, profile.block_map(), demo_extract())
-    assert report.rules_run == ["provenance", "no-unverified-metrics"]
+    assert report.rules_run == ["provenance", "no-unverified-metrics", "completeness"]
     assert report.passed is False and report.violations[0].rule == "provenance"
 
 
@@ -43,9 +43,10 @@ def test_inactive_rules_are_skipped(demo_profile_dir: Path) -> None:
     inactive = [GuardrailRule(rule=r.rule, active=False) for r in profile.guardrails]
     profile = profile.model_copy(update={"guardrails": inactive})
     report = run_guardrails(demo_resume(), profile, profile.block_map(), demo_extract())
-    # The configurable rules obey `active: false`; the two unconditional ones do not appear here
+    # The configurable rules obey `active: false`; the three unconditional ones do not appear here
     # because of a row, so they cannot be switched off by clearing one.
-    assert report.rules_run == ["provenance", "no-unverified-metrics"] and report.passed is True
+    assert report.rules_run == ["provenance", "no-unverified-metrics", "completeness"]
+    assert report.passed is True
 
 
 def test_metrics_cannot_be_switched_off_by_an_inactive_row(demo_profile_dir: Path) -> None:
@@ -86,7 +87,8 @@ def test_unknown_rule_raises(demo_profile_dir: Path) -> None:
         run_guardrails(demo_resume(), profile, profile.block_map(), demo_extract())
 
 
-def test_registry_has_no_entry_for_either_unconditional_rule() -> None:
-    """Both promises are run directly by run_guardrails, not looked up from a user's config."""
+def test_registry_has_no_entry_for_any_unconditional_rule() -> None:
+    """All three are run directly by run_guardrails, not looked up from a user's config."""
     assert "provenance" not in RULES
     assert "no-unverified-metrics" not in RULES
+    assert "completeness" not in RULES

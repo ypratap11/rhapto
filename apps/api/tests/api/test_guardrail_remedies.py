@@ -24,7 +24,7 @@ from rhapto.engine.guardrails.registry import REMEDIES, remedies_for
 def declared_rule_names() -> set[str]:
     """Every `RULE_NAME` constant in `rhapto.engine.guardrails`, found by walking the package.
 
-    Discovered, not listed: a hard-coded list of the six rules would have to be updated by the same
+    Discovered, not listed: a hard-coded list of the rules would have to be updated by the same
     person who forgot the remedy, so it would not catch them.
     """
     names: set[str] = set()
@@ -45,10 +45,10 @@ def test_every_rule_has_a_remedy() -> None:
     )
 
 
-def test_the_six_rules_this_build_ships_are_the_ones_expected() -> None:
-    """Pinned by name as well as by count. Six rules exist; four of them are user-configurable
-    (`RULES`), and `provenance` and `no-unverified-metrics` run unconditionally. A note saying "only
-    5 rules exist" is imprecise -- 5 is the typical length of `rules_run`, not the number of rules.
+def test_the_seven_rules_this_build_ships_are_the_ones_expected() -> None:
+    """Pinned by name as well as by count. Seven rules exist; four of them are user-configurable
+    (`RULES`), and `provenance`, `no-unverified-metrics` and `completeness` run unconditionally.
+    The typical length of `rules_run` is not the number of rules.
     """
     assert declared_rule_names() == {
         "provenance",
@@ -57,6 +57,7 @@ def test_the_six_rules_this_build_ships_are_the_ones_expected() -> None:
         "date-consistency",
         "attribution",
         "visibility-context",
+        "completeness",
     }
 
 
@@ -87,3 +88,14 @@ def test_remedies_for_deduplicates_repeated_rules() -> None:
     """A report commonly holds several violations of one rule; the response carries one remedy."""
     subset = remedies_for(["provenance", "provenance", "provenance"])
     assert subset == {"provenance": REMEDIES["provenance"]}
+
+
+def test_completeness_remedy_is_true_for_a_model_drop_and_a_human_deletion() -> None:
+    """Final review I-2: the remedy must not claim a model did it (a hand deletion is checked on
+    the model's regenerations, not the user's edits) and must say what keeps a block in."""
+    from rhapto.engine.guardrails.registry import REMEDIES
+
+    remedy = REMEDIES["completeness"]
+    assert "Every selected role, project and credential must keep an entry" in remedy
+    assert "Shorten an entry to one line rather than deleting it" in remedy
+    assert "model" not in remedy.casefold()

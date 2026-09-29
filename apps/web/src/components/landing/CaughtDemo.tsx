@@ -7,9 +7,13 @@
  *    After a caught line is repaired (the pipeline gives the model one fix attempt) the rejected
  *    draft and its report are discarded; the visitor is shown the rule only when the package ends up
  *    blocked. So the copy says "inside a run" and never says the user is shown every catch.
- *  - Only the metrics and provenance checks are unconditional. The entities check is on by default
+ *  - Provenance, metrics and completeness (every selected role, project and credential keeps an
+ *    entry) are unconditional on model output; completeness alone is skipped on a user's own hand
+ *    edit (`registry.run_guardrails(include_completeness=...)`). The entities check is on by default
  *    but is a per-account setting, so its case says "on by default".
- *  - Nothing here claims a blocked package produces no document.
+ *  - A blocked package now produces no resume document in any mode (the pipeline, the hand-edit
+ *    path and both serving routes enforce it). The copy here does not rely on that claim and does
+ *    not need to; if it ever makes it, pin it to `tests/unit/test_package_serving.py`.
  *
  * The rule names, paths and messages are quoted EXACTLY from
  * `apps/api/src/rhapto/engine/guardrails/{metrics,entities,provenance}.py`, and pinned by

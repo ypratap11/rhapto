@@ -208,6 +208,27 @@ describe("JobPage", () => {
     expect(routerPush).toHaveBeenCalledWith("/jobs/j1/packages/p1?path=summary%5B0%5D");
   });
 
+  it("links a completeness row, which names no node, to the package page", () => {
+    jobResult = { data: job({ latest_package: pkg({ id: "p1", version: 1, status: "blocked" }) }), error: null, isLoading: false };
+    packageResult = {
+      data: pkgOut({
+        id: "p1",
+        status: "blocked",
+        guardrail_report: {
+          passed: false,
+          rules_run: ["completeness"],
+          violations: [
+            { rule: "completeness", severity: "error", message: "role block 'role-e' was selected but does not appear in Experience", path: "selection.block_ids['role-e']", block_id: "role-e" },
+          ],
+        },
+      } as Partial<PackageOut>),
+      error: null,
+      isLoading: false,
+    };
+    render(<JobPage />);
+    expect(screen.getByRole("link", { name: /does not appear in Experience/i })).toHaveAttribute("href", "/jobs/j1/packages/p1");
+  });
+
   it("offers Apply, and mounts the Did-you-apply prompt, when the latest package is ready", () => {
     jobResult = { data: job({ latest_package: pkg({ id: "p2", version: 2, status: "ready" }) }), error: null, isLoading: false };
     render(<JobPage />);

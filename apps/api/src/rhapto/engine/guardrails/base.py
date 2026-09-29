@@ -5,6 +5,8 @@ from collections.abc import Callable, Iterator, Mapping
 from dataclasses import dataclass, field, replace
 from typing import Any, Literal
 
+from rapidfuzz import fuzz
+
 from rhapto.models.guardrail_report import Violation
 from rhapto.models.jd_extract import JDExtract
 from rhapto.models.profile.blocks import Block
@@ -27,6 +29,31 @@ def normalize_entity(text: str) -> str:
     dashed = normalize_dashes(text)
     collapsed_dashes = re.sub(r"\s*-\s*", "-", dashed)
     return re.sub(r"\s+", " ", collapsed_dashes).strip().casefold()
+
+
+DEFAULT_FUZZY_THRESHOLD = 90
+
+
+def _entity_tokens(normalized: str) -> list[str]:
+    return normalized.replace("-", " ").split()
+
+
+def fuzzy_entity_match(candidate: str, source: str, threshold: int) -> bool:
+    """The ratio absorbs case, dash and spacing differences; the token check rejects added words.
+
+    "Sr Product Manager", "Product Manager II" and "Acme Analytica" all clear the ratio floor
+    against "Product Manager" / "Acme Analytics", but each carries a token the source does not
+    have, which is exactly the title and org inflation `no-invented-entities` exists to stop, and
+    exactly the false positive `completeness`'s merge/substitution detection must not trip on a
+    client org that merely sounds like the employer.
+    """
+    a, b = normalize_entity(candidate), normalize_entity(source)
+    if a == b:
+        return True
+    if fuzz.ratio(a, b) < threshold:
+        return False
+    source_tokens = set(_entity_tokens(b))
+    return all(token in source_tokens for token in _entity_tokens(a))
 
 
 @dataclass(frozen=True)

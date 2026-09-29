@@ -1,5 +1,6 @@
 "use client";
 
+import { useId } from "react";
 import { useRouter } from "next/navigation";
 import { Download, ExternalLink, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
@@ -26,6 +27,11 @@ export function PackageActions({
   const answers = useAnswers();
   const { markApplied, isPending } = useMarkApplied();
   const name = answers.data?.name;
+  // A blocked package's resume documents are never served (409), even when a legacy file from
+  // before that rule is still on disk, so the buttons must not offer them.
+  const blocked = pkg.status === "blocked";
+  const blockedNoteId = useId();
+  const documentButtonProps = blocked ? { "aria-describedby": blockedNoteId } : {};
 
   async function downloadFile(kind: "pdf" | "docx" | "zip") {
     const path = kind === "zip" ? `/api/v1/packages/${pkg.id}/download` : `/api/v1/packages/${pkg.id}/files/resume.${kind}`;
@@ -52,10 +58,10 @@ export function PackageActions({
   return (
     <div className="flex flex-wrap items-center gap-3">
       <div data-slot="button-group" className="inline-flex divide-x divide-border overflow-hidden rounded-control border border-border">
-        <Button variant="outline" className="rounded-none border-0" onClick={() => downloadFile("pdf")} disabled={!pkg.has_pdf}>
+        <Button variant="outline" className="rounded-none border-0" onClick={() => downloadFile("pdf")} disabled={blocked || !pkg.has_pdf} {...documentButtonProps}>
           <Download className="size-4" aria-hidden /> Download PDF
         </Button>
-        <Button variant="outline" className="rounded-none border-0" onClick={() => downloadFile("docx")} disabled={!pkg.has_docx}>
+        <Button variant="outline" className="rounded-none border-0" onClick={() => downloadFile("docx")} disabled={blocked || !pkg.has_docx} {...documentButtonProps}>
           <Download className="size-4" aria-hidden /> Download DOCX
         </Button>
         <Button variant="outline" className="rounded-none border-0" onClick={() => downloadFile("zip")}>
@@ -74,6 +80,12 @@ export function PackageActions({
           </Button>
         )}
       </div>
+      {blocked ? (
+        <p id={blockedNoteId} className="basis-full text-xs text-muted-foreground">
+          Guardrails blocked this package, so its resume documents are not available. Fix the violations and regenerate; the zip
+          still holds the report.
+        </p>
+      ) : null}
       {job.url ? (
         <Button variant="outline" render={<a href={job.url} target="_blank" rel="noreferrer" />}>
           <ExternalLink className="size-4" aria-hidden /> Open posting

@@ -10,6 +10,10 @@ Hard rules (a validator enforces every one of them and will reject your output):
 3. Copy organisation names, role titles, and periods exactly from the block. Never inflate a title.
 4. If a block has an attribution phrase, every bullet from it must contain that phrase verbatim.
 5. Rephrase and reorder freely to match the job's requirements and keywords. Do not invent experience.
+6. Every selected role, project, and credential block gets exactly one entry, in its section, citing that
+   block: role -> Experience, project -> Projects, credential -> Credentials. Never drop an entry to save
+   space -- if the resume is too long, shorten the least relevant entry to a single bullet instead. (A block
+   with an attribution phrase keeps one bullet carrying it.)
 
 Open each achievement bullet with a short label sentence naming what it is, then the detail:
 "Executive decisions. Drove the go/no-go and buy-vs-build decision with the VP Finance..."

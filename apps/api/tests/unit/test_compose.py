@@ -253,3 +253,11 @@ def test_assemble_resume_adds_header(demo_profile_dir: Path) -> None:
         "Led cross-functional delivery of the customer data platform across 4 teams.",
         "acme-data-pm",
     )
+
+
+def test_compose_rules_forbid_dropping_a_selected_entry() -> None:
+    """Spec §3: completeness wins on existence; length pressure is absorbed by bullet depth,
+    never by dropping an entry. This is prompt-only -- there is no page-count code anywhere in
+    the engine, verified against render/templates.py."""
+    assert "never drop an entry" in COMPOSE_RULES.lower()
+    assert "attribution phrase keeps one bullet" in COMPOSE_RULES

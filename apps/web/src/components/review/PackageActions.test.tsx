@@ -50,6 +50,28 @@ describe("PackageActions", () => {
     expect(screen.getByRole("button", { name: /download docx/i })).toBeDisabled();
   });
 
+  it("disables PDF/DOCX downloads for a blocked package even when legacy files exist, and says why", () => {
+    // A package blocked before documents were withheld still has files on disk (has_docx/has_pdf
+    // true), and the server answers 409. The buttons must not offer what will be refused.
+    render(<PackageActions job={job} pkg={{ ...pkg, status: "blocked" }} application={null} onRegenerate={vi.fn()} />);
+    const pdf = screen.getByRole("button", { name: /download pdf/i });
+    const docx = screen.getByRole("button", { name: /download docx/i });
+    expect(pdf).toBeDisabled();
+    expect(docx).toBeDisabled();
+    const reason = screen.getByText(/guardrails blocked this package/i);
+    expect(pdf).toHaveAttribute("aria-describedby", reason.id);
+    expect(docx).toHaveAttribute("aria-describedby", reason.id);
+    // The zip stays available: it carries the report and GUARDRAILS-BLOCKED.md, never a document.
+    expect(screen.getByRole("button", { name: /download zip/i })).toBeEnabled();
+  });
+
+  it("keeps PDF/DOCX enabled and shows no blocked note for a draft package", () => {
+    render(<PackageActions job={job} pkg={{ ...pkg, status: "draft" }} application={null} onRegenerate={vi.fn()} />);
+    expect(screen.getByRole("button", { name: /download pdf/i })).toBeEnabled();
+    expect(screen.getByRole("button", { name: /download docx/i })).toBeEnabled();
+    expect(screen.queryByText(/guardrails blocked this package/i)).not.toBeInTheDocument();
+  });
+
   it("calls onRegenerate when Regenerate is clicked", async () => {
     const onRegenerate = vi.fn();
     render(<PackageActions job={job} pkg={pkg} application={null} onRegenerate={onRegenerate} />);
