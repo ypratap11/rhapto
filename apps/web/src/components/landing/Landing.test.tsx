@@ -34,7 +34,7 @@ describe("Landing, the way in", () => {
     // Scoped to the hero rather than to the page, because that is where a stranger looks -- a
     // page-wide query passes on the footer pair alone, which is how a weaker version of this
     // assertion survived putting "Open your dashboard" back in the hero.
-    // The hero is the first band on the page; the other two are the provenance demo and How it works.
+    // The hero is the first band on the page; the other two are the product tour and How it works.
     const hero = screen.getAllByTestId("hero-band")[0]!;
     expect(within(hero).getByRole("link", { name: /^sign in$/i })).toHaveAttribute(
       "href",
@@ -206,7 +206,7 @@ describe("Landing, the way in", () => {
   it("keeps the client boundary in the children, not in Landing", () => {
     // `Landing` is mounted at `/about` as a server component. A hook added directly to it fails at
     // build time, not in jsdom, so the only way a unit test can pin this constraint is to read the
-    // modules: the interactivity must live behind its own "use client", as ProvenanceDemo already
+    // modules: the interactivity must live behind its own "use client", as ProductTour already
     // does. Cheap, and it fails the moment someone reaches for `useState` in Landing.
     const dir = dirname(fileURLToPath(import.meta.url));
     const read = (name: string) => readFileSync(join(dir, name), "utf8");
@@ -217,7 +217,7 @@ describe("Landing, the way in", () => {
       .replace(/^[ \t]*\/\/.*$/gm, "");
     expect(code).not.toMatch(/"use client"/);
     expect(code).not.toMatch(/\buse[A-Z]\w*\(/);
-    for (const child of ["JourneyWalkthrough.tsx", "ProvenanceDemo.tsx", "CaughtDemo.tsx"]) {
+    for (const child of ["JourneyWalkthrough.tsx", "ProductTour.tsx", "CaughtDemo.tsx"]) {
       expect(read(child)).toMatch(/^"use client";/);
     }
   });

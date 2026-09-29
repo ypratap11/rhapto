@@ -4,7 +4,7 @@
  * the click that is a person's. The owner asked for the animation to start at getting registered and
  * run through the rest, so beat 1 is the request for access and beat 6 is the send.
  *
- * Its own client boundary, for the same reason `ProvenanceDemo` has one: `Landing` renders at `/`
+ * Its own client boundary, for the same reason `ProductTour` has one: `Landing` renders at `/`
  * inside `TokenGate` and at `/about` as a server component, and must stay free of client hooks.
  *
  * Nothing here is a claim about data: no API call, no `profile/` content, no numbers. The six bodies

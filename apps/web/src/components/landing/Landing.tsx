@@ -1,4 +1,4 @@
-/** Rhapto's pitch: what it does, why it is a promise rather than a chatbot, the provenance demo,
+/** Rhapto's pitch: what it does, why it is a promise rather than a chatbot, the product tour,
  * the six-beat walkthrough of the journey, where your data lives, and what it costs.
  *
  * Rendered at two mounts, which is why it is a component and not just a page: `/about` (its own
@@ -16,7 +16,7 @@ import { SAME_ORIGIN_DEPLOYMENT } from "@/lib/api/client";
 import { ACCESS_REQUEST_EMAIL, ACCESS_REQUEST_MAILTO } from "./access";
 import { CaughtDemo } from "./CaughtDemo";
 import { JourneyWalkthrough } from "./JourneyWalkthrough";
-import { ProvenanceDemo } from "./ProvenanceDemo";
+import { ProductTour } from "./ProductTour";
 
 
 // The three non-negotiable product rules, written for someone who has never seen the repo. They
@@ -190,25 +190,14 @@ export function Landing() {
         </p>
       </section>
 
-      {/* Item 2, the centrepiece: the claim two paragraphs up (every line traces to a block)
-          shown on Rhapto's own layout, rather than asserted a second time. The catch itself is the
-          hero's `CaughtDemo`. All interaction lives in `ProvenanceDemo`, a separate `"use client"` component -- this section
-          itself stays a plain server-rendered wrapper, same as the rest of `Landing`. */}
-      <section aria-labelledby="demo-heading" className="mb-12">
+      {/* Item 2, the centrepiece: the claim two paragraphs up (every line traces to a block) shown by
+          walking the real product end to end, rather than asserted a second time. The catch itself is
+          the hero's `CaughtDemo`. All interaction lives in `ProductTour`, a separate `"use client"`
+          component -- this wrapper stays a plain server-rendered band, same as the rest of `Landing`.
+          The tour's own intro heading is this section's h2, so the page keeps exactly one h1. */}
+      <section className="mb-12">
         <HeroBand tone="sand" height="tall">
-          <p className="text-xs font-medium tracking-[0.14em] text-muted-foreground uppercase">
-            The mechanism, not a claim about it
-          </p>
-          <h2 id="demo-heading" className="font-heading text-2xl font-medium">
-            Every bullet knows where it came from
-          </h2>
-          <p className="max-w-2xl text-sm text-muted-foreground">
-            A resume fragment in Rhapto&rsquo;s layout. Every line traces back to a fact already
-            confirmed &mdash; click one to see the block it came from.
-          </p>
-          <div className="mt-2">
-            <ProvenanceDemo />
-          </div>
+          <ProductTour />
         </HeroBand>
       </section>
 
