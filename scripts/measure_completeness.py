@@ -21,7 +21,9 @@ Reading the output: `first pass failed: completeness` is a model that dropped a 
 `repaired (...)` means the one repair call restored it; `blocked after repair (...)` means it did
 not. Both read `TailorResult.pre_repair_report`, not `llm_calls`, so a malformed-output retry is
 never mistaken for a repair. `invented_project_titles` lists the ids of project blocks whose entry
-title or role text is not made of words from the block it cites (the count is printed): no
+title or role text is not made of words from the block it cites (the count is printed), and
+`unchecked_project_entries` counts project entries citing an unknown block id, which that check
+cannot judge: no
 guardrail validates a title, so this is the only place the U-1 risk (models inventing a title for
 a project block with no role) shows up. Look the ids up in the profile to inspect them.
 That repair-success rate, per model, is the number architecture
@@ -48,6 +50,7 @@ from rhapto.engine.measurement import (
     invented_project_titles,
     ledger_document,
     summarize_result,
+    unchecked_project_entries,
 )
 from rhapto.engine.pipeline import tailor
 from rhapto.engine.types import Profile, TailorRequest
@@ -63,6 +66,7 @@ class MeasurementRow:
     repaired: bool
     final_rules: list[str]
     invented_project_titles: list[str]  # block ids, never title text
+    unchecked_project_entries: int  # project entries citing an unknown block id: not judged above
     status: str
     llm_calls: int
     input_tokens: int
@@ -83,6 +87,7 @@ async def _run_one(profile: Profile, jd_text: str, provider: str, model: str) ->
         repaired=result.repaired,
         final_rules=final_rules(result),
         invented_project_titles=invented_project_titles(result, profile.block_map()),
+        unchecked_project_entries=unchecked_project_entries(result, profile.block_map()),
         status=package.status,
         llm_calls=package.llm_calls,
         input_tokens=package.usage.input_tokens,
@@ -115,7 +120,12 @@ def main() -> int:
     args = parser.parse_args()
 
     targets = [_parse_target(parser, raw) for raw in args.targets]
-    jd_text = args.jd.read_text(encoding="utf-8")
+    try:
+        jd_text = args.jd.read_text(encoding="utf-8")
+    except OSError as exc:
+        # One line, no traceback; the class name only, like every other failure this script prints.
+        print(f"cannot read --jd {args.jd}: {type(exc).__name__}", file=sys.stderr)
+        return 1
     rows, failures = asyncio.run(
         collect(
             targets,
@@ -128,7 +138,8 @@ def main() -> int:
         print(
             f"{row.provider}:{row.model}  {row.verdict}  calls={row.llm_calls} "
             f"in={row.input_tokens} out={row.output_tokens} "
-            f"invented_project_titles={len(row.invented_project_titles)}"
+            f"invented_project_titles={len(row.invented_project_titles)} "
+            f"unchecked_project_entries={row.unchecked_project_entries}"
         )
 
     for failure in failures:

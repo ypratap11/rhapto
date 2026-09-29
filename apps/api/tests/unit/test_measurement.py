@@ -2,6 +2,7 @@ import importlib.util
 import json
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -15,6 +16,7 @@ from rhapto.engine.measurement import (
     first_pass_rules,
     invented_project_titles,
     summarize_result,
+    unchecked_project_entries,
 )
 from rhapto.engine.pipeline import CallBudget, TailorResult, tailor
 from rhapto.engine.providers.fake import FakeEmbeddingProvider, FakeLLMProvider
@@ -121,6 +123,42 @@ async def test_no_title_or_content_string_reaches_a_ledger_row(profile: Profile)
     assert all(h in blocks for h in hits)  # every entry is a block id, nothing free-form
 
 
+async def test_the_scripts_own_ledger_row_carries_no_title_text(
+    profile: Profile, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Deferred minor (T5): the privacy check above covers the helpers; this one builds the row
+    the script actually writes -- `_run_one` -> `MeasurementRow` -> `ledger_document` -> JSON."""
+    output = good_output()
+    output["sections"][1]["entries"][0]["title"] = DISTINCTIVE_TITLE
+    script = _load_script()
+    providers = SimpleNamespace(
+        llm=FakeLLMProvider([demo_extract(), output]), embedder=FakeEmbeddingProvider()
+    )
+    monkeypatch.setattr(script, "get_settings", lambda: None)
+    monkeypatch.setattr(script, "build_providers", lambda *_a, **_k: providers)
+    row = await script._run_one(profile, JD, "fake", "m-one")
+    ledger_text = json.dumps(script.ledger_document([row], []))
+    assert "wibblefrotz" not in ledger_text.casefold()
+    [written] = json.loads(ledger_text)["results"]
+    assert written["invented_project_titles"] == ["side-llm-tool"]
+    assert written["unchecked_project_entries"] == 0
+    assert written["verdict"] == "passed clean"
+
+
+async def test_a_project_entry_citing_an_unknown_block_is_counted_not_silently_skipped(
+    profile: Profile,
+) -> None:
+    """Deferred minor (T5): `invented_project_titles` cannot judge an entry whose block is not in
+    the library, so the count of those entries is recorded to keep its upper-bound claim honest."""
+    output = good_output()
+    output["sections"][1]["entries"][0]["source_block_id"] = "ghost-project"
+    output["sections"][1]["entries"][0]["title"] = DISTINCTIVE_TITLE
+    result = await _run(profile, [demo_extract(), output, output])
+    blocks = profile.block_map()
+    assert invented_project_titles(result, blocks) == []
+    assert unchecked_project_entries(result, blocks) == 1
+
+
 SECRET = "Qzv-secret-profile-content-9137"
 TARGETS = [("anthropic", "m-one"), ("openai", "m-two")]
 
@@ -197,3 +235,22 @@ def test_script_failed_target_is_not_printed_is_recorded_and_exits_nonzero(
         {"provider": "anthropic", "model": "m-one", "error_type": "ValueError"},
         {"provider": "openai", "model": "m-two", "error_type": "ValueError"},
     ]
+
+
+def test_script_missing_jd_file_is_one_clean_line_and_exits_nonzero(
+    demo_profile_dir: Path,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Deferred minor (T5): a missing --jd used to escape as a FileNotFoundError traceback."""
+    script = _load_script()
+    missing = tmp_path / "no-such-jd.txt"
+    argv = ["x", "--jd", str(missing), "--profile", str(demo_profile_dir)]
+    argv += ["--out", str(tmp_path / "ledger.json"), "--provider", "anthropic:m-one"]
+    monkeypatch.setattr(sys, "argv", argv)
+    assert script.main() == 1
+    captured = capsys.readouterr()
+    lines = [line for line in (captured.out + captured.err).splitlines() if line.strip()]
+    assert len(lines) == 1 and "FileNotFoundError" in lines[0]
+    assert "Traceback" not in captured.err

@@ -74,7 +74,7 @@ def invented_project_titles(result: TailorResult, blocks: Mapping[str, Block]) -
         for entry in section.entries:
             block = blocks.get(entry.source_block_id)
             if block is None:
-                continue
+                continue  # counted by `unchecked_project_entries`, not judged here
             sourced = set(
                 _TOKEN.findall(
                     " ".join(filter(None, [block.role, block.org, block.content])).casefold()
@@ -86,6 +86,19 @@ def invented_project_titles(result: TailorResult, blocks: Mapping[str, Block]) -
             ):
                 found.append(entry.source_block_id)
     return found
+
+
+def unchecked_project_entries(result: TailorResult, blocks: Mapping[str, Block]) -> int:
+    """How many project entries `invented_project_titles` could not judge because they cite a
+    block id that is not in the library. Recorded next to it so its "upper bound" claim stays
+    honest: a title on such an entry is unchecked, not clean (provenance reports the id itself)."""
+    return sum(
+        1
+        for section in result.package.resume.sections
+        if section.kind == "projects"
+        for entry in section.entries
+        if entry.source_block_id not in blocks
+    )
 
 
 @dataclass(frozen=True)

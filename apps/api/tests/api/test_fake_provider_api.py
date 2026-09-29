@@ -121,5 +121,8 @@ async def test_a_whole_tailor_run_produces_a_clean_package(
         for section in package["resume"]["sections"]
         for entry in section["entries"]
     }
-    assert {"acme-data-pm", "side-llm-tool", "cred-pmp"} <= entry_ids
+    mandatory = {"acme-data-pm", "side-llm-tool", "cred-pmp"}
+    assert mandatory <= entry_ids, (
+        f"mandatory blocks with no entry: {sorted(mandatory - entry_ids)}"
+    )
     assert "completeness" in package["guardrail_report"]["rules_run"]
