@@ -1,0 +1,90 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  api:
+    name: API (lint, types, tests with Postgres + Redis)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    services:
+      postgres:
+        # Same image as docker-compose.yml; the migrations need pgvector.
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: rhapto
+          POSTGRES_PASSWORD: rhapto
+          POSTGRES_DB: rhapto
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U rhapto"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    defaults:
+      run:
+        working-directory: apps/api
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10
+        with:
+          python-version: "3.12"
+          working-directory: apps/api
+          enable-cache: true
+          cache-dependency-glob: apps/api/uv.lock
+      - run: uv sync --locked
+      - run: uv run --locked ruff check .
+      - run: uv run --locked ruff format --check .
+      - run: uv run --locked mypy
+      - run: uv run --locked lint-imports
+      - name: pytest (unit, api, db)
+        env:
+          # An unreachable Postgres or Redis fails the run instead of skipping the database suite.
+          RHAPTO_TEST_REQUIRE_SERVICES: "1"
+        run: uv run --locked pytest -q --junitxml=../../pytest-junit.xml
+      - name: No unexpected skips
+        if: always()
+        working-directory: .
+        run: python .github/scripts/check_skips.py pytest-junit.xml
+
+  web:
+    name: Web (types, lint, tests)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: apps/web
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+        with:
+          package_json_file: apps/web/package.json
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: pnpm
+          cache-dependency-path: apps/web/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+      - run: pnpm lint
+      - run: pnpm test

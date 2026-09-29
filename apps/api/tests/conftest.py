@@ -14,6 +14,7 @@ import pytest
 import redis.asyncio
 import redis.exceptions
 from alembic.config import Config
+from service_guard import service_unreachable
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
@@ -154,7 +155,7 @@ def test_db_url() -> Iterator[str]:
     try:
         asyncio.run(ensure())
     except OSError as exc:
-        pytest.skip(
+        service_unreachable(
             f"Postgres not reachable at {admin}: {exc}. Run `docker compose up -d db redis`."
         )
     yield url
@@ -230,5 +231,7 @@ def test_redis_url() -> str:
     try:
         asyncio.run(ping())
     except (OSError, redis.exceptions.RedisError) as exc:
-        pytest.skip(f"Redis not reachable at {url}: {exc}. Run `docker compose up -d db redis`.")
+        service_unreachable(
+            f"Redis not reachable at {url}: {exc}. Run `docker compose up -d db redis`."
+        )
     return url
