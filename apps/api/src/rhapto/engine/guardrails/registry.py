@@ -5,6 +5,8 @@ from collections.abc import Iterable
 from rhapto.engine.guardrails.attribution import RULE_NAME as ATTRIBUTION
 from rhapto.engine.guardrails.attribution import check_attribution
 from rhapto.engine.guardrails.base import GuardrailContext, Rule, violation
+from rhapto.engine.guardrails.completeness import RULE_NAME as COMPLETENESS
+from rhapto.engine.guardrails.completeness import check_completeness
 from rhapto.engine.guardrails.dates import RULE_NAME as DATES
 from rhapto.engine.guardrails.dates import check_dates
 from rhapto.engine.guardrails.entities import RULE_NAME as ENTITIES
@@ -76,6 +78,10 @@ REMEDIES: dict[str, str] = {
         "A claim needs the context that makes it true -- scope, team size or scale. Add it to the "
         "block, then regenerate."
     ),
+    COMPLETENESS: (
+        "A role, project or credential your profile selected for this job is missing from the "
+        "resume. Regenerate; if the same one keeps vanishing, try a stronger model."
+    ),
 }
 
 
@@ -100,10 +106,11 @@ def run_guardrails(
     extract: JDExtract,
     cover_note: str | None = None,
 ) -> GuardrailReport:
-    """Run the two unconditional rules plus every active configured rule.
+    """Run the three unconditional rules plus every active configured rule.
 
-    Provenance and no-unverified-metrics always run, for every account, whatever is or is not in the
-    `guardrails` table. They are the product's two promises; a deployment where they depend on a row
+    Provenance, no-unverified-metrics and completeness always run, for every account, whatever is or
+    is not in the `guardrails` table. They are the product's promises (completeness is provenance's
+    other half: a silent omission is a truthfulness failure); a deployment where they depend on a row
     existing is a deployment where a fresh account quietly has one of them switched off.
 
     A user may still carry a `no-unverified-metrics` row -- older profiles all do. Its `config` is
@@ -116,12 +123,13 @@ def run_guardrails(
         selection_ids=frozenset(selection_ids),
         extract=extract,
     )
-    rules_run = [PROVENANCE, METRICS]
+    rules_run = [PROVENANCE, METRICS, COMPLETENESS]
     violations: list[Violation] = check_provenance(ctx)
     # Honour an existing row's config if the profile has one; otherwise the rule's own defaults.
     metrics_config = next((r.config for r in profile.guardrails if r.rule == METRICS), None)
     metrics_ctx = ctx if metrics_config is None else ctx.with_config(metrics_config)
     violations.extend(check_metrics(metrics_ctx))
+    violations.extend(check_completeness(ctx))
     for rule in profile.guardrails:
         if rule.rule == METRICS:
             continue  # already run above, unconditionally

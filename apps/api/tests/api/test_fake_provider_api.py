@@ -122,3 +122,4 @@ async def test_a_whole_tailor_run_produces_a_clean_package(
         for entry in section["entries"]
     }
     assert {"acme-data-pm", "side-llm-tool", "cred-pmp"} <= entry_ids
+    assert "completeness" in package["guardrail_report"]["rules_run"]
