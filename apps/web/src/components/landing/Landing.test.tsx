@@ -122,6 +122,62 @@ describe("Landing, the way in", () => {
     expect(screen.getByText(/Six beats from a cold install/i)).toBeInTheDocument();
   });
 
+  it("leads with the catch: plain headline, the kicker, and a lede that says what happens inside a run", () => {
+    render(<Landing />);
+    const hero = screen.getAllByTestId("hero-band")[0]!;
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(
+      "It won't invent a number to get you the interview.",
+    );
+    // plain: no single-word colour accent inside the headline
+    expect(screen.getByRole("heading", { level: 1 }).children).toHaveLength(0);
+    expect(
+      within(hero).getByText("Every AI resume tool can make things up. This one catches itself."),
+    ).toBeInTheDocument();
+    const lede = within(hero).getByText(/drafts your resume with an AI model and checks the draft/i);
+    expect(lede.textContent).toMatch(/one fix/i);
+    expect(lede.textContent).toMatch(/blocked/i);
+    expect(lede.textContent).toMatch(/you press\s+submit/i);
+    // the demo is in the hero, beside the copy
+    expect(within(hero).getByText(/what happens inside a run/i)).toBeInTheDocument();
+    // "A new account starts empty" keeps its place in the hero
+    expect(within(hero).getByText(/A new account starts empty/i)).toBeInTheDocument();
+  });
+
+  it("goes two-column at lg, not md", () => {
+    render(<Landing />);
+    const hero = screen.getAllByTestId("hero-band")[0]!;
+    const grid = hero.querySelector('[class*="lg:grid-cols-"]');
+    expect(grid).not.toBeNull();
+    expect(hero.innerHTML).not.toMatch(/md:grid-cols-\[/);
+  });
+
+  it("no longer overclaims: no 'refuses to do either', no 'cannot happen', no unconditional title/date promise", () => {
+    const { container } = render(<Landing />);
+    const text = container.textContent ?? "";
+    expect(text).not.toMatch(/refuses to do either/i);
+    expect(text).not.toMatch(/so that cannot happen/i);
+    expect(text).not.toMatch(/not already in a block you wrote/i);
+    expect(text).not.toMatch(/refusal you can switch on/i);
+    expect(text).not.toMatch(/blocked before this document was produced/i);
+    // only metrics and provenance may be called unconditional; entities is on by default
+    expect(text).toMatch(/those two checks\s+always run/i);
+    expect(text).toMatch(/on\s+by default/i);
+  });
+
+  it("says a failed number check first gets one fix, and blocks only if that fails", () => {
+    render(<Landing />);
+    const card = screen.getByText("Numbers need your sign-off").closest("[data-slot='card']")!;
+    expect(card.textContent).toMatch(/one try at a fix/i);
+    expect(card.textContent).toMatch(/if that fails, the whole package is marked blocked/i);
+  });
+
+  it("says what the checks do not catch, next to the promises", () => {
+    render(<Landing />);
+    const line = screen.getByText(/What the checks do not catch/i);
+    expect(line.textContent).toMatch(/stretch the wording of its source/i);
+    expect(line.textContent).toMatch(/still read the\s+resume before you send it/i);
+  });
+
   it("prints the request-access address as text, not only as a mailto href", () => {
     // A visitor with no registered mail handler gets a button that does nothing; without the address
     // in the copy there is no way to learn where to write, and this is the one path the whole change
@@ -161,7 +217,7 @@ describe("Landing, the way in", () => {
       .replace(/^[ \t]*\/\/.*$/gm, "");
     expect(code).not.toMatch(/"use client"/);
     expect(code).not.toMatch(/\buse[A-Z]\w*\(/);
-    for (const child of ["JourneyWalkthrough.tsx", "ProvenanceDemo.tsx"]) {
+    for (const child of ["JourneyWalkthrough.tsx", "ProvenanceDemo.tsx", "CaughtDemo.tsx"]) {
       expect(read(child)).toMatch(/^"use client";/);
     }
   });

@@ -105,7 +105,7 @@ const BEAT_MS = 950;
 /** Read at play time rather than subscribed to: this decides how one run behaves, and a reader who
  * changes the OS setting mid-run can press Replay. Guarded because `matchMedia` is absent in some
  * test environments, and the safe answer there is "motion allowed, then the tests that care stub it". */
-function prefersReducedMotion(): boolean {
+export function prefersReducedMotion(): boolean {
   return (
     typeof window !== "undefined" &&
     typeof window.matchMedia === "function" &&

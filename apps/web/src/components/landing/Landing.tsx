@@ -14,6 +14,7 @@ import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { SAME_ORIGIN_DEPLOYMENT } from "@/lib/api/client";
 import { ACCESS_REQUEST_EMAIL, ACCESS_REQUEST_MAILTO } from "./access";
+import { CaughtDemo } from "./CaughtDemo";
 import { JourneyWalkthrough } from "./JourneyWalkthrough";
 import { ProvenanceDemo } from "./ProvenanceDemo";
 
@@ -29,7 +30,7 @@ const PROMISES = [
   {
     icon: BadgeCheck,
     title: "Numbers need your sign-off",
-    body: "Rhapto is told to write “several teams,” never “fifteen teams,” until you have marked that number verified. If it writes the number anyway, the guardrail catches it and marks the whole package blocked — so the promise does not rest on the model behaving.",
+    body: "Rhapto is told to write “several teams,” never “fifteen teams,” until you have marked that number verified. If it writes the number anyway, the guardrail catches it and the model gets one try at a fix; if that fails, the whole package is marked blocked — so the promise does not rest on the model behaving.",
   },
   {
     icon: Hand,
@@ -42,20 +43,29 @@ export function Landing() {
   return (
     <>
       <HeroBand tone="peach" height="tall">
-        <p className="text-xs font-medium tracking-[0.14em] text-muted-foreground uppercase">
-          Open source &middot; Human in the loop
+        {/* Two columns at `lg` only (1024): at 768 each column would be ~340px and the headline
+            would wrap to five-plus lines. `minmax(0, ...)` on both tracks so a long mono path in
+            the demo can never widen its track past the viewport. Below `lg` the demo stacks under
+            the copy. */}
+        <div className="grid items-center gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,26rem)] lg:gap-12">
+          <div className="flex min-w-0 flex-col gap-3">
+        <p className="text-sm font-medium text-muted-foreground">
+          Every AI resume tool can make things up. This one catches itself.
         </p>
-        {/* Display size (item 1): a `clamp` so the same class reads as a strong headline on a
-            360px phone (clamps to the 2.75rem floor) and genuine display type on desktop (up to
-            5rem), rather than one fixed size that is either too small or overflowing. `max-w-4xl`
-            (wider than the old `max-w-3xl`) keeps the measure sane at that size -- a narrower box
-            would wrap this into three cramped lines instead of two confident ones. */}
-        <h1 className="max-w-4xl font-heading text-[clamp(2.75rem,4vw+1.75rem,5rem)] leading-[0.95] font-medium tracking-tight">
-          Every application, stitched to fit.
+        {/* Plain on purpose: no coloured word. The `clamp` keeps one class readable from a 360px
+            phone (2.5rem floor) to the two-column desktop layout, where the ceiling is lower than
+            the old full-width 5rem because the copy column is only about half the band. */}
+        <h1 className="max-w-4xl font-heading text-[clamp(2.5rem,2.5vw+1.5rem,4rem)] leading-[0.98] font-medium tracking-tight">
+          It won&apos;t invent a number to get you the interview.
         </h1>
+        {/* What is true inside a run: the model's draft is checked, a caught line gets one repair,
+            and only a failed repair blocks the package and shows the rule. Not "you see every
+            catch", and no claim about what a blocked package does or does not produce. */}
         <p className="max-w-2xl text-base text-muted-foreground sm:text-lg">
-          Rhapto finds the roles, writes the resume, and shows you where every word came from. Then
-          it steps back and lets you send it.
+          Rhapto drafts your resume with an AI model and checks the draft before you see it. A
+          number you never confirmed, or a line with no source, is sent back for one fix; if that
+          fails, the package is blocked and you see which rule fired. Then you read it, and you
+          press submit.
         </p>
         {/* Plain styled links, not the Base UI `Button` primitive: both of these navigate, and
             `Button render={<Link/>}` forces a choice between misreporting them as role="button"
@@ -114,6 +124,9 @@ export function Landing() {
             What that means
           </a>
         </p>
+          </div>
+          <CaughtDemo />
+        </div>
       </HeroBand>
 
       {/* The human reason, before any mechanism. Everything below this explains HOW Rhapto works;
@@ -137,8 +150,9 @@ export function Landing() {
             </p>
             <p>
               Rhapto takes that weight off. It finds the roles worth your time and writes a resume
-              that is true to what you have actually done. It will not apply on your behalf, and it
-              will not invent anything to make you look better — it refuses to do either. What is
+              that is true to what you have actually done. It will not apply on your behalf — there is no
+              code path that does. And every draft is checked for invented numbers and lines with no
+              source, so what reaches you has been held against what you have actually done. What is
               left is the part that needs a person: deciding where to apply, and what to say when
               someone answers.
             </p>
@@ -152,7 +166,7 @@ export function Landing() {
         </h2>
         <p className="mt-2 max-w-3xl text-sm text-muted-foreground">
           Because a chatbot will happily invent the number that gets you the interview, and you will
-          not find out until someone asks you about it. Rhapto is built so that cannot happen.
+          not find out until someone asks you about it. Rhapto checks every draft for exactly that, and blocks the package if the check fails.
         </p>
         <div className="mt-6 grid gap-4 md:grid-cols-3">
           {PROMISES.map(({ icon: Icon, title, body }) => (
@@ -167,11 +181,18 @@ export function Landing() {
             </Card>
           ))}
         </div>
+        {/* What the checks do not cover, said next to the promises rather than buried: a line can
+            stretch the wording of the block it cites and still pass, so the read-through is real. */}
+        <p className="mt-4 max-w-3xl text-sm text-muted-foreground">
+          What the checks do not catch: a line can stretch the wording of its source without
+          adding a number or a title, and a role can be left out entirely. You still read the
+          resume before you send it.
+        </p>
       </section>
 
-      {/* Item 2, the centrepiece: the claim two paragraphs up ("Rhapto is built so that cannot
-          happen") shown happening, on Rhapto's own output, rather than asserted a second time. All
-          interaction lives in `ProvenanceDemo`, a separate `"use client"` component -- this section
+      {/* Item 2, the centrepiece: the claim two paragraphs up (every line traces to a block)
+          shown on Rhapto's own layout, rather than asserted a second time. The catch itself is the
+          hero's `CaughtDemo`. All interaction lives in `ProvenanceDemo`, a separate `"use client"` component -- this section
           itself stays a plain server-rendered wrapper, same as the rest of `Landing`. */}
       <section aria-labelledby="demo-heading" className="mb-12">
         <HeroBand tone="sand" height="tall">
@@ -183,8 +204,7 @@ export function Landing() {
           </h2>
           <p className="max-w-2xl text-sm text-muted-foreground">
             A resume fragment in Rhapto&rsquo;s layout. Every line traces back to a fact already
-            confirmed &mdash; and the refusal you can switch on below is the validator&rsquo;s own
-            output: rule, path and message exactly as it produces them.
+            confirmed &mdash; click one to see the block it came from.
           </p>
           <div className="mt-2">
             <ProvenanceDemo />
@@ -288,7 +308,9 @@ export function Landing() {
                   behalf.
                 </li>
                 <li>
-                  Write a number, a job title, or a date that is not already in a block you wrote.
+                  Let an unverified number or a line with no source through &mdash; those two checks
+                  always run. The check that job titles, employers and dates match your blocks is on
+                  by default.
                 </li>
                 <li>Spray hundreds of applications. It is built for a considered few, not volume.</li>
                 <li>

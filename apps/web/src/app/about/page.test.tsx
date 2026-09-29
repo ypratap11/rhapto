@@ -25,7 +25,7 @@ describe("AboutPage", () => {
   it("leads with what Rhapto is and a way in", () => {
     render(<AboutPage />);
     expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(
-      "Every application, stitched to fit.",
+      "It won't invent a number to get you the interview.",
     );
     expect(screen.getByRole("link", { name: /get started/i })).toHaveAttribute("href", "/settings");
   });

@@ -1,7 +1,8 @@
 "use client";
 
-/** The "wow" the owner asked for: not a claim that Rhapto refuses to invent facts, but that claim
- * shown happening, on Rhapto's own output. Lives in its own client boundary -- Landing (both of
+/** "Click a line to see its source": every bullet in a resume fragment opens the verified block it
+ * came from. (The catch itself -- a draft line rejected by a guardrail -- lives in `CaughtDemo`, in
+ * the hero.) Lives in its own client boundary -- Landing (both of
  * its mounts, `/` inside `TokenGate` and `/about` as a server component) must stay free of client
  * hooks, so all state is here, not there.
  *
@@ -10,9 +11,7 @@
  * uses) written directly into this component. No API call, no backend, no real profile data. */
 
 import { useId, useState } from "react";
-import { BadgeCheck, ChevronRight, ShieldAlert } from "lucide-react";
-import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
+import { BadgeCheck, ChevronRight } from "lucide-react";
 import { cn } from "cn";
 
 const ENTRIES = [
@@ -33,38 +32,13 @@ const ENTRIES = [
   },
 ] as const;
 
-// Attached to ENTRIES[1] (Acme Analytics) when the toggle is on: a second bullet on that entry
-// that no verified block supports. The path has to match the document actually rendered above:
-// entry index 1, and bullet index 1 because that entry renders exactly one real bullet. A path
-// pointing at a bullet the reader cannot count to is the one thing this demo cannot afford.
-//
-// The block id names a block that is deliberately NOT in the document -- nothing from it was
-// rendered, because it is not verified. The verified reveals show their own block ids so the
-// reader has something to reconcile this one against. Message and path shape match what
-// `apps/api/src/rhapto/engine/guardrails/metrics.py::check_metrics` actually produces --
-// `f"block {block.id!r} is not verified but the text contains metric(s): {offending}"` -- not
-// invented copy.
-const INVENTED_ENTRY_INDEX = 1;
-const INVENTED = {
-  bullet: "Increased forecast accuracy by 42% using a new ML model.",
-  rule: "no-unverified-metrics",
-  path: "sections[0].entries[1].bullets[1]",
-  message: "block 'acme-forecast' is not verified but the text contains metric(s): 42%",
-};
-
 export function ProvenanceDemo() {
   const [openIndex, setOpenIndex] = useState<number | null>(null);
-  const [showInvented, setShowInvented] = useState(false);
   const baseId = useId();
-  const inventedLabelId = `${baseId}-invented-label`;
-  const inventedId = `${baseId}-invented`;
 
   // The single-column ATS resume, rendered in CSS rather than screenshotted so it can never go stale
   // (item 4). It doubles as the interactive demo -- the same fragment that shows the artifact also
-  // shows the mechanism, rather than two competing widgets on one page. The whole demo is one card at
-  // every width: the toggle used to sit in a second grid column from `sm` up, which put it out in the
-  // right-hand margin, detached from the document it changes and clipped on a narrow desktop window.
-  // A control belongs with the thing it controls.
+  // shows the mechanism, rather than two competing widgets on one page.
   return (
     <div className="max-w-3xl overflow-hidden rounded-card bg-surface shadow-card ring-1 ring-foreground/10">
       <div className="border-b border-border px-5 py-4">
@@ -130,65 +104,12 @@ export function ProvenanceDemo() {
                     <p className="mt-1.5 font-medium text-foreground">&ldquo;{entry.bullet}&rdquo;</p>
                   </div>
                 ) : null}
-                {i === INVENTED_ENTRY_INDEX ? (
-                  /* Rendered whether the toggle is on or off, and empty when off: a screen reader
-                     only announces an insertion into a region that already existed, and this one
-                     has to work backwards -- the switch that fills it sits BELOW it in the
-                     document, so without a live region a keyboard or screen-reader user flips it
-                     and hears nothing. */
-                  <div id={inventedId} role="status" className={showInvented ? "mt-2.5" : undefined}>
-                    {showInvented ? (
-                      <>
-                        <p className="flex items-start gap-2 px-2 text-sm text-muted-foreground">
-                          <span aria-hidden className="size-3.5 shrink-0" />
-                          <span>
-                            <span className="sr-only">Rejected draft bullet: </span>
-                            <span className="line-through">{INVENTED.bullet}</span>
-                          </span>
-                        </p>
-                        <div className="mt-1.5 ml-2 rounded-card border border-destructive/30 bg-destructive/5 px-3 py-2.5 text-xs">
-                          <p className="flex items-center gap-1.5 font-mono font-medium text-destructive">
-                            <ShieldAlert aria-hidden className="size-3.5" />
-                            Blocked before this document was produced
-                          </p>
-                          <p className="mt-1.5 flex flex-wrap items-center gap-2">
-                            <span className="rounded-chip bg-destructive/10 px-2 py-0.5 font-mono text-xs font-medium text-destructive">
-                              {INVENTED.rule}
-                            </span>
-                            <span className="font-mono text-muted-foreground">{INVENTED.path}</span>
-                          </p>
-                          <p className="mt-1.5 font-mono text-foreground/80">{INVENTED.message}</p>
-                        </div>
-                      </>
-                    ) : null}
-                  </div>
-                ) : null}
               </li>
             );
           })}
         </ul>
       </div>
 
-      {/* The toggle's own visible label states exactly what it does, so no separate instruction
-          sentence is needed on the page for this interaction either. It sits at the foot of the
-          same card, under the bullets it adds one to: `items-start` rather than `items-center` so
-          the switch stays beside the label's first line when the label wraps at phone width. */}
-      <div className="flex items-start gap-2.5 border-t border-border px-5 py-3.5">
-        <Switch
-          aria-labelledby={inventedLabelId}
-          aria-controls={inventedId}
-          className="mt-0.5 shrink-0"
-          checked={showInvented}
-          onCheckedChange={(checked) => setShowInvented(checked === true)}
-        />
-        <Label
-          id={inventedLabelId}
-          className="cursor-pointer leading-snug"
-          onClick={() => setShowInvented((v) => !v)}
-        >
-          What happens when it invents something
-        </Label>
-      </div>
     </div>
   );
 }
