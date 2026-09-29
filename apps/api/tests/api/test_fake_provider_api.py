@@ -114,3 +114,11 @@ async def test_a_whole_tailor_run_produces_a_clean_package(
         for b in entry["bullets"]
     }
     assert block_ids, "every bullet must still cite a block"
+    # Review C-2: the fake must place every selected mandatory block, or `completeness` blocks the
+    # demo stack. The three mandatory blocks of profile.example are all selected by default.
+    entry_ids = {
+        entry["source_block_id"]
+        for section in package["resume"]["sections"]
+        for entry in section["entries"]
+    }
+    assert {"acme-data-pm", "side-llm-tool", "cred-pmp"} <= entry_ids

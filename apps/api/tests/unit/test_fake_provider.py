@@ -123,6 +123,22 @@ async def test_compose_cites_only_selected_blocks_and_copies_them_verbatim(
     assert output.cover_note and output.change_log
 
 
+async def test_every_mandatory_block_of_the_demo_profile_gets_an_entry(
+    demo_profile_dir: object,
+) -> None:
+    """Review C-2 (2026-09-29). The fake skips any unverified block whose content holds a digit,
+    and (before this fixture change) `side-llm-tool` and `cred-pmp` both did, so the demo stack
+    produced a resume with two selected blocks missing. Every role, project and credential block
+    in `profile.example` must be one the fake can place."""
+    profile = load_profile(demo_profile_dir)  # type: ignore[arg-type]
+    blocks = [b.model_dump(mode="json", exclude_none=True) for b in profile.blocks]
+    output = await _compose(json.dumps(blocks), [b["id"] for b in blocks])
+    cited = {e.source_block_id for s in output.sections for e in s.entries}
+    mandatory = {b.id for b in profile.blocks if b.type in ("role", "project", "credential")}
+    assert mandatory == {"acme-data-pm", "side-llm-tool", "cred-pmp"}, "fixture drifted"
+    assert mandatory <= cited, sorted(mandatory - cited)
+
+
 async def test_a_block_outside_the_selection_is_never_cited(demo_profile_dir: object) -> None:
     profile = load_profile(demo_profile_dir)  # type: ignore[arg-type]
     blocks = [b.model_dump(mode="json", exclude_none=True) for b in profile.blocks]
