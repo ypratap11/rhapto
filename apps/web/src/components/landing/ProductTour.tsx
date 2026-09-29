@@ -124,9 +124,9 @@ export function ProductTour() {
       onKeyDown={onKeyDown}
       className="w-full text-foreground"
     >
-      <span id={labelId} className="sr-only">
+      <h2 id={labelId} className="sr-only">
         Product tour
-      </span>
+      </h2>
 
       <nav aria-label="Tour chapters" className="mb-4 grid grid-cols-5 items-start gap-1.5">
         {CHAPTERS.map((name, k) => {
@@ -180,7 +180,7 @@ export function ProductTour() {
           <div
             className={cn(
               "relative overflow-hidden bg-background",
-              inStep ? "aspect-[1443/758]" : "md:aspect-[1443/758]",
+              inStep ? "aspect-[1443/758]" : "xl:aspect-[1443/758]",
             )}
           >
             {step ? (
@@ -225,7 +225,7 @@ export function ProductTour() {
             ) : null}
 
             {index === -1 ? (
-              <div className="grid min-h-80 place-items-center bg-band-peach p-6 text-center md:absolute md:inset-0 md:min-h-0">
+              <div className="grid min-h-80 place-items-center bg-band-peach p-6 text-center xl:absolute xl:inset-0 xl:min-h-0">
                 <div className="mx-auto max-w-2xl">
                   <p className="mb-3 text-xs font-medium tracking-[0.14em] text-muted-foreground uppercase">
                     Product tour, about 2 minutes
@@ -249,7 +249,7 @@ export function ProductTour() {
             ) : null}
 
             {index === STEPS.length ? (
-              <div className="grid min-h-80 place-items-center bg-band-peach p-6 text-center md:absolute md:inset-0 md:min-h-0">
+              <div className="grid min-h-80 place-items-center bg-band-peach p-6 text-center xl:absolute xl:inset-0 xl:min-h-0">
                 <div className="mx-auto max-w-2xl">
                   <h2
                     ref={outroRef}
@@ -298,7 +298,7 @@ export function ProductTour() {
 
           {step ? (
             <div
-              className="border-t border-border bg-card p-4 text-card-foreground md:absolute md:w-[min(340px,42%)] md:rounded-card md:border md:px-[18px] md:pt-4 md:pb-3.5 md:shadow-card"
+              className="border-t border-border bg-card p-4 text-card-foreground xl:absolute xl:w-[min(340px,42%)] xl:rounded-card xl:border xl:px-[18px] xl:pt-4 xl:pb-3.5 xl:shadow-card"
               style={{ left: `${step.at[0] * 100}%`, top: `${step.at[1] * 100}%` }}
             >
               <div aria-live="polite">

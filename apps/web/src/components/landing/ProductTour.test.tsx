@@ -47,7 +47,7 @@ async function toStep(user: ReturnType<typeof userEvent.setup>, n: number) {
 describe("ProductTour, at rest", () => {
   it("opens on the intro: an h2, the disclosure, no picture, no hotspot", () => {
     const { container } = render(<ProductTour />);
-    expect(screen.getByRole("heading", { level: 2 })).toHaveTextContent(
+    expect(screen.getByRole("heading", { level: 2, name: /defend in any interview/i })).toHaveTextContent(
       "A resume you can defend in any interview.",
     );
     expect(screen.queryByRole("heading", { level: 1 })).toBeNull();
@@ -104,7 +104,7 @@ describe("ProductTour, walking the steps", () => {
     await user.click(screen.getByRole("button", { name: /^back$/i }));
     await user.click(screen.getByRole("button", { name: /^back$/i }));
     expect(start()).toHaveFocus();
-    expect(screen.getByRole("heading", { level: 2 })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 2, name: /defend in any interview/i })).toBeInTheDocument();
   });
 
   it("a chapter click jumps to that chapter's first step and marks it current", async () => {
