@@ -254,18 +254,23 @@ export function Landing() {
                 provider&rsquo;s.
               </p>
               <p>
-                A tailored resume takes two model calls. Measured on a real run, that is{" "}
+                A tailored resume takes one or two model calls. Tested on the same real job in
+                September 2026, that is about{" "}
                 <strong className="font-medium text-foreground">29&ndash;36&cent;</strong> on Claude
-                Opus 5, or{" "}
-                <strong className="font-medium text-foreground">5.8&cent;</strong> on Haiku 4.5, at
-                list prices as of September 2026. That is the model calls only; it does not include
-                running the server if you host it yourself.
+                Opus 5 (from token counts at list price), up to{" "}
+                <strong className="font-medium text-foreground">13.5&cent;</strong> on GPT-5 (billed),
+                and an estimated{" "}
+                <strong className="font-medium text-foreground">2&ndash;5&cent;</strong> on Gemini 3.7
+                Flash (from token counts at Google&rsquo;s price through December 2026, which doubles
+                from January 2027). That is the model calls only; it does not include running the
+                server if you host it yourself.
               </p>
               <p>
-                Rhapto defaults to the stronger model on purpose. On that same job the cheap one
-                passed every guardrail and still left a whole role out of the resume &mdash; the
-                checks catch invented claims, not missing ones. Until that gap is closed, the cheap
-                path is not the recommended one.
+                Cheaper is not automatically safe. On that same job Claude Haiku 4.5 passed every
+                guardrail and still left a whole role out of the resume &mdash; the checks catch
+                invented claims, not missing ones. Opus 5, GPT-5 and Gemini 3.7 Flash each kept every
+                role, but that is two runs each on one job, so read the resume before you send it. The
+                free trial runs on Claude Opus 5.
               </p>
             </CardContent>
           </Card>
