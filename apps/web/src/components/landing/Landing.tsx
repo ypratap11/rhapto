@@ -50,13 +50,13 @@ export function Landing() {
         <div className="grid items-center gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,26rem)] lg:gap-12">
           <div className="flex min-w-0 flex-col gap-3">
         <p className="text-sm font-medium text-muted-foreground">
-          Every AI resume tool can make things up. This one catches itself.
+          Tailored for each job, with every line checked against your own record.
         </p>
         {/* Plain on purpose: no coloured word. The `clamp` keeps one class readable from a 360px
             phone (2.5rem floor) to the two-column desktop layout, where the ceiling is lower than
             the old full-width 5rem because the copy column is only about half the band. */}
         <h1 className="max-w-4xl font-heading text-[clamp(2.5rem,2.5vw+1.5rem,4rem)] leading-[0.98] font-medium tracking-tight">
-          It won&apos;t invent a number to get you the interview.
+          A resume you can defend in any interview.
         </h1>
         {/* What is true inside a run: the model's draft is checked, a caught line gets one repair,
             and only a failed repair blocks the package and shows the rule. Not "you see every

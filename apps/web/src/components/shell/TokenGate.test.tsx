@@ -172,7 +172,7 @@ describe("TokenGate", () => {
     pathname.current = "/";
     renderGate(<TokenGate><Landing /></TokenGate>);
     expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(
-      "It won't invent a number to get you the interview.",
+      "A resume you can defend in any interview.",
     );
     expect(mockBootstrapMutate).not.toHaveBeenCalled();
   });

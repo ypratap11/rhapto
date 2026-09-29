@@ -126,12 +126,12 @@ describe("Landing, the way in", () => {
     render(<Landing />);
     const hero = screen.getAllByTestId("hero-band")[0]!;
     expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(
-      "It won't invent a number to get you the interview.",
+      "A resume you can defend in any interview.",
     );
     // plain: no single-word colour accent inside the headline
     expect(screen.getByRole("heading", { level: 1 }).children).toHaveLength(0);
     expect(
-      within(hero).getByText("Every AI resume tool can make things up. This one catches itself."),
+      within(hero).getByText("Tailored for each job, with every line checked against your own record."),
     ).toBeInTheDocument();
     const lede = within(hero).getByText(/drafts your resume with an AI model and checks the draft/i);
     expect(lede.textContent).toMatch(/one fix/i);
