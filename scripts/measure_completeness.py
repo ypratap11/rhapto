@@ -13,8 +13,9 @@ root with:
 `--profile` takes any profile directory. The owner's real profile may fail the strict schema on
 load (see the scratch-copy note in the owner's memory); point it at the scratch copy in that case.
 The ledger holds rule names, block ids and counts only -- never title, block or resume text -- so
-it is safe to produce from a real profile. (A failed run prints its exception message, which is
-not ledger content; check it before pasting it anywhere.)
+it is safe to produce from a real profile. A failed target is recorded under "failures" with its
+provider, model and exception class name only (messages can embed profile content or LLM output),
+and the script then exits nonzero.
 
 Reading the output: `first pass failed: completeness` is a model that dropped a selected block.
 `repaired (...)` means the one repair call restored it; `blocked after repair (...)` means it did
@@ -32,19 +33,24 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
-from dataclasses import asdict, dataclass
+import sys
+from dataclasses import dataclass
 from pathlib import Path
 
 from rhapto.cli.main import build_providers
 from rhapto.config import get_settings
 from rhapto.engine.measurement import (
+    collect,
+    exit_code,
     final_rules,
     first_pass_rules,
+    format_failure,
     invented_project_titles,
+    ledger_document,
     summarize_result,
 )
 from rhapto.engine.pipeline import tailor
-from rhapto.engine.types import TailorRequest
+from rhapto.engine.types import Profile, TailorRequest
 from rhapto.profile.loader import load_profile
 
 
@@ -63,9 +69,8 @@ class MeasurementRow:
     output_tokens: int
 
 
-async def _run_one(jd_text: str, profile_dir: Path, provider: str, model: str) -> MeasurementRow:
+async def _run_one(profile: Profile, jd_text: str, provider: str, model: str) -> MeasurementRow:
     providers = build_providers(get_settings(), provider, model)
-    profile = load_profile(profile_dir)
     result = await tailor(
         TailorRequest(jd_text=jd_text), profile, providers.llm, providers.embedder
     )
@@ -85,18 +90,6 @@ async def _run_one(jd_text: str, profile_dir: Path, provider: str, model: str) -
     )
 
 
-async def _run_all(
-    jd_text: str, profile_dir: Path, targets: list[tuple[str, str]]
-) -> list[MeasurementRow]:
-    rows: list[MeasurementRow] = []
-    for provider, model in targets:
-        try:
-            rows.append(await _run_one(jd_text, profile_dir, provider, model))
-        except Exception as exc:
-            print(f"{provider}:{model}  FAILED: {exc}")
-    return rows
-
-
 def _parse_target(parser: argparse.ArgumentParser, raw: str) -> tuple[str, str]:
     provider, sep, model = raw.partition(":")
     if not sep or not provider or not model:
@@ -106,7 +99,7 @@ def _parse_target(parser: argparse.ArgumentParser, raw: str) -> tuple[str, str]:
     return provider, model
 
 
-def main() -> None:
+def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--jd", type=Path, required=True)
     parser.add_argument("--profile", type=Path, default=Path("./profile"))
@@ -123,7 +116,13 @@ def main() -> None:
 
     targets = [_parse_target(parser, raw) for raw in args.targets]
     jd_text = args.jd.read_text(encoding="utf-8")
-    rows = asyncio.run(_run_all(jd_text, args.profile, targets))
+    rows, failures = asyncio.run(
+        collect(
+            targets,
+            lambda: load_profile(args.profile),
+            lambda profile, provider, model: _run_one(profile, jd_text, provider, model),
+        )
+    )
 
     for row in rows:
         print(
@@ -132,9 +131,13 @@ def main() -> None:
             f"invented_project_titles={len(row.invented_project_titles)}"
         )
 
-    args.out.write_text(json.dumps([asdict(r) for r in rows], indent=2), encoding="utf-8")
+    for failure in failures:
+        print(format_failure(failure))
+
+    args.out.write_text(json.dumps(ledger_document(rows, failures), indent=2), encoding="utf-8")
     print(f"wrote {args.out}")
+    return exit_code(failures)
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

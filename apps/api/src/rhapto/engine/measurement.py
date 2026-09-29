@@ -17,7 +17,9 @@ text, because the script may be run against the owner's real profile.
 from __future__ import annotations
 
 import re
-from collections.abc import Mapping
+from collections.abc import Awaitable, Callable, Mapping, Sequence
+from dataclasses import asdict, dataclass
+from typing import Any
 
 from rhapto.engine.pipeline import TailorResult
 from rhapto.models.profile.blocks import Block
@@ -84,3 +86,54 @@ def invented_project_titles(result: TailorResult, blocks: Mapping[str, Block]) -
             ):
                 found.append(entry.source_block_id)
     return found
+
+
+@dataclass(frozen=True)
+class FailureRow:
+    """A target that did not produce a measurement. Only the exception CLASS name is kept: the
+    message can embed profile content (a pydantic `input_value=`) or echoed LLM output."""
+
+    provider: str
+    model: str
+    error_type: str
+
+
+async def collect[Ctx, Row](
+    targets: Sequence[tuple[str, str]],
+    prepare: Callable[[], Ctx],
+    run_one: Callable[[Ctx, str, str], Awaitable[Row]],
+) -> tuple[list[Row], list[FailureRow]]:
+    """Run every target, never letting an exception message out.
+
+    `prepare` (loading the profile) runs once; if it fails, every target is recorded as failed
+    with that one sanitized error rather than repeating the load N times.
+    """
+    try:
+        ctx = prepare()
+    except Exception as exc:
+        return [], [FailureRow(p, m, type(exc).__name__) for p, m in targets]
+    rows: list[Row] = []
+    failures: list[FailureRow] = []
+    for provider, model in targets:
+        try:
+            rows.append(await run_one(ctx, provider, model))
+        except Exception as exc:
+            failures.append(FailureRow(provider, model, type(exc).__name__))
+    return rows, failures
+
+
+def format_failure(failure: FailureRow) -> str:
+    return f"{failure.provider}:{failure.model}  FAILED ({failure.error_type})"
+
+
+def ledger_document(rows: Sequence[Any], failures: Sequence[FailureRow]) -> dict[str, Any]:
+    """The JSON ledger: measured rows plus one entry per failed target."""
+    return {
+        "results": [asdict(r) for r in rows],
+        "failures": [asdict(f) for f in failures],
+    }
+
+
+def exit_code(failures: Sequence[FailureRow]) -> int:
+    """Nonzero when any target failed, so a wholly failed run cannot look like success."""
+    return 1 if failures else 0

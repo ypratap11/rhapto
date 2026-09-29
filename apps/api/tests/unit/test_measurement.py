@@ -1,3 +1,6 @@
+import importlib.util
+import json
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -5,6 +8,9 @@ import pytest
 from helpers import demo_extract, good_output
 
 from rhapto.engine.measurement import (
+    FailureRow,
+    collect,
+    exit_code,
     final_rules,
     first_pass_rules,
     invented_project_titles,
@@ -113,3 +119,81 @@ async def test_no_title_or_content_string_reaches_a_ledger_row(profile: Profile)
     ]
     assert "wibblefrotz" not in " ".join(row).casefold()
     assert all(h in blocks for h in hits)  # every entry is a block id, nothing free-form
+
+
+SECRET = "Qzv-secret-profile-content-9137"
+TARGETS = [("anthropic", "m-one"), ("openai", "m-two")]
+
+
+async def test_collect_keeps_only_the_exception_class_never_its_message() -> None:
+    async def run_one(_ctx: None, provider: str, model: str) -> str:
+        if model == "m-one":
+            raise ValueError(f"input_value={SECRET}")
+        return f"{provider}:{model}"
+
+    rows, failures = await collect(TARGETS, lambda: None, run_one)
+    assert rows == ["openai:m-two"]
+    assert failures == [FailureRow("anthropic", "m-one", "ValueError")]
+    assert SECRET not in repr(failures)
+
+
+async def test_a_failing_profile_load_happens_once_and_fails_every_target() -> None:
+    loads: list[int] = []
+
+    def prepare() -> None:
+        loads.append(1)
+        raise RuntimeError(SECRET)
+
+    async def run_one(_ctx: None, provider: str, model: str) -> str:
+        raise AssertionError("must not run")
+
+    rows, failures = await collect(TARGETS, prepare, run_one)
+    assert rows == [] and len(loads) == 1
+    assert [f.error_type for f in failures] == ["RuntimeError", "RuntimeError"]
+    assert exit_code(failures) == 1 and exit_code([]) == 0
+
+
+def _load_script() -> Any:
+    path = Path(__file__).resolve().parents[4] / "scripts" / "measure_completeness.py"
+    spec = importlib.util.spec_from_file_location("measure_completeness_script", path)
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module  # dataclasses resolves string annotations via sys.modules
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_script_failed_target_is_not_printed_is_recorded_and_exits_nonzero(
+    demo_profile_dir: Path,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Both review findings, end to end through the script's own main(): the exception message
+    (which can carry profile content or LLM output) reaches neither stdout nor the ledger, the
+    failure is recorded, and a run where every target failed exits nonzero."""
+    script = _load_script()
+
+    def boom(*_a: Any, **_k: Any) -> None:
+        raise ValueError(f"input_value={SECRET}")
+
+    monkeypatch.setattr(script, "get_settings", lambda: None)  # no real config in a test
+    monkeypatch.setattr(script, "build_providers", boom)
+    jd, out = tmp_path / "jd.txt", tmp_path / "ledger.json"
+    jd.write_text(JD, encoding="utf-8")
+    argv = ["x", "--jd", str(jd), "--profile", str(demo_profile_dir), "--out", str(out)]
+    for provider, model in TARGETS:
+        argv += ["--provider", f"{provider}:{model}"]
+    monkeypatch.setattr(sys, "argv", argv)
+
+    assert script.main() == 1
+    printed = capsys.readouterr().out
+    ledger_text = out.read_text(encoding="utf-8")
+    assert SECRET not in printed and SECRET not in ledger_text
+    assert "ValueError" in printed
+    ledger = json.loads(ledger_text)
+    assert ledger["results"] == []
+    assert ledger["failures"] == [
+        {"provider": "anthropic", "model": "m-one", "error_type": "ValueError"},
+        {"provider": "openai", "model": "m-two", "error_type": "ValueError"},
+    ]
