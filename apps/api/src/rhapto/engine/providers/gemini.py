@@ -124,19 +124,19 @@ class GeminiProvider:
         text = response.text
         if not text:
             raise MalformedOutputError(
-                f"Gemini returned no text for {output_schema.__name__} "
+                f"Gemini returned no text for {name} "
                 "(the response was empty or blocked)"
             )
         try:
             value = output_schema.model_validate_json(text)
         except ValidationError as exc:
             raise MalformedOutputError(
-                f"{output_schema.__name__} did not match the schema: "
+                f"{name} did not match the schema: "
                 f"{exc.error_count()} validation error(s)"
             ) from exc
         except ValueError as exc:
             raise MalformedOutputError(
-                f"Gemini did not return valid JSON for {output_schema.__name__}: {exc}"
+                f"Gemini did not return valid JSON for {name}: {exc}"
             ) from exc
         usage = getattr(response, "usage_metadata", None)
         # Thinking is on by default on 2.5 models and those tokens are billed as output.

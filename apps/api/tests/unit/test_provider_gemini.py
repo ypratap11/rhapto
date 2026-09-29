@@ -176,7 +176,11 @@ async def test_the_adapters_config_is_a_valid_generate_content_config(
     ("finish_reason", "match"),
     [
         (types.FinishReason.MAX_TOKENS, "token cap"),
+        ("MAX_TOKENS", "token cap"),  # some SDK paths hand back the plain string
         (types.FinishReason.SAFETY, "safety"),
+        (types.FinishReason.BLOCKLIST, "safety"),
+        (types.FinishReason.PROHIBITED_CONTENT, "safety"),
+        (types.FinishReason.SPII, "safety"),
         (types.FinishReason.RECITATION, "recitation"),
     ],
 )
@@ -187,6 +191,41 @@ async def test_gemini_names_why_it_stopped_early(finish_reason: Any, match: str)
         await provider.complete_structured(
             system=[], messages=[Message(role="user", content="go")], output_schema=TuneOutput
         )
+
+
+@pytest.mark.parametrize(
+    "finish_reason",
+    [
+        None,
+        types.FinishReason.FINISH_REASON_UNSPECIFIED,
+        types.FinishReason.OTHER,
+        "STOP",
+    ],
+)
+async def test_an_ordinary_or_unknown_finish_reason_with_valid_json_still_parses(
+    finish_reason: Any,
+) -> None:
+    """Only the named early stops are errors; anything else with valid JSON is a normal answer."""
+    result = await _provider(_FakeModels(finish_reason=finish_reason)).complete_structured(
+        system=[], messages=[Message(role="user", content="go")], output_schema=TuneOutput
+    )
+    assert result.value.edits[0].paragraph_id == "p1"
+
+
+async def test_a_response_without_candidates_still_parses_its_text() -> None:
+    models = _FakeModels()
+    real = models.generate_content
+
+    async def no_candidates(**kwargs: Any) -> Any:
+        response = await real(**kwargs)
+        response.candidates = None
+        return response
+
+    models.generate_content = no_candidates  # type: ignore[method-assign]
+    result = await _provider(models).complete_structured(
+        system=[], messages=[Message(role="user", content="go")], output_schema=TuneOutput
+    )
+    assert result.value.cover_note == "hello"
 
 
 @pytest.mark.skipif(
