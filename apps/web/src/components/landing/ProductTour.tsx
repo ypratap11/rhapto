@@ -286,7 +286,7 @@ export function ProductTour() {
                         rel={access.external ? "noreferrer" : undefined}
                         className={primaryBtn}
                       >
-                        Request access
+                        Request beta access
                       </a>
                     ) : (
                       <a href="/settings" className={primaryBtn}>

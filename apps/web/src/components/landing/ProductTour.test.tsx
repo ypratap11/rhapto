@@ -238,7 +238,7 @@ describe("ProductTour, the outro", () => {
     render(<ProductTour />);
     await toOutro(user);
     expect(screen.getByRole("link", { name: /^get started$/i })).toHaveAttribute("href", "/settings");
-    expect(screen.queryByRole("link", { name: /request access/i })).toBeNull();
+    expect(screen.queryByRole("link", { name: /request beta access/i })).toBeNull();
     expect(screen.queryByText(/invite-only/i)).toBeNull();
     expect(screen.queryByText(/private beta/i)).toBeNull();
   });
@@ -248,7 +248,7 @@ describe("ProductTour, the outro", () => {
     const user = userEvent.setup();
     render(<ProductTour />);
     await toOutro(user);
-    expect(screen.getByRole("link", { name: /^request access$/i })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: /^request beta access$/i })).toHaveAttribute(
       "href",
       ACCESS_REQUEST_MAILTO,
     );
@@ -256,7 +256,7 @@ describe("ProductTour, the outro", () => {
     expect(screen.getByText(/invite-only/i)).toBeInTheDocument();
     expect(screen.queryByText(/private beta/i)).toBeNull();
     // The mailto opens in place: no new tab.
-    const link = screen.getByRole("link", { name: /^request access$/i });
+    const link = screen.getByRole("link", { name: /^request beta access$/i });
     expect(link).not.toHaveAttribute("target");
     expect(link).not.toHaveAttribute("rel");
   });
@@ -267,7 +267,7 @@ describe("ProductTour, the outro", () => {
     const user = userEvent.setup();
     render(<ProductTour />);
     await toOutro(user);
-    const link = screen.getByRole("link", { name: /^request access$/i });
+    const link = screen.getByRole("link", { name: /^request beta access$/i });
     expect(link).toHaveAttribute("href", "https://forms.gle/1GUeGcKB9fCiJAdFA");
     expect(link).toHaveAttribute("target", "_blank");
     expect(link).toHaveAttribute("rel", "noreferrer");

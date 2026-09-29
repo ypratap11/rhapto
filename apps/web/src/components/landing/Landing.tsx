@@ -27,7 +27,7 @@ const PROMISES = [
   {
     icon: Fingerprint,
     title: "Know where each claim came from",
-    body: "Each bullet cites a block from your own library, and a resume carrying a bullet Rhapto cannot trace is refused. “Where did that come from?” always has an answer.",
+    body: "Each bullet cites a block from your own library, and a bullet Rhapto cannot trace fails the check and blocks the package. “Where did that come from?” always has an answer.",
   },
   {
     icon: BadgeCheck,
