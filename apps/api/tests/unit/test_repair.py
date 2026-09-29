@@ -46,9 +46,7 @@ def test_repair_instructions_no_longer_tell_the_model_to_drop_bullets() -> None:
     text = " ".join(REPAIR_INSTRUCTIONS.split())  # the prompt wraps lines; compare clauses
     assert "drop bullets" not in text
     # The real restore-not-drop clauses, not incidental words in them.
-    assert (
-        "Never resolve ANY violation by deleting an entry, a section, or a block id" in text
-    )
+    assert "Never resolve ANY violation by deleting an entry, a section, or a block id" in text
     assert "plus a new entry for every block id a completeness violation names" in text
     assert "shorten a low-priority entry to a single bullet -- never remove the entry" in text
     assert "remove only that bullet -- never the entry it was in" in text
