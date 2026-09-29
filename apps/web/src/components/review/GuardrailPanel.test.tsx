@@ -108,3 +108,48 @@ describe("GuardrailPanel, what to do about it", () => {
   });
 });
 
+
+describe("GuardrailPanel, a violation that names something absent from the document", () => {
+  const COMPLETENESS = {
+    rule: "completeness",
+    severity: "error" as const,
+    message: "role block 'role-e' (Vertex Robotics — Founder, 2023-Present) was selected but does not appear in Experience",
+    path: "selection.block_ids['role-e']",
+    block_id: "role-e",
+  };
+  const COMPLETENESS_REMEDY = "A role, project or credential your profile selected for this job is missing from the resume.";
+
+  it("renders a plain row, not a dead button, and keeps the block id and remedy", () => {
+    render(
+      <GuardrailPanel
+        report={{ passed: false, rules_run: ["provenance", "completeness"], violations: [COMPLETENESS] }}
+        remedies={{ completeness: COMPLETENESS_REMEDY }}
+        onSelect={vi.fn()}
+      />,
+    );
+    expect(screen.getByText(/does not appear in Experience/i)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /does not appear in Experience/i })).not.toBeInTheDocument();
+    expect(screen.getByText("role-e")).toBeInTheDocument();
+    expect(screen.getByText(COMPLETENESS_REMEDY)).toBeInTheDocument();
+  });
+
+  it("does not take the button away from the paths that do address something", async () => {
+    // The regression a blanket `startsWith("sections[")` rule would have caused: tune-mode
+    // violations are `edits[i]`, and both pages route them through onSelect.
+    const onSelect = vi.fn();
+    const at = (path: string) => ({ ...ERROR_VIOLATION, message: `problem at ${path}`, path });
+    render(
+      <GuardrailPanel
+        report={{
+          passed: false,
+          rules_run: ["tune-scope"],
+          violations: [at("edits[0]"), at("summary[0]"), at("cover_note"), COMPLETENESS],
+        }}
+        onSelect={onSelect}
+      />,
+    );
+    expect(screen.getAllByRole("button")).toHaveLength(3);
+    await userEvent.setup().click(screen.getByRole("button", { name: /problem at edits\[0\]/ }));
+    expect(onSelect).toHaveBeenCalledWith("edits[0]");
+  });
+});

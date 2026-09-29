@@ -4,6 +4,15 @@ import { StatusBadge } from "@/components/ui/StatusBadge";
 import type { GuardrailReport } from "@/lib/api/queries";
 
 /**
+ * A `completeness` violation names a block that is ABSENT from the document, so its `path` is
+ * `selection.block_ids['<id>']`: it addresses no node, and a click on it would do nothing on the
+ * review page. Only this prefix is treated as node-less. Every other path stays a button --
+ * `sections[..]`, `summary[..]`, `cover_note`, and a tune-mode `edits[..]`, which the review
+ * page's `scrollToChange` and the job page's `?path=` link both depend on.
+ */
+const NODELESS_PATH_PREFIX = "selection.";
+
+/**
  * `remedies` is keyed by rule id and comes from `PackageOut.guardrail_remedies`.
  *
  * It is optional, and a rule missing from it is rendered WITHOUT a remedy line rather than with a
@@ -36,15 +45,12 @@ export function GuardrailPanel({
             // A warning does not block the package, so it must not be dressed as the thing that did.
             const isError = v.severity === "error";
             const remedy = remedies[v.rule];
-            return (
-              <li key={`${v.path}-${i}`}>
-                <button
-                  type="button"
-                  onClick={() => onSelect(v.path)}
-                  className={`hover-lift w-full rounded-control border border-border border-l-4 bg-surface px-3 py-2.5 text-left text-sm ${
-                    isError ? "border-l-destructive" : "border-l-fit-mid"
-                  }`}
-                >
+            const hasNode = !v.path.startsWith(NODELESS_PATH_PREFIX);
+            const rowClass = `w-full rounded-control border border-border border-l-4 bg-surface px-3 py-2.5 text-left text-sm ${
+              isError ? "border-l-destructive" : "border-l-fit-mid"
+            }`;
+            const body = (
+              <>
                   <span className="flex flex-wrap items-center gap-1.5">
                     <span
                       className={`inline-flex items-center rounded-chip px-2 py-0.5 font-mono text-xs font-medium ${
@@ -61,7 +67,17 @@ export function GuardrailPanel({
                   <span className="mt-1.5 block text-foreground">{v.message}</span>
                   <span className="mt-0.5 block font-mono text-xs text-muted-foreground">{v.path}</span>
                   {remedy ? <span className="mt-1.5 block text-xs text-muted-foreground">{remedy}</span> : null}
-                </button>
+              </>
+            );
+            return (
+              <li key={`${v.path}-${i}`}>
+                {hasNode ? (
+                  <button type="button" onClick={() => onSelect(v.path)} className={`hover-lift ${rowClass}`}>
+                    {body}
+                  </button>
+                ) : (
+                  <div className={rowClass}>{body}</div>
+                )}
               </li>
             );
           })}
