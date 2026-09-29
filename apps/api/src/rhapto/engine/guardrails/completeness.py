@@ -9,8 +9,11 @@ Identity is compared with the cited block, not merely present: an entry that cit
 `role-a`'s org and role is a `completeness` error. With `no-invented-entities` also active the same
 defect is reported twice, by design (both messages are true; pinned by a test).
 
-See `.superpowers/sdd/completeness-guardrail/architecture.md` sections 1-3 and 7 for the design
-this implements.
+Per-type identity (what an entry must print to count): a role prints the org and the role/title
+the block itself carries (only those it carries); a project prints a title or role; a credential,
+or a role block with neither org nor role, prints any label or a bullet. A selected block with no
+org, role or content cannot be rendered and is a warning, never an error, so a run is never blocked
+forever. Plan: `docs/superpowers/plans/2026-09-25-completeness-guardrail.md`.
 """
 
 from __future__ import annotations
@@ -111,21 +114,21 @@ def _identity(block: Block, entry: ResumeEntry) -> tuple[bool, str]:
     org_ok = not _present(entry.org) or _agrees(entry.org, block.org)
     role_ok = not _present(entry.role) or _agrees(entry.role, block.role)
     gaps: list[str] = []
-    if block.type == "role":
-        if not (_present(entry.org) and org_ok):
-            gaps.append(f"an org matching {block.org!r}" if _present(block.org) else "org")
-        role_match = _agrees(entry.role, block.role) or _agrees(entry.title, block.role)
-        if not ((_present(entry.role) or _present(entry.title)) and role_match):
-            gaps.append(
-                f"a role/title matching {block.role!r}" if _present(block.role) else "role/title"
-            )
+    has_label = _present(entry.title) or _present(entry.role) or _present(entry.org)
+    if block.type == "role" and (_present(block.org) or _present(block.role)):
+        # Require only the fields the block actually has: demanding an org (or role) the block
+        # lacks would be unsatisfiable, or satisfiable only by inventing one. The role compared is
+        # the one the template prints (`entry.role or entry.title`, `render/templates.py`).
+        if _present(block.org) and not _agrees(entry.org, block.org):
+            gaps.append(f"an org matching {block.org!r}")
+        if _present(block.role) and not _agrees(entry.role or entry.title, block.role):
+            gaps.append(f"a role/title matching {block.role!r}")
     elif block.type == "project":
         if not (_present(entry.title) or _present(entry.role)):
             gaps.append("title/role")
         elif not (org_ok and role_ok):
             gaps.append("an org/role matching the block's own")
-    else:  # credential
-        has_label = _present(entry.title) or _present(entry.role) or _present(entry.org)
+    else:  # credential, or a role block with neither org nor role: any label or a bullet
         if not (has_label or has_bullet_text):
             gaps.append("a label (title/role/org) or a bullet")
         elif not (org_ok and role_ok):
@@ -150,17 +153,22 @@ def _merge_annotation(
     ctx: GuardrailContext, block: Block, kind: str, all_entries: list[_Entry]
 ) -> str:
     """Architecture §3: when `block` has no entry anywhere, look for evidence its content
-    survived somewhere else. Substitution is checked before fold, and fold's bullet scan
-    excludes bullets citing the entry's own block -- otherwise an entry that cites a same-org
-    block which is unselected, or of another type (so the substitution branch does not fire),
-    would have its own bullets reported as "folded".
+    survived somewhere else. The most specific explanation wins, whatever the document order:
+    a same-org sibling entry (substitution), then bullets citing a same-org block (fold), then a
+    bare mention of the org in an entry's text. The fold scan excludes bullets citing the entry's
+    own block -- otherwise an entry that cites a same-org block which is unselected, or of another
+    type (so the substitution branch does not fire), would have its own bullets reported as
+    "folded".
     """
     if not _present(block.org):
         return ""
     org = block.org or ""
-    for path, section, entry in all_entries:
-        if section.kind != kind or entry.source_block_id == block.id:
-            continue
+    candidates = [
+        (path, entry)
+        for path, section, entry in all_entries
+        if section.kind == kind and entry.source_block_id != block.id
+    ]
+    for path, entry in candidates:
         sibling = ctx.blocks.get(entry.source_block_id)
         if (
             sibling is not None
@@ -172,6 +180,7 @@ def _merge_annotation(
                 f"; block {sibling.id!r} (same organisation) is present at {path} -- check "
                 "whether one entry was substituted for both"
             )
+    for path, entry in candidates:
         folded = [
             i
             for i, b in enumerate(entry.bullets)
@@ -184,6 +193,7 @@ def _merge_annotation(
                 f"; its content appears folded into {path} (bullets {folded} cite blocks whose "
                 f"org is {org!r})"
             )
+    for path, entry in candidates:
         if _org_appears_in_entry_text(org, entry):
             return (
                 f"; its content appears folded into {path} (org {org!r} appears in that "

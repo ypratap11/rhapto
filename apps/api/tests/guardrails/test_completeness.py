@@ -473,3 +473,128 @@ def test_a_block_printed_again_in_another_section_kind_is_a_duplicate() -> None:
     )
     violations = check_completeness(_ctx([ROLE_A], resume, [ROLE_A.id]))
     assert len(violations) == 1 and "expected exactly one" in violations[0].message
+
+
+# --- Role blocks that lack an org and/or a role (final review I-1) ---------------------------
+
+ROLE_NO_ORG = Block(
+    id="role-no-org", type="role", role="Advisor", period="2019-2020", content="Advised."
+)
+ROLE_NO_ROLE = Block(
+    id="role-no-role", type="role", org="Globex", period="2019-2020", content="Did."
+)
+ROLE_BARE = Block(id="role-bare", type="role", content="Freelance analysis for small firms.")
+
+
+def _check_one(block: Block, *entries: ResumeEntry) -> list[tuple[str | None, str]]:
+    ctx = _ctx([block], _resume(list(entries)), [block.id])
+    return [(v.block_id, v.severity) for v in check_completeness(ctx)]
+
+
+def test_role_block_without_org_passes_when_its_entry_prints_no_org() -> None:
+    """Before the fix this was unsatisfiable: completeness demanded an org the block does not have,
+    and any org the model printed would be invented."""
+    assert _check_one(ROLE_NO_ORG, _entry(ROLE_NO_ORG, org=None)) == []
+
+
+def test_role_block_without_org_is_flagged_when_absent() -> None:
+    assert _check_one(ROLE_NO_ORG) == [("role-no-org", "error")]
+
+
+def test_role_block_without_org_does_not_require_or_reward_an_invented_org() -> None:
+    """Completeness is silent about the org either way; an invented one is `no-invented-entities`'
+    job (checked below), never a completeness pass condition."""
+    invented = _entry(ROLE_NO_ORG, org="Invented Org")
+    assert _check_one(ROLE_NO_ORG, invented) == []
+
+
+def test_invented_org_on_an_org_less_role_block_is_left_to_entities(
+    demo_profile_dir: Path,
+) -> None:
+    profile = _with_blocks(demo_profile_dir, ROLE_NO_ORG)
+    assert any(r.rule == "no-invented-entities" and r.active for r in profile.guardrails)
+    resume = demo_resume()
+    resume.sections[0].entries.append(_entry(ROLE_NO_ORG, org="Invented Org"))
+    report = run_guardrails(resume, profile, [*profile.block_map()], demo_extract())
+    rules = [v.rule for v in report.violations if v.severity == "error"]
+    assert RULE_NAME not in rules
+    assert "no-invented-entities" in rules
+
+
+def test_role_block_without_org_still_checks_the_role_it_has() -> None:
+    assert _check_one(ROLE_NO_ORG, _entry(ROLE_NO_ORG, org=None, role="Chief Wizard")) == [
+        ("role-no-org", "error")
+    ]
+
+
+def test_role_block_without_role_passes_when_its_entry_prints_no_role_or_title() -> None:
+    assert _check_one(ROLE_NO_ROLE, _entry(ROLE_NO_ROLE, role=None, title=None)) == []
+
+
+def test_role_block_without_role_is_flagged_when_absent() -> None:
+    assert _check_one(ROLE_NO_ROLE) == [("role-no-role", "error")]
+
+
+def test_role_block_without_role_still_checks_the_org_it_has() -> None:
+    assert _check_one(ROLE_NO_ROLE, _entry(ROLE_NO_ROLE, org=None, role=None)) == [
+        ("role-no-role", "error")
+    ]
+
+
+def test_role_block_with_neither_org_nor_role_passes_on_a_bullet() -> None:
+    entry = ResumeEntry(
+        source_block_id=ROLE_BARE.id, bullets=[bullet("Freelance analysis.", ROLE_BARE.id)]
+    )
+    assert _check_one(ROLE_BARE, entry) == []
+
+
+def test_role_block_with_neither_org_nor_role_passes_on_a_label() -> None:
+    assert _check_one(ROLE_BARE, ResumeEntry(source_block_id=ROLE_BARE.id, title="Freelance")) == []
+
+
+def test_role_block_with_neither_org_nor_role_is_flagged_when_empty_or_absent() -> None:
+    assert _check_one(ROLE_BARE, ResumeEntry(source_block_id=ROLE_BARE.id)) == [
+        ("role-bare", "error")
+    ]
+    assert _check_one(ROLE_BARE) == [("role-bare", "error")]
+
+
+def test_role_identity_compares_the_field_the_renderer_prints() -> None:
+    """The template prints `entry.role or entry.title`. A wrong role with a matching title prints
+    the wrong role, so it must not pass; a matching title with no role prints the title and does."""
+    wrong_role = _entry(ROLE_A, role="Chief Wizard", title=ROLE_A.role)
+    assert _check_one(ROLE_A, wrong_role) == [("role-a", "error")]
+    title_only = _entry(ROLE_A, role=None, title=ROLE_A.role)
+    assert _check_one(ROLE_A, title_only) == []
+
+
+def test_merge_annotation_prefers_a_later_substitution_over_an_earlier_text_fold() -> None:
+    """Deferred minor (T1): the most specific explanation wins, not the first entry in document
+    order. Entry 0 merely mentions Vertex Robotics; entry 4 is the same-org sibling that replaced
+    role-e -- the message must name the substitution."""
+    mention = _entry(ROLE_A, bullets=[bullet("Partnered with Vertex Robotics.", ROLE_A.id)])
+    entries = [mention] + [_entry(b) for b in FIVE_ROLES[1:4]] + [_entry(ROLE_F)]
+    blocks = FIVE_ROLES + [ROLE_F]
+    ctx = _ctx(blocks, _resume(entries), [b.id for b in blocks])
+    violations = check_completeness(ctx)
+    assert [v.block_id for v in violations] == ["role-e"]
+    assert "substituted" in violations[0].message and "role-f" in violations[0].message
+    assert "folded" not in violations[0].message
+
+
+def test_merge_annotation_prefers_a_cited_bullet_fold_over_an_earlier_text_mention() -> None:
+    mention = _entry(ROLE_A, bullets=[bullet("Partnered with Vertex Robotics.", ROLE_A.id)])
+    carrier = _entry(
+        ROLE_B,
+        bullets=[
+            bullet("Analysed things.", ROLE_B.id),
+            bullet("Shipped a robot.", VERTEX_ACHIEVEMENT.id),
+        ],
+    )
+    entries = [mention, carrier] + [_entry(b) for b in FIVE_ROLES[2:4]]
+    blocks = FIVE_ROLES + [VERTEX_ACHIEVEMENT]
+    ctx = _ctx(blocks, _resume(entries), [b.id for b in blocks])
+    violations = check_completeness(ctx)
+    assert [v.block_id for v in violations] == ["role-e"]
+    assert "sections[0].entries[1]" in violations[0].message
+    assert "bullets [1]" in violations[0].message
