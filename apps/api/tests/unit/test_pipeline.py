@@ -273,6 +273,20 @@ async def test_repair_that_drops_a_different_block_is_blocked_with_the_post_repa
     assert result.docx == b""  # a failing report never persists a DOCX, whatever rule failed
 
 
+async def test_model_dropping_a_credential_is_still_blocked_by_completeness(
+    profile: Profile,
+) -> None:
+    """The hand-edit exemption (PATCH) must not leak into model output: the same removal by the
+    composer and the repair is blocked."""
+    output = repair_drops_credential_output()
+    llm = FakeLLMProvider([demo_extract(), output, output])
+    result = await tailor(TailorRequest(jd_text=JD), profile, llm, FakeEmbeddingProvider())
+    assert result.package.status == "blocked" and result.docx == b""
+    assert "completeness" in result.package.guardrail_report.rules_run
+    violations = result.package.guardrail_report.violations
+    assert [v.block_id for v in violations if v.rule == "completeness"] == ["cred-pmp"]
+
+
 # --- tune mode -------------------------------------------------------------------------------
 
 CLEAN_BULLET = "Led the Snowflake migration for 12 teams, reducing warehouse cost 30%."

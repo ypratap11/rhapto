@@ -6,6 +6,7 @@ review" and still have the file on disk, so the serving paths refuse independent
 the same behaviour over HTTP is `test_blocked_package_download_is_unmistakable` (CI).
 """
 
+import io
 import uuid
 import zipfile
 from pathlib import Path
@@ -95,8 +96,8 @@ def test_the_zip_leaves_the_documents_out_when_asked_even_if_they_are_on_disk(
     withheld = store.build_zip(
         str(package_id), "note", "{}", {"GUARDRAILS-BLOCKED.md": "x"}, include_documents=False
     )
-    with zipfile.ZipFile(__import__("io").BytesIO(withheld)) as zf:
+    with zipfile.ZipFile(io.BytesIO(withheld)) as zf:
         assert sorted(zf.namelist()) == ["GUARDRAILS-BLOCKED.md", "cover-note.md", "package.json"]
     included = store.build_zip(str(package_id), "note", "{}")
-    with zipfile.ZipFile(__import__("io").BytesIO(included)) as zf:
+    with zipfile.ZipFile(io.BytesIO(included)) as zf:
         assert {"resume.docx", "resume.pdf"} <= set(zf.namelist())

@@ -214,9 +214,20 @@ class EditedVersion(NamedTuple):
 async def _edited_blocks_version(
     parent: Package, profile: Profile, extract: JDExtract, resume: ResumeDocument
 ) -> EditedVersion:
-    """Re-validate the hand-edited resume against the parent's stored selection and re-render."""
+    """Re-validate the hand-edited resume against the parent's stored selection and re-render.
+
+    `completeness` is skipped here and only here: a selected block the user deleted by hand is
+    their deliberate choice, not a silent AI drop (controller ruling, final review I-2). Provenance,
+    no-unverified-metrics and the configured rules still run, and a failing report still yields no
+    DOCX. The tune hand-edit path runs `run_tune_guardrails`, which never includes completeness.
+    """
     report = run_guardrails(
-        resume, profile, parent.selection_block_ids, extract, cover_note=parent.cover_note
+        resume,
+        profile,
+        parent.selection_block_ids,
+        extract,
+        cover_note=parent.cover_note,
+        include_completeness=False,
     )
     docx = b""
     if report.passed:
@@ -495,5 +506,5 @@ async def package_file(
         path,
         media_type=media,
         filename=f"{stem}_Resume.{ext}",
-        headers={GUARDRAIL_HEADER: "passed" if report.passed else "blocked"},
+        headers={GUARDRAIL_HEADER: "passed"},  # a blocked report was refused above
     )

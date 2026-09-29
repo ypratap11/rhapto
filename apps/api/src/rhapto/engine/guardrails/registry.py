@@ -79,8 +79,8 @@ REMEDIES: dict[str, str] = {
         "block, then regenerate."
     ),
     COMPLETENESS: (
-        "A role, project or credential your profile selected for this job is missing from the "
-        "resume. Regenerate; if the same one keeps vanishing, try a stronger model."
+        "Every selected role, project and credential must keep an entry. Shorten an entry to one "
+        "line rather than deleting it, or regenerate."
     ),
 }
 
@@ -105,6 +105,8 @@ def run_guardrails(
     selection_ids: Iterable[str],
     extract: JDExtract,
     cover_note: str | None = None,
+    *,
+    include_completeness: bool = True,
 ) -> GuardrailReport:
     """Run the three unconditional rules plus every active configured rule.
 
@@ -116,6 +118,12 @@ def run_guardrails(
     A user may still carry a `no-unverified-metrics` row -- older profiles all do. Its `config` is
     honoured, and `active: false` is ignored rather than obeyed, because this rule is not one a user
     gets to turn off. It is never run twice.
+
+    `include_completeness=False` is for the human hand-edit path ONLY (`api/routers/packages.py`,
+    PATCH): a selected block the user deletes by hand is a deliberate choice, not a silent AI drop,
+    which is what completeness guards against. Model output (tailor, repair) always runs it. This is
+    a code flag and never a profile setting -- `guardrails.yaml` still cannot name the rule.
+    Provenance and no-unverified-metrics run on every path, flag or not.
     """
     ctx = GuardrailContext(
         resume=resume,
@@ -123,13 +131,15 @@ def run_guardrails(
         selection_ids=frozenset(selection_ids),
         extract=extract,
     )
-    rules_run = [PROVENANCE, METRICS, COMPLETENESS]
+    rules_run = [PROVENANCE, METRICS]
     violations: list[Violation] = check_provenance(ctx)
     # Honour an existing row's config if the profile has one; otherwise the rule's own defaults.
     metrics_config = next((r.config for r in profile.guardrails if r.rule == METRICS), None)
     metrics_ctx = ctx if metrics_config is None else ctx.with_config(metrics_config)
     violations.extend(check_metrics(metrics_ctx))
-    violations.extend(check_completeness(ctx))
+    if include_completeness:
+        rules_run.append(COMPLETENESS)
+        violations.extend(check_completeness(ctx))
     for rule in profile.guardrails:
         if rule.rule == METRICS:
             continue  # already run above, unconditionally

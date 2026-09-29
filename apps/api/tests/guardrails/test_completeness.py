@@ -598,3 +598,45 @@ def test_merge_annotation_prefers_a_cited_bullet_fold_over_an_earlier_text_menti
     assert [v.block_id for v in violations] == ["role-e"]
     assert "sections[0].entries[1]" in violations[0].message
     assert "bullets [1]" in violations[0].message
+
+
+# --- Hand-edit exemption (final review I-2, controller ruling) --------------------------------
+
+
+def _without_credentials(resume: ResumeDocument) -> ResumeDocument:
+    resume.sections = [s for s in resume.sections if s.kind != "credentials"]
+    return resume
+
+
+def test_model_output_that_drops_a_credential_is_blocked_by_default(demo_profile_dir: Path) -> None:
+    profile = load_profile(demo_profile_dir)
+    resume = _without_credentials(demo_resume())
+    report = run_guardrails(resume, profile, [*profile.block_map()], demo_extract())
+    assert report.passed is False
+    assert [v.block_id for v in report.violations if v.rule == RULE_NAME] == ["cred-pmp"]
+
+
+def test_hand_edit_flag_skips_only_completeness(demo_profile_dir: Path) -> None:
+    """The user's own deletion is deliberate, not a silent AI drop: the hand-edit path passes
+    `include_completeness=False`. It is a code flag, never a `guardrails.yaml` switch."""
+    profile = load_profile(demo_profile_dir)
+    resume = _without_credentials(demo_resume())
+    report = run_guardrails(
+        resume, profile, [*profile.block_map()], demo_extract(), include_completeness=False
+    )
+    assert report.passed is True, [v.model_dump() for v in report.violations]
+    assert RULE_NAME not in report.rules_run
+    assert report.rules_run[:2] == ["provenance", "no-unverified-metrics"]
+
+
+def test_hand_edit_flag_still_runs_metrics_and_provenance(demo_profile_dir: Path) -> None:
+    profile = load_profile(demo_profile_dir).model_copy(update={"guardrails": []})
+    resume = _without_credentials(demo_resume())
+    resume.sections[0].entries[0].bullets.append(bullet("Cut cost 37%.", "acme-migration"))
+    resume.sections[0].entries[0].bullets.append(bullet("Made up.", "ghost-block"))
+    report = run_guardrails(
+        resume, profile, [*profile.block_map()], demo_extract(), include_completeness=False
+    )
+    assert report.passed is False
+    rules = {v.rule for v in report.violations if v.severity == "error"}
+    assert {"provenance", "no-unverified-metrics"} <= rules
