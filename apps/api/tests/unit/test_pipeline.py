@@ -396,6 +396,8 @@ async def test_tune_mode_budget_exhausted_before_repair_yields_a_blocked_package
     )
     assert result.package.status == "blocked" and result.package.llm_calls == 2
     assert len(llm.calls) == 2 and result.docx == b""
+    # Blocks-only fields stay at their defaults in tune mode (nothing reads them there).
+    assert result.pre_repair_report is None and result.repaired is False
 
 
 async def test_tune_mode_regeneration_passes_previous_edits(profile: Profile) -> None:

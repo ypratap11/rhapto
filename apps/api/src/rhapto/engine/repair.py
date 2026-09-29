@@ -12,8 +12,9 @@ that is not in <blocks>, remove only that bullet -- never the entry it was in, a
 A "completeness" violation names a block that must have exactly one entry in its own section (role -> experience,
 project -> projects, credential -> credentials), with org, role/title and period copied verbatim from that
 block's fields in <blocks>. Never resolve ANY violation by deleting an entry, a section, or a block id: the
-corrected document must keep an entry for every block id it already cites, plus a new entry for every block id
-a completeness violation names. If the corrected document would be too long, shorten a low-priority entry to a
+corrected document must keep an entry for every block id in <blocks> it already cites, plus a new entry for every
+block id a completeness violation names. An entry citing a block id that is not in <blocks> must be re-pointed to
+the right block or removed. If the corrected document would be too long, shorten a low-priority entry to a
 single bullet -- never remove the entry. Do not introduce new block ids."""
 
 

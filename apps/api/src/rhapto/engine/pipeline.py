@@ -90,6 +90,28 @@ async def _structured_call[R](
     return value
 
 
+async def _repair_call[R](
+    budget: CallBudget, call: Callable[[], Awaitable[tuple[R, TokenUsage]]]
+) -> R | None:
+    """The one repair attempt both modes make, or None when it cannot happen or failed.
+
+    Unlike `_structured_call` it never raises and never retries: with no calls left, or with a
+    malformed answer (which still counts as a call), the caller keeps its blocked draft so the
+    human sees the report instead of a failed task.
+    """
+    try:
+        budget.before_call()
+    except LLMBudgetExceeded:
+        return None
+    try:
+        value, usage = await call()
+    except MalformedOutputError:
+        budget.after_call(TokenUsage())
+        return None
+    budget.after_call(usage)
+    return value
+
+
 def _build_package(
     request: TailorRequest,
     track: Track,
@@ -180,30 +202,18 @@ async def tailor(
     if not report.passed:
         pre_repair_report = report
         await _notify(on_step, "repair")
-        try:
-            budget.before_call()
-        except LLMBudgetExceeded:
-            pass  # no calls left; keep the blocked draft so the human sees the report
-        else:
-            try:
-                fixed, usage = await repair(
-                    output, report, build_system_blocks(profile, track, selection), llm
-                )
-            except MalformedOutputError:
-                # The retry budget is spent; keep the blocked draft so the human sees the report.
-                budget.after_call(TokenUsage())
-            else:
-                budget.after_call(usage)
-                output = fixed
-                was_repaired = True
-                resume = assemble_resume(output, profile)
-                report = run_guardrails(
-                    resume,
-                    profile,
-                    selection.block_ids,
-                    jd_extract,
-                    cover_note=output.cover_note,
-                )
+        blocked = output
+        fixed = await _repair_call(
+            budget,
+            lambda: repair(blocked, report, build_system_blocks(profile, track, selection), llm),
+        )
+        if fixed is not None:
+            output = fixed
+            was_repaired = True
+            resume = assemble_resume(output, profile)
+            report = run_guardrails(
+                resume, profile, selection.block_ids, jd_extract, cover_note=output.cover_note
+            )
 
     await _notify(on_step, "render")
     docx = b""
@@ -263,23 +273,17 @@ async def _tune_branch(
 
     if not report.passed:
         await _notify(on_step, "repair")
-        try:
-            budget.before_call()
-        except LLMBudgetExceeded:
-            pass  # no calls left; keep the blocked draft so the human sees the report
-        else:
-            try:
-                fixed, usage = await tune_repair(output, report, build_tune_system_blocks(doc), llm)
-            except MalformedOutputError:
-                # The retry budget is spent; keep the blocked draft so the human sees the report.
-                budget.after_call(TokenUsage())
-            else:
-                budget.after_call(usage)
-                output = fixed
-                edits = to_edits(doc, output)
-                report = run_tune_guardrails(
-                    doc, edits, jd_extract, profile.guardrails, cover_note=output.cover_note
-                )
+        blocked_tune = output
+        fixed_tune = await _repair_call(
+            budget,
+            lambda: tune_repair(blocked_tune, report, build_tune_system_blocks(doc), llm),
+        )
+        if fixed_tune is not None:
+            output = fixed_tune
+            edits = to_edits(doc, output)
+            report = run_tune_guardrails(
+                doc, edits, jd_extract, profile.guardrails, cover_note=output.cover_note
+            )
 
     await _notify(on_step, "render")
     # Unlike blocks mode there is no safe partial artefact: the writer edits the user's own file
