@@ -124,15 +124,13 @@ class GeminiProvider:
         text = response.text
         if not text:
             raise MalformedOutputError(
-                f"Gemini returned no text for {name} "
-                "(the response was empty or blocked)"
+                f"Gemini returned no text for {name} (the response was empty or blocked)"
             )
         try:
             value = output_schema.model_validate_json(text)
         except ValidationError as exc:
             raise MalformedOutputError(
-                f"{name} did not match the schema: "
-                f"{exc.error_count()} validation error(s)"
+                f"{name} did not match the schema: {exc.error_count()} validation error(s)"
             ) from exc
         except ValueError as exc:
             raise MalformedOutputError(
