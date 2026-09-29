@@ -63,9 +63,9 @@ jobs:
           RHAPTO_TEST_REQUIRE_SERVICES: "1"
         run: uv run --locked pytest -q --junitxml=../../pytest-junit.xml
       - name: No unexpected skips
-        if: always()
+        if: ${{ !cancelled() }}
         working-directory: .
-        run: python .github/scripts/check_skips.py pytest-junit.xml
+        run: python3 .github/scripts/check_skips.py pytest-junit.xml
 
   web:
     name: Web (types, lint, tests)
