@@ -151,8 +151,8 @@ export function CaughtDemo() {
           What happens inside a run
         </p>
         <p className="mt-1 text-xs text-muted-foreground">
-          The model&rsquo;s draft is checked before you see the resume. A caught line gets one fix;
-          only if that fails is the package blocked, and then you see the rule that fired.
+          The model&rsquo;s draft is checked before you see the resume. The draft gets one repair
+          pass; only if that fails is the package blocked, and then you see the rule that fired.
         </p>
       </div>
 
@@ -219,7 +219,7 @@ export function CaughtDemo() {
             key={index}
             data-testid="caught-stamp"
             aria-hidden="true"
-            className="rounded-chip border-2 border-destructive px-2 py-0.5 font-mono text-[0.7rem] font-bold tracking-widest text-destructive uppercase -rotate-3 motion-safe:animate-in motion-safe:fade-in motion-safe:zoom-in-150 motion-safe:duration-300"
+            className="rounded-control border-[3px] border-destructive px-3 py-1 font-mono text-base font-extrabold tracking-[0.2em] text-destructive uppercase -rotate-6 sm:text-lg motion-safe:animate-in motion-safe:fade-in motion-safe:zoom-in-150 motion-safe:duration-300"
           >
             Caught
           </span>
@@ -239,7 +239,7 @@ export function CaughtDemo() {
       </div>
 
       <div className="border-t border-diff-add/30 bg-diff-add-bg px-4 py-3 text-xs">
-        <p className="font-mono font-medium text-diff-add">Sent instead</p>
+        <p className="font-mono font-medium text-diff-add">Repaired to</p>
         <p className="mt-1 font-medium text-foreground [overflow-wrap:anywhere]">
           {current.sent.text}
         </p>

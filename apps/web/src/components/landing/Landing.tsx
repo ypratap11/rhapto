@@ -152,7 +152,7 @@ export function Landing() {
               Rhapto takes that weight off. It finds the roles worth your time and writes a resume
               that is true to what you have actually done. It will not apply on your behalf — there is no
               code path that does. And every draft is checked for invented numbers and lines with no
-              source, so what reaches you has been held against what you have actually done. What is
+              source, and one that fails is marked blocked. What is
               left is the part that needs a person: deciding where to apply, and what to say when
               someone answers.
             </p>
@@ -308,9 +308,9 @@ export function Landing() {
                   behalf.
                 </li>
                 <li>
-                  Let an unverified number or a line with no source through &mdash; those two checks
-                  always run. The check that job titles, employers and dates match your blocks is on
-                  by default.
+                  Quietly let an unverified number or a line with no source through. Those two checks
+                  always run, and a package that fails them after one fix attempt is marked blocked.
+                  The check that job titles, employers and dates match your blocks is on by default.
                 </li>
                 <li>Spray hundreds of applications. It is built for a considered few, not volume.</li>
                 <li>

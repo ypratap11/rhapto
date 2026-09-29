@@ -152,7 +152,13 @@ describe("CaughtDemo, the three cases", () => {
     }
   });
 
-  it("cites a real block id in the line sent instead", () => {
+  it("labels the fixed line as repaired, never as sent: Rhapto does not submit anything", () => {
+    render(<CaughtDemo />);
+    expect(screen.getByText("Repaired to")).toBeInTheDocument();
+    expect(screen.queryByText(/sent instead/i)).not.toBeInTheDocument();
+  });
+
+  it("cites a real block id in the repaired line", () => {
     render(<CaughtDemo />);
     fireEvent.click(screen.getByRole("button", { name: EXPECTED[2].button }));
     expect(screen.getByText(/block: acme-migration/)).toBeInTheDocument();
@@ -172,7 +178,7 @@ describe("CaughtDemo, the three cases", () => {
     const { container } = render(<CaughtDemo />);
     const text = container.textContent ?? "";
     expect(text).toMatch(/inside a run/i);
-    expect(text).toMatch(/one fix/i);
+    expect(text).toMatch(/one repair\s+pass/i);
     expect(text).toMatch(/blocked/i);
     expect(text).not.toMatch(/no document|not produced|never produced|before this document/i);
   });
