@@ -51,6 +51,20 @@ def cover_note_metric_output() -> dict[str, Any]:
     return output
 
 
+def missing_role_output() -> dict[str, Any]:
+    """Drops the acme-data-pm entry entirely -- the adversarial case this project targets."""
+    output = good_output()
+    output["sections"][0]["entries"] = []
+    return output
+
+
+def repair_drops_credential_output() -> dict[str, Any]:
+    """A 'repair' that fixes the role but drops the credential instead -- must still block."""
+    output = good_output()
+    output["sections"][2]["entries"] = []
+    return output
+
+
 def test_call_budget() -> None:
     budget = CallBudget(max_calls=2)
     budget.before_call()
@@ -91,6 +105,8 @@ async def test_malformed_compose_is_retried_within_the_budget(profile: Profile) 
     result = await tailor(TailorRequest(jd_text=JD), profile, llm, FakeEmbeddingProvider())
     assert result.package.status == "draft" and result.package.llm_calls == 3
     assert len(llm.calls) == 3
+    # I-3: three calls and a draft, but the third was a malformed-output retry, not a repair.
+    assert result.pre_repair_report is None and result.repaired is False
 
 
 async def test_malformed_compose_twice_raises_instead_of_a_fourth_call(profile: Profile) -> None:
@@ -111,6 +127,8 @@ async def test_repair_path_uses_three_calls_and_passes(profile: Profile) -> None
     llm = FakeLLMProvider([demo_extract(), bad_output(), good_output()])
     result = await tailor(TailorRequest(jd_text=JD), profile, llm, FakeEmbeddingProvider())
     assert result.package.status == "draft" and result.package.llm_calls == 3
+    assert result.repaired is True
+    assert result.pre_repair_report is not None and not result.pre_repair_report.passed
     repair_call = llm.calls[2]
     assert "25%" in repair_call.messages[0].content and repair_call.output_schema is ComposeOutput
     assert repair_call.system == llm.calls[1].system  # same cached system blocks as compose
@@ -121,6 +139,7 @@ async def test_usage_reaches_the_package(profile: Profile) -> None:
     llm = FakeLLMProvider([demo_extract(), good_output()])
     result = await tailor(TailorRequest(jd_text=JD), profile, llm, FakeEmbeddingProvider())
     assert result.package.llm_calls == 2
+    assert result.pre_repair_report is None and result.repaired is False
     assert result.package.usage.input_tokens == 20
     assert result.package.usage.output_tokens == 10
 
@@ -155,17 +174,24 @@ async def test_unrepairable_output_is_blocked(profile: Profile) -> None:
     )  # still rendered for review; the orphan check is the only hard stop
 
 
-async def test_budget_exceeded_raises_before_fourth_call(profile: Profile) -> None:
+async def test_budget_exceeded_during_repair_yields_a_blocked_package_not_a_crash(
+    profile: Profile,
+) -> None:
+    """C2: an exhausted budget on the repair path must not raise -- it must return the blocked
+    draft, exactly like a MalformedOutputError on the same path already does."""
     llm = FakeLLMProvider([demo_extract(), bad_output(), bad_output()])
-    with pytest.raises(LLMBudgetExceeded):
-        await tailor(
-            TailorRequest(jd_text=JD),
-            profile,
-            llm,
-            FakeEmbeddingProvider(),
-            budget=CallBudget(max_calls=2),
-        )
+    result = await tailor(
+        TailorRequest(jd_text=JD),
+        profile,
+        llm,
+        FakeEmbeddingProvider(),
+        budget=CallBudget(max_calls=2),
+    )
+    assert result.package.status == "blocked" and result.package.llm_calls == 2
     assert len(llm.calls) == 2
+    assert not result.package.guardrail_report.passed
+    # The first report is kept, and the result says no repair ever ran.
+    assert result.pre_repair_report is not None and result.repaired is False
 
 
 async def test_orphan_bullet_blocks_without_docx(profile: Profile) -> None:
@@ -217,6 +243,34 @@ async def test_cover_note_metric_blocks_even_when_the_resume_is_clean(profile: P
     assert [v.path for v in violations] == ["cover_note"]
     assert violations[0].rule == "no-unverified-metrics" and violations[0].block_id is None
     assert "37%" in violations[0].message
+
+
+async def test_missing_role_block_triggers_repair_and_restoring_it_passes(
+    profile: Profile,
+) -> None:
+    llm = FakeLLMProvider([demo_extract(), missing_role_output(), good_output()])
+    result = await tailor(TailorRequest(jd_text=JD), profile, llm, FakeEmbeddingProvider())
+    assert result.package.status == "draft" and result.package.llm_calls == 3
+    assert result.package.guardrail_report.passed
+    assert result.repaired is True
+    assert result.pre_repair_report is not None
+    first = [v for v in result.pre_repair_report.violations if v.rule == "completeness"]
+    assert [v.block_id for v in first] == ["acme-data-pm"]
+    # The violation itself, not REPAIR_INSTRUCTIONS' own mention of the word, must reach the model.
+    sent = llm.calls[2].messages[0].content
+    assert "[completeness]" in sent and "was selected but does not appear in Experience" in sent
+    assert "acme-data-pm" in sent
+
+
+async def test_repair_that_drops_a_different_block_is_blocked_with_the_post_repair_report(
+    profile: Profile,
+) -> None:
+    llm = FakeLLMProvider([demo_extract(), missing_role_output(), repair_drops_credential_output()])
+    result = await tailor(TailorRequest(jd_text=JD), profile, llm, FakeEmbeddingProvider())
+    assert result.package.status == "blocked" and result.package.llm_calls == 3
+    violations = result.package.guardrail_report.violations
+    assert any(v.rule == "completeness" and v.block_id == "cred-pmp" for v in violations)
+    assert not any(v.block_id == "acme-data-pm" for v in violations)  # the role was restored
 
 
 # --- tune mode -------------------------------------------------------------------------------
@@ -312,6 +366,22 @@ async def test_tune_mode_malformed_repair_keeps_the_blocked_draft(profile: Profi
     result = await tailor(tune_request(doc, data), profile, llm, FakeEmbeddingProvider())
     assert result.package.status == "blocked" and result.package.llm_calls == 3
     assert not result.package.guardrail_report.passed
+
+
+async def test_tune_mode_budget_exhausted_before_repair_yields_a_blocked_package(
+    profile: Profile,
+) -> None:
+    doc, data = _source()
+    llm = FakeLLMProvider([demo_extract(), tune_output(DIRTY_BULLET), tune_output(CLEAN_BULLET)])
+    result = await tailor(
+        tune_request(doc, data),
+        profile,
+        llm,
+        FakeEmbeddingProvider(),
+        budget=CallBudget(max_calls=2),
+    )
+    assert result.package.status == "blocked" and result.package.llm_calls == 2
+    assert len(llm.calls) == 2 and result.docx == b""
 
 
 async def test_tune_mode_regeneration_passes_previous_edits(profile: Profile) -> None:
