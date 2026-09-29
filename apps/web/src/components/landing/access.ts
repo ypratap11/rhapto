@@ -15,3 +15,26 @@ export const ACCESS_REQUEST_EMAIL = "hellorhapto@augaster.com";
 export const ACCESS_REQUEST_MAILTO = `mailto:${ACCESS_REQUEST_EMAIL}?subject=${encodeURIComponent(
   "Rhapto access request",
 )}`;
+
+/** Where "Request beta access" goes (the owner's Google Form). Both `Landing` and the
+ * tour's outro read it through `accessRequestLink`, so they cannot drift apart. Emptying it falls
+ * back to the mailto above, which is the one-line way to switch back. */
+export const ACCESS_REQUEST_URL = "https://forms.gle/1GUeGcKB9fCiJAdFA";
+
+export type AccessRequestLink = {
+  href: string;
+  /** True only for an https URL: the caller opens it in a new tab with `rel="noreferrer"`. The mailto
+   * fallback is not external and gets neither attribute. */
+  external: boolean;
+};
+
+/** Pure. Anything that is not a parseable https URL (empty, http, javascript:, mailto:, garbage)
+ * falls back to the mailto, so a typo in `ACCESS_REQUEST_URL` cannot produce a dead or unsafe link. */
+export function accessRequestLink(url: string = ACCESS_REQUEST_URL): AccessRequestLink {
+  try {
+    if (new URL(url).protocol === "https:") return { href: url, external: true };
+  } catch {
+    // not a URL: fall through to the mailto
+  }
+  return { href: ACCESS_REQUEST_MAILTO, external: false };
+}

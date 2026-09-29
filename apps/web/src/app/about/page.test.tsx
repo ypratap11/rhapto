@@ -81,13 +81,14 @@ describe("AboutPage", () => {
 
   it("states the three guarantees that are the reason to use it", () => {
     render(<AboutPage />);
-    expect(screen.getByText("Every line has a source")).toBeInTheDocument();
-    expect(screen.getByText("Numbers need your sign-off")).toBeInTheDocument();
+    expect(screen.getByText("Know where each claim came from")).toBeInTheDocument();
+    expect(screen.getByText("Use numbers you can support")).toBeInTheDocument();
     expect(screen.getByText("The last click is yours")).toBeInTheDocument();
   });
 
   it("says what a resume costs before anyone spends money", () => {
-    // The project funds nobody's API usage, so the price belongs on the way in, not in a FAQ.
+    // Per-model costs moved, whole, into the developer section; the free-beta line is in the main flow
+    // (Landing.test.tsx). Every regex below is unchanged.
     render(<AboutPage />);
     const costs = screen.getByText("What it costs").closest("[data-slot=card]");
     expect(costs).not.toBeNull();
@@ -99,8 +100,11 @@ describe("AboutPage", () => {
     expect(costs).toHaveTextContent(/left a whole role out/);
   });
 
-  it("promises in plain words that it never submits an application", () => {
+  it("promises in plain words, once, that it never submits an application", () => {
+    // Was /Submit an application/i on the will-not-do bullet. That bullet and the why-exists sentence
+    // were dropped so the promise is said once, in the third card, the strongest instance.
     render(<AboutPage />);
-    expect(screen.getByText(/Submit an application/i)).toBeInTheDocument();
+    expect(screen.getByText(/no code path in it that submits an application/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/no code path/i)).toHaveLength(1);
   });
 });

@@ -23,7 +23,7 @@ import { useEffect, useId, useRef, useState, useSyncExternalStore } from "react"
 import type { KeyboardEvent } from "react";
 import { SAME_ORIGIN_DEPLOYMENT } from "@/lib/api/client";
 import { cn } from "cn";
-import { ACCESS_REQUEST_MAILTO } from "./access";
+import { accessRequestLink } from "./access";
 import { prefersReducedMotion } from "./JourneyWalkthrough";
 import { CHAPTERS, CHAPTER_FIRST_STEP, STEPS, STEPS_STILL, TOUR_H, TOUR_W } from "./tourSteps";
 import type { Seg } from "./tourSteps";
@@ -70,6 +70,7 @@ function subscribeReducedMotion(onChange: () => void) {
 
 export function ProductTour() {
   const labelId = useId();
+  const access = accessRequestLink();
   // -1 is the intro, STEPS.length is the outro.
   const [index, setIndex] = useState(-1);
   const reduced = useSyncExternalStore(subscribeReducedMotion, prefersReducedMotion, () => false);
@@ -231,7 +232,7 @@ export function ProductTour() {
                     Product tour, about 2 minutes
                   </p>
                   <h2 className="mb-3 font-heading text-[clamp(1.7rem,3.4vw,3rem)] leading-[1.05] font-medium tracking-tight text-balance">
-                    A resume you can defend in any interview.
+                    See a real run, start to finish
                   </h2>
                   <p className="mx-auto mb-5 max-w-[52ch] text-[clamp(0.95rem,1.2vw,1.1rem)] text-muted-foreground">
                     Follow Maya, a data program manager, from her career record to a tailored application,
@@ -279,7 +280,12 @@ export function ProductTour() {
                   </p>
                   <div className="flex flex-wrap items-center justify-center gap-3">
                     {SAME_ORIGIN_DEPLOYMENT ? (
-                      <a href={ACCESS_REQUEST_MAILTO} className={primaryBtn}>
+                      <a
+                        href={access.href}
+                        target={access.external ? "_blank" : undefined}
+                        rel={access.external ? "noreferrer" : undefined}
+                        className={primaryBtn}
+                      >
                         Request access
                       </a>
                     ) : (

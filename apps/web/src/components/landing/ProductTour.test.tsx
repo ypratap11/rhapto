@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { ACCESS_REQUEST_MAILTO } from "./access";
+import { ACCESS_REQUEST_MAILTO, ACCESS_REQUEST_URL } from "./access";
 import { ProductTour } from "./ProductTour";
 import { CHAPTERS, STEPS, TOUR_H, TOUR_W, layout } from "./tourSteps";
 
@@ -16,6 +16,17 @@ vi.mock("@/lib/api/client", async (importOriginal) => {
     get SAME_ORIGIN_DEPLOYMENT() {
       return sameOriginFlag.value;
     },
+  };
+});
+
+// The shipped request URL is the Google Form; to exercise the mailto fallback here the tour's own call
+// to `accessRequestLink()` is redirected to a chosen URL. The helper's logic is the real one.
+const accessUrl = { value: "" };
+vi.mock("./access", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./access")>();
+  return {
+    ...actual,
+    accessRequestLink: (url?: string) => actual.accessRequestLink(url ?? accessUrl.value),
   };
 });
 
@@ -31,6 +42,7 @@ function stubMatchMedia(reduce: boolean) {
 beforeEach(() => stubMatchMedia(false));
 afterEach(() => {
   sameOriginFlag.value = false;
+  accessUrl.value = "";
   vi.restoreAllMocks();
   Reflect.deleteProperty(window, "matchMedia");
 });
@@ -47,9 +59,11 @@ async function toStep(user: ReturnType<typeof userEvent.setup>, n: number) {
 describe("ProductTour, at rest", () => {
   it("opens on the intro: an h2, the disclosure, no picture, no hotspot", () => {
     const { container } = render(<ProductTour />);
-    expect(screen.getByRole("heading", { level: 2, name: /defend in any interview/i })).toHaveTextContent(
-      "A resume you can defend in any interview.",
+    expect(screen.getByRole("heading", { level: 2, name: /see a real run/i })).toHaveTextContent(
+      "See a real run, start to finish",
     );
+    // Not the page h1 repeated right under the hero.
+    expect(screen.queryByRole("heading", { name: /defend in any interview/i })).toBeNull();
     expect(screen.queryByRole("heading", { level: 1 })).toBeNull();
     // Visible text, not a tooltip: the visitor must be told Maya is fictional and the rest is real.
     expect(
@@ -104,7 +118,7 @@ describe("ProductTour, walking the steps", () => {
     await user.click(screen.getByRole("button", { name: /^back$/i }));
     await user.click(screen.getByRole("button", { name: /^back$/i }));
     expect(start()).toHaveFocus();
-    expect(screen.getByRole("heading", { level: 2, name: /defend in any interview/i })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 2, name: /see a real run/i })).toBeInTheDocument();
   });
 
   it("a chapter click jumps to that chapter's first step and marks it current", async () => {
@@ -229,7 +243,7 @@ describe("ProductTour, the outro", () => {
     expect(screen.queryByText(/private beta/i)).toBeNull();
   });
 
-  it("same-origin deployments get Request access -> the mailto, and say invite-only", async () => {
+  it("same-origin deployments with no request URL get Request access -> the mailto fallback, and say invite-only", async () => {
     sameOriginFlag.value = true;
     const user = userEvent.setup();
     render(<ProductTour />);
@@ -241,6 +255,22 @@ describe("ProductTour, the outro", () => {
     expect(screen.queryByRole("link", { name: /get started/i })).toBeNull();
     expect(screen.getByText(/invite-only/i)).toBeInTheDocument();
     expect(screen.queryByText(/private beta/i)).toBeNull();
+    // The mailto opens in place: no new tab.
+    const link = screen.getByRole("link", { name: /^request access$/i });
+    expect(link).not.toHaveAttribute("target");
+    expect(link).not.toHaveAttribute("rel");
+  });
+
+  it("with the shipped request URL the outro's Request access opens the form in a new tab", async () => {
+    sameOriginFlag.value = true;
+    accessUrl.value = ACCESS_REQUEST_URL;
+    const user = userEvent.setup();
+    render(<ProductTour />);
+    await toOutro(user);
+    const link = screen.getByRole("link", { name: /^request access$/i });
+    expect(link).toHaveAttribute("href", "https://forms.gle/1GUeGcKB9fCiJAdFA");
+    expect(link).toHaveAttribute("target", "_blank");
+    expect(link).toHaveAttribute("rel", "noreferrer");
   });
 
   it("Watch again returns to step 1 and focuses its heading", async () => {

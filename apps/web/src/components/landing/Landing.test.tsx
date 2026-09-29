@@ -3,7 +3,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { ACCESS_REQUEST_EMAIL, ACCESS_REQUEST_MAILTO } from "./access";
+import { ACCESS_REQUEST_EMAIL, ACCESS_REQUEST_MAILTO, ACCESS_REQUEST_URL } from "./access";
 import { Landing } from "./Landing";
 
 // `SAME_ORIGIN_DEPLOYMENT` is a `const` computed from an env var at module load, so a module mock is
@@ -20,70 +20,149 @@ vi.mock("@/lib/api/client", async (importOriginal) => {
   };
 });
 
+// The request URL ships empty (mailto fallback). To see the external-link branch render, `Landing`'s
+// own call to `accessRequestLink()` is redirected to a test URL; the helper's logic is the real one.
+const accessUrl = { value: "" };
+vi.mock("./access", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./access")>();
+  return {
+    ...actual,
+    accessRequestLink: (url?: string) => actual.accessRequestLink(url ?? accessUrl.value),
+  };
+});
+
 afterEach(() => {
   sameOriginFlag.value = false;
+  accessUrl.value = "";
 });
 
 describe("Landing, the way in", () => {
-  it("offers a stranger on the hosted instance both a sign-in and a way to ask for access", () => {
+  it("hosted hero: Request beta access is the one button, the tour is a link, sign-in is small text", () => {
     sameOriginFlag.value = true;
     render(<Landing />);
 
-    // The defect this fixes: the page told people to sign in and had no sign-in anywhere, and its
-    // only CTA led to a Cloudflare Access prompt that refuses an address nobody has allowlisted.
-    // Scoped to the hero rather than to the page, because that is where a stranger looks -- a
-    // page-wide query passes on the footer pair alone, which is how a weaker version of this
-    // assertion survived putting "Open your dashboard" back in the hero.
-    // The hero is the first band on the page; the other two are the product tour and How it works.
+    // The hero is the first band on the page. Scoped to it, because that is where a stranger looks --
+    // a page-wide query passes on the footer alone.
     const hero = screen.getAllByTestId("hero-band")[0]!;
-    expect(within(hero).getByRole("link", { name: /^sign in$/i })).toHaveAttribute(
-      "href",
-      "/dashboard",
-    );
-    expect(within(hero).getByRole("link", { name: /^request access$/i })).toHaveAttribute(
-      "href",
-      ACCESS_REQUEST_MAILTO,
-    );
+    // The three calls to action, in order; "What that means" after them is the anchor to #honest.
+    const links = within(hero).getAllByRole("link").slice(0, 3);
+    expect(links.map((l) => l.textContent)).toEqual([
+      "Request beta access",
+      "Watch the 2-minute tour",
+      "Sign in",
+    ]);
+
+    const [request, tour, signIn] = links as HTMLAnchorElement[];
+    expect(request).toHaveAttribute("href", ACCESS_REQUEST_MAILTO);
+    expect(tour).toHaveAttribute("href", "#tour");
+    expect(signIn).toHaveAttribute("href", "/dashboard");
+    // Hierarchy: only the request link is a filled button; the other two are plain text links.
+    expect(request!.className).toMatch(/bg-primary/);
+    expect(tour!.className).not.toMatch(/bg-primary|border-border/);
+    expect(signIn!.className).not.toMatch(/bg-primary|border-border/);
+    // "Already invited?" is the plain text that leads into the Sign in link.
+    expect(signIn!.parentElement!.textContent).toMatch(/Already invited\?\s*Sign in/);
+
     expect(screen.queryByRole("link", { name: /open your dashboard/i })).toBeNull();
+    expect(screen.queryByRole("link", { name: /^request access$/i })).toBeNull();
 
-    // And again at the foot of the page, so someone who read the whole thing does not scroll back.
-    const signIn = screen.getAllByRole("link", { name: /^sign in$/i });
-    expect(signIn).toHaveLength(2);
-    for (const link of signIn) expect(link).toHaveAttribute("href", "/dashboard");
-
-    const request = screen.getAllByRole("link", { name: /^request access$/i });
-    expect(request).toHaveLength(2);
-    for (const link of request) expect(link).toHaveAttribute("href", ACCESS_REQUEST_MAILTO);
-    // Spelled out rather than only compared to the constant: a typo'd or emptied address would
-    // otherwise agree with itself and pass.
+    // Footer mirrors it, so the Sign-in count stays two.
+    const signInAll = screen.getAllByRole("link", { name: /^sign in$/i });
+    expect(signInAll).toHaveLength(2);
+    for (const link of signInAll) expect(link).toHaveAttribute("href", "/dashboard");
+    const requestAll = screen.getAllByRole("link", { name: /^request beta access$/i });
+    expect(requestAll).toHaveLength(2);
+    for (const link of requestAll) {
+      expect(link).toHaveAttribute("href", ACCESS_REQUEST_MAILTO);
+      // Mailto links open in place, with no target or rel.
+      expect(link).not.toHaveAttribute("target");
+      expect(link).not.toHaveAttribute("rel");
+    }
+    // Spelled out rather than only compared to the constant.
     expect(ACCESS_REQUEST_MAILTO).toBe(
       "mailto:hellorhapto@augaster.com?subject=Rhapto%20access%20request",
     );
     expect(ACCESS_REQUEST_EMAIL).toBe("hellorhapto@augaster.com");
   });
 
-  it("says that access is invite-only, next to the buttons, instead of letting Cloudflare Access refuse people unexplained", () => {
+  it("with the shipped request URL, both request buttons open it in a new tab and the address is not printed", () => {
+    sameOriginFlag.value = true;
+    accessUrl.value = ACCESS_REQUEST_URL;
+    render(<Landing />);
+    const requestAll = screen.getAllByRole("link", { name: /^request beta access$/i });
+    expect(requestAll).toHaveLength(2);
+    for (const link of requestAll) {
+      expect(link).toHaveAttribute("href", "https://forms.gle/1GUeGcKB9fCiJAdFA");
+      expect(link).toHaveAttribute("target", "_blank");
+      expect(link).toHaveAttribute("rel", "noreferrer");
+    }
+    expect(document.querySelectorAll('a[href^="mailto:"]')).toHaveLength(0);
+    expect(document.body.textContent).not.toContain(ACCESS_REQUEST_EMAIL);
+  });
+
+  it("gives the tour section the #tour anchor, on Landing's wrapper", () => {
+    render(<Landing />);
+    const target = document.getElementById("tour");
+    expect(target).not.toBeNull();
+    expect(target!.tagName).toBe("SECTION");
+    expect(target!.className).toMatch(/scroll-mt-20/);
+    expect(within(target!).getByRole("region", { name: /product tour/i })).toBeInTheDocument();
+    expect(document.querySelectorAll("#tour")).toHaveLength(1);
+  });
+
+  it("orders the page: hero, tour, why, chatbot, how it works, before you start, developers", () => {
+    render(<Landing />);
+    const at = (name: RegExp) => screen.getByRole("heading", { level: 2, name });
+    const order = [
+      screen.getByRole("heading", { level: 1 }),
+      screen.getByRole("region", { name: /product tour/i }),
+      at(/why this exists/i),
+      at(/why not just ask a chatbot/i),
+      at(/^how it works$/i),
+      at(/before you start/i),
+      at(/for developers & self-hosting/i),
+    ];
+    for (let i = 1; i < order.length; i++) {
+      expect(
+        order[i - 1]!.compareDocumentPosition(order[i]!) & Node.DOCUMENT_POSITION_FOLLOWING,
+        `section ${i} follows section ${i - 1}`,
+      ).toBeTruthy();
+    }
+    expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);
+  });
+
+  it("says private beta in the hero with no pronoun and no turnaround, and keeps the allowlist truth under Before you start", () => {
     sameOriginFlag.value = true;
     render(<Landing />);
-    const line = screen.getByText(/sign-in is an allowlist the maintainer keeps by hand/i);
-    expect(line).toBeInTheDocument();
-    // Nobody has committed to answering, so this line must not imply a turnaround.
-    expect(line.textContent ?? "").not.toMatch(/reply|respond|get back|within \d|hour|business day/i);
-    // And no pronoun for the maintainer: the page never names them and states nobody's pronouns.
-    expect(line.textContent ?? "").not.toMatch(/\b(him|her|his|hers|he|she|they|them)\b/i);
+    const hero = screen.getAllByTestId("hero-band")[0]!;
+    const line = within(hero).getByText(/Private beta: sign-in is invite-only, so request access first\./);
+    // Nobody has committed to answering, so this line must not imply a turnaround or a grant.
+    expect(line.textContent ?? "").not.toMatch(/reply|respond|get back|within \d|hour|business day|I'll|I will/i);
+    // And no pronoun for the maintainer.
+    expect(line.textContent ?? "").not.toMatch(/\b(him|her|his|hers|he|she|they|them|i)\b/i);
+    // The mechanics moved, shortened, and stayed true: addresses not on the list are turned away.
+    const before = screen.getByRole("heading", { name: /before you start/i }).closest("section")!;
+    const mech = within(before).getByText(/sign-in is an allowlist the maintainer keeps by hand/i);
+    expect(mech.textContent).toMatch(/not on it will be turned away/i);
+    expect(mech.textContent ?? "").not.toMatch(/reply|respond|get back|within \d|hour|business day/i);
+    expect(mech.textContent ?? "").not.toMatch(/\b(him|her|his|hers|he|she|they|them)\b/i);
   });
 
   it("offers a self-hoster neither sign-in nor request access, because they have nobody to ask", () => {
     render(<Landing />);
     expect(screen.getByRole("link", { name: /^get started$/i })).toHaveAttribute("href", "/settings");
     expect(screen.queryByRole("link", { name: /^sign in$/i })).toBeNull();
-    expect(screen.queryByRole("link", { name: /request access/i })).toBeNull();
+    expect(screen.queryByRole("link", { name: /request (beta )?access/i })).toBeNull();
+    expect(screen.queryByText(/private beta/i)).toBeNull();
+    // (Journey beat 1 still mentions the allowlist in both modes; that is outside this change.)
+    const before = screen.getByRole("heading", { name: /before you start/i }).closest("section")!;
+    expect(within(before).queryByText(/allowlist/i)).toBeNull();
     // No mailto at all: nothing on a self-hosted page should mail the maintainer of someone else's
     // instance.
     expect(document.querySelectorAll('a[href^="mailto:"]')).toHaveLength(0);
   });
 
-  it("keeps the data-residency disclosure whole, for both audiences, after the five cards went", () => {
+  it("keeps the data-residency disclosure whole, for both audiences, now in the developer section", () => {
     // This assertion used to reach the "Get in" card via the How it works list. The cards were
     // removed as a duplicate telling of the journey, but card 1 was never really a step -- it is the
     // disclosure someone reads while deciding whether to upload a CV, and its wording was rewritten
@@ -93,9 +172,12 @@ describe("Landing, the way in", () => {
     for (const hosted of [false, true]) {
       sameOriginFlag.value = hosted;
       const { unmount } = render(<Landing />);
-      const block = screen
-        .getByRole("heading", { name: /wherever you run it/i })
-        .parentElement!.textContent!;
+      const heading = screen.getByRole("heading", { level: 3, name: /wherever you run it/i });
+      // Moved word for word into "For developers & self-hosting".
+      expect(heading.closest("section")).toBe(
+        screen.getByRole("heading", { level: 2, name: /for developers & self-hosting/i }).closest("section"),
+      );
+      const block = heading.parentElement!.textContent!;
       expect(block).toMatch(/stay on your machine/i);
       // The exception is load-bearing: a privacy claim that omits what IS sent is the defect this
       // sentence shipped with. It must keep naming the model provider and that it happens per run.
@@ -137,6 +219,8 @@ describe("Landing, the way in", () => {
     expect(lede.textContent).toMatch(/one fix/i);
     expect(lede.textContent).toMatch(/blocked/i);
     expect(lede.textContent).toMatch(/you press\s+submit/i);
+    // said once on the whole page
+    expect(screen.getAllByText(/no code path/i)).toHaveLength(1);
     // the demo is in the hero, beside the copy
     expect(within(hero).getByText(/what happens inside a run/i)).toBeInTheDocument();
     // "A new account starts empty" keeps its place in the hero
@@ -166,9 +250,41 @@ describe("Landing, the way in", () => {
 
   it("says a failed number check first gets one fix, and blocks only if that fails", () => {
     render(<Landing />);
-    const card = screen.getByText("Numbers need your sign-off").closest("[data-slot='card']")!;
+    const card = screen.getByText("Use numbers you can support").closest("[data-slot='card']")!;
     expect(card.textContent).toMatch(/one try at a fix/i);
     expect(card.textContent).toMatch(/if that fails, the whole package is marked blocked/i);
+  });
+
+  it("benefit-led card titles, and the third card is kept whole", () => {
+    render(<Landing />);
+    expect(screen.getByText("Know where each claim came from")).toBeInTheDocument();
+    expect(screen.getByText("Use numbers you can support")).toBeInTheDocument();
+    const last = screen.getByText("The last click is yours").closest("[data-slot='card']")!;
+    expect(last.textContent).toMatch(/no code path in it that submits an application/i);
+    expect(screen.queryByText("Every line has a source")).toBeNull();
+    expect(screen.queryByText("Numbers need your sign-off")).toBeNull();
+  });
+
+  it("makes the chatbot comparison precise, without 'shows you anything that fails' or 'catches everything'", () => {
+    const { container } = render(<Landing />);
+    const section = screen.getByRole("heading", { name: /why not just ask a chatbot/i }).closest("section")!;
+    const t = section.textContent ?? "";
+    expect(t).toMatch(/details you didn.t confirm/i);
+    expect(t).toMatch(/numbers you haven.t confirmed/i);
+    expect(t).toMatch(/one chance to fix/i);
+    expect(t).toMatch(/marks the package blocked if the fix doesn.t hold/i);
+    const all = container.textContent ?? "";
+    expect(all).not.toMatch(/shows you anything that still fails/i);
+    expect(all).not.toMatch(/catches everything/i);
+    expect(all).not.toMatch(/happily invent/i);
+  });
+
+  it("names what Rhapto checks and what you still review, in the main flow", () => {
+    render(<Landing />);
+    const heading = screen.getByRole("heading", { name: /what rhapto checks — and what you still review/i });
+    expect(heading.closest("section")).toBe(
+      screen.getByRole("heading", { name: /why not just ask a chatbot/i }).closest("section"),
+    );
   });
 
   it("says what the checks do not catch, next to the promises", () => {
@@ -184,9 +300,8 @@ describe("Landing, the way in", () => {
     // exists to create.
     sameOriginFlag.value = true;
     render(<Landing />);
-    expect(screen.getByText(/sign-in is an allowlist/i).textContent ?? "").toContain(
-      ACCESS_REQUEST_EMAIL,
-    );
+    const hero = screen.getAllByTestId("hero-band")[0]!;
+    expect(within(hero).getByText(/private beta/i).textContent ?? "").toContain(ACCESS_REQUEST_EMAIL);
   });
 
   it("drops the redundant 'already set up' line in hosted mode, keeps it where it names a different page", () => {
@@ -201,6 +316,51 @@ describe("Landing, the way in", () => {
     render(<Landing />);
     // In token mode the button goes to /settings, so it genuinely names somewhere else.
     expect(screen.getByText(/Already set up\?/i)).toBeInTheDocument();
+  });
+
+  it("pricing: hosted says 5 AI runs on us, import uses one, paid plan coming; token mode says free and open source", () => {
+    sameOriginFlag.value = true;
+    const { container, unmount } = render(<Landing />);
+    const before = screen.getByRole("heading", { name: /before you start/i }).closest("section")!;
+    const hosted = within(before).getByText(/Free during the beta/i).closest("[data-slot='card']")!;
+    expect(hosted.textContent).toMatch(/5 AI runs on us \(importing your resume uses one\)/);
+    expect(hosted.textContent).toMatch(/then use your own AI key/i);
+    expect(hosted.textContent).toMatch(/A paid plan with AI usage included is coming/i);
+    expect(container.textContent).not.toMatch(/\d tailored resumes/i);
+    expect(container.textContent).not.toMatch(/3 AI runs/);
+    expect(container.textContent).not.toMatch(/no subscription/i);
+    unmount();
+
+    sameOriginFlag.value = false;
+    const r = render(<Landing />);
+    const t = r.container.textContent ?? "";
+    expect(t).toMatch(/Free and open source \(AGPL-3\.0\); you use your own AI key/);
+    expect(t).not.toMatch(/AI runs on us/i);
+    expect(t).not.toMatch(/paid plan/i);
+    expect(t).not.toMatch(/free runs|this beta/i);
+  });
+
+  it("privacy one-liner: hosted names the beta's provider for free runs, token mode does not", () => {
+    sameOriginFlag.value = true;
+    const { unmount } = render(<Landing />);
+    const line = screen.getByText(/Your documents and career record stay in your account\./);
+    expect(line.textContent).toMatch(
+      /To draft, Rhapto sends text from them to one AI provider: this beta.s during your free runs, then yours\./,
+    );
+    // the will-not-do key bullet is fixed the same way
+    expect(screen.getByText(/Send your resume, your key, or your history anywhere except/i).textContent).toMatch(
+      /this beta.s during your free runs, then yours/,
+    );
+    unmount();
+
+    sameOriginFlag.value = false;
+    render(<Landing />);
+    const tokenLine = screen.getByText(/Your documents and career record stay in your account\./);
+    expect(tokenLine.textContent).toMatch(/one AI provider/i);
+    expect(tokenLine.textContent).not.toMatch(/beta|free runs/i);
+    expect(
+      screen.getByText(/Send your resume, your key, or your history anywhere except/i).textContent,
+    ).not.toMatch(/beta|free runs/i);
   });
 
   it("keeps the client boundary in the children, not in Landing", () => {
