@@ -102,7 +102,11 @@ def test_tailor_blocked_exits_3(workspace: Path, monkeypatch: pytest.MonkeyPatch
     )
     assert result.exit_code == 3, result.output
     assert "no-unverified-metrics" in result.output and "25%" in result.output
-    assert (workspace / "out" / "exampleco-data-platform-program-manager" / "package.json").exists()
+    target = workspace / "out" / "exampleco-data-platform-program-manager"
+    assert (target / "package.json").exists()
+    assert not (target / "resume.docx").exists()
+    # I-5: this failure is not a provenance one, and the message must not say so.
+    assert "guardrails failed" in result.output and "provenance violation" not in result.output
 
 
 def test_tailor_with_track_and_feedback(workspace: Path, monkeypatch: pytest.MonkeyPatch) -> None:

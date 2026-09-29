@@ -181,7 +181,7 @@ def tailor_cmd(
     write_package(result, target)
 
     if not result.docx:
-        typer.echo("PDF skipped: no DOCX was rendered (provenance violation; see guardrail report)")
+        typer.echo("PDF skipped: no DOCX was rendered (guardrails failed; see the report)")
     elif no_pdf:
         typer.echo("PDF skipped")
     elif not soffice_available(settings.rhapto_soffice_binary):

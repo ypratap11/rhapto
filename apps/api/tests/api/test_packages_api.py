@@ -9,6 +9,7 @@ from helpers_docx import build_fixture_docx
 
 from rhapto.engine.compose import AnswerItem, ComposeOutput
 from rhapto.engine.tune import ProposedEdit, TuneOutput
+from rhapto.services.storage import PackageStorage
 
 JD = "ExampleCo seeks a Data Platform Program Manager to lead our Snowflake migration. " * 3
 
@@ -108,7 +109,7 @@ async def test_patch_with_invented_metric_is_blocked(client: httpx.AsyncClient, 
     new = (await client.patch(f"/api/v1/packages/{package_id}", json={"resume": resume})).json()
     assert new["status"] == "blocked"
     assert {v["rule"] for v in new["guardrail_report"]["violations"]} == {"no-unverified-metrics"}
-    assert new["has_docx"] is True  # rendered for review; only orphan bullets suppress the DOCX
+    assert new["has_docx"] is False  # owner, 2026-09-25: a failing report never persists a DOCX
 
 
 @pytest.mark.usefixtures("imported_profile")
@@ -190,9 +191,9 @@ async def test_package_list_and_named_downloads(client: httpx.AsyncClient, fake_
 
 @pytest.mark.usefixtures("imported_profile")
 async def test_blocked_package_download_is_unmistakable(
-    client: httpx.AsyncClient, fake_llm
+    client: httpx.AsyncClient, fake_llm, storage: PackageStorage
 ) -> None:  # type: ignore[no-untyped-def]
-    """A blocked package stays downloadable, but the transport and the zip both say so."""
+    """A blocked package's zip says so, and no resume document leaves the server for it."""
     _, package_id = await _tailored(client, fake_llm)
     resume = (await client.get(f"/api/v1/packages/{package_id}")).json()["resume"]
     resume["sections"][0]["entries"][0]["bullets"][1] = bullet(
@@ -200,16 +201,20 @@ async def test_blocked_package_download_is_unmistakable(
     ).model_dump()
     new = (await client.patch(f"/api/v1/packages/{package_id}", json={"resume": resume})).json()
     assert new["status"] == "blocked"
+    # A row stored before Phase 5 has a DOCX on disk (rendered "for review"). Put one there:
+    # the serving paths must refuse it themselves, not rely on the writer having skipped it.
+    storage.write_docx(new["id"], b"PK legacy docx")
 
     download = await client.get(f"/api/v1/packages/{new['id']}/download")
     assert download.status_code == 200
     assert download.headers["x-rhapto-guardrails"] == "blocked"
     with zipfile.ZipFile(io.BytesIO(download.content)) as zf:
         assert "GUARDRAILS-BLOCKED.md" in zf.namelist()
+        assert "resume.docx" not in zf.namelist()
         note = zf.read("GUARDRAILS-BLOCKED.md").decode()
     assert "no-unverified-metrics" in note and "25%" in note
     docx = await client.get(f"/api/v1/packages/{new['id']}/files/resume.docx")
-    assert docx.status_code == 200 and docx.headers["x-rhapto-guardrails"] == "blocked"
+    assert docx.status_code == 409 and "guardrails" in docx.json()["detail"]
 
 
 # --- tune mode ---------------------------------------------------------------------------------

@@ -169,9 +169,7 @@ async def test_unrepairable_output_is_blocked(profile: Profile) -> None:
     result = await tailor(TailorRequest(jd_text=JD), profile, llm, FakeEmbeddingProvider())
     assert result.package.status == "blocked" and result.package.llm_calls == 3
     assert {v.rule for v in result.package.guardrail_report.violations} == {"no-unverified-metrics"}
-    assert (
-        result.docx[:2] == b"PK"
-    )  # still rendered for review; the orphan check is the only hard stop
+    assert result.docx == b""  # owner, 2026-09-25: a failing report never persists a DOCX
 
 
 async def test_budget_exceeded_during_repair_yields_a_blocked_package_not_a_crash(
@@ -243,6 +241,7 @@ async def test_cover_note_metric_blocks_even_when_the_resume_is_clean(profile: P
     assert [v.path for v in violations] == ["cover_note"]
     assert violations[0].rule == "no-unverified-metrics" and violations[0].block_id is None
     assert "37%" in violations[0].message
+    assert result.docx == b""  # the resume is clean; only the cover note failed
 
 
 async def test_missing_role_block_triggers_repair_and_restoring_it_passes(
@@ -271,6 +270,7 @@ async def test_repair_that_drops_a_different_block_is_blocked_with_the_post_repa
     violations = result.package.guardrail_report.violations
     assert any(v.rule == "completeness" and v.block_id == "cred-pmp" for v in violations)
     assert not any(v.block_id == "acme-data-pm" for v in violations)  # the role was restored
+    assert result.docx == b""  # a failing report never persists a DOCX, whatever rule failed
 
 
 # --- tune mode -------------------------------------------------------------------------------

@@ -100,8 +100,9 @@ def blocked_note(report: GuardrailReport) -> str:
     lines = [
         "# Guardrails blocked this package",
         "",
-        "Rhapto's guardrails rejected this draft. The files are still here so you can see why,",
-        "but do not send this resume until every violation below is resolved.",
+        "Rhapto's guardrails rejected this draft, so no resume document is included.",
+        "The violations below say why; do not send a resume built from this draft until every",
+        "error is resolved.",
         "",
     ]
     for violation in report.violations:
@@ -217,12 +218,14 @@ async def _edited_blocks_version(
     report = run_guardrails(
         resume, profile, parent.selection_block_ids, extract, cover_note=parent.cover_note
     )
-    try:
-        # python-docx builds a zip in memory; keep it off the event loop with the rest of the IO.
-        base = profile.base_for(profile.get_track(parent.track_id))
-        docx = await asyncio.to_thread(render_docx, resume, profile.block_map(), base.style)
-    except OrphanBulletError:
-        docx = b""
+    docx = b""
+    if report.passed:
+        try:
+            # python-docx builds a zip in memory; keep it off the event loop with the rest of the IO.
+            base = profile.base_for(profile.get_track(parent.track_id))
+            docx = await asyncio.to_thread(render_docx, resume, profile.block_map(), base.style)
+        except OrphanBulletError:
+            docx = b""
     return EditedVersion({"resume": resume}, docx, report)
 
 
@@ -451,6 +454,7 @@ async def download_package(
         row.cover_note,
         model.model_dump_json(indent=2),
         extra_files,
+        include_documents=passed,
     )
     filename = f"{await _basename(session, user_id)}_Package.zip"
     return Response(
@@ -476,6 +480,16 @@ async def package_file(
     ext = "docx" if name == "resume.docx" else "pdf"
     media = DOCX_MEDIA if name == "resume.docx" else PDF_MEDIA
     report = GuardrailReport.model_validate(row.guardrail_report_json)
+    if not report.passed:
+        # 409, not 404: the file exists, it is being withheld. An absent file (every blocked
+        # package written since Phase 5) already answered 404 above, so 404 stays "nothing was
+        # rendered" and 409 means "rendered before the rule existed, and refused now". The web
+        # client turns any non-2xx into a toast carrying this `detail`.
+        raise HTTPException(
+            status_code=409,
+            detail="guardrails blocked this package, so its resume documents are not served; "
+            "fix the violations and regenerate",
+        )
     stem = await _basename(session, user_id)
     return FileResponse(
         path,

@@ -58,12 +58,16 @@ class PackageStorage:
         cover_note: str,
         package_json: str,
         extra_files: dict[str, str] | None = None,
+        include_documents: bool = True,
     ) -> bytes:
         """Zip the package files. `extra_files` maps archive name to text content (e.g. a
-        guardrail-blocked notice) and is written last."""
+        guardrail-blocked notice) and is written last. `include_documents=False` leaves
+        `resume.docx` and `resume.pdf` out even when they are on disk: the caller passes it for
+        a package whose guardrail report failed, so a file rendered before that rule existed
+        is not handed out."""
         buffer = io.BytesIO()
         with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as zf:
-            for name in ("resume.docx", "resume.pdf"):
+            for name in ("resume.docx", "resume.pdf") if include_documents else ():
                 path = self.path_for(package_id, name)
                 if path is not None:
                     zf.write(path, name)
