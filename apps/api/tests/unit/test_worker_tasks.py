@@ -144,7 +144,6 @@ async def test_tailor_job_success_path(
     assert bus.published[-1][1]["event"] == "done" and bus.published[-1][1]["status"] == "draft"
 
 
-@pytest.mark.anyio
 async def test_tailor_job_without_a_track_uses_the_job_s_best_scoring_track(
     session_factory, user: User, demo_profile_dir: Path, tmp_path: Path
 ) -> None:  # type: ignore[no-untyped-def]
@@ -175,7 +174,6 @@ async def test_tailor_job_without_a_track_uses_the_job_s_best_scoring_track(
         assert package is not None and package.track_id == "ai-pm"
 
 
-@pytest.mark.anyio
 async def test_tailor_job_reuses_the_stored_jd_extract(
     session_factory, user: User, demo_profile_dir: Path, tmp_path: Path
 ) -> None:  # type: ignore[no-untyped-def]
