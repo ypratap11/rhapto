@@ -5,6 +5,10 @@ Unconditional, like provenance and no-unverified-metrics (owner decision 1): not
 no `ctx.config` (C5 -- an unconditional rule with a tunable knob is a configurable rule wearing a
 disguise).
 
+Identity is compared with the cited block, not merely present: an entry that cites `role-e` but prints
+`role-a`'s org and role is a `completeness` error. With `no-invented-entities` also active the same
+defect is reported twice, by design (both messages are true; pinned by a test).
+
 See `.superpowers/sdd/completeness-guardrail/architecture.md` sections 1-3 and 7 for the design
 this implements.
 """
@@ -87,22 +91,45 @@ def _attribution_unreachable(block: Block, entry: ResumeEntry) -> bool:
     return block.attribution.casefold() not in text.casefold()
 
 
+def _agrees(entry_value: str | None, block_value: str | None) -> bool:
+    """A printed field agrees with the block's own when the block has none to disagree with, or
+    when it fuzzy-matches (case, dash and spacing tolerant; no added words)."""
+    if not _present(block_value):
+        return True
+    return _present(entry_value) and fuzzy_entity_match(
+        entry_value or "", block_value or "", DEFAULT_FUZZY_THRESHOLD
+    )
+
+
 def _identity(block: Block, entry: ResumeEntry) -> tuple[bool, str]:
-    """Whether `entry` gives `block` a renderable identity, per the per-type clauses in
+    """Whether `entry` gives `block` a renderable identity of its OWN, per the per-type clauses in
     architecture §2, and -- when it doesn't -- a description of what's missing, for the violation
-    message.
+    message. An entry that cites the block but prints another block's org or role does not give
+    the reader this block, so a mismatch is a gap, not a pass.
     """
     has_bullet_text = any(_present(b.text) for b in entry.bullets)
+    org_ok = not _present(entry.org) or _agrees(entry.org, block.org)
+    role_ok = not _present(entry.role) or _agrees(entry.role, block.role)
+    gaps: list[str] = []
     if block.type == "role":
-        has_org = _present(entry.org)
-        has_title = _present(entry.role) or _present(entry.title)
-        gaps = [g for g, ok in (("org", has_org), ("role/title", has_title)) if not ok]
+        if not (_present(entry.org) and org_ok):
+            gaps.append(f"an org matching {block.org!r}" if _present(block.org) else "org")
+        role_match = _agrees(entry.role, block.role) or _agrees(entry.title, block.role)
+        if not ((_present(entry.role) or _present(entry.title)) and role_match):
+            gaps.append(
+                f"a role/title matching {block.role!r}" if _present(block.role) else "role/title"
+            )
     elif block.type == "project":
-        has_title = _present(entry.title) or _present(entry.role)
-        gaps = [] if has_title else ["title/role"]
+        if not (_present(entry.title) or _present(entry.role)):
+            gaps.append("title/role")
+        elif not (org_ok and role_ok):
+            gaps.append("an org/role matching the block's own")
     else:  # credential
         has_label = _present(entry.title) or _present(entry.role) or _present(entry.org)
-        gaps = [] if (has_label or has_bullet_text) else ["a label (title/role/org) or a bullet"]
+        if not (has_label or has_bullet_text):
+            gaps.append("a label (title/role/org) or a bullet")
+        elif not (org_ok and role_ok):
+            gaps.append("an org/role matching the block's own")
     if _attribution_unreachable(block, entry):
         gaps.append("a bullet carrying the required attribution phrase")
     return (not gaps, " and ".join(gaps))
@@ -194,10 +221,10 @@ def check_completeness(ctx: GuardrailContext) -> list[Violation]:
         citing = [(p, s, e) for p, s, e in all_entries if e.source_block_id == block_id]
         right_section = [(p, s, e) for p, s, e in citing if s.kind == kind]
         qualifying = [(p, s, e) for p, s, e in right_section if _identity(block, e)[0]]
-        if len(qualifying) == 1:
-            continue
-        if len(qualifying) > 1:
-            paths = [p for p, _, _ in qualifying]
+        if len(citing) > 1:
+            # Count every citing entry, not only the qualifying ones: a copy that lacks its org or
+            # sits in another section kind is still a second printing of the block.
+            paths = [p for p, _, _ in citing]
             out.append(
                 violation(
                     RULE_NAME,
@@ -207,6 +234,8 @@ def check_completeness(ctx: GuardrailContext) -> list[Violation]:
                     block.id,
                 )
             )
+        elif len(qualifying) == 1:
+            continue
         elif right_section:
             path, _, entry = right_section[0]
             _, gap = _identity(block, entry)

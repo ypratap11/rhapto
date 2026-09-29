@@ -220,9 +220,13 @@ def test_credential_with_neither_label_nor_bullets_is_flagged() -> None:
 
 
 def test_credential_with_bullet_and_no_label_is_clean(demo_profile_dir: Path) -> None:
-    """The `cred-pmp` shape: no org/role/title, one bullet -- must stay clean."""
+    """The `cred-pmp` shape, pinned explicitly: every label field stripped, one bullet -- clean.
+    Deleting the credential clause's `has_bullet_text` escape makes this fail."""
     profile = load_profile(demo_profile_dir)
     resume = demo_resume()
+    cred = next(e for s in resume.sections for e in s.entries if e.source_block_id == "cred-pmp")
+    cred.title = cred.org = cred.role = None
+    assert cred.bullets and not (cred.title or cred.org or cred.role)
     ctx = GuardrailContext(
         resume=resume,
         blocks=profile.block_map(),
@@ -230,6 +234,8 @@ def test_credential_with_bullet_and_no_label_is_clean(demo_profile_dir: Path) ->
         extract=demo_extract(),
     )
     assert check_completeness(ctx) == []
+    cred.bullets = []
+    assert [v.block_id for v in check_completeness(ctx)] == ["cred-pmp"]
 
 
 def test_empty_selection_produces_no_violations() -> None:
@@ -390,3 +396,80 @@ def test_a_duplicated_entry_is_reported_by_two_rules_by_design(demo_profile_dir:
     errors = [v.rule for v in report.violations if v.severity == "error"]
     assert errors.count("completeness") == 1
     assert sorted(set(errors)) == ["completeness", "date-consistency"]
+
+
+def test_entry_citing_one_block_but_printing_another_blocks_identity_is_flagged() -> None:
+    """Review probe: role-e's entry prints role-a's org and role, so Vertex Robotics never appears
+    for the reader. A bare account (no configured rules) must still block."""
+    swapped = _entry(ROLE_E, org=ROLE_A.org, role=ROLE_A.role, period=ROLE_E.period)
+    blocks = [ROLE_A, ROLE_E]
+    ctx = _ctx(blocks, _resume([_entry(ROLE_A), swapped]), [b.id for b in blocks])
+    violations = check_completeness(ctx)
+    assert [(v.block_id, v.severity) for v in violations] == [("role-e", "error")]
+    assert "Vertex Robotics" in violations[0].message
+
+
+def test_identity_mismatch_via_run_guardrails_blocks_a_bare_account(demo_profile_dir: Path) -> None:
+    base = load_profile(demo_profile_dir)
+    profile = base.model_copy(update={"blocks": [*base.blocks, ROLE_E], "guardrails": []})
+    resume = demo_resume()
+    resume.sections[0].entries.append(
+        _entry(ROLE_E, org="Acme Analytics", role="Senior Data Program Manager")
+    )
+    report = run_guardrails(resume, profile, [*profile.block_map()], demo_extract())
+    assert report.passed is False
+    assert [v.block_id for v in report.violations if v.rule == RULE_NAME] == ["role-e"]
+
+
+def test_identity_mismatch_with_entities_active_is_reported_by_two_rules_by_design(
+    demo_profile_dir: Path,
+) -> None:
+    """Recorded exception (like the duplicate case): with `no-invented-entities` configured, the
+    same defect is one `completeness` error plus the entities error(s). Both are true."""
+    base = load_profile(demo_profile_dir)
+    profile = base.model_copy(update={"blocks": [*base.blocks, ROLE_E]})
+    assert any(r.rule == "no-invented-entities" and r.active for r in profile.guardrails)
+    resume = demo_resume()
+    resume.sections[0].entries.append(
+        _entry(ROLE_E, org="Acme Analytics", role="Senior Data Program Manager")
+    )
+    report = run_guardrails(resume, profile, [*profile.block_map()], demo_extract())
+    errors = [v.rule for v in report.violations if v.severity == "error"]
+    assert errors.count(RULE_NAME) == 1
+    assert "no-invented-entities" in errors
+
+
+def test_fuzzy_match_tolerates_case_and_spacing_in_identity() -> None:
+    entry = _entry(ROLE_A, org="GLOBEX", role="engineer")
+    assert check_completeness(_ctx([ROLE_A], _resume([entry]), [ROLE_A.id])) == []
+
+
+def test_project_entry_with_another_orgs_name_is_flagged() -> None:
+    entry = ResumeEntry(
+        source_block_id=PROJECT_A.id,
+        org="Somebody Else Ltd",
+        title="A tool",
+        bullets=[bullet("Built a tool.", PROJECT_A.id)],
+    )
+    resume = _resume([entry], kind="projects", title="Projects")
+    violations = check_completeness(_ctx([PROJECT_A], resume, [PROJECT_A.id]))
+    assert [v.block_id for v in violations] == ["project-a"]
+
+
+def test_a_block_printed_twice_is_a_duplicate_even_if_the_copy_is_unidentifiable() -> None:
+    """The second copy lacks its org, so it does not qualify -- it must still count."""
+    resume = _resume([_entry(ROLE_A), _entry(ROLE_A, org=None)])
+    violations = check_completeness(_ctx([ROLE_A], resume, [ROLE_A.id]))
+    assert len(violations) == 1 and "expected exactly one" in violations[0].message
+
+
+def test_a_block_printed_again_in_another_section_kind_is_a_duplicate() -> None:
+    resume = ResumeDocument(
+        header=ResumeHeader(name="Test Person"),
+        sections=[
+            ResumeSection(title="Experience", kind="experience", entries=[_entry(ROLE_A)]),
+            ResumeSection(title="Projects", kind="projects", entries=[_entry(ROLE_A)]),
+        ],
+    )
+    violations = check_completeness(_ctx([ROLE_A], resume, [ROLE_A.id]))
+    assert len(violations) == 1 and "expected exactly one" in violations[0].message
