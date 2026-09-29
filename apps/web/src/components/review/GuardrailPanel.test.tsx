@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { GuardrailPanel } from "./GuardrailPanel";
@@ -117,7 +117,7 @@ describe("GuardrailPanel, a violation that names something absent from the docum
     path: "selection.block_ids['role-e']",
     block_id: "role-e",
   };
-  const COMPLETENESS_REMEDY = "A role, project or credential your profile selected for this job is missing from the resume.";
+  const COMPLETENESS_REMEDY = "Every selected role, project and credential must keep an entry.";
 
   it("renders a plain row, not a dead button, and keeps the block id and remedy", () => {
     render(
@@ -129,8 +129,31 @@ describe("GuardrailPanel, a violation that names something absent from the docum
     );
     expect(screen.getByText(/does not appear in Experience/i)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /does not appear in Experience/i })).not.toBeInTheDocument();
+    // The row itself, not just "no button with that name": nothing in it is interactive.
+    const item = screen.getByText(/does not appear in Experience/i).closest("li");
+    expect(item).not.toBeNull();
+    const row = item!.firstElementChild as HTMLElement;
+    expect(row.tagName).toBe("DIV");
+    expect(row).not.toHaveAttribute("role");
+    expect(within(item!).queryByRole("button")).not.toBeInTheDocument();
+    expect(within(item!).queryByRole("link")).not.toBeInTheDocument();
     expect(screen.getByText("role-e")).toBeInTheDocument();
     expect(screen.getByText(COMPLETENESS_REMEDY)).toBeInTheDocument();
+  });
+
+  it("links a node-less row to the package when given somewhere to go, still not as a button", () => {
+    // The job page: its rows navigate to the package page, and a completeness row must too.
+    render(
+      <GuardrailPanel
+        report={{ passed: false, rules_run: ["completeness"], violations: [ERROR_VIOLATION, COMPLETENESS] }}
+        onSelect={vi.fn()}
+        nodelessHref="/jobs/j1/packages/p1"
+      />,
+    );
+    expect(screen.getByRole("link", { name: /does not appear in Experience/i })).toHaveAttribute("href", "/jobs/j1/packages/p1");
+    expect(screen.queryByRole("button", { name: /does not appear in Experience/i })).not.toBeInTheDocument();
+    // A row that addresses a node keeps its button.
+    expect(screen.getByRole("button", { name: /metric\(s\) not found/i })).toBeInTheDocument();
   });
 
   it("does not take the button away from the paths that do address something", async () => {

@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import type { GuardrailReport } from "@/lib/api/queries";
 
@@ -9,6 +10,9 @@ import type { GuardrailReport } from "@/lib/api/queries";
  * review page. Only this prefix is treated as node-less. Every other path stays a button --
  * `sections[..]`, `summary[..]`, `cover_note`, and a tune-mode `edits[..]`, which the review
  * page's `scrollToChange` and the job page's `?path=` link both depend on.
+ *
+ * A node-less row is never a button. Where the panel sits away from the document (the job page),
+ * the caller passes `nodelessHref` and the row becomes a plain link to the package page instead.
  */
 const NODELESS_PATH_PREFIX = "selection.";
 
@@ -25,10 +29,12 @@ export function GuardrailPanel({
   report,
   remedies = {},
   onSelect,
+  nodelessHref,
 }: {
   report: GuardrailReport;
   remedies?: Record<string, string>;
   onSelect: (path: string) => void;
+  nodelessHref?: string;
 }) {
   return (
     <section aria-labelledby="guardrails-heading" className="space-y-3 rounded-card border border-border bg-surface p-4 shadow-card">
@@ -51,35 +57,41 @@ export function GuardrailPanel({
             }`;
             const body = (
               <>
-                  <span className="flex flex-wrap items-center gap-1.5">
-                    <span
-                      className={`inline-flex items-center rounded-chip px-2 py-0.5 font-mono text-xs font-medium ${
-                        isError ? "bg-destructive/10 text-destructive" : "bg-fit-mid/10 text-fit-mid"
-                      }`}
-                    >
-                      {v.rule}
-                    </span>
-                    <span className="text-xs text-muted-foreground">{v.severity}</span>
-                    {/* Which block the bullet came from: the path says where it is in the document,
-                        `block_id` says what to go and edit in the library. */}
-                    {v.block_id ? <span className="font-mono text-xs text-muted-foreground">{v.block_id}</span> : null}
+                <span className="flex flex-wrap items-center gap-1.5">
+                  <span
+                    className={`inline-flex items-center rounded-chip px-2 py-0.5 font-mono text-xs font-medium ${
+                      isError ? "bg-destructive/10 text-destructive" : "bg-fit-mid/10 text-fit-mid"
+                    }`}
+                  >
+                    {v.rule}
                   </span>
-                  <span className="mt-1.5 block text-foreground">{v.message}</span>
-                  <span className="mt-0.5 block font-mono text-xs text-muted-foreground">{v.path}</span>
-                  {remedy ? <span className="mt-1.5 block text-xs text-muted-foreground">{remedy}</span> : null}
+                  <span className="text-xs text-muted-foreground">{v.severity}</span>
+                  {/* Which block the bullet came from: the path says where it is in the document,
+                      `block_id` says what to go and edit in the library. */}
+                  {v.block_id ? <span className="font-mono text-xs text-muted-foreground">{v.block_id}</span> : null}
+                </span>
+                <span className="mt-1.5 block text-foreground">{v.message}</span>
+                <span className="mt-0.5 block font-mono text-xs text-muted-foreground">{v.path}</span>
+                {remedy ? <span className="mt-1.5 block text-xs text-muted-foreground">{remedy}</span> : null}
               </>
             );
-            return (
-              <li key={`${v.path}-${i}`}>
-                {hasNode ? (
-                  <button type="button" onClick={() => onSelect(v.path)} className={`hover-lift ${rowClass}`}>
-                    {body}
-                  </button>
-                ) : (
-                  <div className={rowClass}>{body}</div>
-                )}
-              </li>
-            );
+            let row;
+            if (hasNode) {
+              row = (
+                <button type="button" onClick={() => onSelect(v.path)} className={`hover-lift ${rowClass}`}>
+                  {body}
+                </button>
+              );
+            } else if (nodelessHref) {
+              row = (
+                <Link href={nodelessHref} className={`hover-lift block ${rowClass}`}>
+                  {body}
+                </Link>
+              );
+            } else {
+              row = <div className={rowClass}>{body}</div>;
+            }
+            return <li key={`${v.path}-${i}`}>{row}</li>;
           })}
         </ul>
       ) : null}
