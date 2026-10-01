@@ -152,6 +152,7 @@ def install_error_handlers(app: FastAPI) -> None:
             type(exc.orig).__name__,
             getattr(exc.orig, "sqlstate", None),
             getattr(getattr(exc.orig, "__cause__", None), "constraint_name", None),
+            exc_info=exc,
         )
         return problem(409, "Conflict", "the change conflicts with existing data")
 
