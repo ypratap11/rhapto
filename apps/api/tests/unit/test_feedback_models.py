@@ -61,6 +61,18 @@ def test_other_c0_control_is_rejected_but_newline_and_tab_are_kept(model, field)
     assert getattr(ok, field) == "line one\n\tline two"
 
 
+@pytest.mark.parametrize(("model", "field"), TEXT_FIELDS)
+@pytest.mark.parametrize("bad", ["a\ud800b", "\udfff", "x\udc00"])
+def test_lone_surrogate_is_rejected_in_every_text_field(model, field, bad) -> None:  # type: ignore[no-untyped-def]
+    """json.loads accepts a lone surrogate escape; jsonb does not, so it must stop here (422)."""
+    with pytest.raises(ValidationError):
+        _build(model, field, bad)
+
+
+def test_a_real_astral_character_is_still_fine() -> None:
+    assert QuickAnswers(kind="idea", text="nice \U0001f600").text == "nice \U0001f600"
+
+
 def test_validation_message_does_not_echo_the_value() -> None:
     with pytest.raises(ValidationError) as info:
         QuickAnswers(kind="bug", text="SECRET-SENTINEL\x00")

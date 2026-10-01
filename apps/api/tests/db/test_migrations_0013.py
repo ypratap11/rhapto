@@ -18,7 +18,7 @@ from sqlalchemy import CheckConstraint, inspect, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
-from rhapto.db.models import FeedbackRow, User
+from rhapto.db.models import PAGE_AREAS, FeedbackRow, User
 from rhapto.db.session import make_engine
 
 # Mirrors tests/conftest.py rather than importing it (see test_migrations_0012.py for why).
@@ -129,10 +129,18 @@ async def test_each_check_rejects_a_bad_row(
 
 async def test_good_rows_are_accepted(session: AsyncSession, user: User) -> None:
     await _insert(session, user, "survey", None)
-    await _insert(session, user, "quick", "review")
 
 
-async def test_0013_round_trips_on_a_scratch_database() -> None:
+@pytest.mark.parametrize("area", PAGE_AREAS)
+async def test_the_live_check_accepts_every_page_area(
+    session: AsyncSession, user: User, area: str
+) -> None:
+    """Exercises the migrated DB's CHECK against the model's tuple, so an area added to `PAGE_AREAS`
+    but not to 0013 fails here (names alone would agree)."""
+    await _insert(session, user, "quick", area)
+
+
+async def test_0013_round_trips_on_a_scratch_database(monkeypatch: pytest.MonkeyPatch) -> None:
     import asyncpg
     from alembic.config import Config
 
@@ -151,7 +159,7 @@ async def test_0013_round_trips_on_a_scratch_database() -> None:
 
     try:
         cfg = Config(str(API_DIR / "alembic.ini"))
-        os.environ["DATABASE_URL"] = scratch_url
+        monkeypatch.setenv("DATABASE_URL", scratch_url)
         scratch_engine = make_engine(scratch_url)
 
         async def tables() -> set[str]:
@@ -176,6 +184,3 @@ async def test_0013_round_trips_on_a_scratch_database() -> None:
             await admin.execute(f'DROP DATABASE IF EXISTS "{scratch_name}" WITH (FORCE)')
         finally:
             await admin.close()
-        os.environ["DATABASE_URL"] = _dsn(base_url).replace(
-            "postgresql://", "postgresql+asyncpg://"
-        )

@@ -25,11 +25,14 @@ API_SRC = Path(__file__).resolve().parents[2] / "src" / "rhapto" / "api"
 
 
 def test_the_cross_user_read_is_not_mentioned_anywhere_under_api() -> None:
-    """Any occurrence, not only import lines: a router must not reach `all_with_email` at all."""
+    """Any occurrence, not only import lines: a router must not reach `all_with_email`, nor query the
+    `FeedbackRow` model directly (the only HTTP touch is the repo's insert/count/owned_context)."""
     offenders = [
         str(path)
         for path in API_SRC.rglob("*.py")
-        if "all_with_email" in path.read_text(encoding="utf-8")
+        if any(
+            name in path.read_text(encoding="utf-8") for name in ("all_with_email", "FeedbackRow")
+        )
     ]
     assert offenders == []
 
@@ -84,19 +87,28 @@ def _seed(url: str) -> None:
     asyncio.run(go())
 
 
+def _fresh_settings(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Make the CLI read the environment now, WITHOUT touching `get_settings`' process-wide cache.
+
+    An earlier version called `get_settings.cache_clear()` and left the cache empty; later tests
+    (worker tasks) relied on an already-warm cache and then raised MissingSecretKeyError, because the
+    autouse `_no_provider_env` deletes RHAPTO_SECRET_KEY. `__wrapped__` is the uncached function.
+    """
+    monkeypatch.setattr("rhapto.cli.main.get_settings", get_settings.__wrapped__)
+
+
 @pytest.fixture
 def env(migrated_db: str, session_factory: object, monkeypatch: pytest.MonkeyPatch) -> str:
     # `session_factory` is requested only for its teardown, which truncates every table.
     monkeypatch.setenv("DATABASE_URL", migrated_db)
     monkeypatch.setenv("RHAPTO_SECRET_KEY", "cli-test-secret")
-    get_settings.cache_clear()
+    _fresh_settings(monkeypatch)
     return migrated_db
 
 
 def test_csv_matches_the_stored_rows(env: str) -> None:
     _seed(env)
     result = runner.invoke(app, ["feedback", "report", "--csv"])
-    get_settings.cache_clear()
     assert result.exit_code == 0, result.output
     rows = list(csv.DictReader(io.StringIO(result.output)))
     assert len(rows) == 3
@@ -132,7 +144,6 @@ def test_default_output_has_no_email_and_the_flag_adds_it(env: str) -> None:
     assert "example.com" not in plain.output
     assert "Could not find, the menu." in plain.output
     flagged = runner.invoke(app, ["feedback", "report", "--with-emails"])
-    get_settings.cache_clear()
     assert flagged.exit_code == 0, flagged.output
     assert "tester-a@example.com" in flagged.output
     assert "tester-b@example.com" in flagged.output
@@ -141,14 +152,12 @@ def test_default_output_has_no_email_and_the_flag_adds_it(env: str) -> None:
 def test_csv_with_emails_adds_the_column(env: str) -> None:
     _seed(env)
     result = runner.invoke(app, ["feedback", "report", "--csv", "--with-emails"])
-    get_settings.cache_clear()
     rows = list(csv.DictReader(io.StringIO(result.output)))
     assert {r["email"] for r in rows} == {"tester-a@example.com", "tester-b@example.com"}
 
 
 def test_empty_table_exits_zero(env: str) -> None:
     result = runner.invoke(app, ["feedback", "report"])
-    get_settings.cache_clear()
     assert result.exit_code == 0, result.output
     assert "No feedback yet." in result.output
 
@@ -156,22 +165,22 @@ def test_empty_table_exits_zero(env: str) -> None:
 def test_since_in_the_future_filters_everything(env: str) -> None:
     _seed(env)
     result = runner.invoke(app, ["feedback", "report", "--since", "2999-01-01"])
-    get_settings.cache_clear()
     assert result.exit_code == 0, result.output
     assert "No feedback yet." in result.output
 
 
 def test_bad_since_is_a_clean_error(env: str) -> None:
     result = runner.invoke(app, ["feedback", "report", "--since", "yesterday"])
-    get_settings.cache_clear()
+    assert result.exit_code == 1
+    # An explicit offset is not silently discarded: only a plain date is accepted.
+    result = runner.invoke(app, ["feedback", "report", "--since", "2026-10-01T09:00+05:00"])
     assert result.exit_code == 1
 
 
 def test_refuses_to_run_without_a_secret(monkeypatch: pytest.MonkeyPatch) -> None:
     """The pseudonym key derives from the secret; an empty one must not silently weaken it."""
     monkeypatch.setenv("RHAPTO_SECRET_KEY", "")
-    get_settings.cache_clear()
+    _fresh_settings(monkeypatch)
     result = runner.invoke(app, ["feedback", "report"])
-    get_settings.cache_clear()
     assert result.exit_code == 1
     assert "RHAPTO_SECRET_KEY" in result.output

@@ -290,7 +290,7 @@ def feedback_report(
     """
     import hashlib
     import hmac
-    from datetime import UTC, datetime
+    from datetime import UTC, date, datetime, time
 
     from rhapto.config import MissingSecretKeyError
     from rhapto.db.repositories import feedback as feedback_repo
@@ -309,7 +309,7 @@ def feedback_report(
     since_dt: datetime | None = None
     if since is not None:
         try:
-            since_dt = datetime.fromisoformat(since).replace(tzinfo=UTC)
+            since_dt = datetime.combine(date.fromisoformat(since), time.min, tzinfo=UTC)
         except ValueError as exc:
             typer.echo(f"error: --since must be a date like 2026-10-01, got {since!r}", err=True)
             raise typer.Exit(1) from exc

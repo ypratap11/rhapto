@@ -13,7 +13,6 @@ from typing import Any
 import httpx
 import pytest
 from fastapi import FastAPI
-from fastapi.routing import APIRoute
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -182,6 +181,19 @@ async def test_nul_in_text_is_422_not_500_and_is_not_echoed(
     assert sentinel not in response.text
 
 
+async def test_lone_surrogate_is_422_not_500(
+    client: httpx.AsyncClient, session_factory: async_sessionmaker[AsyncSession]
+) -> None:
+    r"""`json.loads` accepts the escape `\ud800`; jsonb would refuse it and the request would 500.
+    httpx's `json=` cannot encode it, so the raw body is sent."""
+    raw = r'{"form":"quick","page_area":"jobs","answers":{"kind":"bug","text":"\ud800"}}'
+    response = await client.post(
+        URL, content=raw.encode(), headers={"Content-Type": "application/json"}
+    )
+    assert response.status_code == 422, response.text
+    assert await _rows(session_factory) == []
+
+
 # ---- auth and rate limit ---------------------------------------------------------------------
 
 
@@ -259,6 +271,8 @@ async def _job_and_package(session: AsyncSession, user_id: uuid.UUID) -> tuple[J
         resume_json={},
         cover_note="",
         change_log="",
+        guardrail_report_json={},
+        jd_extract_json={},
     )
     session.add(package)
     await session.commit()
@@ -300,12 +314,14 @@ async def test_another_users_context_ids_are_stored_null(
 
 def test_exactly_one_feedback_route_and_it_is_the_post(app: FastAPI) -> None:
     """Must fail if anyone adds a list/get/delete route for feedback."""
-    found = [
-        (route.path, sorted(route.methods))
-        for route in app.routes
-        if isinstance(route, APIRoute) and "feedback" in route.path
-    ]
-    assert found == [("/api/v1/feedback", ["POST"])]
+    # `app.routes` holds lazy include objects in this FastAPI, not APIRoutes; the OpenAPI document
+    # is the resolved HTTP surface (the 405 tests below cover anything hidden from the schema).
+    found = {
+        path: sorted(methods)
+        for path, methods in app.openapi()["paths"].items()
+        if "feedback" in path
+    }
+    assert found == {"/api/v1/feedback": ["post"]}
 
 
 @pytest.mark.parametrize("method", ["GET", "PUT", "PATCH", "DELETE"])

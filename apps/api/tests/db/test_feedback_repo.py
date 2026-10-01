@@ -47,6 +47,8 @@ async def _job_with_package(session: AsyncSession, user: User) -> tuple[Job, Pac
         resume_json={},
         cover_note="",
         change_log="",
+        guardrail_report_json={},
+        jd_extract_json={},
     )
     session.add(package)
     await session.commit()

@@ -226,7 +226,7 @@ def test_csv_fixed_columns_and_values() -> None:
     header = text.splitlines()[0].split(",")
     assert header[:2] == ["id", "tester"]
     assert header[2:8] == ["created_at", "form", "page_area", "app_version", "job_id", "package_id"]
-    assert header[-3:] == ["quick.kind", "quick.rating", "quick.text"]
+    assert header[-4:] == ["quick.kind", "quick.rating", "quick.text", "raw_answers"]
     assert "email" not in header
     first, second = parse(text)
     assert first["getting_started.stuck"] == "a, b\nc"  # csv quoting round-trips commas/newlines
@@ -272,3 +272,8 @@ def test_csv_empty_is_header_only() -> None:
 def test_csv_unknown_schema_row_does_not_crash() -> None:
     rows = parse(render_csv([rec(version=99, answers={"x": 1})], key=KEY, with_emails=False))
     assert rows[0]["form"] == "survey" and rows[0]["overall.would_use"] == ""
+    assert rows[0]["raw_answers"] == '{"x": 1}'  # nothing stored is dropped from the export
+
+
+def test_csv_raw_answers_is_blank_for_a_known_row() -> None:
+    assert parse(render_csv([quick("x")], key=KEY, with_emails=False))[0]["raw_answers"] == ""

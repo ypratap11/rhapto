@@ -46,7 +46,11 @@ _ALLOWED_CONTROLS = frozenset("\n\t")
 
 def _clean_text(value: str) -> str | None:
     """Reject NUL and C0 controls (except newline and tab); blank text becomes None."""
-    if any(ord(ch) < 0x20 and ch not in _ALLOWED_CONTROLS for ch in value):
+    # Also lone UTF-16 surrogates: json.loads accepts "\ud800", but jsonb refuses it (a 500).
+    if any(
+        (ord(ch) < 0x20 and ch not in _ALLOWED_CONTROLS) or 0xD800 <= ord(ch) <= 0xDFFF
+        for ch in value
+    ):
         # Deliberately generic: the value must never be echoed into an error body or a log.
         raise ValueError("text contains control characters")
     return value or None
@@ -242,6 +246,7 @@ _SURVEY_SECTIONS: tuple[tuple[str, str, tuple[_Field, ...]], ...] = (
 )
 
 _QUICK_COLUMNS = ("quick.kind", "quick.rating", "quick.text")
+_RAW_COLUMN = "raw_answers"  # only filled for a row whose schema_version this code does not know
 _FORMULA_STARTS = ("=", "+", "-", "@", "\t", "\r")
 
 
@@ -392,6 +397,7 @@ def render_csv(records: Sequence[FeedbackRecord], *, key: bytes, with_emails: bo
     header = ["id", "tester"] + (["email"] if with_emails else [])
     header += ["created_at", "form", "page_area", "app_version", "job_id", "package_id"]
     header += [f"{s}.{f}" for s, f in survey_cols] + list(_QUICK_COLUMNS)
+    header.append(_RAW_COLUMN)
     buffer = io.StringIO()
     writer = csv.writer(buffer, lineterminator="\n")
     writer.writerow(header)
@@ -406,5 +412,6 @@ def render_csv(records: Sequence[FeedbackRecord], *, key: bytes, with_emails: bo
         for column in _QUICK_COLUMNS:
             field = column.split(".", 1)[1]
             row.append(r.answers.get(field) if known and r.form == "quick" else None)
+        row.append(None if known else json.dumps(r.answers, sort_keys=True, ensure_ascii=False))
         writer.writerow([_cell(v) for v in row])
     return buffer.getvalue()
