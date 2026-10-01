@@ -10,6 +10,7 @@ from sqlalchemy import (
     CheckConstraint,
     DateTime,
     ForeignKey,
+    Index,
     Integer,
     SmallInteger,
     String,
@@ -30,6 +31,18 @@ TASK_STATUSES = ("queued", "running", "succeeded", "failed")
 # blocked: guardrails refused it. A package is never written as "ready" -- only promoted.
 PACKAGE_STATUSES = ("draft", "ready", "blocked")
 CLOSED_REASONS = ("rejected", "withdrew", "no_response", "filled")
+FEEDBACK_FORMS = ("survey", "quick")
+PAGE_AREAS = (
+    "dashboard",
+    "jobs",
+    "job_detail",
+    "review",
+    "resumes",
+    "pipeline",
+    "profile",
+    "settings",
+    "other",
+)
 
 
 class User(TimestampMixin, Base):
@@ -393,3 +406,36 @@ class SourceCredentialRow(UserScopedMixin, TimestampMixin, Base):
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=new_uuid)
     source: Mapped[str] = mapped_column(String(50), nullable=False)
     credentials_encrypted: Mapped[str] = mapped_column(Text, nullable=False)
+
+
+class FeedbackRow(UserScopedMixin, TimestampMixin, Base):
+    """One submitted feedback response. Insert-only: no code path updates or deletes a row (the spec
+    excludes editing and deleting); deleting the account cascades it away.
+
+    `job_id` / `package_id` are pointers only, deliberately NOT foreign keys: feedback must outlive a
+    job the tester later deletes, and `SET NULL` would silently erase the context.
+    """
+
+    __tablename__ = "feedback"
+    __table_args__ = (
+        CheckConstraint(
+            "form IN (" + ", ".join(f"'{f}'" for f in FEEDBACK_FORMS) + ")", name="ck_feedback_form"
+        ),
+        CheckConstraint(
+            "page_area IS NULL OR page_area IN (" + ", ".join(f"'{a}'" for a in PAGE_AREAS) + ")",
+            name="ck_feedback_page_area",
+        ),
+        # Quick feedback is always about a page; the survey is about the product.
+        CheckConstraint(
+            "(form = 'quick') = (page_area IS NOT NULL)", name="ck_feedback_area_iff_quick"
+        ),
+        Index("ix_feedback_user_created", "user_id", "created_at"),
+    )
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=new_uuid)
+    form: Mapped[str] = mapped_column(String(10), nullable=False)
+    page_area: Mapped[str | None] = mapped_column(String(20))
+    schema_version: Mapped[int] = mapped_column(SmallInteger, nullable=False)
+    answers: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    app_version: Mapped[str] = mapped_column(String(64), nullable=False)
+    job_id: Mapped[uuid.UUID | None] = mapped_column()
+    package_id: Mapped[uuid.UUID | None] = mapped_column()
