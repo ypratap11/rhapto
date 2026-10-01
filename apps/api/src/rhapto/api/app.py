@@ -16,6 +16,7 @@ from rhapto.api.routers import (
     applications,
     dashboard,
     discovery,
+    feedback,
     jobs,
     meta,
     packages,
@@ -168,6 +169,7 @@ def create_app(
     app.include_router(taxonomy.router, prefix=API_PREFIX, tags=["taxonomy"])
     app.include_router(search.router, prefix=API_PREFIX, tags=["search"])
     app.include_router(dashboard.router, prefix=API_PREFIX, tags=["dashboard"])
+    app.include_router(feedback.router, prefix=API_PREFIX, tags=["feedback"])
     return app
 
 

@@ -50,6 +50,9 @@ class Settings(BaseSettings):
     # entirely in token mode, which is a single self-hosted account already using its own env key --
     # that exemption is what makes a default of 3 safe to ship without an env change anywhere.
     rhapto_trial_runs: int = 3
+    # Short git SHA of the build, stamped into feedback rows' app_version. Passed as a Docker build
+    # arg (not a runtime env) so it survives a hand-recreated container. Empty is fine.
+    rhapto_build_id: str = ""
 
 
 class MissingSecretKeyError(RuntimeError):

@@ -109,6 +109,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/feedback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Create Feedback */
+        post: operations["create_feedback_api_v1_feedback_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/health": {
         parameters: {
             query?: never;
@@ -1272,6 +1289,13 @@ export interface components {
             /** Paragraph Ids */
             paragraph_ids: string[];
         };
+        /** DownloadsSection */
+        DownloadsSection: {
+            /** Looked Right */
+            looked_right?: ("yes" | "no") | null;
+            /** Problems */
+            problems?: string | null;
+        };
         /** Edit */
         Edit: {
             /** After */
@@ -1294,6 +1318,49 @@ export interface components {
             /** Paragraph Id */
             paragraph_id: string;
         };
+        /**
+         * FeedbackIn
+         * @description One tester response. `user_id` and `app_version` are deliberately absent (and `extra="forbid"`
+         *     rejects them): identity comes from `UserDep`, the version from the server.
+         */
+        FeedbackIn: {
+            /** Answers */
+            answers: components["schemas"]["SurveyAnswers"] | components["schemas"]["QuickAnswers"];
+            /**
+             * Form
+             * @enum {string}
+             */
+            form: "survey" | "quick";
+            /** Job Id */
+            job_id?: string | null;
+            /** Package Id */
+            package_id?: string | null;
+            /** Page Area */
+            page_area?: ("dashboard" | "jobs" | "job_detail" | "review" | "resumes" | "pipeline" | "profile" | "settings" | "other") | null;
+        };
+        /**
+         * FeedbackOut
+         * @description Nothing else is echoed back: no answers, no ids of context.
+         */
+        FeedbackOut: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+        };
+        /** FindingJobsSection */
+        FindingJobsSection: {
+            /** Bad Match Example */
+            bad_match_example?: string | null;
+            /** Match Quality */
+            match_quality?: number | null;
+        };
         /** FollowUpOut */
         FollowUpOut: {
             /**
@@ -1309,6 +1376,13 @@ export interface components {
             job: components["schemas"]["JobRef"];
             /** Status */
             status: string;
+        };
+        /** GettingStartedSection */
+        GettingStartedSection: {
+            /** Ease */
+            ease?: number | null;
+            /** Stuck */
+            stuck?: string | null;
         };
         /** GuardrailReport */
         GuardrailReport: {
@@ -1675,6 +1749,22 @@ export interface components {
              */
             user_id: string;
         };
+        /** OverallSection */
+        OverallSection: {
+            /** Fix First */
+            fix_first?: string | null;
+            /** Pay Why */
+            pay_why?: string | null;
+            /**
+             * Quote Ok
+             * @default false
+             */
+            quote_ok: boolean;
+            /** Would Pay 19 */
+            would_pay_19?: ("yes" | "maybe" | "no") | null;
+            /** Would Use */
+            would_use?: ("yes" | "maybe" | "no") | null;
+        };
         /** PackageListItem */
         PackageListItem: {
             /** Application Status */
@@ -1865,6 +1955,13 @@ export interface components {
              */
             started_at: string;
         };
+        /** ProfileSection */
+        ProfileSection: {
+            /** Ease */
+            ease?: number | null;
+            /** Missing Or Confusing */
+            missing_or_confusing?: string | null;
+        };
         /**
          * ProviderInfoOut
          * @description One supported provider, for the Settings picker.
@@ -1878,6 +1975,18 @@ export interface components {
             label: string;
             /** Models */
             models: string[];
+        };
+        /** QuickAnswers */
+        QuickAnswers: {
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "bug" | "confusing" | "idea" | "worked_well";
+            /** Rating */
+            rating?: number | null;
+            /** Text */
+            text?: string | null;
         };
         /** ResumeBase */
         ResumeBase: {
@@ -1999,6 +2108,19 @@ export interface components {
             /** Title */
             title: string;
         };
+        /** ReviewSection */
+        ReviewSection: {
+            /** Flag Verdict */
+            flag_verdict?: ("right" | "false_alarm" | "not_sure") | null;
+            /** Flagged */
+            flagged?: ("yes" | "no" | "not_sure") | null;
+            /** Resume Quality */
+            resume_quality?: number | null;
+            /** Would Have Noticed */
+            would_have_noticed?: ("yes" | "no" | "not_sure") | null;
+            /** Wrongly Blocked */
+            wrongly_blocked?: string | null;
+        };
         /** SavedSearchCountOut */
         SavedSearchCountOut: {
             /**
@@ -2096,6 +2218,17 @@ export interface components {
              * @default 0
              */
             runs: number;
+        };
+        /** SessionSection */
+        SessionSection: {
+            /** Finished */
+            finished?: ("yes" | "partly" | "no") | null;
+            /** Minutes */
+            minutes?: ("lt_10" | "10_30" | "30_60" | "gt_60") | null;
+            /** Task */
+            task?: ("find_jobs" | "tailor_resume" | "review_package" | "set_up_profile" | "other") | null;
+            /** Task Other */
+            task_other?: string | null;
         };
         /** SourceDocument */
         SourceDocument: {
@@ -2212,6 +2345,19 @@ export interface components {
             at: string;
             /** Status */
             status: string;
+        };
+        /**
+         * SurveyAnswers
+         * @description Every section optional, so every section is skippable.
+         */
+        SurveyAnswers: {
+            downloads?: components["schemas"]["DownloadsSection"] | null;
+            finding_jobs?: components["schemas"]["FindingJobsSection"] | null;
+            getting_started?: components["schemas"]["GettingStartedSection"] | null;
+            overall?: components["schemas"]["OverallSection"] | null;
+            profile?: components["schemas"]["ProfileSection"] | null;
+            review?: components["schemas"]["ReviewSection"] | null;
+            session?: components["schemas"]["SessionSection"] | null;
         };
         /** TailorBody */
         TailorBody: {
@@ -2736,6 +2882,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SourceInfoOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_feedback_api_v1_feedback_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FeedbackIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FeedbackOut"];
                 };
             };
             /** @description Validation Error */

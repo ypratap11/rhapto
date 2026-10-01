@@ -16,6 +16,10 @@ ENV PATH="/app/.venv/bin:$PATH"
 
 # API: migrations then uvicorn.
 FROM base AS api
+# Short git SHA, stamped into feedback rows. A build arg (baked into the image) rather than a runtime
+# env so it survives a hand recreate of the container.
+ARG RHAPTO_BUILD_ID=""
+ENV RHAPTO_BUILD_ID=$RHAPTO_BUILD_ID
 EXPOSE 8000
 CMD ["sh", "-c", "rhapto db upgrade && uvicorn rhapto.api.app:app --host 0.0.0.0 --port 8000"]
 

@@ -621,6 +621,40 @@
         "title": "DocSection",
         "type": "object"
       },
+      "DownloadsSection": {
+        "additionalProperties": false,
+        "properties": {
+          "looked_right": {
+            "anyOf": [
+              {
+                "enum": [
+                  "yes",
+                  "no"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Looked Right"
+          },
+          "problems": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Problems"
+          }
+        },
+        "title": "DownloadsSection",
+        "type": "object"
+      },
       "Edit": {
         "additionalProperties": false,
         "properties": {
@@ -669,6 +703,136 @@
         "title": "EditPatch",
         "type": "object"
       },
+      "FeedbackIn": {
+        "additionalProperties": false,
+        "description": "One tester response. `user_id` and `app_version` are deliberately absent (and `extra=\"forbid\"`\nrejects them): identity comes from `UserDep`, the version from the server.",
+        "properties": {
+          "answers": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SurveyAnswers"
+              },
+              {
+                "$ref": "#/components/schemas/QuickAnswers"
+              }
+            ],
+            "title": "Answers"
+          },
+          "form": {
+            "enum": [
+              "survey",
+              "quick"
+            ],
+            "title": "Form",
+            "type": "string"
+          },
+          "job_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Job Id"
+          },
+          "package_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Package Id"
+          },
+          "page_area": {
+            "anyOf": [
+              {
+                "enum": [
+                  "dashboard",
+                  "jobs",
+                  "job_detail",
+                  "review",
+                  "resumes",
+                  "pipeline",
+                  "profile",
+                  "settings",
+                  "other"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Page Area"
+          }
+        },
+        "required": [
+          "form",
+          "answers"
+        ],
+        "title": "FeedbackIn",
+        "type": "object"
+      },
+      "FeedbackOut": {
+        "description": "Nothing else is echoed back: no answers, no ids of context.",
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "created_at"
+        ],
+        "title": "FeedbackOut",
+        "type": "object"
+      },
+      "FindingJobsSection": {
+        "additionalProperties": false,
+        "properties": {
+          "bad_match_example": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bad Match Example"
+          },
+          "match_quality": {
+            "anyOf": [
+              {
+                "maximum": 5.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Match Quality"
+          }
+        },
+        "title": "FindingJobsSection",
+        "type": "object"
+      },
       "FollowUpOut": {
         "properties": {
           "application_id": {
@@ -696,6 +860,38 @@
           "follow_up_at"
         ],
         "title": "FollowUpOut",
+        "type": "object"
+      },
+      "GettingStartedSection": {
+        "additionalProperties": false,
+        "properties": {
+          "ease": {
+            "anyOf": [
+              {
+                "maximum": 5.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ease"
+          },
+          "stuck": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stuck"
+          }
+        },
+        "title": "GettingStartedSection",
         "type": "object"
       },
       "GuardrailReport": {
@@ -1776,6 +1972,74 @@
         "title": "MeOut",
         "type": "object"
       },
+      "OverallSection": {
+        "additionalProperties": false,
+        "properties": {
+          "fix_first": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fix First"
+          },
+          "pay_why": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pay Why"
+          },
+          "quote_ok": {
+            "default": false,
+            "title": "Quote Ok",
+            "type": "boolean"
+          },
+          "would_pay_19": {
+            "anyOf": [
+              {
+                "enum": [
+                  "yes",
+                  "maybe",
+                  "no"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Would Pay 19"
+          },
+          "would_use": {
+            "anyOf": [
+              {
+                "enum": [
+                  "yes",
+                  "maybe",
+                  "no"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Would Use"
+          }
+        },
+        "title": "OverallSection",
+        "type": "object"
+      },
       "PackageListItem": {
         "properties": {
           "application_status": {
@@ -2275,6 +2539,38 @@
         "title": "PollRunOut",
         "type": "object"
       },
+      "ProfileSection": {
+        "additionalProperties": false,
+        "properties": {
+          "ease": {
+            "anyOf": [
+              {
+                "maximum": 5.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ease"
+          },
+          "missing_or_confusing": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Missing Or Confusing"
+          }
+        },
+        "title": "ProfileSection",
+        "type": "object"
+      },
       "ProviderInfoOut": {
         "description": "One supported provider, for the Settings picker.",
         "properties": {
@@ -2305,6 +2601,51 @@
           "default"
         ],
         "title": "ProviderInfoOut",
+        "type": "object"
+      },
+      "QuickAnswers": {
+        "additionalProperties": false,
+        "properties": {
+          "kind": {
+            "enum": [
+              "bug",
+              "confusing",
+              "idea",
+              "worked_well"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "rating": {
+            "anyOf": [
+              {
+                "maximum": 5.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rating"
+          },
+          "text": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Text"
+          }
+        },
+        "required": [
+          "kind"
+        ],
+        "title": "QuickAnswers",
         "type": "object"
       },
       "ResumeBase": {
@@ -2620,6 +2961,86 @@
         "title": "ResumeSection",
         "type": "object"
       },
+      "ReviewSection": {
+        "additionalProperties": false,
+        "properties": {
+          "flag_verdict": {
+            "anyOf": [
+              {
+                "enum": [
+                  "right",
+                  "false_alarm",
+                  "not_sure"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Flag Verdict"
+          },
+          "flagged": {
+            "anyOf": [
+              {
+                "enum": [
+                  "yes",
+                  "no",
+                  "not_sure"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Flagged"
+          },
+          "resume_quality": {
+            "anyOf": [
+              {
+                "maximum": 5.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resume Quality"
+          },
+          "would_have_noticed": {
+            "anyOf": [
+              {
+                "enum": [
+                  "yes",
+                  "no",
+                  "not_sure"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Would Have Noticed"
+          },
+          "wrongly_blocked": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Wrongly Blocked"
+          }
+        },
+        "title": "ReviewSection",
+        "type": "object"
+      },
       "SavedSearchCountOut": {
         "properties": {
           "ever_found": {
@@ -2836,6 +3257,76 @@
           "created_at"
         ],
         "title": "SearchOut",
+        "type": "object"
+      },
+      "SessionSection": {
+        "additionalProperties": false,
+        "properties": {
+          "finished": {
+            "anyOf": [
+              {
+                "enum": [
+                  "yes",
+                  "partly",
+                  "no"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished"
+          },
+          "minutes": {
+            "anyOf": [
+              {
+                "enum": [
+                  "lt_10",
+                  "10_30",
+                  "30_60",
+                  "gt_60"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Minutes"
+          },
+          "task": {
+            "anyOf": [
+              {
+                "enum": [
+                  "find_jobs",
+                  "tailor_resume",
+                  "review_package",
+                  "set_up_profile",
+                  "other"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Task"
+          },
+          "task_other": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Task Other"
+          }
+        },
+        "title": "SessionSection",
         "type": "object"
       },
       "SourceDocument": {
@@ -3132,6 +3623,84 @@
           "at"
         ],
         "title": "StatusChange",
+        "type": "object"
+      },
+      "SurveyAnswers": {
+        "additionalProperties": false,
+        "description": "Every section optional, so every section is skippable.",
+        "properties": {
+          "downloads": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DownloadsSection"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "finding_jobs": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FindingJobsSection"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "getting_started": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/GettingStartedSection"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "overall": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/OverallSection"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "profile": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ProfileSection"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "review": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ReviewSection"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "session": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SessionSection"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "title": "SurveyAnswers",
         "type": "object"
       },
       "TailorBody": {
@@ -4262,6 +4831,65 @@
         "summary": "Sources",
         "tags": [
           "discovery"
+        ]
+      }
+    },
+    "/api/v1/feedback": {
+      "post": {
+        "operationId": "create_feedback_api_v1_feedback_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FeedbackIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FeedbackOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Feedback",
+        "tags": [
+          "feedback"
         ]
       }
     },

@@ -32,6 +32,8 @@ services:
       context: .
       dockerfile: apps/api/Dockerfile
       target: api
+      args:
+        RHAPTO_BUILD_ID: ${RHAPTO_BUILD_ID:-}
     restart: unless-stopped
     env_file: .env
     environment:

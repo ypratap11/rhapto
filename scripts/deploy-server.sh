@@ -65,7 +65,7 @@ echo "==> Syncing tracked source (excluding .env, profile/, .git)"
 git archive --format=tar "$REF" | "$SSH" "$HOST" "cd '$DEST' && tar -xf - --exclude='.env' --exclude='profile/*'"
 
 echo "==> Rebuilding: ${SERVICES[*]}"
-"$SSH" "$HOST" "cd '$DEST' && docker compose build ${SERVICES[*]} && docker compose up -d ${SERVICES[*]}"
+"$SSH" "$HOST" "cd '$DEST' && RHAPTO_BUILD_ID='$(git rev-parse --short=9 "$REF")' docker compose build ${SERVICES[*]} && docker compose up -d ${SERVICES[*]}"
 
 echo "==> Verifying"
 "$SSH" "$HOST" "cd '$DEST' && docker compose ps --format '{{.Service}} {{.State}}' && head -2 LICENSE"

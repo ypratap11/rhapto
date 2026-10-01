@@ -142,8 +142,16 @@ def install_error_handlers(app: FastAPI) -> None:
     @app.exception_handler(IntegrityError)
     async def _integrity(request: Request, exc: IntegrityError) -> JSONResponse:
         # e.g. two concurrent writers racing for the same (job_id, version).
+        # Never `exc_info` and never `str(exc)`: asyncpg appends Postgres' `DETAIL: Failing row
+        # contains (...)` to the message, which quotes the row -- tester feedback, profile content.
+        # Log the kind of failure only. Applies to every table, by design.
         logger.warning(
-            "database integrity error on %s %s", request.method, request.url.path, exc_info=exc
+            "database integrity error on %s %s: %s sqlstate=%s constraint=%s",
+            request.method,
+            request.url.path,
+            type(exc.orig).__name__,
+            getattr(exc.orig, "sqlstate", None),
+            getattr(getattr(exc.orig, "__cause__", None), "constraint_name", None),
         )
         return problem(409, "Conflict", "the change conflicts with existing data")
 
