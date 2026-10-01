@@ -9,11 +9,11 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { ApiError } from "@/lib/api/client";
 import { useSubmitFeedback } from "@/lib/api/queries";
-import { type FeedbackQuickAnswers, type PageArea } from "@/lib/feedback";
+import { type FeedbackQuickAnswers, type PageArea, TEXT_MAX } from "@/lib/feedback";
 import { ChoiceGroup } from "./ChoiceGroup";
 import { FeedbackNotice } from "./FeedbackNotice";
 
-export const TEXT_MAX = 2000;
+
 
 type Kind = FeedbackQuickAnswers["kind"];
 const KINDS: ReadonlyArray<{ value: Kind; label: string }> = [
