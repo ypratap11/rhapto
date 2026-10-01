@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { CircleQuestionMark, Settings } from "lucide-react";
+import { FeedbackButton } from "@/components/feedback/FeedbackButton";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 
 const TABS = [
@@ -56,6 +57,7 @@ export function TopBar() {
           >
             About
           </Link>
+          <FeedbackButton />
           <ThemeToggle />
           <Link href="/settings" aria-label="Settings" title="Settings" className="rounded-control p-1.5 text-muted-foreground hover:text-foreground">
             <Settings className="size-4" aria-hidden />
