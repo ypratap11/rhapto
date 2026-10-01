@@ -13,7 +13,9 @@ database: your ratings and free-text answers, the page area it was about, the ap
 quick form) the job or package you had open, if it is yours. Only the maintainer of the instance reads
 it, through a command-line report that pseudonymises the author by default; email addresses are shown
 only when the maintainer asks for them explicitly. Feedback is kept until your account is deleted
-(it is removed with the account), and the maintainer will purge it manually after the October test.
+(it is removed with the account); the maintainer may also delete it by hand. While you fill in the
+survey, an unsent draft is kept in your browser's local storage for up to 7 days so you can come back
+to it; it is cleared when you submit, and it stays in that browser if you sign out without submitting.
 
 ## What leaves the machine
 
