@@ -192,6 +192,17 @@ export function loadDraft(userId: string): SurveyDraft | null {
   try {
     const raw = window.localStorage.getItem(draftKey(userId));
     if (raw === null) return null;
+    const draft = parseDraft(raw);
+    // An expired or unreadable draft is free text nobody can restore: do not leave it behind.
+    if (draft === null) window.localStorage.removeItem(draftKey(userId));
+    return draft;
+  } catch {
+    return null;
+  }
+}
+
+function parseDraft(raw: string): SurveyDraft | null {
+  try {
     const parsed: unknown = JSON.parse(raw);
     if (!isPlainObject(parsed)) return null;
     const { savedAt, step, answers } = parsed;

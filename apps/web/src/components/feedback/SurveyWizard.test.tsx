@@ -182,6 +182,28 @@ describe("SurveyWizard submit", () => {
     expect(screen.getByRole("button", { name: "Submit" })).toBeEnabled();
   });
 
+  it("keeps Submit disabled when the only thing set is the quote consent", async () => {
+    const user = await startWizard();
+    await skipTo(user, 6);
+    await user.click(screen.getByRole("checkbox", { name: /quote my answers/i }));
+    expect(screen.getByRole("button", { name: "Submit" })).toBeDisabled();
+    await user.click(screen.getAllByRole("radio", { name: "Maybe" })[0] as HTMLElement);
+    expect(screen.getByRole("button", { name: "Submit" })).toBeEnabled();
+  });
+
+  it("moves focus to the confirmation heading and leaves no draft behind after a send", async () => {
+    const user = await startWizard();
+    await user.click(screen.getByRole("radio", { name: "Find jobs" }));
+    await skipTo(user, 6);
+    await user.click(screen.getAllByRole("radio", { name: "Yes" })[0] as HTMLElement);
+    await user.click(screen.getByRole("button", { name: "Submit" }));
+    expect(await screen.findByRole("heading", { level: 2, name: "Thank you" })).toHaveFocus();
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 450));
+    });
+    expect(window.localStorage.getItem(draftKey(USER))).toBeNull();
+  });
+
   it("posts form survey with only the answered fields, clears the draft and confirms", async () => {
     const user = await startWizard();
     await user.click(screen.getByRole("radio", { name: "Tailor a resume" }));

@@ -158,6 +158,18 @@ describe("survey draft (browser storage)", () => {
     }
   });
 
+  it("removes an expired or corrupt draft from storage when it is read", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-10-01T00:00:00Z"));
+    saveDraft(USER_A, draft({ savedAt: Date.now() }));
+    vi.setSystemTime(new Date("2026-10-09T00:00:00Z"));
+    expect(loadDraft(USER_A)).toBeNull();
+    expect(window.localStorage.getItem(draftKey(USER_A))).toBeNull();
+    window.localStorage.setItem(draftKey(USER_B), "{not json");
+    expect(loadDraft(USER_B)).toBeNull();
+    expect(window.localStorage.getItem(draftKey(USER_B))).toBeNull();
+  });
+
   it("is inert, not fatal, when localStorage throws", () => {
     const boom = () => {
       throw new Error("blocked");

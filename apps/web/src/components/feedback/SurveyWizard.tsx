@@ -33,8 +33,11 @@ export function SurveyWizard() {
   return <SurveyForm userId={me.data.user_id} />;
 }
 
+// A lone quote_ok is consent, not an answer: the API rejects a survey holding nothing else (422), so
+// neither Submit nor the draft treats it as one.
 function hasAnswers(answers: Answers): boolean {
-  return Object.keys(toSurveyBody({ savedAt: 0, step: 0, answers }).answers as object).length > 0;
+  const sections = Object.values(toSurveyBody({ savedAt: 0, step: 0, answers }).answers as Record<string, object>);
+  return sections.some((section) => Object.keys(section).some((k) => k !== "quote_ok"));
 }
 
 function SurveyForm({ userId }: { userId: string }) {
@@ -45,12 +48,15 @@ function SurveyForm({ userId }: { userId: string }) {
   const [restored, setRestored] = useState(initial !== null);
   const [done, setDone] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Set the moment the server accepts the survey; every later draft write (timer or unmount) checks it.
+  const sentRef = useRef(false);
 
   // Debounced draft save. An answer-less form clears the draft instead of saving an empty one, so
   // "Start over" (and a never-touched form) leaves nothing behind in the browser.
   useEffect(() => {
     if (done) return;
     const timer = setTimeout(() => {
+      if (sentRef.current) return;
       if (hasAnswers(answers)) saveDraft(userId, { savedAt: Date.now(), step, answers });
       else clearDraft(userId);
     }, SAVE_DELAY_MS);
@@ -65,7 +71,7 @@ function SurveyForm({ userId }: { userId: string }) {
   useEffect(
     () => () => {
       const { answers: a, step: s, done: d } = latest.current;
-      if (!d && hasAnswers(a)) saveDraft(userId, { savedAt: Date.now(), step: s, answers: a });
+      if (!d && !sentRef.current && hasAnswers(a)) saveDraft(userId, { savedAt: Date.now(), step: s, answers: a });
     },
     [userId],
   );
@@ -73,6 +79,10 @@ function SurveyForm({ userId }: { userId: string }) {
   // Focus moves to the step heading on every step change (keyboard and screen-reader users land at
   // the top of the new step), but not on first render, which would steal focus from the page.
   const headingRef = useRef<HTMLHeadingElement>(null);
+  const doneRef = useRef<HTMLHeadingElement>(null);
+  useEffect(() => {
+    if (done) doneRef.current?.focus();
+  }, [done]);
   const firstRender = useRef(true);
   useEffect(() => {
     if (firstRender.current) {
@@ -85,7 +95,9 @@ function SurveyForm({ userId }: { userId: string }) {
   if (done) {
     return (
       <section aria-live="polite" className="space-y-4">
-        <h2 className="font-serif text-2xl">Thank you</h2>
+        <h2 ref={doneRef} tabIndex={-1} className="font-serif text-2xl outline-none">
+          Thank you
+        </h2>
         <p>Thank you — your answers were sent.</p>
         <Link href="/dashboard" className="inline-block text-sm underline">
           Back to dashboard
@@ -108,6 +120,7 @@ function SurveyForm({ userId }: { userId: string }) {
     setError(null);
     try {
       await submit.mutateAsync(toSurveyBody({ savedAt: Date.now(), step, answers }));
+      sentRef.current = true;
       clearDraft(userId);
       setDone(true);
     } catch (e) {
