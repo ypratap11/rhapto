@@ -271,6 +271,79 @@ def accounts_set_email(
     typer.echo(f"renamed {old_email} -> {new_email}")
 
 
+feedback_app = typer.Typer(no_args_is_help=True, help="Tester feedback.")
+app.add_typer(feedback_app, name="feedback")
+
+
+@feedback_app.command("report")
+def feedback_report(
+    with_emails: bool = typer.Option(False, "--with-emails", help="Show tester emails."),
+    csv: bool = typer.Option(False, "--csv", help="One CSV row per response instead of Markdown."),
+    since: str | None = typer.Option(
+        None, "--since", help="Only responses from this date (YYYY-MM-DD)."
+    ),
+) -> None:
+    """Print every tester's feedback to stdout. The only way to read it: there is no HTTP read path.
+
+    Testers are pseudonyms (T-xxxxxx, keyed on RHAPTO_SECRET_KEY) unless --with-emails is given.
+    Run on the server: docker compose exec -T api rhapto feedback report > feedback.md
+    """
+    import hashlib
+    import hmac
+    from datetime import UTC, datetime
+
+    from rhapto.config import MissingSecretKeyError
+    from rhapto.db.repositories import feedback as feedback_repo
+    from rhapto.services.feedback import (
+        PSEUDONYM_SALT,
+        FeedbackRecord,
+        render_csv,
+        render_markdown,
+    )
+
+    try:
+        settings = get_settings()
+    except MissingSecretKeyError as exc:
+        typer.echo(f"error: {exc}", err=True)
+        raise typer.Exit(1) from exc
+    since_dt: datetime | None = None
+    if since is not None:
+        try:
+            since_dt = datetime.fromisoformat(since).replace(tzinfo=UTC)
+        except ValueError as exc:
+            typer.echo(f"error: --since must be a date like 2026-10-01, got {since!r}", err=True)
+            raise typer.Exit(1) from exc
+    key = hmac.new(settings.rhapto_secret_key.encode(), PSEUDONYM_SALT, hashlib.sha256).digest()
+
+    async def load() -> list[FeedbackRecord]:
+        engine = make_engine(settings.database_url)
+        try:
+            async with make_session_factory(engine)() as session:
+                pairs = await feedback_repo.all_with_email(session, since_dt)
+        finally:
+            await engine.dispose()
+        return [
+            FeedbackRecord(
+                id=row.id,
+                user_id=row.user_id,
+                email=email,
+                created_at=row.created_at,
+                form=row.form,
+                page_area=row.page_area,
+                schema_version=row.schema_version,
+                answers=row.answers,
+                app_version=row.app_version,
+                job_id=row.job_id,
+                package_id=row.package_id,
+            )
+            for row, email in pairs
+        ]
+
+    records = asyncio.run(load())
+    render = render_csv if csv else render_markdown
+    typer.echo(render(records, key=key, with_emails=with_emails), nl=False)
+
+
 def alembic_config() -> Config:
     """alembic.ini lives two directories above the package (apps/api) in a checkout and at /app in the image."""
     root = Path(__file__).resolve().parents[3]
