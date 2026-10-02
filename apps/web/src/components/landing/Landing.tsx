@@ -210,8 +210,8 @@ export function Landing() {
         </h3>
         <p className="mt-2 max-w-3xl text-sm text-muted-foreground">
           What the checks do not catch: a line can stretch the wording of its source without
-          adding a number or a title, and a role can be left out entirely. You still read the
-          resume before you send it.
+          adding a number or a title, and a role Rhapto never selected for this resume is not
+          flagged as missing. You still read the resume before you send it.
         </p>
       </section>
 
@@ -423,10 +423,11 @@ export function Landing() {
             </p>
             <p>
               Cheaper is not automatically safe. On that same job Claude Haiku 4.5 passed every
-              guardrail and still left a whole role out of the resume &mdash; the checks catch
-              invented claims, not missing ones. Opus 5, GPT-5 and Gemini 3.7 Flash each kept every
-              role, but that is two runs each on one job, so read the resume before you send it. The
-              free trial runs on Claude Opus 5.
+              guardrail and still left a whole role out of the resume. Rhapto now also checks that
+              every role it selected for the resume appears in the draft the model writes (not your
+              own hand edits); a role it never selected is not flagged. Opus 5, GPT-5 and Gemini 3.7 Flash each kept every role, but that is two runs
+              each on one job, so read the resume before you send it. The free trial runs on Claude
+              Opus 5.
             </p>
           </CardContent>
         </Card>

@@ -291,6 +291,9 @@ describe("Landing, the way in", () => {
     render(<Landing />);
     const line = screen.getByText(/What the checks do not catch/i);
     expect(line.textContent).toMatch(/stretch the wording of its source/i);
+    // The completeness check keeps every role that was picked; one never picked is still not flagged,
+    // so the limit stays on the page in that narrower form.
+    expect(line.textContent).toMatch(/never selected for this resume is not\s+flagged as missing/i);
     expect(line.textContent).toMatch(/still read the\s+resume before you send it/i);
   });
 

@@ -98,6 +98,14 @@ describe("AboutPage", () => {
     // without that caveat would send people to the one path that can silently lose their history,
     // so the warning is part of the price — deleting it must fail a test, not pass review.
     expect(costs).toHaveTextContent(/left a whole role out/);
+    // Completeness now catches a picked role going missing, but not one never picked; the old
+    // "not missing ones" line would now understate the check, and overstating it would be worse.
+    // The completeness guardrail (engine/guardrails/completeness.py) covers every selected block, on
+    // model drafts only; the hand-edit PATCH skips it. Pin both halves so neither claim drifts.
+    expect(costs).toHaveTextContent(/checks that every role it selected for the resume appears/);
+    expect(costs).toHaveTextContent(/not your own hand edits/);
+    expect(costs).toHaveTextContent(/a role it never selected is not flagged/);
+    expect(costs).not.toHaveTextContent(/not missing ones/);
   });
 
   it("promises in plain words, once, that it never submits an application", () => {
