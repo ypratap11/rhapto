@@ -92,6 +92,15 @@ describe("TopBar", () => {
     expect(trailing).toEqual(["Feedback on this page", "Toggle theme", "Settings", "Help"]);
     expect(button).toBeInTheDocument();
   });
+
+  it("lets the tabs drop to their own sideways-scrolling row on phones instead of overflowing the bar", () => {
+    // jsdom cannot measure layout; this pins the classes that do the work. Live check at 375px: the
+    // one-row bar overflowed to ~550px and pushed the icons off-screen.
+    render(<TopBar />);
+    const nav = screen.getByRole("navigation", { name: "Primary" });
+    expect(nav.className.split(" ")).toEqual(expect.arrayContaining(["w-full", "overflow-x-auto"]));
+    expect(nav.parentElement?.className.split(" ")).toEqual(expect.arrayContaining(["flex-wrap", "md:flex-nowrap"]));
+  });
 });
 
 afterEach(() => {

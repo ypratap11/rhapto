@@ -22,14 +22,20 @@ export function TopBar() {
   const pathname = usePathname();
   return (
     <header className="border-b border-border bg-surface">
-      <div className="mx-auto flex h-14 max-w-6xl items-center justify-between gap-6 px-6">
+      {/* Below `md` the bar wraps into two rows: logo and icons on top, the five tabs underneath in
+          a row that scrolls sideways. One row needs ~700px; at 375px it overflowed to ~550px and
+          pushed the icons off-screen. */}
+      <div className="mx-auto flex min-h-14 max-w-6xl flex-wrap items-center justify-between gap-x-6 px-4 pt-2 sm:px-6 md:h-14 md:flex-nowrap md:pt-0">
         {/* The logo is a signed-in person's way back to their app, not to the explainer at "/" --
             sending them to the pitch instead would be the annoyance this route split must not
             create. */}
         <Link href="/dashboard" className="font-serif text-xl font-medium tracking-tight">
           Rhapto
         </Link>
-        <nav aria-label="Primary" className="flex flex-1 items-center gap-5 text-sm">
+        <nav
+          aria-label="Primary"
+          className="order-last flex w-full items-center gap-4 overflow-x-auto whitespace-nowrap pt-2 text-sm md:order-none md:w-auto md:flex-1 md:gap-5 md:overflow-visible md:pt-0"
+        >
           {TABS.map(({ href, label }) => {
             // No tab's href is a prefix of another tab's href (checked: /dashboard, /jobs,
             // /resumes, /pipeline, /profile), so a plain prefix match is unambiguous -- the old
@@ -49,8 +55,8 @@ export function TopBar() {
         </nav>
         <div className="flex items-center gap-1">
           {/* Deliberately outside the Primary nav: "About" is the pitch, not a place you work.
-              Hidden below `sm` because the five primary tabs already overflow this bar at phone
-              widths; a newcomer on a phone reaches /about from the TokenGate card instead. */}
+              Hidden below `sm` to keep the top row short on phones; a newcomer on a phone reaches
+              /about from the TokenGate card instead. */}
           <Link
             href="/about"
             className="hidden px-1.5 text-sm text-muted-foreground hover:text-foreground sm:inline"
