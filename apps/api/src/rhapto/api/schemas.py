@@ -14,6 +14,7 @@ from rhapto.models.jd_extract import JDExtract
 from rhapto.models.profile.blocks import Block
 from rhapto.models.resume_document import ResumeDocument
 from rhapto.models.source_document import Edit, SourceDocument
+from rhapto.services.feedback import FeedbackForm, PageArea, QuickAnswers, SurveyAnswers
 from rhapto.services.trial import LlmKeySource
 
 
@@ -702,3 +703,49 @@ class DashboardOut(BaseModel):
     checklist: ChecklistOut
     saved_searches: list[SavedSearchCountOut]
     due_followups: list[FollowUpOut]
+
+
+class FeedbackIn(BaseModel):
+    """One tester response. `user_id` and `app_version` are deliberately absent (and `extra="forbid"`
+    rejects them): identity comes from `UserDep`, the version from the server."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    form: FeedbackForm
+    page_area: PageArea | None = None  # required iff quick
+    answers: SurveyAnswers | QuickAnswers
+    job_id: uuid.UUID | None = None  # quick only
+    package_id: uuid.UUID | None = None  # quick only
+
+    @model_validator(mode="after")
+    def _shape_matches_form(self) -> FeedbackIn:
+        if self.form == "quick":
+            if not isinstance(self.answers, QuickAnswers):
+                raise ValueError("quick feedback needs quick answers")
+            if self.page_area is None:
+                raise ValueError("quick feedback needs page_area")
+        else:
+            if not isinstance(self.answers, SurveyAnswers):
+                raise ValueError("a survey needs survey answers")
+            if self.page_area is not None:
+                raise ValueError("a survey has no page_area")
+            if self.job_id is not None or self.package_id is not None:
+                raise ValueError("a survey has no page context")
+            if not _survey_has_an_answer(self.answers):
+                raise ValueError("a survey needs at least one answer")
+        return self
+
+
+def _survey_has_an_answer(answers: SurveyAnswers) -> bool:
+    """True if any section carries a real answer. `quote_ok` is a consent flag, not an answer."""
+    for section in answers.model_dump(exclude_none=True).values():
+        if any(value is not None for key, value in section.items() if key != "quote_ok"):
+            return True
+    return False
+
+
+class FeedbackOut(BaseModel):
+    """Nothing else is echoed back: no answers, no ids of context."""
+
+    id: uuid.UUID
+    created_at: datetime

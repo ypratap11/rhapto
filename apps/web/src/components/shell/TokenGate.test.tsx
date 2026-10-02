@@ -1,10 +1,10 @@
-import { render, screen } from "@testing-library/react";
+import { render, renderHook, screen } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act } from "react";
 import { hydrateRoot } from "react-dom/client";
 import { renderToString } from "react-dom/server";
-import { TokenGate } from "./TokenGate";
+import { TokenGate, useSignedIn } from "./TokenGate";
 import { Landing } from "@/components/landing/Landing";
 import { ApiError, setSettings } from "@/lib/api/client";
 import { useBootstrap, useMe } from "@/lib/api/queries";
@@ -348,5 +348,45 @@ describe("TokenGate in access mode", () => {
     pathname.current = "/settings";
     renderGate(<TokenGate><p>settings form</p></TokenGate>);
     expect(screen.getByText("settings form")).toBeInTheDocument();
+  });
+});
+
+describe("useSignedIn", () => {
+  afterEach(() => {
+    sameOriginFlag.value = false;
+  });
+
+  it.each(["/", "/about", "/settings"])("is false on the public route %s, even with a token stored", (path) => {
+    pathname.current = path;
+    setSettings({ token: "tok", apiUrl: "http://localhost:8000" });
+    expect(renderHook(() => useSignedIn()).result.current).toBe(false);
+  });
+
+  it.each(["/", "/about", "/settings"])("is false on the public route %s in access mode", (path) => {
+    sameOriginFlag.value = true;
+    pathname.current = path;
+    expect(renderHook(() => useSignedIn()).result.current).toBe(false);
+  });
+
+  it("is true on an app route with a token (token mode) and false without one", () => {
+    pathname.current = "/dashboard";
+    expect(renderHook(() => useSignedIn()).result.current).toBe(false);
+    setSettings({ token: "tok", apiUrl: "http://localhost:8000" });
+    expect(renderHook(() => useSignedIn()).result.current).toBe(true);
+  });
+
+  it("is true on an app route in access mode with no token", () => {
+    sameOriginFlag.value = true;
+    pathname.current = "/dashboard";
+    expect(renderHook(() => useSignedIn()).result.current).toBe(true);
+  });
+
+  // The survey is an app page behind sign-in, not a public route: /feedback must never be added to
+  // PUBLIC_ROUTES (that would also open it, client-side, to a visitor with no session).
+  it("treats /feedback as a signed-in-only route", () => {
+    pathname.current = "/feedback";
+    expect(renderHook(() => useSignedIn()).result.current).toBe(false);
+    setSettings({ token: "tok", apiUrl: "http://localhost:8000" });
+    expect(renderHook(() => useSignedIn()).result.current).toBe(true);
   });
 });

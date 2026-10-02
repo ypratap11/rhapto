@@ -8,6 +8,15 @@ history, your profile (contact answers, blocks, tracks, guardrails, resume bases
 your saved searches. All of it lives on the machine (or server) running your own Docker Compose
 stack — Rhapto has no hosted service of its own.
 
+Feedback you submit through the in-app survey or the per-page feedback button is stored in the same
+database: your ratings and free-text answers, the page area it was about, the app version, and (for the
+quick form) the job or package you had open, if it is yours. Only the maintainer of the instance reads
+it, through a command-line report that pseudonymises the author by default; email addresses are shown
+only when the maintainer asks for them explicitly. Feedback is kept until your account is deleted
+(it is removed with the account); the maintainer may also delete it by hand. While you fill in the
+survey, an unsent draft is kept in your browser's local storage for up to 7 days so you can come back
+to it; it is cleared when you submit, and it stays in that browser if you sign out without submitting.
+
 ## What leaves the machine
 
 Two kinds of outbound request leave your machine, and nothing else does: requests to whichever job

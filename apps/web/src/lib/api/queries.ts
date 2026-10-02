@@ -965,3 +965,12 @@ export function useRecommendedJobs(page: number) {
   const all = query.data ?? [];
   return { ...query, data: all.slice(page * RECOMMENDED_PAGE_SIZE, page * RECOMMENDED_PAGE_SIZE + RECOMMENDED_PAGE_SIZE) };
 }
+
+export type FeedbackBody = Schemas["FeedbackIn"];
+
+// Insert-only endpoint: nothing cached depends on it, so there is nothing to invalidate.
+export function useSubmitFeedback() {
+  return useMutation({
+    mutationFn: (body: FeedbackBody) => unwrap(apiClient().POST("/api/v1/feedback", { body })),
+  });
+}

@@ -93,9 +93,20 @@ function getServerSnapshot(): boolean | null {
 // it no edge exposure at all, only a client-side pass-through once a request already arrived.
 const PUBLIC_ROUTES = new Set(["/", "/settings", "/about"]);
 
+// The one definition of "this visitor is (or may be) signed in, so /me is worth asking": not on a
+// public route, and either an access-mode deployment (the edge already authenticated the request) or
+// a stored token. TokenGate and the shell feedback button both gate `useMe` on it, so the button can
+// never re-introduce fix-round finding I1 -- a /me call from the public landing page.
+export function useSignedIn(): boolean {
+  const pathname = usePathname();
+  const tokenPresent = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
+  return !PUBLIC_ROUTES.has(pathname) && (SAME_ORIGIN_DEPLOYMENT || tokenPresent === true);
+}
+
 export function TokenGate({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const tokenPresent = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
+  const signedIn = useSignedIn();
   // Called unconditionally, per React's rules of hooks, but only consulted in the access-mode
   // branch below, and only once past the public-route return (fix-round finding I1: `enabled` used
   // to stay live on / in access mode, so every view of the soon-to-be-world-readable landing page
@@ -111,7 +122,7 @@ export function TokenGate({ children }: { children: React.ReactNode }) {
   // `hasToken()` would already see a stored token; that divergence is unobservable here because
   // `me` is read only inside the `SAME_ORIGIN_DEPLOYMENT` branch below, where `||` short-circuits
   // to `true` regardless of either value.
-  const me = useMe({ enabled: !PUBLIC_ROUTES.has(pathname) && (SAME_ORIGIN_DEPLOYMENT || tokenPresent === true) });
+  const me = useMe({ enabled: signedIn });
 
   if (PUBLIC_ROUTES.has(pathname)) return <>{children}</>;
 
