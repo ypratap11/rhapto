@@ -143,3 +143,42 @@ def test_a_role_with_no_titles_is_not_resolved(
         assert role_titles_for([_track("t", field="only", role="one")]) == {}
     finally:
         tax.taxonomy.cache_clear()
+
+
+def test_shipped_lists_after_the_qa_review() -> None:
+    """QA review I-1, I-2, I-3: wrong-industry titles are vetoed, real spellings match."""
+    ppm = "program-project-management"
+    cases: list[tuple[str, str, str, bool]] = [
+        ("engineering", "qa", "Engineering Technician 4, Quality Assurance", False),
+        ("engineering", "qa", "Quality Assurance Technician", False),
+        ("engineering", "qa", "Quality Assurance Inspector", False),
+        ("engineering", "qa", "Quality Assurance Auditor", False),
+        ("engineering", "qa", "Quality Assurance Nurse Reviewer", False),
+        ("engineering", "qa", "Quality Assurance Representative", False),
+        ("engineering", "qa", "Test Engineer, Power Electronics", False),
+        ("engineering", "qa", "Senior Test Engineer, Rockets", False),
+        ("engineering", "qa", "Senior QA Engineer", True),
+        (ppm, "technical-program-manager", "Director, Technical Program Management", True),
+        (ppm, "technical-program-manager", "Technical Program Management Lead", True),
+        (ppm, "technical-program-manager", "Technical Programme Manager", True),
+        (ppm, "program-manager", "Director, Program Management", True),
+        (ppm, "program-manager", "Programme Manager", True),
+        (ppm, "project-manager", "Project Management Office Lead", True),
+        ("engineering", "devops-sre", "Dev Ops Engineer", True),
+        ("engineering", "devops-sre", "Dev-Ops Engineer", True),
+        ("engineering", "devops-sre", "DevSecOps Engineer", True),
+        ("engineering", "devops-sre", "Senior Software Engineer - Platform", True),
+        ("engineering", "devops-sre", "Reliability Engineer, Site Operations", True),
+        (
+            "engineering",
+            "devops-sre",
+            "Senior Software Engineer, GenAI Platform & LLM Tools",
+            False,
+        ),
+        ("engineering", "devops-sre", "Reliability Engineer, Aircraft", False),
+        (ppm, "technical-program-manager", "Executive Assistant to Program Manager", False),
+        (ppm, "program-manager", "Executive Assistant to Program Manager", False),
+    ]
+    for field, role, title, expected in cases:
+        got = title_match(title, _shipped(field, role)) is not None
+        assert got is expected, f"{role}: {title!r} expected match={expected}"
