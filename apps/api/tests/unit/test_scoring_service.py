@@ -1,3 +1,5 @@
+import logging
+
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -224,3 +226,43 @@ async def test_all_or_nothing_mode_propagates_a_chunk_failure(
     ]
     with pytest.raises(RuntimeError):
         await score_and_store(session, user.id, jobs, AlwaysFails())
+
+
+async def test_a_failing_middle_chunk_does_not_stop_the_third_chunk(
+    session: AsyncSession, user: User, caplog: pytest.LogCaptureFixture
+) -> None:
+    """A1. `session.rollback()` after chunk 2 expires every loaded Job; before the fix chunk 3 then
+    read `job.jd_embedding` on an expired instance (MissingGreenlet) and failed too, and so did every
+    chunk after it. The test above this one fails only the LAST chunk, so it never ran a chunk after
+    a failure."""
+
+    class MiddleChunkFails(RecordingEmbedder):
+        async def embed(self, texts: list[str]) -> list[list[float]]:
+            if len(self.sizes) == 2:  # call 1 = the track, call 2 = chunk 1, this call = chunk 2
+                self.sizes.append(len(texts))
+                raise RuntimeError("embedding provider is down")
+            return await super().embed(texts)
+
+    await profile_repo.upsert_track(session, user.id, DATA)
+    jobs = [
+        await jobs_repo.create_job(
+            session,
+            user.id,
+            jd_text=f"Job {i}: own the data platform and ETL roadmap for analytics. " * 4,
+            title=f"Data PM {i}",
+            location="Denver, CO",
+        )
+        for i in range(2 * SCORE_CHUNK + 20)  # three chunks: 50, 50, 20
+    ]
+    with caplog.at_level(logging.ERROR, logger="rhapto.services.scoring"):
+        await score_and_store(session, user.id, jobs, MiddleChunkFails(), commit_each_chunk=True)
+
+    for job in jobs:
+        await session.refresh(job)
+    assert all(j.best_fit is not None for j in jobs[:SCORE_CHUNK])
+    assert all(j.best_fit is None for j in jobs[SCORE_CHUNK : 2 * SCORE_CHUNK])  # the failed chunk
+    assert all(j.best_fit is not None for j in jobs[2 * SCORE_CHUNK :]), (
+        "chunks after a failed chunk must still be scored"
+    )
+    assert caplog.text.count("scoring chunk") == 1  # only the middle chunk failed
+    assert "MissingGreenlet" not in caplog.text
