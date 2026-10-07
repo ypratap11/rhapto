@@ -1,6 +1,8 @@
 import logging
+from typing import Any
 
 import pytest
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from rhapto.db.models import User
@@ -229,19 +231,27 @@ async def test_all_or_nothing_mode_propagates_a_chunk_failure(
 
 
 async def test_a_failing_middle_chunk_does_not_stop_the_third_chunk(
-    session: AsyncSession, user: User, caplog: pytest.LogCaptureFixture
+    session: AsyncSession,
+    user: User,
+    caplog: pytest.LogCaptureFixture,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """A1. `session.rollback()` after chunk 2 expires every loaded Job; before the fix chunk 3 then
-    read `job.jd_embedding` on an expired instance (MissingGreenlet) and failed too, and so did every
-    chunk after it. The test above this one fails only the LAST chunk, so it never ran a chunk after
-    a failure."""
+    """A1. The middle chunk fails AFTER database statements ran in it (so a transaction is open and
+    `session.rollback()` really expires every loaded Job), the realistic shape of two concurrent
+    rescores colliding on UNIQUE(user_id, job_id, track_id). Chunk 3 must still be scored: before
+    any fix it would read `job.jd_embedding` on an expired instance (MissingGreenlet). A failure
+    inside `embed` never reaches the database, so rollback is a no-op and cannot show this."""
+    real_upsert = disc_repo.upsert_scores
+    calls = 0
 
-    class MiddleChunkFails(RecordingEmbedder):
-        async def embed(self, texts: list[str]) -> list[list[float]]:
-            if len(self.sizes) == 2:  # call 1 = the track, call 2 = chunk 1, this call = chunk 2
-                self.sizes.append(len(texts))
-                raise RuntimeError("embedding provider is down")
-            return await super().embed(texts)
+    async def upsert_then_collide(*args: Any, **kwargs: Any) -> None:
+        nonlocal calls
+        calls += 1
+        await real_upsert(*args, **kwargs)  # the statements really ran and flushed
+        if calls == SCORE_CHUNK + 5:  # 5th job of chunk 2
+            raise IntegrityError("INSERT INTO job_scores", {}, Exception("duplicate key"))
+
+    monkeypatch.setattr(disc_repo, "upsert_scores", upsert_then_collide)
 
     await profile_repo.upsert_track(session, user.id, DATA)
     jobs = [
@@ -255,7 +265,7 @@ async def test_a_failing_middle_chunk_does_not_stop_the_third_chunk(
         for i in range(2 * SCORE_CHUNK + 20)  # three chunks: 50, 50, 20
     ]
     with caplog.at_level(logging.ERROR, logger="rhapto.services.scoring"):
-        await score_and_store(session, user.id, jobs, MiddleChunkFails(), commit_each_chunk=True)
+        await score_and_store(session, user.id, jobs, RecordingEmbedder(), commit_each_chunk=True)
 
     for job in jobs:
         await session.refresh(job)
