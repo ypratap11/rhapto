@@ -1,5 +1,5 @@
 import { render, screen, within } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "@/lib/api/client";
 import DashboardPage from "./page";
 
@@ -14,16 +14,17 @@ vi.mock("@/components/dashboard/DashboardHero", () => ({
     </h1>
   ),
 }));
-vi.mock("@/components/dashboard/RecommendedRoles", () => ({ RecommendedRoles: () => <div>Recommended roles</div> }));
+vi.mock("@/components/dashboard/RecommendedRoles", () => ({ RecommendedRoles: ({ noTracks }: { noTracks?: boolean }) => <div>Recommended roles{noTracks ? " (no tracks)" : ""}</div> }));
 vi.mock("@/components/dashboard/ActiveApplications", () => ({ ActiveApplications: () => <div>Active applications</div> }));
 vi.mock("@/components/dashboard/ProfileChecklist", () => ({ ProfileChecklist: () => <div>Profile checklist</div> }));
 vi.mock("@/components/dashboard/SavedSearchesRail", () => ({ SavedSearchesRail: () => <div>Saved searches rail</div> }));
 
+let tracksResult: { data: unknown } = { data: [{ id: "t1", name: "Data PM", min_fit: 60 }] };
 let dashboardResult: { data: unknown; error: unknown; isLoading: boolean } = { data: undefined, error: null, isLoading: true };
 vi.mock("@/lib/api/queries", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/api/queries")>()),
   useDashboard: () => dashboardResult,
-  useTracks: () => ({ data: [{ id: "t1", name: "Data PM", min_fit: 60 }] }),
+  useTracks: () => tracksResult,
   useTaxonomy: () => ({ data: { fields: [{ id: "engineering", name: "Engineering", roles: [] }] } }),
 }));
 
@@ -39,6 +40,10 @@ const checklist = {
 };
 
 describe("DashboardPage", () => {
+  afterEach(() => {
+    tracksResult = { data: [{ id: "t1", name: "Data PM", min_fit: 60 }] };
+  });
+
   it("puts the hero in a peach, tall band", () => {
     dashboardResult = { data: undefined, error: null, isLoading: true };
     render(<DashboardPage />);
@@ -74,6 +79,21 @@ describe("DashboardPage", () => {
     expect(screen.getByRole("alert")).toBeInTheDocument();
     // Not a blank page: the rest of the Dashboard still renders around the banner.
     expect(screen.getByRole("heading", { name: /find your next role/i })).toBeInTheDocument();
+    expect(screen.getByText("Recommended roles")).toBeInTheDocument();
+  });
+
+  it("tells Recommended roles when the user has no tracks, and only when that is settled", () => {
+    dashboardResult = {
+      data: { new_fit_count: 0, needs_review_count: 0, checklist, due_followups: [], saved_searches: [] },
+      error: null,
+      isLoading: false,
+    };
+    tracksResult = { data: [] };
+    const { unmount } = render(<DashboardPage />);
+    expect(screen.getByText("Recommended roles (no tracks)")).toBeInTheDocument();
+    unmount();
+    tracksResult = { data: undefined }; // still loading: no verdict
+    render(<DashboardPage />);
     expect(screen.getByText("Recommended roles")).toBeInTheDocument();
   });
 });

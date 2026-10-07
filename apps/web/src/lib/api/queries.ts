@@ -966,6 +966,29 @@ export function useRecommendedJobs(page: number) {
   return { ...query, data: all.slice(page * RECOMMENDED_PAGE_SIZE, page * RECOMMENDED_PAGE_SIZE + RECOMMENDED_PAGE_SIZE) };
 }
 
+/** The API caps `ids=` at 200 (`MAX_IDS` in `api/routers/jobs.py`). */
+export const SIMILAR_POSTINGS_MAX = 200;
+
+/**
+ * The other copies of a posting that `GET /jobs` collapsed into one row (`JobOut.also_ids`).
+ *
+ * Fetched only when the person opens them. `ids=` is never arranged server-side, so every copy comes
+ * back; `posted_within: "any"` because a copy can be older than the 90-day default window.
+ */
+export function useSimilarPostings(ids: string[], enabled: boolean) {
+  const wanted = ids.slice(0, SIMILAR_POSTINGS_MAX);
+  return useQuery({
+    queryKey: ["jobs", "similar", wanted] as const,
+    queryFn: () =>
+      unwrap(
+        apiClient().GET("/api/v1/jobs", {
+          params: { query: asJobsQuery({ ids: wanted.join(","), sort: "newest", posted_within: "any" }) },
+        }),
+      ),
+    enabled: enabled && wanted.length > 0,
+  });
+}
+
 export type FeedbackBody = Schemas["FeedbackIn"];
 
 // Insert-only endpoint: nothing cached depends on it, so there is nothing to invalidate.

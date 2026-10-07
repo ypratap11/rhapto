@@ -12,6 +12,7 @@ vi.mock("@/components/jobs/MarkSearchViewed", () => ({ MarkSearchViewed: () => n
 const run = vi.fn();
 const saveSearch = vi.fn().mockResolvedValue({ id: "s1", name: "pm" });
 const jobsQuery = vi.fn();
+const tracksQuery = vi.fn();
 // Recorded rather than ignored: the page must decide WHETHER to ask for a diagnosis, and that
 // decision is the whole call discipline (never on a non-empty grid, never while loading, never when
 // an error banner already explains the emptiness).
@@ -36,7 +37,7 @@ vi.mock("@/lib/api/queries", async (importOriginal) => ({
   useLiveSearch: () => ({ run, jobs: [], perSource: null, status: "idle", error: null }),
   useJobsQuery: () => jobsQuery(),
   useJobsEmptyReason: (...args: unknown[]) => emptyReason(...args),
-  useTracks: () => ({ data: [{ id: "t1", name: "Data PM", min_fit: 60 }] }),
+  useTracks: () => tracksQuery(),
   useTaxonomy: () => ({ data: { fields: [{ id: "engineering", name: "Engineering", roles: [] }] } }),
   useSourceSettings: () => ({ data: [{ source: "themuse", label: "The Muse", enabled: true, needs_key: false, key_set: false }] }),
   useSavedSearches: () => ({ data: [] }),
@@ -72,6 +73,7 @@ function job(id: string): JobOut {
 }
 
 beforeEach(() => {
+  tracksQuery.mockReturnValue({ data: [{ id: "t1", name: "Data PM", min_fit: 60 }] });
   jobsQuery.mockReturnValue({ data: [], isLoading: false, error: null });
   emptyReason.mockReset();
   emptyReason.mockReturnValue({ data: undefined, isLoading: false });
@@ -350,5 +352,30 @@ describe("Jobs page", () => {
       expect(screen.getAllByRole("article")).toHaveLength(1);
       expect(screen.queryByText(/couldn.t load jobs/i)).not.toBeInTheDocument();
     });
+  });
+});
+
+describe("a user with no target role", () => {
+  it("is told to pick one, and the list is labelled as unranked", () => {
+    tracksQuery.mockReturnValue({ data: [] });
+    jobsQuery.mockReturnValue({ data: [job("j1")], isLoading: false, error: null });
+    render(<JobsPage />);
+    expect(screen.getByText(/pick the role you want/i)).toBeInTheDocument();
+    expect(screen.getByText("Newest jobs, not ranked yet")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Pick a role" })).toHaveAttribute("href", "/profile?card=tracks");
+    expect(screen.getByText("Role j1")).toBeInTheDocument();
+  });
+
+  it("is not told anything while the tracks are still loading", () => {
+    tracksQuery.mockReturnValue({ data: undefined });
+    jobsQuery.mockReturnValue({ data: [job("j1")], isLoading: false, error: null });
+    render(<JobsPage />);
+    expect(screen.queryByText(/pick the role you want/i)).not.toBeInTheDocument();
+  });
+
+  it("sees no prompt once they have a track", () => {
+    jobsQuery.mockReturnValue({ data: [job("j1")], isLoading: false, error: null });
+    render(<JobsPage />);
+    expect(screen.queryByText(/pick the role you want/i)).not.toBeInTheDocument();
   });
 });

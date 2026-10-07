@@ -8,6 +8,7 @@ import { FilterChips } from "@/components/jobs/FilterChips";
 import type { TrackInfo } from "@/components/jobs/JobCard";
 import { JobGrid } from "@/components/jobs/JobGrid";
 import { MarkSearchViewed } from "@/components/jobs/MarkSearchViewed";
+import { NoTrackPrompt } from "@/components/jobs/NoTrackPrompt";
 import { SaveSearchButton } from "@/components/jobs/SaveSearchButton";
 import { SearchForm } from "@/components/jobs/SearchForm";
 import { SourceReport } from "@/components/jobs/SourceReport";
@@ -76,6 +77,8 @@ function JobsPageInner() {
   // The band's Search button switches the grid from the stored jobs to the live result.
   const browse = useJobsQuery(state, { enabled: live.status === "idle", searchId });
   const tracksQuery = useTracks();
+  // Only a settled, empty answer is a verdict: while the tracks load (or fail) there is nothing to say.
+  const noTracks = Array.isArray(tracksQuery.data) && tracksQuery.data.length === 0;
   const taxonomy = useTaxonomy();
   const sourceSettings = useSourceSettings();
   const savedSearches = useSavedSearches();
@@ -191,6 +194,7 @@ function JobsPageInner() {
       </div>
       <SourceReport perSource={live.perSource} />
       {hasIssue ? <ApiErrorBanner error={error ?? "Can't reach Rhapto's API."} /> : null}
+      {noTracks ? <NoTrackPrompt /> : null}
       <JobGrid
         jobs={pageJobs}
         tracks={tracks}

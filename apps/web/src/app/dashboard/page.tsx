@@ -25,6 +25,8 @@ export default function DashboardPage() {
   const [state, setState] = useState<SearchState>(DEFAULT_SEARCH_STATE);
   const dashboard = useDashboard();
   const tracksQuery = useTracks();
+  // Only a settled, empty answer is a verdict: while the tracks load (or fail) there is nothing to say.
+  const noTracks = Array.isArray(tracksQuery.data) && tracksQuery.data.length === 0;
   const taxonomy = useTaxonomy();
 
   const tracks = useMemo(() => {
@@ -95,7 +97,7 @@ export default function DashboardPage() {
               pending={false}
             />
           </section>
-          <RecommendedRoles tracks={tracks} />
+          <RecommendedRoles tracks={tracks} noTracks={noTracks} />
           <ActiveApplications />
         </div>
         <aside className="space-y-8">

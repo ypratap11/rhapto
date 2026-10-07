@@ -77,6 +77,20 @@ describe("RecommendedRoles", () => {
     expect(screen.getByText(/nothing to recommend yet/i)).toBeInTheDocument();
   });
 
+  it("prompts for a role and labels the list as unranked when the user has no tracks", () => {
+    recommendedJobs.mockReturnValue({ data: tenJobs, isLoading: false, error: null });
+    render(<RecommendedRoles tracks={tracks} noTracks />);
+    expect(screen.getByText(/pick the role you want/i)).toBeInTheDocument();
+    expect(screen.getByText("Newest jobs, not ranked yet")).toBeInTheDocument();
+    expect(screen.getAllByRole("link", { name: /tailor/i })).toHaveLength(10); // the list is still shown
+  });
+
+  it("shows no prompt by default", () => {
+    recommendedJobs.mockReturnValue({ data: tenJobs, isLoading: false, error: null });
+    render(<RecommendedRoles tracks={tracks} />);
+    expect(screen.queryByText(/pick the role you want/i)).not.toBeInTheDocument();
+  });
+
   describe("when the API is unreachable or fails", () => {
     it("shows the error banner and swaps the empty-state copy when a failed query has nothing cached", () => {
       recommendedJobs.mockReturnValue({ data: undefined, isLoading: false, error: new Error("boom"), isPaused: false });
