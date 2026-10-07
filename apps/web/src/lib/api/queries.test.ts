@@ -221,7 +221,7 @@ describe("useSimilarPostings", () => {
     const ids = Array.from({ length: 250 }, (_, i) => `id${i}`);
     const { result } = renderHook(() => useSimilarPostings(ids, true), { wrapper: queryWrapper() });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    const sent = (getMock.mock.calls[0][1] as { params: { query: { ids: string } } }).params.query.ids.split(",");
+    const sent = (getMock.mock.calls[0]![1] as { params: { query: { ids: string } } }).params.query.ids.split(",");
     expect(sent).toHaveLength(200);
     expect(sent[199]).toBe("id199");
   });
