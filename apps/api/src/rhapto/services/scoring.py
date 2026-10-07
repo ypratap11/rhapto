@@ -3,10 +3,10 @@ from __future__ import annotations
 import logging
 import uuid
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from rhapto.db.models import EMBEDDING_DIMENSIONS, Job
+from rhapto.db.models import EMBEDDING_DIMENSIONS, Job, JobScore
 from rhapto.db.models import Track as TrackRow
 from rhapto.db.repositories import discovery as disc_repo
 from rhapto.db.repositories import profile as profile_repo
@@ -189,7 +189,16 @@ async def score_and_store(
 async def rescore_user(
     session: AsyncSession, user_id: uuid.UUID, embedder: EmbeddingProvider
 ) -> int:
-    for row in await profile_repo.list_tracks(session, user_id):
+    rows = await profile_repo.list_tracks(session, user_id)
+    # Scores of tracks that no longer exist are never rewritten by an upsert; drop them here so a
+    # deleted track (or a rescore that raced its delete) cannot leave rows behind. With no tracks
+    # left `not_in([])` matches every row of the user, which is what is wanted.
+    await session.execute(
+        delete(JobScore).where(
+            JobScore.user_id == user_id, JobScore.track_id.not_in([r.track_id for r in rows])
+        )
+    )
+    for row in rows:
         row.embedding = None  # descriptions may have changed; recompute every track
     jobs = list(await session.scalars(select(Job).where(Job.user_id == user_id)))
     # A whole queue can be hundreds of jobs; commit per chunk so a timeout leaves the work done

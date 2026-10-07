@@ -185,10 +185,20 @@ async def put_track(
 
 
 @router.delete("/tracks/{track_id}", status_code=204)
-async def delete_track(track_id: str, user_id: UserDep, session: SessionDep) -> Response:
+async def delete_track(
+    track_id: str, user_id: UserDep, session: SessionDep, enqueuer: EnqueuerDep
+) -> Response:
     if not await repo.delete_track(session, user_id, track_id):
         raise not_found("track", track_id)
     await session.commit()
+    try:
+        # A rescore clears best_fit / best_track_id when no tracks are left, and re-ranks against
+        # the remaining ones otherwise. Serialised per user by the worker's rescore lock.
+        await enqueuer.enqueue("rescore_jobs", user_id=str(user_id))
+    except Exception:  # the delete is committed; a queue outage must not fail the request
+        logger.exception(
+            "could not enqueue %s; the track is deleted but jobs are not rescored", "rescore_jobs"
+        )
     return Response(status_code=204)
 
 

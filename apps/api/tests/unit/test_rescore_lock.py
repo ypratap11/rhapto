@@ -101,7 +101,9 @@ async def test_lock_is_exclusive_per_user_and_released_on_exit(
         assert first is True
         async with with_user_rescore_lock(engine, user.id) as second:
             assert second is False  # same user, still held: never acquired twice
-    assert await _held_rescore_locks(engine) == 0  # released at the database, not just re-acquirable
+    assert (
+        await _held_rescore_locks(engine) == 0
+    )  # released at the database, not just re-acquirable
     async with with_user_rescore_lock(engine, user.id) as after_release:
         assert after_release is True
 

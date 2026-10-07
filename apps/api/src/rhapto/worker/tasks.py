@@ -95,6 +95,62 @@ async def with_user_poll_lock(engine: AsyncEngine, user_id: uuid.UUID) -> AsyncI
         yield acquired
 
 
+#: First half of the two-int advisory-lock key (ASCII "RESC"). Postgres keeps `pg_advisory_lock(int, int)`
+#: and `pg_advisory_lock(bigint)` in separate key spaces, so no rescore key can equal a poll key.
+RESCORE_LOCK_CLASS = 0x52455343
+
+#: How long a rescore that lost the race waits before asking to run again.
+RESCORE_REQUEUE_DELAY = timedelta(seconds=30)
+
+
+@asynccontextmanager
+async def with_user_rescore_lock(engine: AsyncEngine, user_id: uuid.UUID) -> AsyncIterator[bool]:
+    """A NON-blocking, SESSION-level advisory lock keyed on `user_id`, for one whole `rescore_jobs`.
+
+    Session-level, not transaction-level like `with_user_poll_lock`: `rescore_user` commits after
+    every chunk, which would release a transaction-level lock after the first one. That is also why
+    this holds its own dedicated connection, in AUTOCOMMIT so no transaction sits open for minutes.
+
+    Non-blocking (`pg_try_advisory_lock`): a rescore that loses the race must neither sit in one of
+    the worker's two slots nor spend its own `job_timeout` waiting (re-review R3-1); the caller
+    re-enqueues itself instead. Cleanup is unconditional: the lock is released in `finally`, then
+    the connection is invalidated, so it can never return to the pool still holding the lock -- a
+    session-level lock plus a missed unlock would otherwise poison a pooled connection (see the
+    note on `with_user_poll_lock`). Invalidation ends the backend session, which releases any
+    advisory lock it still holds, even when the unlock itself was skipped by a cancellation.
+
+    The key uses 4 bytes of the user's UUID, so two users can in principle share a key; that only
+    serialises their rescores, which is harmless.
+    """
+    key = int.from_bytes(user_id.bytes[:4], "big", signed=True)
+    params = {"c": RESCORE_LOCK_CLASS, "k": key}
+    conn = await engine.connect()
+    try:
+        await conn.execution_options(isolation_level="AUTOCOMMIT")
+        acquired = bool(
+            (
+                await conn.execute(
+                    text("SELECT pg_try_advisory_lock(CAST(:c AS integer), CAST(:k AS integer))"),
+                    params,
+                )
+            ).scalar()
+        )
+        try:
+            yield acquired
+        finally:
+            if acquired:
+                try:
+                    await conn.execute(
+                        text("SELECT pg_advisory_unlock(CAST(:c AS integer), CAST(:k AS integer))"),
+                        params,
+                    )
+                except Exception:  # invalidate() below releases it anyway
+                    logger.exception("could not release the rescore lock for user %s", user_id)
+    finally:
+        await conn.invalidate()
+        await conn.close()
+
+
 def _stored_extract(job: Job) -> JDExtract | None:
     """The JD extract already on the job row, or None when there is nothing usable there.
 
@@ -532,12 +588,23 @@ async def score_jobs(ctx: dict[str, Any], user_id: str, job_ids: list[str]) -> N
 
 
 async def rescore_jobs(ctx: dict[str, Any], user_id: str) -> None:
+    """Rescore every job for one user. Runs for one user never overlap (A1) and none is dropped:
+    a run that finds the lock held re-enqueues itself 30 s later instead of waiting. A re-run
+    recomputes from the then-current tracks, so a role saved during the first run is scored by the
+    next one. Deliberately no arq `_job_id` -- see `with_user_rescore_lock` and the plan."""
     factory: async_sessionmaker[AsyncSession] = ctx["session_factory"]
     try:
         uid = uuid.UUID(user_id)
-        async with factory() as session:
-            await rescore_user(session, uid, ctx["embedder"])
-            await session.commit()
+        async with with_user_rescore_lock(ctx["engine"], uid) as acquired:
+            if not acquired:
+                await ctx["redis"].enqueue_job(
+                    "rescore_jobs", user_id=user_id, _defer_by=RESCORE_REQUEUE_DELAY
+                )
+                logger.info("rescore for user %s deferred: another rescore is running", user_id)
+                return
+            async with factory() as session:
+                await rescore_user(session, uid, ctx["embedder"])
+                await session.commit()
     except Exception:
         logger.exception("rescore_jobs failed for user %s", user_id)
 

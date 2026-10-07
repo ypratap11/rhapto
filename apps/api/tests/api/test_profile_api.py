@@ -192,7 +192,9 @@ async def test_deleting_a_track_deletes_its_scores_and_rescores(
     enqueuer,  # type: ignore[no-untyped-def]
 ) -> None:
     for body in (TRACK_A, TRACK_B):
-        assert (await client.put(f"/api/v1/profile/tracks/{body['id']}", json=body)).status_code == 201
+        assert (
+            await client.put(f"/api/v1/profile/tracks/{body['id']}", json=body)
+        ).status_code == 201
     created = await client.post(
         "/api/v1/jobs",
         json={"jd_text": "Own the data platform roadmap for analytics. " * 4, "title": "Data PM"},

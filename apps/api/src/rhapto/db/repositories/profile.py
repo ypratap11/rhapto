@@ -14,6 +14,7 @@ from rhapto.db.models import (
     Aggregator,
     Answers,
     Guardrail,
+    JobScore,
     ResumeBase,
     ResumeBlock,
     Track,
@@ -202,13 +203,20 @@ async def upsert_track(
 
 
 async def delete_track(session: AsyncSession, user_id: uuid.UUID, track_id: str) -> bool:
+    """Delete the track AND its `job_scores` rows: a rescore only upserts rows for the tracks that
+    still exist, so without this a deleted track's scores would linger forever."""
     result = cast(
         "CursorResult[Any]",
         await session.execute(
             delete(Track).where(Track.user_id == user_id, Track.track_id == track_id)
         ),
     )
-    return bool(result.rowcount)
+    if not result.rowcount:
+        return False
+    await session.execute(
+        delete(JobScore).where(JobScore.user_id == user_id, JobScore.track_id == track_id)
+    )
+    return True
 
 
 async def list_guardrails(session: AsyncSession, user_id: uuid.UUID) -> list[Guardrail]:

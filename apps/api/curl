@@ -1,0 +1,15 @@
+    PID  TTY        STIME COMMAND
+  19909 ?          Sep 18 /usr/bin/grep
+  19908 ?          Sep 18 /usr/bin/tail
+  63080 ?        09:31:26 /usr/bin/PS
+  26947 ?          Sep 26 /usr/bin/bash
+  39974 ?          Sep 18 /usr/bin/grep
+  56125 ?          Sep 24 /usr/bin/tail
+  39973 ?          Sep 18 /usr/bin/tail
+  63357 ?          Sep 25 /c/Python313/python
+  63259 ?          Sep 25 /c/Python313/python
+  63921 ?          Sep 25 /c/Python313/python
+  63257 ?          Sep 25 /usr/bin/bash
+  56126 ?          Sep 24 /usr/bin/grep
+  63078 ?        09:31:25 /usr/bin/bash
+  26955 ?          Sep 26 /c/Program Files/nodejs/node
