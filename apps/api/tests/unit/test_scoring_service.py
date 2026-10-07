@@ -276,3 +276,22 @@ async def test_a_failing_middle_chunk_does_not_stop_the_third_chunk(
     )
     assert caplog.text.count("scoring chunk") == 1  # only the middle chunk failed
     assert "MissingGreenlet" not in caplog.text
+
+
+async def test_rescore_deletes_scores_of_tracks_that_no_longer_exist(
+    session: AsyncSession, user: User
+) -> None:
+    await profile_repo.upsert_track(session, user.id, DATA)
+    job = await jobs_repo.create_job(
+        session, user.id, jd_text="Own the data platform and ETL roadmap. " * 5, title="Data PM"
+    )
+    embedder = FakeEmbeddingProvider(dimensions=384)
+    await score_and_store(session, user.id, [job], embedder)
+    # A leftover from a deleted track (or a rescore that raced the delete).
+    await disc_repo.upsert_scores(session, user.id, job, [("deleted-track", 77, {})])
+    before = await disc_repo.scores_for_jobs(session, user.id, [job.id])
+    assert {s.track_id for s in before[job.id]} == {"data-pm", "deleted-track"}
+
+    await rescore_user(session, user.id, embedder)
+    after = await disc_repo.scores_for_jobs(session, user.id, [job.id])
+    assert {s.track_id for s in after[job.id]} == {"data-pm"}
