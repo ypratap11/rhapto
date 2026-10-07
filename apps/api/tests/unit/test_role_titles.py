@@ -105,7 +105,6 @@ def test_shipped_lists_on_the_reviewed_titles() -> None:
     sre = _shipped("engineering", "devops-sre")
     for title in (
         "Software Engineer, Infrastructure",
-        "Senior Software Engineer - Platform",
         "Site Reliability Engineer",
     ):
         assert title_match(title, sre) is not None, title
@@ -167,7 +166,6 @@ def test_shipped_lists_after_the_qa_review() -> None:
         ("engineering", "devops-sre", "Dev Ops Engineer", True),
         ("engineering", "devops-sre", "Dev-Ops Engineer", True),
         ("engineering", "devops-sre", "DevSecOps Engineer", True),
-        ("engineering", "devops-sre", "Senior Software Engineer - Platform", True),
         ("engineering", "devops-sre", "Reliability Engineer, Site Operations", True),
         (
             "engineering",
@@ -178,6 +176,12 @@ def test_shipped_lists_after_the_qa_review() -> None:
         ("engineering", "devops-sre", "Reliability Engineer, Aircraft", False),
         (ppm, "technical-program-manager", "Executive Assistant to Program Manager", False),
         (ppm, "program-manager", "Executive Assistant to Program Manager", False),
+        ("engineering", "devops-sre", "Senior DevOps Engineer, LLM Products", True),
+        ("engineering", "devops-sre", "LLM Infrastructure Engineer", True),
+        (ppm, "technical-program-manager", "Technical Program Manager, AI Assistant", True),
+        (ppm, "technical-program-manager", "TPM, Voice Assistants", True),
+        ("engineering", "qa", "QA Engineer, Rocket Money", True),
+        ("engineering", "qa", "Senior QA Analyst - Rocket Mortgage", True),
     ]
     for field, role, title, expected in cases:
         got = title_match(title, _shipped(field, role)) is not None

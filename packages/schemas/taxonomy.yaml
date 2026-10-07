@@ -41,8 +41,8 @@ fields:
       - id: devops-sre
         name: DevOps and SRE
         keywords: [site reliability engineer, DevOps engineer, Kubernetes, Terraform, CI CD, observability, incident response]
-        titles: [site reliability, SRE, DevOps, platform engineer, infrastructure engineer, cloud engineer, production engineer, dev ops, devsecops, infrastructure, reliability engineer, platform]
-        exclude_titles: [sales, solutions, support, customer, construction, civil, mechanical, electrical, chemical, plant, building, manufacturing, molding, injection, industrial, product, marketing, program, project, recruiter, recruiting, analyst, designer, writer, genai, gen ai, llm, aircraft, aerospace, avionics, hardware]
+        titles: [site reliability, SRE, DevOps, platform engineer, infrastructure engineer, cloud engineer, production engineer, dev ops, devsecops, infrastructure, reliability engineer, platform engineering]
+        exclude_titles: [sales, solutions, support, customer, construction, civil, mechanical, electrical, chemical, plant, building, manufacturing, molding, injection, industrial, product, marketing, program, project, recruiter, recruiting, analyst, designer, writer, aircraft, aerospace, avionics, hardware]
       - id: security
         name: Security
         keywords: [security engineer, application security, threat modeling, incident response, penetration testing, identity and access, compliance]
@@ -52,7 +52,7 @@ fields:
         name: QA
         keywords: [QA engineer, test automation, quality engineering, end to end testing, regression testing, test strategy, defect triage]
         titles: [QA engineer, QA analyst, quality assurance, quality engineer, quality analyst, test engineer, test analyst, SDET, software development engineer in test, software engineer in test, test automation engineer, automation test engineer, software tester, QA]
-        exclude_titles: [mechanical, flight, hardware, manufacturing, supplier, structural, electrical, chemical, civil, construction, clinical, food safety, aircraft, avionics, aerospace, vehicle, vehicles, automotive, propulsion, battery, batteries, semiconductor, semiconductors, wafer, wafers, laboratory, laboratories, environmental, pharmaceutical, pharmaceuticals, medical device, medical devices, RF, field, welding, materials, vendor, vendors, systems, integration, satellite, satellites, spacecraft, radar, missile, missiles, GMP, technician, technicians, inspector, inspectors, auditor, auditors, nurse, nurses, representative, representatives, power electronics, rocket, rockets]
+        exclude_titles: [mechanical, flight, hardware, manufacturing, supplier, structural, electrical, chemical, civil, construction, clinical, food safety, aircraft, avionics, aerospace, vehicle, vehicles, automotive, propulsion, battery, batteries, semiconductor, semiconductors, wafer, wafers, laboratory, laboratories, environmental, pharmaceutical, pharmaceuticals, medical device, medical devices, RF, field, welding, materials, vendor, vendors, systems, integration, satellite, satellites, spacecraft, radar, missile, missiles, GMP, technician, technicians, inspector, inspectors, auditor, auditors, nurse, nurses, representative, representatives, power electronics, rockets, launch vehicle]
   - id: data-science
     name: Data Science
     themuse_category: Data Science
@@ -114,12 +114,12 @@ fields:
         name: Technical Program Manager
         keywords: [technical program manager, TPM, cross functional programs, technical roadmap, dependency management, risk management, engineering delivery]
         titles: [technical program manager, technical programme manager, technical program management, technical programme management, TPM, program manager]
-        exclude_titles: [construction, clinical, nursing, facilities, real estate, manufacturing, civil, mechanical, electrical, patient, grants, event, events, hospitality, retail, fleet, marketing, sales, partner, partners, partnership, partnerships, community, HR, people, recruiting, communications, communication, legal, finance, education, government, assistant, assistants]
+        exclude_titles: [construction, clinical, nursing, facilities, real estate, manufacturing, civil, mechanical, electrical, patient, grants, event, events, hospitality, retail, fleet, marketing, sales, partner, partners, partnership, partnerships, community, HR, people, recruiting, communications, communication, legal, finance, education, government, executive assistant, administrative assistant, personal assistant]
       - id: program-manager
         name: Program Manager
         keywords: [program manager, program governance, portfolio management, stakeholder management, roadmap, status reporting, OKRs]
         titles: [program manager, programme manager, program management, programme management, program lead, program director, head of programs]
-        exclude_titles: [construction, clinical, nursing, facilities, real estate, manufacturing, civil, mechanical, electrical, patient, grants, event, events, hospitality, retail, fleet, marketing, sales, partner, partners, partnership, partnerships, community, HR, people, recruiting, communications, communication, legal, finance, education, government, assistant, assistants]
+        exclude_titles: [construction, clinical, nursing, facilities, real estate, manufacturing, civil, mechanical, electrical, patient, grants, event, events, hospitality, retail, fleet, marketing, sales, partner, partners, partnership, partnerships, community, HR, people, recruiting, communications, communication, legal, finance, education, government, executive assistant, administrative assistant, personal assistant]
       - id: project-manager
         name: Project Manager
         keywords: [project manager, project plan, schedule management, budget tracking, scope management, RAID log, PMP]
