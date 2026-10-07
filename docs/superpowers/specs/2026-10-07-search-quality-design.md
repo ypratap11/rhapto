@@ -243,7 +243,7 @@ included.
 **Acceptance** (raw per-tester counts are reported; about five testers have roles, so it is a small
 gate):
 - every tester with a role: new list >= 10 of 15 relevant, and no tester's count goes down;
-- no duplicate (C1) and at most two per company (C2) in any new arranged top 15;
+- no duplicate (C1) and at most two per company among the title matches (C2, owner decision) in any new arranged top 15;
 - after A1 and once the queue is idle: zero accounts with tracks that have unscored jobs, excluding
   jobs the scorer skips by design (`jd_embedding` is None, `services/scoring.py:78`);
 - reported, not gated: jobs >= `min_fit` per tester, before vs after, split by location tier.
