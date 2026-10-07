@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import uuid
+from collections.abc import Mapping
 
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -13,6 +14,7 @@ from rhapto.db.repositories import profile as profile_repo
 from rhapto.engine.providers.embeddings import EmbeddingProvider
 from rhapto.engine.scoring import (
     LocationTier,
+    RoleTitles,
     best_track,
     location_preference_from_answers,
     location_tier,
@@ -22,6 +24,7 @@ from rhapto.engine.scoring import (
 )
 from rhapto.models.profile.tracks import Track
 from rhapto.services.profile_sync import track_row_to_model
+from rhapto.services.taxonomy import TaxonomyError, find_role
 
 logger = logging.getLogger(__name__)
 
@@ -33,6 +36,34 @@ SCORE_CHUNK = 50
 
 def _fit_dimensions(vector: list[float]) -> list[float] | None:
     return list(vector) if len(vector) == EMBEDDING_DIMENSIONS else None
+
+
+def role_titles_for(tracks: list[Track]) -> dict[str, RoleTitles]:
+    """The title phrases for each track that can use the role-first blend, keyed by track id.
+
+    A track is included only when it has a `field` and a `role`, `find_role` still finds that role
+    (a role id removed from the taxonomy after the row was written falls back), and the role has
+    non-empty `titles`. A `TaxonomyError` (missing or invalid file, or a custom taxonomy that
+    cannot load) is logged ONCE for the run and every track falls back to today's blend -- it never
+    stops scoring. Called once per `score_and_store`, so "once" is once per run.
+    """
+    resolved: dict[str, RoleTitles] = {}
+    try:
+        for track in tracks:
+            if not track.field or not track.role:
+                continue
+            role = find_role(track.field, track.role)
+            if role is None or not role.titles:
+                continue
+            resolved[track.id] = RoleTitles(
+                titles=tuple(role.titles), exclude=tuple(role.exclude_titles)
+            )
+    except TaxonomyError:
+        logger.exception(
+            "taxonomy unavailable; every track falls back to the legacy blend for this run"
+        )
+        return {}
+    return resolved
 
 
 async def ensure_track_embeddings(
@@ -68,6 +99,7 @@ async def _score_chunk(
     embedder: EmbeddingProvider,
     *,
     has_location_preference: bool,
+    role_titles: Mapping[str, RoleTitles],
 ) -> None:
     unembedded = [job for job, _ in chunk if job.jd_embedding is None]
     if unembedded:
@@ -86,6 +118,7 @@ async def _score_chunk(
             track_vectors,
             tier,
             has_location_preference=has_location_preference,
+            role_titles=role_titles,
         )
         best = best_track(scores, tracks)
         job.best_track_id = best.track_id if best else None
@@ -131,6 +164,7 @@ async def score_and_store(
     # One read of answers.yaml for the whole batch; `rescore_jobs` runs this again whenever the
     # user edits a location answer, so the stored tiers follow the preference.
     preference = location_preference_from_answers(await profile_repo.get_answers(session, user_id))
+    role_titles = role_titles_for(tracks)
     # Tiering needs no embedding, so every row gets its tier before the slow part starts: an
     # embedding provider that falls over must not leave the queue with no location data at all.
     tiered = [(job, location_tier(job.location, preference)) for job in jobs]
@@ -160,6 +194,7 @@ async def score_and_store(
                 track_vectors,
                 embedder,
                 has_location_preference=bool(preference.terms),
+                role_titles=role_titles,
             )
         except Exception:
             if not commit_each_chunk:
