@@ -2,12 +2,19 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
 from rhapto.db.repositories.jobs import RECOMMENDED_FIT_FLOOR
 from rhapto.engine.scoring import TITLE_MISS_CAP
-from rhapto.services.ranking import arrange, company_key, title_key, wants_arrangement
+from rhapto.services.ranking import (
+    arrange,
+    company_key,
+    relevance_key,
+    title_key,
+    wants_arrangement,
+)
 
 
 @dataclass(frozen=True)
@@ -117,3 +124,38 @@ def test_wants_arrangement(ids_given: bool, sort: str, recommended: bool, expect
 def test_recommended_floor_matches_the_title_miss_cap() -> None:
     """db/ may not import engine/ (import-linter), so the floor is repeated there; this is the check."""
     assert RECOMMENDED_FIT_FLOOR == TITLE_MISS_CAP == 45
+
+
+@dataclass(frozen=True)
+class Scored:
+    id: uuid.UUID
+    best_fit: int | None
+    posted_at: datetime | None
+    discovered_at: datetime
+
+
+def test_relevance_key_orders_by_decayed_fit_then_recency_then_id() -> None:
+    now = datetime(2026, 10, 7, 12, tzinfo=UTC)
+
+    def at(days: int) -> datetime:
+        return now - timedelta(days=days)
+
+    jobs = [
+        Scored(uuid.UUID(int=1), 90, at(0), at(0)),
+        Scored(uuid.UUID(int=2), 80, at(10), at(10)),  # 80 - 10 * 0.2 = 78.0
+        Scored(uuid.UUID(int=3), 78, at(0), at(0)),  # 78.0: ties with 2, the newer one first
+        Scored(uuid.UUID(int=4), 85, at(200), at(200)),  # past the 90-day cap: 85 - 18 = 67.0
+        Scored(uuid.UUID(int=5), 67, at(0), at(0)),  # 67.0: ties with 4, newer first
+        Scored(uuid.UUID(int=6), None, None, at(1)),  # unscored: last, newest first
+        Scored(uuid.UUID(int=7), None, at(5), at(5)),
+        Scored(uuid.UUID(int=8), None, at(5), at(5)),  # same timestamp as 7: id decides
+    ]
+    ordered = sorted(jobs, key=lambda j: relevance_key(j, now))
+    assert [j.id.int for j in ordered] == [1, 3, 2, 5, 4, 6, 7, 8]
+
+
+def test_a_dateless_posting_is_judged_by_when_it_was_discovered() -> None:
+    now = datetime(2026, 10, 7, 12, tzinfo=UTC)
+    fresh = Scored(uuid.UUID(int=1), 70, None, now - timedelta(days=0))
+    stale = Scored(uuid.UUID(int=2), 70, None, now - timedelta(days=60))
+    assert relevance_key(fresh, now) < relevance_key(stale, now)

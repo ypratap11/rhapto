@@ -13,8 +13,10 @@ import uuid
 from collections import Counter
 from collections.abc import Sequence
 from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
 from typing import Protocol
 
+from rhapto.db.repositories.jobs import RECENCY_DECAY, RECENCY_DECAY_CAP_DAYS
 from rhapto.engine.scoring import TITLE_MISS_CAP
 
 #: How many rows of one company may sit among the top of the list before the rest sort after them.
@@ -122,3 +124,35 @@ def wants_arrangement(*, ids_given: bool, sort: str, recommended: bool) -> bool:
     which sorts by fit), and NEVER for an `ids=` request: live search re-fetches its own results
     that way and must get every row it asked for."""
     return not ids_given and (sort == "relevance" or recommended)
+
+
+_EPOCH = datetime(1970, 1, 1, tzinfo=UTC)
+_MICRO = timedelta(microseconds=1)
+
+
+class Scored(Protocol):
+    @property
+    def id(self) -> uuid.UUID: ...
+    @property
+    def best_fit(self) -> int | None: ...
+    @property
+    def posted_at(self) -> datetime | None: ...
+    @property
+    def discovered_at(self) -> datetime: ...
+
+
+def relevance_key(job: Scored, now: datetime) -> tuple[bool, float, int, uuid.UUID]:
+    """The sort key of `sort=relevance`, so the preview can order in-memory scores.
+
+    Ascending order of this key is the SQL order in `db/repositories/jobs.py` (`list_jobs`):
+    `best_fit - least(age_days, 90) * 0.2` descending with NULLs last, then
+    `coalesce(posted_at, discovered_at)` descending, then `id`. The SQL stays the production path;
+    `tests/unit/test_relevance_parity.py` fails if either side drifts.
+    """
+    moment = job.posted_at or job.discovered_at
+    micros = (moment - _EPOCH) // _MICRO
+    if job.best_fit is None:
+        return (True, 0.0, -micros, job.id)
+    age_days = (now - moment).total_seconds() / 86400.0
+    decayed = job.best_fit - min(age_days, RECENCY_DECAY_CAP_DAYS) * RECENCY_DECAY
+    return (False, -decayed, -micros, job.id)
