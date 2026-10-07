@@ -62,13 +62,15 @@ Required regardless of which is the cause:
 - a test with 3 or more chunks that fails the **middle** chunk and asserts the third is scored;
 - one user's rescores never run in parallel, and none is ever dropped. Not via arq `_job_id`: that
   silently discards any enqueue while one is queued, running, or for `keep_result` after it (re-review
-  R-1), so a second role saved in that window would never be scored. Instead `rescore_jobs` takes a
-  **blocking, session-level** Postgres advisory lock keyed on the user, in its own key namespace
+  R-1), so a second role saved in that window would never be scored. Instead `rescore_jobs` tries a
+  **non-blocking, session-level** Postgres advisory lock keyed on the user, in its own key namespace
   (distinct from the poll's `with_user_poll_lock`, `worker/tasks.py:76`), on a dedicated connection
   held for the whole run -- session-level because `commit_each_chunk` commits would release a
-  transaction-level lock after the first chunk. A second rescore waits its turn and then recomputes
-  from the then-current tracks. A test proves two concurrent rescores for one user serialise and both
-  complete.
+  transaction-level lock after the first chunk. If the lock is held, the task re-enqueues itself
+  deferred by ~30 s (no `_job_id`) and returns, so it neither occupies one of the two worker slots
+  nor burns its 600 s timeout waiting (revision-3 review R3-1). The lock is released and the
+  connection invalidated in `finally`. A re-run recomputes from the then-current tracks. A test
+  proves two concurrent rescores for one user serialise and both complete.
 
 **A2. No target role = say so.** For an account with zero tracks, the Jobs page and the dashboard's
 recommendations show a short prompt -- "Pick the role you want and we'll rank these for you" -- with
@@ -280,7 +282,7 @@ each confirmed with the owner first.
 
 C-1 exclusions and true negative tests: B1, section 6 unit tests. I-1: A1. I-2: B3 worked numbers and
 per-tier reporting. I-3: B3 "What the cap does". I-4: section 5 "Where it applies" / "How". I-5: C1
-`also_ids`. I-6: B2 fallbacks, mixed accounts. I-7: A3. I-8: section 6 `rank-preview`. Re-review R-1: A1 advisory lock. R-2: section 6 `relevance_key` parity test. I-9: B5.
+`also_ids`. I-6: B2 fallbacks, mixed accounts. I-7: A3. I-8: section 6 `rank-preview`. Re-review R-1 and R3-1: A1 non-blocking advisory lock with deferred re-enqueue. R-2: section 6 `relevance_key` parity test. I-9: B5.
 M-1: C3 place lists. M-2: C3 age-out. M-3: B4, UI moved to non-goals. M-4: B1 fixtures, B5 rebuild and
 rescore. M-5: A2 dropped. M-6: acceptance. M-7: C1 representative, with/without `arrange`. M-8: section
 1, verified on the probe.
