@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from rhapto.engine.compose import AnswerItem, ComposeOutput
+from rhapto.engine.scoring import RoleTitles
 from rhapto.models.jd_extract import JDExtract
 from rhapto.models.resume_document import (
     ResumeBullet,
@@ -106,3 +107,41 @@ def good_output() -> dict[str, Any]:
 def default_tailor_script() -> tuple[JDExtract, dict[str, Any]]:
     """The (extract, compose) LLM response pair a plain, guardrail-clean tailor run scripts."""
     return demo_extract(), good_output()
+
+
+# QA / TPM role fixture, defined once and shared by the engine, service and preview tests. The spec's
+# example lists, copied literally. These are test INPUTS, not the shipped taxonomy: the shipped
+# lists are exercised end to end in test_role_titles.py and test_scoring_service.py.
+QA_EXCLUDE = (
+    "mechanical",
+    "flight",
+    "hardware",
+    "manufacturing",
+    "supplier",
+    "structural",
+    "electrical",
+    "chemical",
+    "civil",
+    "construction",
+    "clinical",
+    "food safety",
+)
+QA = RoleTitles(
+    titles=(
+        "QA engineer",
+        "QA analyst",
+        "quality assurance",
+        "quality engineer",
+        "test engineer",
+        "SDET",
+        "test automation engineer",
+        "software tester",
+    ),
+    exclude=QA_EXCLUDE,
+)
+QA_NO_EXCLUDE = RoleTitles(titles=QA.titles)
+TPM = RoleTitles(
+    titles=("technical program manager", "TPM", "program manager"),
+    exclude=("construction", "clinical", "nursing", "facilities", "real estate", "manufacturing"),
+)
+TPM_NO_EXCLUDE = RoleTitles(titles=TPM.titles)

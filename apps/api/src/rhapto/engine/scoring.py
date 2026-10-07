@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Mapping
+from dataclasses import dataclass
 from typing import Any, Literal
 
 from pydantic import BaseModel
@@ -17,7 +19,16 @@ COSINE_CEIL = 0.80
 TITLE_HIT = 2
 TEXT_HIT = 1
 
+# Role-first blend (search-quality spec B3). The title says whether a job IS the user's role; the
+# description only says what it is about. A job whose title is not the role is capped, after the
+# location multiplier, so 45 is a true ceiling.
+TITLE_WEIGHT = 0.45
+ROLE_SEMANTIC_WEIGHT = 0.35
+ROLE_KEYWORD_WEIGHT = 0.20
+TITLE_MISS_CAP = 45
+
 LocationTier = Literal["preferred", "remote", "country", "abroad", "unknown"]
+Blend = Literal["role", "legacy"]
 
 # How much of a job's fit survives its location. A great role in the wrong hemisphere is not
 # a great role for this user, so the penalty is a multiplier on the blended fit rather than
@@ -379,6 +390,10 @@ class TrackScore(BaseModel):
     #: [location_tier]`; see `_location_multiplier`. Recorded here so `rationale` reports what
     #: happened rather than recomputing it from the tier alone.
     location_multiplier: float = 1.0
+    #: The `titles` phrase that matched the job's title, or None (no match, or the legacy blend).
+    title_match: str | None = None
+    #: Which blend produced `fit_score`: "role" (title-first) or "legacy" (semantic + keywords).
+    blend: Blend = "legacy"
 
 
 def track_text(track: Track) -> str:
@@ -408,6 +423,40 @@ def keyword_score(track: Track, title: str | None, text: str) -> tuple[int, list
             matched.append(keyword)
     fraction = min(1.0, hits / len(track.keywords))
     return int(round(fraction * 100)), matched
+
+
+@dataclass(frozen=True)
+class RoleTitles:
+    """One taxonomy role's title phrases, resolved by the caller. `engine/` cannot read the
+    taxonomy (it imports no service), so `services.scoring` hands these in per track."""
+
+    titles: tuple[str, ...]
+    exclude: tuple[str, ...] = ()
+
+
+def title_match(title: str | None, role: RoleTitles) -> str | None:
+    """The `titles` phrase `title` matches, or None.
+
+    A title is a match when it contains a `titles` phrase AND no `exclude` phrase: "Flight Test
+    Engineer" contains "test engineer" but is vetoed by "flight". Whole-word, case-insensitive
+    (`keyword_matches`). A blank title never matches.
+    """
+    if not title or not title.strip():
+        return None
+    if any(keyword_matches(phrase, title) for phrase in role.exclude):
+        return None
+    return next((phrase for phrase in role.titles if keyword_matches(phrase, title)), None)
+
+
+def role_fit(title_score: int, semantic: int, keywords: int, multiplier: float) -> int:
+    """The role-first blend: one rounding, then the cap last (so it is a true ceiling)."""
+    raw = (
+        TITLE_WEIGHT * title_score
+        + ROLE_SEMANTIC_WEIGHT * semantic
+        + ROLE_KEYWORD_WEIGHT * keywords
+    )
+    fit = int(round(raw * multiplier))
+    return min(fit, TITLE_MISS_CAP) if title_score == 0 else fit
 
 
 #: Tiers a posting can only land in through the *absence* of location information (`unknown`)
@@ -441,25 +490,44 @@ def score_job(
     location_tier: LocationTier = "unknown",
     *,
     has_location_preference: bool = True,
+    role_titles: Mapping[str, RoleTitles] | None = None,
 ) -> list[TrackScore]:
+    """Score one job against every track.
+
+    A track listed in `role_titles` (keyed by track id) with a non-empty `titles` is scored with
+    the role-first blend, provided the job has a title; every other track -- no entry, an empty
+    role, a job with no title -- keeps today's semantic + keyword blend, unchanged.
+    """
     multiplier = _location_multiplier(
         location_tier, has_location_preference=has_location_preference
     )
+    has_title = bool(title and title.strip())
     scores: list[TrackScore] = []
     for track in tracks:
         vector = track_embeddings.get(track.id)
         semantic = semantic_score(cosine(jd_embedding, vector)) if vector else 0
         keywords, matched = keyword_score(track, title, jd_text)
-        fit = int(round(SEMANTIC_WEIGHT * semantic + KEYWORD_WEIGHT * keywords))
+        role = (role_titles or {}).get(track.id)
+        blend: Blend = "legacy"
+        phrase: str | None = None
+        if role is not None and role.titles and has_title:
+            phrase = title_match(title, role)
+            fit_score = role_fit(100 if phrase else 0, semantic, keywords, multiplier)
+            blend = "role"
+        else:
+            fit = int(round(SEMANTIC_WEIGHT * semantic + KEYWORD_WEIGHT * keywords))
+            fit_score = int(round(fit * multiplier))
         scores.append(
             TrackScore(
                 track_id=track.id,
-                fit_score=int(round(fit * multiplier)),
+                fit_score=fit_score,
                 semantic=semantic,
                 keywords=keywords,
                 matched=matched,
                 location_tier=location_tier,
                 location_multiplier=multiplier,
+                title_match=phrase,
+                blend=blend,
             )
         )
     return scores
@@ -485,11 +553,26 @@ def bucket_for(
 
 
 def rationale(score: TrackScore) -> dict[str, Any]:
-    return {
+    """Why this score, as stored in `job_scores.rationale_json`. Reports the blend actually used."""
+    weights: dict[str, float]
+    if score.blend == "role":
+        weights = {
+            "title": TITLE_WEIGHT,
+            "semantic": ROLE_SEMANTIC_WEIGHT,
+            "keywords": ROLE_KEYWORD_WEIGHT,
+        }
+    else:
+        weights = {"semantic": SEMANTIC_WEIGHT, "keywords": KEYWORD_WEIGHT}
+    payload: dict[str, Any] = {
         "semantic": score.semantic,
         "keywords": score.keywords,
         "matched": score.matched,
-        "weights": {"semantic": SEMANTIC_WEIGHT, "keywords": KEYWORD_WEIGHT},
+        "blend": score.blend,
+        "title_match": score.title_match,
+        "weights": weights,
         "location_tier": score.location_tier,
         "location_multiplier": score.location_multiplier,
     }
+    if score.blend == "role":
+        payload["title"] = 100 if score.title_match else 0
+    return payload
