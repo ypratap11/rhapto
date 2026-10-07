@@ -197,9 +197,13 @@ highest under the request's own ordering (relevance key or fit), ties to the new
 `api/routers/jobs.py:45-59`). The label says "similar postings", not "locations", because copies can
 come from different sources.
 
-**C2. At most two per company at the top.** After C1, within the request's ordering, a company's third
-and later rows sort after every row that is within the first two of its own company. Nothing is
-removed.
+**C2. At most two per company at the top.** After C1, within the request's ordering, and only among
+jobs ABOVE `TITLE_MISS_CAP` (`best_fit > 45`, i.e. title matches and old-blend scores above 45), a
+company's third and later rows sort after the other above-cap rows: they are written back into the
+positions the above-cap rows already occupied, so a deferred title match still precedes every capped
+(`<= 45`) and unscored row, and those rows keep their plain order. Nothing is removed. (Owner
+decision 2026-10-07, plan review I-1: a whole-list partition would have buried good rows below
+capped and unscored ones.)
 
 **C3. HN titles.** `parse_header` (`services/discovery/sources/hn_hiring.py:22-27`) picks the role from
 the segments after the company, skipping a segment that reads as a location or work mode: it contains
@@ -227,8 +231,10 @@ is not confounded with de-duplication.
 - Pseudonyms reuse the HMAC scheme of `rhapto feedback report` (`cli/main.py:278-290`); no emails.
 - It is CLI-only, run on the server over SSH. It reads all accounts, so it never gets an HTTP route.
 
-**Blind judging.** For each tester with a role, the old and new top 15 are shuffled and labelled X and
-Y. A judge who did not write the code (a fresh subagent; the owner spot-checks two testers) sees
+**Blind judging.** For each tester with a role, the four top-15 lists (old and new, each with and
+without `arrange`) are merged into one set of distinct jobs, shuffled, with no list labels -- so
+neither duplicates nor order reveal which list a job came from -- and judged once; every list's
+count is computed from those single judgements (plan review I-2). A judge who did not write the code (a fresh subagent; the owner spot-checks two testers) sees
 company, title, location and a ~300-character description excerpt for each job, plus the tester's role
 names, and marks each job relevant or not. It never sees the title-phrase lists, so it does not share
 their blind spots. A synthetic mixed account (one hand-written track beside one role track) is
@@ -260,12 +266,20 @@ phrase**, and each is shown to fail when the role's `exclude_titles` is removed:
 
 ## 7. Rollout
 
-Branch -> PR -> merge -> deploy to the droplet (`git archive` + `docker compose build && up -d`;
-the rebuild is what picks up the new taxonomy) -> time one real-size rescore (B5) -> `rhapto
-rank-preview`, judged -> only if accepted, rescore every account, one at a time -> rerun the probe and
-show the owner the before/after. If the judged result fails, the blend or the title lists are tuned
-and the preview rerun; production is not rescored until it passes. The deploy and the rescore are
-each confirmed with the owner first.
+Branch -> PR -> **scratch copy first** (owner decision 2026-10-07, plan review C-1): restore the latest
+backup into a separate scratch Postgres (its own container and network on the droplet, never the
+production `db`), build the branch image there, time one real-size rescore (B5) against it and run
+`rhapto rank-preview` + blind judging against it; every script that can write asserts
+`current_database()` (and host) is the scratch one, and `rank-preview` takes `--expect-database`.
+**Production is not deployed, and no production account is rescored, until the judged result passes
+acceptance.** Then, each step confirmed with the owner: back up, merge and deploy to the droplet
+(`git archive` + `docker compose build && up -d`; the rebuild is what picks up the new taxonomy),
+rescore every account one at a time, rerun the probe and show the owner the before/after, and tear
+the scratch copy down. If the judged result fails, the blend or the title lists are tuned, the scratch
+copy re-restored and the preview rerun; production is untouched meanwhile. Why scratch first: the new
+scoring runs on every scoring path the moment it is deployed, so deploying first would move any
+tester who edits a role onto the new scale (contaminating the "today" baseline) and the
+`recommended=true` floor would empty an old-scale dashboard until the rescore finished.
 
 ## 8. Risks
 
