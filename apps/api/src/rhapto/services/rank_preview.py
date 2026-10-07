@@ -97,6 +97,7 @@ async def read_only_session(
     """A session whose transaction is READ ONLY from its first statement and always rolls back."""
     async with factory() as session:
         # With SQLAlchemy's autobegin this must be the first statement executed on the session.
+        await session.execute(text("SET TRANSACTION READ ONLY"))
         try:
             yield session
         finally:
