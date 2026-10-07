@@ -135,19 +135,8 @@ async def with_user_rescore_lock(engine: AsyncEngine, user_id: uuid.UUID) -> Asy
                 )
             ).scalar()
         )
-        try:
-            yield acquired
-        finally:
-            if acquired:
-                try:
-                    await conn.execute(
-                        text("SELECT pg_advisory_unlock(CAST(:c AS integer), CAST(:k AS integer))"),
-                        params,
-                    )
-                except Exception:  # invalidate() below releases it anyway
-                    logger.exception("could not release the rescore lock for user %s", user_id)
+        yield acquired
     finally:
-        await conn.invalidate()
         await conn.close()
 
 
