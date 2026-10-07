@@ -3892,6 +3892,14 @@
       "TaxonomyRole": {
         "additionalProperties": false,
         "properties": {
+          "exclude_titles": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Exclude Titles",
+            "type": "array"
+          },
           "id": {
             "pattern": "^[a-z0-9][a-z0-9-]*$",
             "title": "Id",
@@ -3909,6 +3917,14 @@
           "name": {
             "title": "Name",
             "type": "string"
+          },
+          "titles": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Titles",
+            "type": "array"
           }
         },
         "required": [

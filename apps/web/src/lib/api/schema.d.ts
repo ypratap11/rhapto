@@ -2420,12 +2420,22 @@ export interface components {
         };
         /** TaxonomyRole */
         TaxonomyRole: {
+            /**
+             * Exclude Titles
+             * @default []
+             */
+            exclude_titles: string[];
             /** Id */
             id: string;
             /** Keywords */
             keywords: string[];
             /** Name */
             name: string;
+            /**
+             * Titles
+             * @default []
+             */
+            titles: string[];
         };
         /**
          * TaxonomySuggestionOut
