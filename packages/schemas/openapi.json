@@ -1206,6 +1206,15 @@
       },
       "JobOut": {
         "properties": {
+          "also_ids": {
+            "default": [],
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "title": "Also Ids",
+            "type": "array"
+          },
           "application_status": {
             "anyOf": [
               {

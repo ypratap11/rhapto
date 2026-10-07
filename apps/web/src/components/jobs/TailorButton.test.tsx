@@ -46,6 +46,7 @@ const job: JobOut = {
   latest_package: null,
   application_status: null,
   rescued: false,
+  also_ids: [],
   scores: [],
 };
 

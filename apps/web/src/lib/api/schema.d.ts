@@ -1513,6 +1513,11 @@ export interface components {
         };
         /** JobOut */
         JobOut: {
+            /**
+             * Also Ids
+             * @default []
+             */
+            also_ids: string[];
             /** Application Status */
             application_status: string | null;
             /** Best Fit */

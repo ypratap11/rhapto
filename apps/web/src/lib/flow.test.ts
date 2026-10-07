@@ -5,7 +5,7 @@ import type { JobOut, PackageListItem } from "./api/queries";
 const base = (over: Partial<JobOut>): JobOut => ({
   id: "j", source: "manual", company: "ExampleCo", title: "Data PM", location: null, url: null, jd_text: "x",
   extracted: null, discovered_at: "2026-09-01T00:00:00Z", latest_package: null, application_status: null,
-  best_track_id: "data-pm", best_fit: 70, bucket: "fit", rescued: false, repost_of: null, posted_at: null, scores: [],
+  best_track_id: "data-pm", best_fit: 70, bucket: "fit", rescued: false, repost_of: null, posted_at: null, scores: [], also_ids: [],
   ...over,
 });
 

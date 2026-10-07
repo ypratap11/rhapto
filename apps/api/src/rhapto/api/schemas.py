@@ -199,6 +199,10 @@ class JobOut(BaseModel):
     # "Not interested" / "no longer listed"; see Job.hidden_at and Job.unlisted_at.
     hidden_at: datetime | None = None
     unlisted_at: datetime | None = None
+    # The other copies of this posting that `GET /jobs` collapsed into this row (same company and
+    # title after normalisation). Computed per request, never stored; the web opens them with
+    # `GET /jobs?ids=...`. Empty for `ids=` requests and for every sort that is not arranged.
+    also_ids: list[uuid.UUID] = []
 
 
 class TailorBody(BaseModel):

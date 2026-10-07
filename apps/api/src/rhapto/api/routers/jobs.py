@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import uuid
+from collections.abc import Mapping, Sequence
 from typing import Annotated, Any, Literal, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
@@ -26,6 +27,7 @@ from rhapto.engine.scoring import LocationTier
 from rhapto.models.jd_extract import JDExtract
 from rhapto.services.enqueue import Enqueuer
 from rhapto.services.jobtext import FetchText
+from rhapto.services.ranking import arrange, wants_arrangement
 from rhapto.services.storage import PackageStorage
 from rhapto.services.taxonomy import find_field
 
@@ -72,6 +74,7 @@ def job_to_out(
     scores: list[JobScore],
     min_fit: int | None,
     search_name: str | None = None,
+    also_ids: Sequence[uuid.UUID] = (),
 ) -> JobOut:
     bucket: Literal["fit", "low"] | None
     if job.best_fit is None:
@@ -117,6 +120,7 @@ def job_to_out(
         salary_text=job.salary_text,
         hidden_at=job.hidden_at,
         unlisted_at=job.unlisted_at,
+        also_ids=list(also_ids),
     )
 
 
@@ -144,7 +148,10 @@ async def _out(session: AsyncSession, user_id: uuid.UUID, job: Job) -> JobOut:
 
 
 async def _outs(
-    session: AsyncSession, user_id: uuid.UUID, jobs: list[tuple[Job, str | None]]
+    session: AsyncSession,
+    user_id: uuid.UUID,
+    jobs: list[tuple[Job, str | None]],
+    also: Mapping[uuid.UUID, Sequence[uuid.UUID]] | None = None,
 ) -> list[JobOut]:
     scores_by_job = await scores_for_jobs(session, user_id, [j.id for j, _ in jobs])
     tracks = {t.track_id: t.min_fit for t in await profile_repo.list_tracks(session, user_id)}
@@ -158,6 +165,7 @@ async def _outs(
                 scores_by_job.get(job.id, []),
                 tracks.get(job.best_track_id) if job.best_track_id else None,
                 search_name,
+                (also or {}).get(job.id, ()),
             )
         )
     return out
@@ -264,7 +272,18 @@ FiltersDep = Annotated[repo.JobFilterParams, Depends(job_filters)]
 
 @router.get("", response_model=list[JobOut])
 async def list_jobs(user_id: UserDep, session: SessionDep, filters: FiltersDep) -> list[JobOut]:
-    return await _outs(session, user_id, await repo.list_jobs(session, filters))
+    rows = await repo.list_jobs(session, filters)
+    also: dict[uuid.UUID, tuple[uuid.UUID, ...]] = {}
+    if wants_arrangement(
+        ids_given=filters.ids is not None, sort=filters.sort, recommended=filters.recommended
+    ):
+        # C1 (collapse duplicates) and C2 (at most two per company at the top), over the full list:
+        # this endpoint has no pagination and both clients page on the client side.
+        ordered = rows
+        arranged = arrange([job for job, _ in ordered])
+        rows = [ordered[a.index] for a in arranged]
+        also = {ordered[a.index][0].id: a.also_ids for a in arranged}
+    return await _outs(session, user_id, rows, also)
 
 
 # MUST stay declared before `/{job_id}`: FastAPI matches routes in declaration order, so the path

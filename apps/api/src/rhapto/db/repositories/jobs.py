@@ -276,12 +276,24 @@ def _search_clause(term: str) -> ColumnElement[bool]:
     )
 
 
+#: `recommended=true` drops scored jobs at or below this fit: with the role-first blend a job whose
+#: title is not the user's role is capped at 45 (`engine.scoring.TITLE_MISS_CAP`). `db/` may not
+#: import `engine/` (import-linter), so the value is repeated here; `tests/unit/test_ranking.py::
+#: test_recommended_floor_matches_the_title_miss_cap` fails if the two drift. Unscored jobs stay.
+RECOMMENDED_FIT_FLOOR = 45
+
+
 def _recommended_clause(user_id: uuid.UUID) -> ColumnElement[bool]:
     has_package = select(Package.id).where(Package.user_id == user_id, Package.job_id == Job.id)
     has_application = select(Application.id).where(
         Application.user_id == user_id, Application.job_id == Job.id
     )
-    return and_(Job.unlisted_at.is_(None), ~has_package.exists(), ~has_application.exists())
+    return and_(
+        Job.unlisted_at.is_(None),
+        ~has_package.exists(),
+        ~has_application.exists(),
+        or_(Job.best_fit.is_(None), Job.best_fit > RECOMMENDED_FIT_FLOOR),
+    )
 
 
 #: `location_tier` is NULL on rows scored before location priority shipped and on rows the scorer
