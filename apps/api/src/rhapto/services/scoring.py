@@ -95,6 +95,21 @@ async def _score_chunk(
         )
 
 
+async def _reload_jobs(session: AsyncSession, job_ids: list[uuid.UUID]) -> None:
+    """Refresh `job_ids` from the database into the session's identity map.
+
+    `session.rollback()` expires every loaded instance. Reading even a plain column of an expired
+    `Job` is an implicit lazy load, which raises `MissingGreenlet` in an `AsyncSession`, so after a
+    failed chunk the next chunk's `job.jd_embedding` read failed too -- and so did every chunk
+    after it. `populate_existing` reloads the rows the chunk is about to use; `scalars(...)` is
+    consumed so the instances really are populated before the chunk runs.
+    """
+    if not job_ids:
+        return
+    stmt = select(Job).where(Job.id.in_(job_ids)).execution_options(populate_existing=True)
+    list(await session.scalars(stmt))
+
+
 async def score_and_store(
     session: AsyncSession,
     user_id: uuid.UUID,
@@ -126,8 +141,16 @@ async def score_and_store(
         await session.commit()
 
     total = len(tiered)
+    # Primary keys captured NOW, before any rollback can expire the instances: after one, even
+    # `job.id` would be a lazy load.
+    job_ids = [job.id for job, _ in tiered]
+    rolled_back = False
     for index, start in enumerate(range(0, total, SCORE_CHUNK), start=1):
         chunk = tiered[start : start + SCORE_CHUNK]
+        if rolled_back:
+            # An earlier chunk failed and rolled back, which expired every instance in the session,
+            # this chunk's included. Reload them before reading any attribute.
+            await _reload_jobs(session, job_ids[start : start + SCORE_CHUNK])
         try:
             await _score_chunk(
                 session,
@@ -147,6 +170,7 @@ async def score_and_store(
             # back the partial in-memory updates so they cannot ride along with the next chunk's
             # commit; the tiers were committed above and survive.
             await session.rollback()
+            rolled_back = True
             logger.exception(
                 "scoring chunk %d failed for user %s; %d job(s) keep their previous scores",
                 index,
