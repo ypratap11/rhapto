@@ -54,8 +54,17 @@ def test_company_cap_only_reorders_rows_above_the_title_miss_cap() -> None:
 
 
 def test_capped_and_unscored_rows_of_one_company_are_never_moved() -> None:
-    rows = [row(n, "Shield AI", f"T{n}", fit) for n, fit in enumerate((40, 30, None, 20, 10), 1)]
-    assert [a.index for a in arrange(rows)] == [0, 1, 2, 3, 4]
+    # Another company's row sits after the third Shield AI row: a cap applied to ALL rows would
+    # defer that third row behind it; applied only above the cap, nothing moves.
+    rows = [
+        row(1, "Shield AI", "T1", 40),
+        row(2, "Shield AI", "T2", 30),
+        row(3, "Shield AI", "T3", None),
+        row(4, "Other Co", "U1", 20),
+        row(5, "Shield AI", "T4", 10),
+        row(6, "Other Co", "U2", 5),
+    ]
+    assert [a.index for a in arrange(rows)] == [0, 1, 2, 3, 4, 5]
 
 
 def test_missing_company_is_never_collapsed_or_capped() -> None:
