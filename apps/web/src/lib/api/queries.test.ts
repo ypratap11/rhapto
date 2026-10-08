@@ -3,7 +3,7 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import { createElement, type ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "./client";
-import { keys, PACKAGE_LIST_PARAMS, useJobsEmptyReason, useLlmSettings, useMarkApplied, type JobFilters } from "./queries";
+import { keys, PACKAGE_LIST_PARAMS, useJobsEmptyReason, useLlmSettings, useMarkApplied, useSimilarPostings, type JobFilters } from "./queries";
 import { DEFAULT_SEARCH_STATE } from "@/lib/search-state";
 
 const postMock = vi.fn();
@@ -190,3 +190,39 @@ describe("useJobsEmptyReason", () => {
   });
 });
 
+describe("useSimilarPostings", () => {
+  beforeEach(() => {
+    getMock.mockReset();
+    getMock.mockResolvedValue({ data: [], response: { ok: true } });
+  });
+
+  it("asks GET /jobs for exactly those ids, newest first, with no age window", async () => {
+    const { result } = renderHook(() => useSimilarPostings(["a", "b"], true), { wrapper: queryWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(getMock).toHaveBeenCalledTimes(1);
+    expect(getMock).toHaveBeenCalledWith("/api/v1/jobs", {
+      params: { query: { ids: "a,b", sort: "newest", posted_within: "any" } },
+    });
+  });
+
+  it("sends nothing until it is enabled", async () => {
+    renderHook(() => useSimilarPostings(["a", "b"], false), { wrapper: queryWrapper() });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(getMock).not.toHaveBeenCalled();
+  });
+
+  it("sends nothing for an empty id list, even when enabled", async () => {
+    renderHook(() => useSimilarPostings([], true), { wrapper: queryWrapper() });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(getMock).not.toHaveBeenCalled();
+  });
+
+  it("sends at most 200 ids, the API's cap", async () => {
+    const ids = Array.from({ length: 250 }, (_, i) => `id${i}`);
+    const { result } = renderHook(() => useSimilarPostings(ids, true), { wrapper: queryWrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    const sent = (getMock.mock.calls[0]![1] as { params: { query: { ids: string } } }).params.query.ids.split(",");
+    expect(sent).toHaveLength(200);
+    expect(sent[199]).toBe("id199");
+  });
+});

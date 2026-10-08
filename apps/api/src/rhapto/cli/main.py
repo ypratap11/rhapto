@@ -344,6 +344,77 @@ def feedback_report(
     typer.echo(render(records, key=key, with_emails=with_emails), nl=False)
 
 
+@app.command(name="rank-preview")
+def rank_preview_cmd(
+    top: int = typer.Option(15, "--top", min=1, max=50, help="Rows per list."),
+    blind_dir: Path | None = typer.Option(
+        None,
+        "--blind-dir",
+        help="Also write judge-<tester>.md (one shuffled union of all four lists, JD excerpts, no list labels) and key.json here.",
+    ),
+    synthetic_mixed: bool = typer.Option(
+        False,
+        "--synthetic-mixed",
+        help="Add an in-memory account: one hand-written track beside one role track.",
+    ),
+    seed: str = typer.Option("rank-preview-1", "--seed", help="Seeds the judge-file shuffle."),
+    expect_database: str | None = typer.Option(
+        None,
+        "--expect-database",
+        help="Refuse to run unless current_database() is exactly this (use it on the scratch copy).",
+    ),
+    embedder_kind: str = typer.Option("fastembed", "--embedder", hidden=True),
+) -> None:
+    """Before/after of the top of every account's list. READ-ONLY; never writes to the database.
+
+    Testers are pseudonyms (T-xxxxxx, the same keyed hash as `feedback report`); emails are never
+    read. Run on the server: docker compose exec -T worker rhapto rank-preview --blind-dir /tmp/judge
+    """
+    import hashlib
+    import hmac
+
+    from rhapto.config import MissingSecretKeyError
+    from rhapto.services.feedback import PSEUDONYM_SALT
+    from rhapto.services.rank_preview import (
+        DatabaseMismatchError,
+        render_report,
+        run_rank_preview,
+        write_blind_files,
+    )
+
+    try:
+        settings = get_settings()
+    except MissingSecretKeyError as exc:
+        typer.echo(f"error: {exc}", err=True)
+        raise typer.Exit(1) from exc
+    key = hmac.new(settings.rhapto_secret_key.encode(), PSEUDONYM_SALT, hashlib.sha256).digest()
+    embedder = build_embedder(settings, embedder_kind)
+
+    async def go() -> list[Any]:
+        engine = make_engine(settings.database_url)
+        try:
+            return await run_rank_preview(
+                make_session_factory(engine),
+                embedder,
+                key,
+                top_n=top,
+                synthetic_mixed=synthetic_mixed,
+                expect_database=expect_database,
+            )
+        finally:
+            await engine.dispose()
+
+    try:
+        previews = asyncio.run(go())
+    except DatabaseMismatchError as exc:
+        typer.echo(f"error: {exc}", err=True)
+        raise typer.Exit(1) from exc
+    typer.echo(render_report(previews), nl=False)
+    if blind_dir is not None:
+        write_blind_files(previews, blind_dir, seed=seed)
+        typer.echo(f"blind files written to {blind_dir}", err=True)
+
+
 def alembic_config() -> Config:
     """alembic.ini lives two directories above the package (apps/api) in a checkout and at /app in the image."""
     root = Path(__file__).resolve().parents[3]

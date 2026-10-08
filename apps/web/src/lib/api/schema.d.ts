@@ -1513,6 +1513,11 @@ export interface components {
         };
         /** JobOut */
         JobOut: {
+            /**
+             * Also Ids
+             * @default []
+             */
+            also_ids: string[];
             /** Application Status */
             application_status: string | null;
             /** Best Fit */
@@ -2420,12 +2425,22 @@ export interface components {
         };
         /** TaxonomyRole */
         TaxonomyRole: {
+            /**
+             * Exclude Titles
+             * @default []
+             */
+            exclude_titles: string[];
             /** Id */
             id: string;
             /** Keywords */
             keywords: string[];
             /** Name */
             name: string;
+            /**
+             * Titles
+             * @default []
+             */
+            titles: string[];
         };
         /**
          * TaxonomySuggestionOut

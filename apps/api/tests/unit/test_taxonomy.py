@@ -4,6 +4,7 @@ from pathlib import Path
 
 import pytest
 
+from rhapto.engine.select import keyword_matches
 from rhapto.services import taxonomy as tax
 
 SPEC_FIELDS = [
@@ -120,13 +121,17 @@ def test_the_env_override_wins(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) 
         "    roles:\n"
         "      - id: one\n"
         "        name: One\n"
-        "        keywords: [aa, bb, cc, dd, ee, ff]\n",
+        "        keywords: [aa, bb, cc, dd, ee, ff]\n"
+        "        titles: [one engineer]\n"
+        "        exclude_titles: [intern]\n",
         encoding="utf-8",
     )
     monkeypatch.setenv("RHAPTO_TAXONOMY_PATH", str(override))
     tax.taxonomy.cache_clear()
     try:
         assert [f.id for f in tax.taxonomy().fields] == ["only"]
+        role = tax.taxonomy().fields[0].roles[0]
+        assert role.titles == ["one engineer"] and role.exclude_titles == ["intern"]
     finally:
         tax.taxonomy.cache_clear()
 
@@ -161,3 +166,101 @@ def test_a_broken_or_missing_file_raises_taxonomy_error(tmp_path: Path) -> None:
         tax.load_taxonomy(bad)
     with pytest.raises(tax.TaxonomyError):
         tax.load_taxonomy(tmp_path / "missing.yaml")
+
+
+def test_every_shipped_role_has_non_empty_titles() -> None:
+    for field in tax.taxonomy().fields:
+        for role in field.roles:
+            assert role.titles, f"{field.id}/{role.id} has no titles"
+            assert all(p.strip() for p in [*role.titles, *role.exclude_titles]), role.id
+
+
+def test_no_exclusion_contradicts_its_own_titles() -> None:
+    """An exclusion that matches one of the role's OWN phrases would make that phrase unmatchable
+    (e.g. excluding "test" from a role whose title is "test engineer")."""
+    for field in tax.taxonomy().fields:
+        for role in field.roles:
+            for exclusion in role.exclude_titles:
+                for phrase in role.titles:
+                    assert not keyword_matches(exclusion, phrase), (
+                        f"{field.id}/{role.id}: exclusion {exclusion!r} matches title {phrase!r}"
+                    )
+
+
+def test_the_roles_the_spec_gives_as_examples_ship_with_those_lists() -> None:
+    qa = tax.find_role("engineering", "qa")
+    assert qa is not None
+    assert {
+        "QA engineer",
+        "QA analyst",
+        "quality assurance",
+        "quality engineer",
+        "test engineer",
+        "SDET",
+        "test automation engineer",
+        "software tester",
+    } <= set(qa.titles)
+    assert {
+        "mechanical",
+        "flight",
+        "hardware",
+        "manufacturing",
+        "supplier",
+        "structural",
+        "electrical",
+        "chemical",
+        "civil",
+        "construction",
+        "clinical",
+        "food safety",
+    } <= set(qa.exclude_titles)
+
+    tpm = tax.find_role("program-project-management", "technical-program-manager")
+    assert tpm is not None
+    assert {"technical program manager", "TPM", "program manager"} <= set(tpm.titles)
+    assert {
+        "construction",
+        "clinical",
+        "nursing",
+        "facilities",
+        "real estate",
+        "manufacturing",
+    } <= set(tpm.exclude_titles)
+
+    project = tax.find_role("program-project-management", "project-manager")
+    assert project is not None
+    assert {"project manager", "project lead", "project coordinator", "delivery manager"} <= set(
+        project.titles
+    )
+    assert {
+        "construction",
+        "civil",
+        "electrical",
+        "mechanical",
+        "field",
+        "site",
+        "clinical",
+    } <= set(project.exclude_titles)
+
+    scrum = tax.find_role("program-project-management", "scrum-master")
+    assert scrum is not None
+    assert {"scrum master", "agile coach", "agile delivery lead"} <= set(scrum.titles)
+
+
+def test_titles_and_exclusions_are_optional_in_a_custom_file(tmp_path: Path) -> None:
+    """A RHAPTO_TAXONOMY_PATH file written before these fields existed must still load."""
+    legacy = tmp_path / "taxonomy.yaml"
+    legacy.write_text(
+        "fields:\n"
+        "  - id: only\n"
+        "    name: Only\n"
+        "    themuse_category: Engineering\n"
+        "    adzuna_category: IT Jobs\n"
+        "    roles:\n"
+        "      - id: one\n"
+        "        name: One\n"
+        "        keywords: [aa, bb, cc, dd, ee, ff]\n",
+        encoding="utf-8",
+    )
+    role = tax.load_taxonomy(legacy).fields[0].roles[0]
+    assert role.titles == [] and role.exclude_titles == []

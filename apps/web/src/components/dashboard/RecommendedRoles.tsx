@@ -4,13 +4,14 @@ import { Sparkles } from "lucide-react";
 import { useState } from "react";
 import type { TrackInfo } from "@/components/jobs/JobCard";
 import { JobGrid } from "@/components/jobs/JobGrid";
+import { NoTrackPrompt } from "@/components/jobs/NoTrackPrompt";
 import { ApiErrorBanner } from "@/components/shell/ApiErrorBanner";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { RECOMMENDED_MAX_PAGES, RECOMMENDED_PAGE_SIZE, useRecommendedJobs } from "@/lib/api/queries";
 
 /** Spec §3.1: fit-ranked jobs with no resume and no application, ten per page, five pages max. */
-export function RecommendedRoles({ tracks }: { tracks: Record<string, TrackInfo> }) {
+export function RecommendedRoles({ tracks, noTracks = false }: { tracks: Record<string, TrackInfo>; noTracks?: boolean }) {
   const [page, setPage] = useState(0);
   const query = useRecommendedJobs(page);
   const jobs = query.data ?? [];
@@ -44,6 +45,7 @@ export function RecommendedRoles({ tracks }: { tracks: Record<string, TrackInfo>
         </div>
       </div>
       {hasIssue ? <ApiErrorBanner error={query.error ?? "Can't reach Rhapto's API."} /> : null}
+      {noTracks ? <NoTrackPrompt /> : null}
       <JobGrid
         jobs={jobs}
         tracks={tracks}

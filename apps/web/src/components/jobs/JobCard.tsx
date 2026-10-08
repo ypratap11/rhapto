@@ -8,6 +8,7 @@ import type { JobOut } from "@/lib/api/queries";
 import { locationTierLabel, SOURCE_LABEL } from "@/lib/fit";
 import { formatRelative, truncate } from "@/lib/format";
 import { NotInterestedButton } from "./NotInterestedButton";
+import { SimilarPostings } from "./SimilarPostings";
 
 export type TrackInfo = { name: string; min_fit: number };
 
@@ -18,6 +19,7 @@ export type TrackInfo = { name: string; min_fit: number };
 export function JobCard({ job, track }: { job: JobOut; track: TrackInfo | null }) {
   const company = job.company ?? "Unknown company";
   const tier = locationTierLabel(job.location_tier);
+  const alsoIds = job.also_ids ?? []; // absent on a response from before the field existed
   return (
     <article className="hover-lift flex h-full flex-col gap-3 rounded-card border border-border bg-surface p-4 shadow-card">
       <div className="flex items-start justify-between gap-3">
@@ -47,6 +49,7 @@ export function JobCard({ job, track }: { job: JobOut; track: TrackInfo | null }
       </div>
       {job.salary_text ? <p className="text-sm font-medium">{job.salary_text}</p> : null}
       <p className="line-clamp-2 text-sm text-muted-foreground">{truncate(job.jd_text, 160)}</p>
+      {alsoIds.length > 0 ? <SimilarPostings ids={alsoIds} /> : null}
       <p className="mt-auto text-xs text-muted-foreground">Posted · {formatRelative(job.posted_at ?? job.discovered_at)}</p>
       <div className="flex items-center justify-between gap-2 border-t border-border pt-3">
         {/* A plain styled Link, not the Base UI `Button` primitive: Tailor is a navigation, and

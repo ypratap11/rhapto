@@ -2,6 +2,11 @@
 # Picking a role creates a track named after it, with these keywords and min_fit 60.
 # `themuse_category` and `adzuna_category` are the category names those two APIs use for the
 # field; keyword-only sources get the track's keywords instead.
+# `titles` are job-title phrases that mean the role (whole-word, case-insensitive; a space also
+# matches a hyphen). `exclude_titles` are words that veto a match: a title that contains a
+# `titles` phrase AND an `exclude_titles` word is NOT this role ("Flight Test Engineer" is not QA).
+# Both feed role-first ranking (spec 2026-10-07-search-quality-design.md, B1). A change here takes
+# effect after an image rebuild and a rescore.
 fields:
   - id: engineering
     name: Engineering
@@ -11,27 +16,43 @@ fields:
       - id: backend
         name: Backend
         keywords: [backend engineer, backend developer, API design, microservices, distributed systems, server side, databases]
+        titles: [backend, back end, server side engineer, API engineer]
+        exclude_titles: [sales, support, recruiter, solutions]
       - id: frontend
         name: Frontend
         keywords: [frontend engineer, frontend developer, React, TypeScript, web UI, accessibility, design systems]
+        titles: [frontend, front end, UI engineer, UI developer, web developer]
+        exclude_titles: [sales, support, recruiter]
       - id: full-stack
         name: Full stack
         keywords: [full stack engineer, full stack developer, web application, REST API, React, Node, end to end]
+        titles: [full stack, fullstack]
+        exclude_titles: [sales, support, recruiter]
       - id: mobile
         name: Mobile
         keywords: [mobile engineer, iOS engineer, Android engineer, Swift, Kotlin, React Native, mobile application]
+        titles: [mobile engineer, mobile developer, iOS, Android, React Native]
+        exclude_titles: [sales, marketing, partnerships, support, recruiter]
       - id: ml-engineering
         name: ML Engineering
         keywords: [machine learning engineer, ML infrastructure, model serving, feature store, MLOps, PyTorch, inference]
+        titles: [machine learning engineer, ML engineer, MLOps, ML platform, AI engineer, applied AI, LLM engineer, GenAI engineer, deep learning engineer]
+        exclude_titles: [sales, solutions, support, customer, recruiter, recruiting]
       - id: devops-sre
         name: DevOps and SRE
         keywords: [site reliability engineer, DevOps engineer, Kubernetes, Terraform, CI CD, observability, incident response]
+        titles: [site reliability, SRE, DevOps, platform engineer, infrastructure engineer, cloud engineer, production engineer, dev ops, devsecops, infrastructure, reliability engineer, platform engineering]
+        exclude_titles: [sales, solutions, support, customer, construction, civil, mechanical, electrical, chemical, plant, building, manufacturing, molding, injection, industrial, product, marketing, program, project, recruiter, recruiting, analyst, designer, writer, aircraft, aerospace, avionics, hardware]
       - id: security
         name: Security
         keywords: [security engineer, application security, threat modeling, incident response, penetration testing, identity and access, compliance]
+        titles: [security engineer, application security, appsec, security analyst, cybersecurity, cyber security, information security, infosec, security architect, penetration tester, detection engineer, SOC analyst, product security, cloud security]
+        exclude_titles: [physical, guard, safety, facilities, armed, patrol, loss prevention]
       - id: qa
         name: QA
         keywords: [QA engineer, test automation, quality engineering, end to end testing, regression testing, test strategy, defect triage]
+        titles: [QA engineer, QA analyst, quality assurance, quality engineer, quality analyst, test engineer, test analyst, SDET, software development engineer in test, software engineer in test, test automation engineer, automation test engineer, software tester, QA]
+        exclude_titles: [mechanical, flight, hardware, manufacturing, supplier, structural, electrical, chemical, civil, construction, clinical, food safety, aircraft, avionics, aerospace, vehicle, vehicles, automotive, propulsion, battery, batteries, semiconductor, semiconductors, wafer, wafers, laboratory, laboratories, environmental, pharmaceutical, pharmaceuticals, medical device, medical devices, RF, field, welding, materials, vendor, vendors, systems, integration, satellite, satellites, spacecraft, radar, missile, missiles, GMP, technician, technicians, inspector, inspectors, auditor, auditors, nurse, nurses, representative, representatives, power electronics, rockets, launch vehicle]
   - id: data-science
     name: Data Science
     themuse_category: Data Science
@@ -40,18 +61,27 @@ fields:
       - id: data-scientist
         name: Data Scientist
         keywords: [data scientist, statistical modeling, experimentation, A/B testing, Python, causal inference, predictive models]
+        titles: [data scientist, applied scientist, decision scientist, machine learning scientist]
+        exclude_titles: [clinical trial]
       - id: data-analyst
         name: Data Analyst
         keywords: [data analyst, SQL, dashboards, business intelligence, reporting, Tableau, metrics]
+        titles: [data analyst, business intelligence, BI analyst, BI developer, reporting analyst, product analyst, insights analyst, analytics analyst]
+        exclude_titles: [equity, credit, investment, underwriting]
       - id: data-engineer
         name: Data Engineer
         keywords: [data engineer, data pipelines, ETL, Spark, Airflow, data warehouse, streaming]
+        titles: [data engineer, data engineering, ETL developer, data pipeline engineer, data platform engineer, big data engineer, data infrastructure engineer]
+        exclude_titles: [sales, support, recruiter]
       - id: analytics-engineer
         name: Analytics Engineer
         keywords: [analytics engineer, dbt, data modeling, semantic layer, SQL, data quality, warehouse]
+        titles: [analytics engineer, analytics engineering, dbt developer]
       - id: ml-research
         name: ML Research
         keywords: [machine learning researcher, research scientist, deep learning, publications, model architecture, benchmarks, PyTorch]
+        titles: [research scientist, research engineer, machine learning researcher, ML researcher, AI researcher]
+        exclude_titles: [clinical, biology, biological, chemistry, chemical, pharmaceutical, materials, battery, mechanical, electrical, neuroscience, immunology, oncology, drug, genomics, wet lab, medicinal]
   - id: product
     name: Product
     themuse_category: Product Management
@@ -60,15 +90,21 @@ fields:
       - id: product-manager
         name: Product Manager
         keywords: [product manager, product roadmap, user research, requirements, prioritisation, stakeholder management, product strategy]
+        titles: [product manager, product owner, associate product manager]
+        exclude_titles: [construction, real estate, store, restaurant]
       - id: technical-product-manager
         name: Technical Product Manager
         keywords: [technical product manager, platform product, API product, developer experience, technical roadmap, architecture, integrations]
+        titles: [technical product manager, platform product manager, API product manager, developer product manager, infrastructure product manager, product manager]
+        exclude_titles: [construction, real estate, store, restaurant]
       - id: group-product-manager
         name: Group Product Manager
         keywords: [group product manager, principal product manager, product leadership, portfolio, mentoring, product strategy, org alignment]
+        titles: [group product manager, principal product manager, director of product, product director, head of product, VP of product, vice president of product, chief product officer]
       - id: product-operations
         name: Product Operations
         keywords: [product operations, product ops, release process, tooling, product analytics, launch readiness, cross functional]
+        titles: [product operations, product ops]
   - id: program-project-management
     name: Program and Project Management
     themuse_category: Project Management
@@ -77,18 +113,27 @@ fields:
       - id: technical-program-manager
         name: Technical Program Manager
         keywords: [technical program manager, TPM, cross functional programs, technical roadmap, dependency management, risk management, engineering delivery]
+        titles: [technical program manager, technical programme manager, technical program management, technical programme management, TPM, program manager]
+        exclude_titles: [construction, clinical, nursing, facilities, real estate, manufacturing, civil, mechanical, electrical, patient, grants, event, events, hospitality, retail, fleet, marketing, sales, partner, partners, partnership, partnerships, community, HR, people, recruiting, communications, communication, legal, finance, education, government, executive assistant, administrative assistant, personal assistant]
       - id: program-manager
         name: Program Manager
         keywords: [program manager, program governance, portfolio management, stakeholder management, roadmap, status reporting, OKRs]
+        titles: [program manager, programme manager, program management, programme management, program lead, program director, head of programs]
+        exclude_titles: [construction, clinical, nursing, facilities, real estate, manufacturing, civil, mechanical, electrical, patient, grants, event, events, hospitality, retail, fleet, marketing, sales, partner, partners, partnership, partnerships, community, HR, people, recruiting, communications, communication, legal, finance, education, government, executive assistant, administrative assistant, personal assistant]
       - id: project-manager
         name: Project Manager
         keywords: [project manager, project plan, schedule management, budget tracking, scope management, RAID log, PMP]
+        titles: [project manager, project lead, project coordinator, delivery manager, project management office, PMO]
+        exclude_titles: [construction, civil, electrical, mechanical, field, site, clinical, facilities, real estate, manufacturing, nursing, retail, interior, landscape, logistics, warehouse, driver, fleet, last mile, courier]
       - id: delivery-lead
         name: Delivery Lead
         keywords: [delivery lead, delivery manager, release management, agile delivery, throughput, team health, escalation]
+        titles: [delivery lead, delivery manager, engineering delivery, release manager, release train engineer, release management, delivery director, head of delivery, service delivery manager]
+        exclude_titles: [logistics, warehouse, driver, route, fulfillment, fulfilment, last mile, courier, fleet, store, restaurant, construction, food]
       - id: scrum-master
         name: Scrum Master
         keywords: [scrum master, agile coach, sprint planning, retrospectives, backlog refinement, velocity, impediment removal]
+        titles: [scrum master, agile coach, agile delivery lead]
   - id: design
     name: Design
     themuse_category: Design and UX
@@ -97,15 +142,22 @@ fields:
       - id: product-designer
         name: Product Designer
         keywords: [product designer, UX design, interaction design, wireframes, prototyping, Figma, design systems]
+        titles: [product designer, UX designer, UI designer, UI UX designer, UX UI designer, interaction designer, experience designer]
+        exclude_titles: [interior, fashion, industrial, packaging, jewelry, landscape, textile, footwear, apparel]
       - id: ux-researcher
         name: UX Researcher
         keywords: [UX researcher, user research, usability testing, interviews, research synthesis, personas, qualitative research]
+        titles: [UX researcher, user researcher, design researcher, UX research, user experience researcher]
+        exclude_titles: [clinical, pharmaceutical]
       - id: ux-writer
         name: UX Writer
         keywords: [UX writer, content design, microcopy, content strategy, voice and tone, information architecture, localisation]
+        titles: [UX writer, content designer, UX content designer, UX content strategist, product content designer, UX copywriter]
       - id: brand-designer
         name: Brand Designer
         keywords: [brand designer, visual design, identity system, typography, marketing design, illustration, art direction]
+        titles: [brand designer, graphic designer, visual designer, marketing designer, art director]
+        exclude_titles: [interior, fashion, textile, jewelry, landscape, footwear, apparel]
   - id: marketing
     name: Marketing
     themuse_category: Marketing
@@ -114,15 +166,21 @@ fields:
       - id: product-marketing-manager
         name: Product Marketing Manager
         keywords: [product marketing manager, positioning, messaging, go to market, launch, competitive analysis, sales enablement]
+        titles: [product marketing manager, product marketing lead, product marketer, head of product marketing, director of product marketing, PMM]
       - id: growth-marketing
         name: Growth Marketing
         keywords: [growth marketing, performance marketing, paid acquisition, conversion rate, funnel, lifecycle marketing, experimentation]
+        titles: [growth marketing, growth marketer, performance marketing, paid acquisition, user acquisition, acquisition marketing, lifecycle marketing, paid social, paid media]
       - id: content-marketing
         name: Content Marketing
         keywords: [content marketing, editorial calendar, SEO, blog, thought leadership, copywriting, content strategy]
+        titles: [content marketing, content marketer, content strategist, content manager, SEO manager, SEO specialist, copywriter, content writer]
+        exclude_titles: [UX, technical, documentation]
       - id: demand-generation
         name: Demand Generation
         keywords: [demand generation, pipeline generation, campaign management, marketing automation, Marketo, lead scoring, ABM]
+        titles: [demand generation, demand gen, campaign manager, ABM, account based marketing, marketing automation, marketing operations]
+        exclude_titles: [political, election, fundraising, advocacy]
   - id: sales
     name: Sales
     themuse_category: Sales
@@ -131,15 +189,22 @@ fields:
       - id: account-executive
         name: Account Executive
         keywords: [account executive, quota, pipeline, enterprise sales, closing, negotiation, Salesforce]
+        titles: [account executive, sales executive, enterprise sales, strategic account executive, strategic accounts executive]
+        exclude_titles: [engineer, engineering, solutions, representative, SDR, operations, enablement]
       - id: sales-development
         name: Sales Development
         keywords: [sales development representative, SDR, outbound prospecting, lead qualification, cold outreach, cadences, discovery calls]
+        titles: [sales development representative, SDR, business development representative, BDR, sales development, lead generation specialist, inside sales representative]
       - id: solutions-engineer
         name: Solutions Engineer
         keywords: [solutions engineer, sales engineer, technical demo, proof of concept, RFP, pre sales, solution design]
+        titles: [solutions engineer, sales engineer, solutions consultant, pre sales, presales, technical sales, solution engineer, customer engineer, technical solutions]
+        exclude_titles: [HVAC, mechanical, electrical, chemical, industrial, manufacturing, construction, hardware, field, equipment, machinery, building]
       - id: sales-manager
         name: Sales Manager
         keywords: [sales manager, team quota, forecasting, coaching, territory planning, pipeline review, sales process]
+        titles: [sales manager, sales director, head of sales, regional sales manager, sales team lead, VP of sales, vice president of sales, director of sales, sales lead]
+        exclude_titles: [retail, store, showroom, car, automotive, real estate, restaurant, pharmacy, floor]
   - id: finance
     name: Finance
     themuse_category: Accounting and Finance
@@ -148,15 +213,21 @@ fields:
       - id: financial-analyst
         name: Financial Analyst
         keywords: [financial analyst, financial modeling, variance analysis, forecasting, budgeting, Excel, reporting]
+        titles: [financial analyst, finance analyst, business finance partner, finance business partner]
       - id: fp-and-a
         name: FP and A
         keywords: [FP&A, financial planning and analysis, annual plan, headcount planning, scenario modeling, board reporting, KPIs]
+        titles: [FP&A, FP and A, financial planning and analysis, financial planning, strategic finance]
+        exclude_titles: [advisor, wealth, retirement, insurance, estate]
       - id: accountant
         name: Accountant
         keywords: [accountant, general ledger, month end close, reconciliations, GAAP, accounts payable, audit support]
+        titles: [accountant, accounting manager, accounting analyst, accounts payable, accounts receivable, bookkeeper, general ledger]
       - id: controller
         name: Controller
         keywords: [controller, financial controls, close process, technical accounting, audit, SOX, policy]
+        titles: [financial controller, corporate controller, assistant controller, division controller, controller]
+        exclude_titles: [firmware, embedded, motor, flight, traffic, hardware, software, engineer, engineering, PLC, robotics, drone]
   - id: operations
     name: Operations
     themuse_category: Business Operations
@@ -165,15 +236,23 @@ fields:
       - id: business-operations
         name: Business Operations
         keywords: [business operations, process improvement, operating cadence, analytics, cross functional, planning, efficiency]
+        titles: [business operations, bizops, biz ops, business operations analyst]
+        exclude_titles: [warehouse, store, restaurant, hospital, clinic]
       - id: supply-chain
         name: Supply Chain
         keywords: [supply chain, logistics, inventory management, procurement, demand planning, vendor management, fulfilment]
+        titles: [supply chain, procurement, logistics, demand planner, supply planner, inventory, sourcing manager, purchasing, materials planner]
+        exclude_titles: [software, security, cybersecurity, driver, courier, warehouse associate, forklift]
       - id: technical-operations
         name: Technical Operations
         keywords: [technical operations, service operations, runbooks, capacity planning, vendor management, uptime, escalation]
+        titles: [technical operations, tech ops, techops, operations engineer, systems operations, NOC engineer, production operations]
+        exclude_titles: [manufacturing, clinical, laboratory, pharmaceutical, GMP, plant, cell therapy]
       - id: strategy-operations
         name: Strategy and Operations
         keywords: [strategy and operations, strategic planning, market analysis, business case, executive reporting, OKRs, special projects]
+        titles: [strategy and operations, strategy & operations, strategy operations, strategy ops, chief of staff, corporate strategy, strategic planning]
+        exclude_titles: [military, army, navy, hospital, clinic]
   - id: people
     name: People
     themuse_category: HR
@@ -182,15 +261,20 @@ fields:
       - id: recruiter
         name: Recruiter
         keywords: [recruiter, technical recruiting, sourcing, candidate pipeline, interview process, offer negotiation, applicant tracking]
+        titles: [recruiter, technical recruiter, talent acquisition, sourcer, recruiting coordinator, recruiting manager, talent sourcer, talent partner]
       - id: people-partner
         name: People Partner
         keywords: [people partner, HR business partner, employee relations, performance management, coaching, organisational design, retention]
+        titles: [people partner, HR business partner, HRBP, human resources business partner, employee relations, people business partner, HR partner]
       - id: people-operations
         name: People Operations
         keywords: [people operations, HR operations, onboarding, HRIS, benefits administration, compliance, policy]
+        titles: [people operations, people ops, HR operations, HRIS, HR generalist, HR coordinator, human resources coordinator, human resources generalist, benefits administrator]
       - id: learning-and-development
         name: Learning and Development
         keywords: [learning and development, training programs, enablement, curriculum design, facilitation, career development, coaching]
+        titles: [learning and development, L&D, learning development, instructional designer, training manager, training specialist, learning experience designer, curriculum developer, talent development, organizational development, corporate trainer]
+        exclude_titles: [flight, pilot, fitness, athletic, driving, yoga, teacher]
   - id: customer-success
     name: Customer Success
     themuse_category: Customer Service
@@ -199,15 +283,22 @@ fields:
       - id: customer-success-manager
         name: Customer Success Manager
         keywords: [customer success manager, renewals, retention, onboarding, QBR, adoption, account health]
+        titles: [customer success manager, customer success, client success, renewals manager]
       - id: solutions-architect
         name: Solutions Architect
         keywords: [solutions architect, technical account manager, integration design, reference architecture, customer workshops, implementation, escalation]
+        titles: [solutions architect, solution architect, technical account manager, cloud architect, enterprise architect, customer architect]
+        exclude_titles: [building, construction, civil, landscape, interior, naval, structural, mechanical]
       - id: support-engineer
         name: Support Engineer
         keywords: [support engineer, technical support, troubleshooting, ticket queue, SLA, root cause analysis, knowledge base]
+        titles: [support engineer, technical support, customer support engineer, application support, production support, product support, help desk]
+        exclude_titles: [mechanical, electrical, manufacturing, aircraft, avionics, HVAC, plant, field service]
       - id: implementation-manager
         name: Implementation Manager
         keywords: [implementation manager, onboarding projects, deployment, configuration, migration, go live, customer training]
+        titles: [implementation manager, implementation specialist, implementation consultant, onboarding manager, implementation lead, implementation engineer, technical implementation]
+        exclude_titles: [construction, civil, real estate, mechanical, electrical, facilities]
   - id: other
     name: Other
     themuse_category: Other
@@ -216,3 +307,5 @@ fields:
       - id: generalist
         name: Generalist
         keywords: [generalist, cross functional, operations, analysis, project delivery, stakeholder management, communication]
+        titles: [generalist, business generalist, operations generalist]
+        exclude_titles: [HR, human resources]

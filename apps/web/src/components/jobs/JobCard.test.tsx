@@ -4,6 +4,10 @@ import type { JobOut } from "@/lib/api/queries";
 import { JobCard } from "./JobCard";
 
 vi.mock("./NotInterestedButton", () => ({ NotInterestedButton: () => <button>Not interested</button> }));
+vi.mock("@/lib/api/queries", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/api/queries")>()),
+  useSimilarPostings: () => ({ data: undefined, isLoading: false, isError: false }),
+}));
 
 const job = {
   id: "j1",
@@ -72,5 +76,17 @@ describe("JobCard", () => {
   it("shows a dashed ring while the worker is still scoring", () => {
     render(<JobCard job={{ ...job, best_fit: null } as JobOut} track={track} />);
     expect(screen.getByRole("img", { name: /not scored yet/i })).toBeInTheDocument();
+  });
+
+  it("offers '+N similar postings' when the list collapsed copies into this row", () => {
+    render(<JobCard job={{ ...job, also_ids: ["j2", "j3"] } as JobOut} track={track} />);
+    expect(screen.getByRole("button", { name: "+2 similar postings" })).toBeInTheDocument();
+  });
+
+  it("shows nothing extra for a row that collapsed nothing", () => {
+    render(<JobCard job={{ ...job, also_ids: [] } as JobOut} track={track} />);
+    expect(screen.queryByText(/similar posting/)).not.toBeInTheDocument();
+    render(<JobCard job={job} track={track} />); // a response from before the field existed
+    expect(screen.queryByText(/similar posting/)).not.toBeInTheDocument();
   });
 });

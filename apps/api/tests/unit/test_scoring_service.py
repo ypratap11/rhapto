@@ -1,4 +1,8 @@
+import logging
+from typing import Any, NoReturn
+
 import pytest
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from rhapto.db.models import User
@@ -7,6 +11,8 @@ from rhapto.db.repositories import jobs as jobs_repo
 from rhapto.db.repositories import profile as profile_repo
 from rhapto.engine.providers.fake import FakeEmbeddingProvider
 from rhapto.models.profile.tracks import Track
+from rhapto.services import scoring as scoring_service
+from rhapto.services import taxonomy as tax
 from rhapto.services.scoring import (
     SCORE_CHUNK,
     ensure_track_embeddings,
@@ -224,3 +230,162 @@ async def test_all_or_nothing_mode_propagates_a_chunk_failure(
     ]
     with pytest.raises(RuntimeError):
         await score_and_store(session, user.id, jobs, AlwaysFails())
+
+
+async def test_a_failing_middle_chunk_does_not_stop_the_third_chunk(
+    session: AsyncSession,
+    user: User,
+    caplog: pytest.LogCaptureFixture,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A1. The middle chunk fails AFTER database statements ran in it (so a transaction is open and
+    `session.rollback()` really expires every loaded Job), the realistic shape of two concurrent
+    rescores colliding on UNIQUE(user_id, job_id, track_id). Chunk 3 must still be scored: before
+    any fix it would read `job.jd_embedding` on an expired instance (MissingGreenlet). A failure
+    inside `embed` never reaches the database, so rollback is a no-op and cannot show this."""
+    real_upsert = disc_repo.upsert_scores
+    calls = 0
+
+    async def upsert_then_collide(*args: Any, **kwargs: Any) -> None:
+        nonlocal calls
+        calls += 1
+        await real_upsert(*args, **kwargs)  # the statements really ran and flushed
+        if calls == SCORE_CHUNK + 5:  # 5th job of chunk 2
+            raise IntegrityError("INSERT INTO job_scores", {}, Exception("duplicate key"))
+
+    monkeypatch.setattr(disc_repo, "upsert_scores", upsert_then_collide)
+
+    await profile_repo.upsert_track(session, user.id, DATA)
+    jobs = [
+        await jobs_repo.create_job(
+            session,
+            user.id,
+            jd_text=f"Job {i}: own the data platform and ETL roadmap for analytics. " * 4,
+            title=f"Data PM {i}",
+            location="Denver, CO",
+        )
+        for i in range(2 * SCORE_CHUNK + 20)  # three chunks: 50, 50, 20
+    ]
+    with caplog.at_level(logging.ERROR, logger="rhapto.services.scoring"):
+        await score_and_store(session, user.id, jobs, RecordingEmbedder(), commit_each_chunk=True)
+
+    for job in jobs:
+        await session.refresh(job)
+    assert all(j.best_fit is not None for j in jobs[:SCORE_CHUNK])
+    assert all(j.best_fit is None for j in jobs[SCORE_CHUNK : 2 * SCORE_CHUNK])  # the failed chunk
+    assert all(j.best_fit is not None for j in jobs[2 * SCORE_CHUNK :]), (
+        "chunks after a failed chunk must still be scored"
+    )
+    assert caplog.text.count("scoring chunk") == 1  # only the middle chunk failed
+    assert "MissingGreenlet" not in caplog.text
+
+
+async def test_rescore_deletes_scores_of_tracks_that_no_longer_exist(
+    session: AsyncSession, user: User
+) -> None:
+    await profile_repo.upsert_track(session, user.id, DATA)
+    job = await jobs_repo.create_job(
+        session, user.id, jd_text="Own the data platform and ETL roadmap. " * 5, title="Data PM"
+    )
+    embedder = FakeEmbeddingProvider(dimensions=384)
+    await score_and_store(session, user.id, [job], embedder)
+    # A leftover from a deleted track (or a rescore that raced the delete).
+    await disc_repo.upsert_scores(session, user.id, job, [("deleted-track", 77, {})])
+    before = await disc_repo.scores_for_jobs(session, user.id, [job.id])
+    assert {s.track_id for s in before[job.id]} == {"data-pm", "deleted-track"}
+
+    await rescore_user(session, user.id, embedder)
+    after = await disc_repo.scores_for_jobs(session, user.id, [job.id])
+    assert {s.track_id for s in after[job.id]} == {"data-pm"}
+
+
+QA_TRACK = Track(
+    id="qa",
+    name="QA",
+    resume_base="b",
+    min_fit=60,
+    field="engineering",
+    role="qa",
+    keywords=[
+        "regression testing",
+        "test automation",
+        "quality engineering",
+        "defect triage",
+        "test strategy",
+        "end to end testing",
+    ],
+    description="Test automation and regression testing for software quality",
+)
+QA_JD = (
+    "Own the regression testing and test automation strategy, triage defects and drive end to end "
+    "testing. "
+) * 3
+KNOWN_BAD = ["Flight Test Engineer", "Mechanical Test Engineer", "Supplier Quality Engineer"]
+
+
+async def test_a_role_track_ranks_its_title_above_a_topically_identical_wrong_role(
+    session: AsyncSession, user: User
+) -> None:
+    await profile_repo.upsert_track(session, user.id, QA_TRACK)
+    real = await jobs_repo.create_job(session, user.id, jd_text=QA_JD, title="Senior QA Engineer")
+    wrong = await jobs_repo.create_job(
+        session, user.id, jd_text=QA_JD, title="Flight Test Engineer"
+    )
+    await score_and_store(session, user.id, [real, wrong], FakeEmbeddingProvider(dimensions=384))
+
+    assert real.best_fit is not None and wrong.best_fit is not None
+    assert real.best_fit >= 60 and wrong.best_fit <= 45
+    stored = await disc_repo.scores_for_jobs(session, user.id, [real.id])
+    rationale = stored[real.id][0].rationale_json
+    assert rationale["blend"] == "role" and rationale["title_match"] == "QA engineer"
+    assert rationale["weights"] == {"title": 0.45, "semantic": 0.35, "keywords": 0.2}
+
+
+async def test_shipped_qa_role_caps_the_known_bad_titles_and_fails_without_exclusions(
+    session: AsyncSession, user: User, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    await profile_repo.upsert_track(session, user.id, QA_TRACK)
+    jobs = [
+        await jobs_repo.create_job(session, user.id, jd_text=QA_JD, title=title)
+        for title in KNOWN_BAD
+    ]
+    embedder = FakeEmbeddingProvider(dimensions=384)
+    await score_and_store(session, user.id, jobs, embedder)
+    assert all(j.best_fit is not None and j.best_fit <= 45 for j in jobs)
+
+    # Same jobs, same description; strip `exclude_titles` from the SHIPPED role. The negative
+    # assertion above must now fail -- that is what proves it is not passing for the wrong reason.
+    real_find_role = scoring_service.find_role
+
+    def without_exclusions(field_id: str, role_id: str):  # type: ignore[no-untyped-def]
+        role = real_find_role(field_id, role_id)
+        return None if role is None else role.model_copy(update={"exclude_titles": []})
+
+    monkeypatch.setattr(scoring_service, "find_role", without_exclusions)
+    await score_and_store(session, user.id, jobs, embedder)
+    assert all(j.best_fit is not None and j.best_fit > 45 for j in jobs)
+
+
+async def test_taxonomy_failure_and_missing_title_fall_back_to_the_legacy_blend(
+    session: AsyncSession, user: User, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    await profile_repo.upsert_track(session, user.id, QA_TRACK)
+    untitled = await jobs_repo.create_job(session, user.id, jd_text=QA_JD, title=None)
+    titled = await jobs_repo.create_job(session, user.id, jd_text=QA_JD, title="Senior QA Engineer")
+    embedder = FakeEmbeddingProvider(dimensions=384)
+
+    # A hand-added job with no title is scored with today's blend, not penalised for it.
+    await score_and_store(session, user.id, [untitled, titled], embedder)
+    rows = await disc_repo.scores_for_jobs(session, user.id, [untitled.id, titled.id])
+    assert rows[untitled.id][0].rationale_json["blend"] == "legacy"
+    assert rows[titled.id][0].rationale_json["blend"] == "role"
+
+    # The taxonomy cannot load: scoring still completes, on the legacy blend.
+    def boom() -> NoReturn:
+        raise tax.TaxonomyError("cannot read the taxonomy")
+
+    monkeypatch.setattr(tax, "taxonomy", boom)
+    await score_and_store(session, user.id, [untitled, titled], embedder)
+    rows = await disc_repo.scores_for_jobs(session, user.id, [titled.id])
+    assert rows[titled.id][0].rationale_json["blend"] == "legacy"
+    assert titled.best_fit is not None

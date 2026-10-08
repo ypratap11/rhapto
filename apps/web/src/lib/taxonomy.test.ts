@@ -9,8 +9,8 @@ const field: TaxonomyField = {
   themuse_category: "Project Management",
   adzuna_category: "PM Jobs",
   roles: [
-    { id: "technical-program-manager", name: "Technical Program Manager", keywords: ["program manager", "tpm", "cross-functional"] },
-    { id: "program-manager", name: "Program Manager", keywords: ["program manager"] },
+    { id: "technical-program-manager", name: "Technical Program Manager", keywords: ["program manager", "tpm", "cross-functional"], titles: ["technical program manager"], exclude_titles: [] },
+    { id: "program-manager", name: "Program Manager", keywords: ["program manager"], titles: ["program manager"], exclude_titles: [] },
   ],
 };
 const taxonomy: TaxonomyOut = { fields: [field] };

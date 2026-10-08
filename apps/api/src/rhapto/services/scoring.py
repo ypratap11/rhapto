@@ -2,17 +2,19 @@ from __future__ import annotations
 
 import logging
 import uuid
+from collections.abc import Mapping
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from rhapto.db.models import EMBEDDING_DIMENSIONS, Job
+from rhapto.db.models import EMBEDDING_DIMENSIONS, Job, JobScore
 from rhapto.db.models import Track as TrackRow
 from rhapto.db.repositories import discovery as disc_repo
 from rhapto.db.repositories import profile as profile_repo
 from rhapto.engine.providers.embeddings import EmbeddingProvider
 from rhapto.engine.scoring import (
     LocationTier,
+    RoleTitles,
     best_track,
     location_preference_from_answers,
     location_tier,
@@ -22,6 +24,7 @@ from rhapto.engine.scoring import (
 )
 from rhapto.models.profile.tracks import Track
 from rhapto.services.profile_sync import track_row_to_model
+from rhapto.services.taxonomy import TaxonomyError, find_role
 
 logger = logging.getLogger(__name__)
 
@@ -33,6 +36,34 @@ SCORE_CHUNK = 50
 
 def _fit_dimensions(vector: list[float]) -> list[float] | None:
     return list(vector) if len(vector) == EMBEDDING_DIMENSIONS else None
+
+
+def role_titles_for(tracks: list[Track]) -> dict[str, RoleTitles]:
+    """The title phrases for each track that can use the role-first blend, keyed by track id.
+
+    A track is included only when it has a `field` and a `role`, `find_role` still finds that role
+    (a role id removed from the taxonomy after the row was written falls back), and the role has
+    non-empty `titles`. A `TaxonomyError` (missing or invalid file, or a custom taxonomy that
+    cannot load) is logged ONCE for the run and every track falls back to today's blend -- it never
+    stops scoring. Called once per `score_and_store`, so "once" is once per run.
+    """
+    resolved: dict[str, RoleTitles] = {}
+    try:
+        for track in tracks:
+            if not track.field or not track.role:
+                continue
+            role = find_role(track.field, track.role)
+            if role is None or not role.titles:
+                continue
+            resolved[track.id] = RoleTitles(
+                titles=tuple(role.titles), exclude=tuple(role.exclude_titles)
+            )
+    except TaxonomyError:
+        logger.exception(
+            "taxonomy unavailable; every track falls back to the legacy blend for this run"
+        )
+        return {}
+    return resolved
 
 
 async def ensure_track_embeddings(
@@ -68,6 +99,7 @@ async def _score_chunk(
     embedder: EmbeddingProvider,
     *,
     has_location_preference: bool,
+    role_titles: Mapping[str, RoleTitles],
 ) -> None:
     unembedded = [job for job, _ in chunk if job.jd_embedding is None]
     if unembedded:
@@ -86,6 +118,7 @@ async def _score_chunk(
             track_vectors,
             tier,
             has_location_preference=has_location_preference,
+            role_titles=role_titles,
         )
         best = best_track(scores, tracks)
         job.best_track_id = best.track_id if best else None
@@ -93,6 +126,21 @@ async def _score_chunk(
         await disc_repo.upsert_scores(
             session, user_id, job, [(s.track_id, s.fit_score, rationale(s)) for s in scores]
         )
+
+
+async def _reload_jobs(session: AsyncSession, job_ids: list[uuid.UUID]) -> None:
+    """Refresh `job_ids` from the database into the session's identity map.
+
+    `session.rollback()` expires every loaded instance. Reading even a plain column of an expired
+    `Job` is an implicit lazy load, which raises `MissingGreenlet` in an `AsyncSession`, so after a
+    failed chunk the next chunk's `job.jd_embedding` read failed too -- and so did every chunk
+    after it. `populate_existing` reloads the rows the chunk is about to use; `scalars(...)` is
+    consumed so the instances really are populated before the chunk runs.
+    """
+    if not job_ids:
+        return
+    stmt = select(Job).where(Job.id.in_(job_ids)).execution_options(populate_existing=True)
+    list(await session.scalars(stmt))
 
 
 async def score_and_store(
@@ -116,6 +164,7 @@ async def score_and_store(
     # One read of answers.yaml for the whole batch; `rescore_jobs` runs this again whenever the
     # user edits a location answer, so the stored tiers follow the preference.
     preference = location_preference_from_answers(await profile_repo.get_answers(session, user_id))
+    role_titles = role_titles_for(tracks)
     # Tiering needs no embedding, so every row gets its tier before the slow part starts: an
     # embedding provider that falls over must not leave the queue with no location data at all.
     tiered = [(job, location_tier(job.location, preference)) for job in jobs]
@@ -126,8 +175,16 @@ async def score_and_store(
         await session.commit()
 
     total = len(tiered)
+    # Primary keys captured NOW, before any rollback can expire the instances: after one, even
+    # `job.id` would be a lazy load.
+    job_ids = [job.id for job, _ in tiered]
+    rolled_back = False
     for index, start in enumerate(range(0, total, SCORE_CHUNK), start=1):
         chunk = tiered[start : start + SCORE_CHUNK]
+        if rolled_back:
+            # An earlier chunk failed and rolled back, which expired every instance in the session,
+            # this chunk's included. Reload them before reading any attribute.
+            await _reload_jobs(session, job_ids[start : start + SCORE_CHUNK])
         try:
             await _score_chunk(
                 session,
@@ -137,6 +194,7 @@ async def score_and_store(
                 track_vectors,
                 embedder,
                 has_location_preference=bool(preference.terms),
+                role_titles=role_titles,
             )
         except Exception:
             if not commit_each_chunk:
@@ -147,6 +205,7 @@ async def score_and_store(
             # back the partial in-memory updates so they cannot ride along with the next chunk's
             # commit; the tiers were committed above and survive.
             await session.rollback()
+            rolled_back = True
             logger.exception(
                 "scoring chunk %d failed for user %s; %d job(s) keep their previous scores",
                 index,
@@ -165,7 +224,16 @@ async def score_and_store(
 async def rescore_user(
     session: AsyncSession, user_id: uuid.UUID, embedder: EmbeddingProvider
 ) -> int:
-    for row in await profile_repo.list_tracks(session, user_id):
+    rows = await profile_repo.list_tracks(session, user_id)
+    # Scores of tracks that no longer exist are never rewritten by an upsert; drop them here so a
+    # deleted track (or a rescore that raced its delete) cannot leave rows behind. With no tracks
+    # left `not_in([])` matches every row of the user, which is what is wanted.
+    await session.execute(
+        delete(JobScore).where(
+            JobScore.user_id == user_id, JobScore.track_id.not_in([r.track_id for r in rows])
+        )
+    )
+    for row in rows:
         row.embedding = None  # descriptions may have changed; recompute every track
     jobs = list(await session.scalars(select(Job).where(Job.user_id == user_id)))
     # A whole queue can be hundreds of jobs; commit per chunk so a timeout leaves the work done

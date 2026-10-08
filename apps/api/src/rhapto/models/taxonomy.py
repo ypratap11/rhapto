@@ -15,6 +15,14 @@ class TaxonomyRole(BaseModel):
     id: Annotated[str, Field(pattern='^[a-z0-9][a-z0-9-]*$')]
     name: str
     keywords: Annotated[list[str], Field(max_length=10, min_length=6)]
+    titles: list[str] = []
+    """
+    Job-title phrases that mean this role. Whole-word, case-insensitive; a space also matches a hyphen.
+    """
+    exclude_titles: list[str] = []
+    """
+    Words or phrases that, present in a title, mean it is NOT this role even though a titles phrase matched.
+    """
 
 
 class TaxonomyField(BaseModel):

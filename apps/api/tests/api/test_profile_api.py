@@ -1,9 +1,14 @@
 import io
+import uuid
 import zipfile
 from pathlib import Path
 
 import httpx
 import pytest
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+
+from rhapto.db.models import Job, JobScore
 
 
 async def test_blocks_crud_and_embedding_enqueued(client: httpx.AsyncClient, enqueuer) -> None:  # type: ignore[no-untyped-def]
@@ -156,3 +161,72 @@ async def test_import_invalid_yaml_is_422(client: httpx.AsyncClient) -> None:
 
 async def test_export_without_profile_is_422(client: httpx.AsyncClient) -> None:
     assert (await client.get("/api/v1/profile/export")).status_code == 422
+
+
+TRACK_A = {
+    "id": "a",
+    "name": "A",
+    "resume_base": "b",
+    "keywords": ["data platform"],
+    "description": "Data platform program leadership",
+}
+TRACK_B = {**TRACK_A, "id": "b", "name": "B", "keywords": ["LLM"], "description": "LLM work"}
+
+
+async def _job_state(
+    session_factory: async_sessionmaker[AsyncSession], user_id: uuid.UUID
+) -> tuple[set[str], str | None, int | None]:
+    async with session_factory() as session:
+        tracks = set(
+            await session.scalars(select(JobScore.track_id).where(JobScore.user_id == user_id))
+        )
+        job = await session.scalar(select(Job).where(Job.user_id == user_id))
+        assert job is not None
+        return tracks, job.best_track_id, job.best_fit
+
+
+async def test_deleting_a_track_deletes_its_scores_and_rescores(
+    client: httpx.AsyncClient,
+    session_factory: async_sessionmaker[AsyncSession],
+    user_id: uuid.UUID,
+    enqueuer,  # type: ignore[no-untyped-def]
+) -> None:
+    for body in (TRACK_A, TRACK_B):
+        assert (
+            await client.put(f"/api/v1/profile/tracks/{body['id']}", json=body)
+        ).status_code == 201
+    created = await client.post(
+        "/api/v1/jobs",
+        json={"jd_text": "Own the data platform roadmap for analytics. " * 4, "title": "Data PM"},
+    )
+    assert created.status_code == 201, created.text
+    tracks, _, _ = await _job_state(session_factory, user_id)
+    assert tracks == {"a", "b"}
+
+    enqueuer.calls.clear()
+    assert (await client.delete("/api/v1/profile/tracks/a")).status_code == 204
+    assert [c[0] for c in enqueuer.calls] == ["rescore_jobs"]
+    assert enqueuer.calls[0][1] == {"user_id": str(user_id)}
+    tracks, best_track, best_fit = await _job_state(session_factory, user_id)
+    assert tracks == {"b"}  # a's rows are gone; b was rescored
+    assert best_track == "b" and best_fit is not None
+
+
+async def test_deleting_the_last_track_clears_the_stale_ordering(
+    client: httpx.AsyncClient,
+    session_factory: async_sessionmaker[AsyncSession],
+    user_id: uuid.UUID,
+) -> None:
+    assert (
+        await client.put(f"/api/v1/profile/tracks/{TRACK_A['id']}", json=TRACK_A)
+    ).status_code == 201
+    await client.post(
+        "/api/v1/jobs",
+        json={"jd_text": "Own the data platform roadmap for analytics. " * 4, "title": "Data PM"},
+    )
+    _, best_track, best_fit = await _job_state(session_factory, user_id)
+    assert best_track == "a" and best_fit is not None
+
+    assert (await client.delete("/api/v1/profile/tracks/a")).status_code == 204
+    tracks, best_track, best_fit = await _job_state(session_factory, user_id)
+    assert tracks == set() and best_track is None and best_fit is None  # A2 can now say "unranked"

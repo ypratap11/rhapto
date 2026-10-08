@@ -36,6 +36,18 @@
           "minItems": 6,
           "maxItems": 10,
           "items": { "type": "string" }
+        },
+        "titles": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": [],
+          "description": "Job-title phrases that mean this role. Whole-word, case-insensitive; a space also matches a hyphen."
+        },
+        "exclude_titles": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": [],
+          "description": "Words or phrases that, present in a title, mean it is NOT this role even though a titles phrase matched."
         }
       }
     }
