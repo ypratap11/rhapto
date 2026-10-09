@@ -391,3 +391,33 @@ def test_present_as_a_verb_is_not_a_date(demo_profile_dir: Path) -> None:
         cover_note=None,
     )
     assert [v.rule for v in bad.violations] == ["date-consistency"]
+
+
+def test_homepage_proof_matches_the_engine_wording(demo_profile_dir: Path) -> None:
+    """The landing page's proof (apps/web/src/components/landing/TuneProof.tsx) quotes this catch:
+    a sentence from the document with a number the model added. The rule name, the path and the
+    message are shown to visitors verbatim, so they are pinned here against the real guardrail. The
+    same four strings are asserted in TuneProof.test.tsx."""
+    doc = _doc()
+    b = _bullet(doc)
+    assert b.text == "Led the Snowflake migration for 12 teams, cutting warehouse cost 30%."
+    report = run_tune_guardrails(
+        doc,
+        [
+            Edit(
+                paragraph_id=b.id,
+                before=b.text,
+                after="Led the Snowflake migration for 45 teams, cutting warehouse cost 30%.",
+                reason="r",
+            )
+        ],
+        demo_extract(),
+        _rules(demo_profile_dir),
+        cover_note=None,
+    )
+    assert not report.passed
+    (violation,) = report.violations
+    assert violation.rule == "no-new-numbers"
+    assert violation.path == "edits[0]"
+    assert violation.message == "number(s) not found in the document: 45"
+    assert "no-new-numbers" in report.rules_run[:2]  # always runs, whatever the user configured
