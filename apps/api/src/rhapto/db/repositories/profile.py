@@ -445,9 +445,4 @@ async def track_readiness(session: AsyncSession, user_id: uuid.UUID, track_id: s
     ).first()
     if row is None:
         return None
-    # MUTANT (withdrawn probe): "any job_scores row exists for this track". Replaced in the next commit.
-    return bool(
-        await session.scalar(
-            select(exists().where(JobScore.user_id == user_id, JobScore.track_id == track_id))
-        )
-    )
+    return row.scored_at is not None and row.scored_at >= row.score_requested_at

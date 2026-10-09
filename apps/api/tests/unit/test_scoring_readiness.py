@@ -129,8 +129,9 @@ async def test_readiness_is_false_between_chunks_and_true_after_the_final_commit
 
     async with session_factory() as work:
         await rescore_user(work, user.id, Observing(observe))
-        # MUTANT RUN ONLY: pre-commit assertion disabled so the mid-run assertion is what fails.
-        # assert await _ready(session_factory, user.id) is False
+        assert (
+            await _ready(session_factory, user.id) is False
+        )  # marked in `work`, not yet committed
         await work.commit()
 
     assert len(seen) >= 2
