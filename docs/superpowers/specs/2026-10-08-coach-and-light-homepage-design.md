@@ -82,7 +82,7 @@ step, where the ones who did not finish stopped.
    - Below the proof, a "How it works in detail" link goes to `/about`.
 
 `/about` currently renders the same `<Landing />` (`app/about/page.tsx:15`). A new
-`components/landing/About.tsx` takes these sections in their current order, without content changes:
+`components/landing/About.tsx` takes these sections in their current order, without content changes, except that its hosted "Sign in" calls to action become "Tailor my resume" → `/start` (owner decision 2026-10-09):
 
 - ProductTour
 - the feature-card grid
@@ -253,7 +253,7 @@ every ORM update, including the rescore's own embedding writes (`db/base.py:22-2
 | No model key (409) | "Rhapto isn't set up to tailor yet" | Feedback link |
 | Tailor waiting in the queue | "Still working, others are ahead of you" | Wait (the worker runs 2 jobs at a time) |
 | Tailor task fails | The task's reason | Retry; no run is consumed when the failure comes before the claim |
-| **Package blocked by a guardrail** | "Rhapto stopped this draft because it added something that isn't in your resume" | Try again (regenerate with `parent_package_id`; this costs a run, and the screen says so), or pick another job |
+| **Package blocked by a guardrail** | "Rhapto stopped this draft because it added something that isn't in your resume" | Try again (a fresh tune run on the same job, **without** `parent_package_id`, so the model never sees the blocked edit; owner decision 2026-10-09; this costs a run, and the screen says so), or pick another job |
 | No matches after scoring | Reason from `/jobs/empty-reason` | Paste a job |
 
 ## Testing
