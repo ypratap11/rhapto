@@ -101,3 +101,14 @@ async def claim_trial_run(session: AsyncSession, user_id: uuid.UUID, limit: int)
     )
     row = claim.first()
     return int(row[0]) if row is not None else None
+
+
+async def claim_free_import(session: AsyncSession, user_id: uuid.UUID) -> bool:  # MUTANT
+    current = await session.scalar(select(User.free_import_used_at).where(User.id == user_id))
+    if current is not None:
+        return False
+    claim = await session.execute(
+        text("UPDATE users SET free_import_used_at = now() WHERE id = :uid RETURNING id"),
+        {"uid": str(user_id)},
+    )
+    return claim.first() is not None
