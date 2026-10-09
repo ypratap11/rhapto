@@ -1,17 +1,18 @@
-"""Coach support endpoints. `GET /coach/readiness` is read-only and per user; the events route is added
-in the next task."""
+"""Coach support endpoints. `GET /coach/readiness` is read-only and per user; `POST /coach/events`
+records counts only."""
 
 from __future__ import annotations
 
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from rhapto.api.deps import current_user, get_session
 from rhapto.api.errors import not_found
-from rhapto.api.schemas import ReadinessOut
+from rhapto.api.schemas import CoachEventIn, ReadinessOut
+from rhapto.db.repositories import coach as coach_repo
 from rhapto.db.repositories import profile as profile_repo
 
 router = APIRouter()
@@ -30,3 +31,10 @@ async def coach_readiness(
     if ready is None:
         raise not_found("track", track)
     return ReadinessOut(ready=ready)
+
+
+@router.post("/coach/events", status_code=204)
+async def record_coach_event(body: CoachEventIn, user_id: UserDep, session: SessionDep) -> Response:
+    await coach_repo.record_event(session, user_id, body.step)
+    await session.commit()
+    return Response(status_code=204)

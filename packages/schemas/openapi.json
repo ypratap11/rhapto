@@ -512,6 +512,29 @@
         "title": "ChecklistOut",
         "type": "object"
       },
+      "CoachEventIn": {
+        "additionalProperties": false,
+        "description": "One coach step reached. Counts only; `extra=\"forbid\"` so no text can be sent along.",
+        "properties": {
+          "step": {
+            "enum": [
+              "started",
+              "resume_in",
+              "role_confirmed",
+              "jobs_shown",
+              "tailor_started",
+              "downloaded"
+            ],
+            "title": "Step",
+            "type": "string"
+          }
+        },
+        "required": [
+          "step"
+        ],
+        "title": "CoachEventIn",
+        "type": "object"
+      },
       "DashboardOut": {
         "properties": {
           "checklist": {
@@ -2657,6 +2680,20 @@
         "title": "QuickAnswers",
         "type": "object"
       },
+      "ReadinessOut": {
+        "description": "Spec 3.3: has the track's latest save been covered by a rescore that finished?",
+        "properties": {
+          "ready": {
+            "title": "Ready",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ready"
+        ],
+        "title": "ReadinessOut",
+        "type": "object"
+      },
       "ResumeBase": {
         "additionalProperties": false,
         "properties": {
@@ -4652,6 +4689,118 @@
         "summary": "Patch Application",
         "tags": [
           "applications"
+        ]
+      }
+    },
+    "/api/v1/coach/events": {
+      "post": {
+        "operationId": "record_coach_event_api_v1_coach_events_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CoachEventIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Record Coach Event",
+        "tags": [
+          "coach"
+        ]
+      }
+    },
+    "/api/v1/coach/readiness": {
+      "get": {
+        "description": "Has the latest save of this track been covered by a rescore that finished? The coach waits on\nthis, not on scores: a rescore commits every SCORE_CHUNK jobs, so scores appear long before it ends.",
+        "operationId": "coach_readiness_api_v1_coach_readiness_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "track",
+            "required": true,
+            "schema": {
+              "minLength": 1,
+              "title": "Track",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReadinessOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Coach Readiness",
+        "tags": [
+          "coach"
         ]
       }
     },

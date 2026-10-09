@@ -138,7 +138,11 @@ async def test_deleting_the_user_deletes_their_events(session: AsyncSession, use
     await _insert(session, user, "jobs_shown")
     await session.execute(text("DELETE FROM users WHERE id = :uid"), {"uid": str(user.id)})
     await session.commit()
-    count = (await session.execute(text("SELECT count(*) FROM coach_events"))).scalar_one()
+    count = (
+        await session.execute(
+            text("SELECT count(*) FROM coach_events WHERE user_id = :uid"), {"uid": str(user.id)}
+        )
+    ).scalar_one()
     assert count == 0
 
 
