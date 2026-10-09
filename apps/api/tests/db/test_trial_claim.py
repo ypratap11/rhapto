@@ -17,7 +17,12 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from rhapto.db.models import User
-from rhapto.db.repositories.users import claim_trial_run, get_or_create_user, trial_runs_used
+from rhapto.db.repositories.users import (
+    claim_free_import,
+    claim_trial_run,
+    get_or_create_user,
+    trial_runs_used,
+)
 
 LIMIT = 3
 
@@ -148,3 +153,47 @@ async def test_one_users_exhausted_allowance_does_not_touch_another(
     await session.commit()
     assert await trial_runs_used(session, user.id) == LIMIT
     assert await trial_runs_used(session, other.id) == 1
+
+
+async def test_two_concurrent_free_import_claims_give_exactly_one(
+    session_factory: async_sessionmaker[AsyncSession], user: User
+) -> None:
+    """The free import's race, sequenced rather than left to the scheduler. A bare gather passes a
+    read-then-write mutant whenever one claim happens to finish first. Here A claims (row lock held,
+    uncommitted), B claims and must queue behind it, A commits, B is released: the conditional
+    UPDATE re-evaluates `free_import_used_at IS NULL` against A's committed value, finds it false and
+    returns no row. A SELECT-then-UPDATE would read NULL (MVCC does not block a read), proceed, and
+    overwrite A's win."""
+    async with session_factory() as a, session_factory() as b:
+        first = await claim_free_import(a, user.id)
+        assert first is True, "the first claimer takes the free import"
+
+        second_task = asyncio.create_task(claim_free_import(b, user.id))
+        for _ in range(100):
+            await asyncio.sleep(0.02)
+            if second_task.done():
+                break
+        assert not second_task.done(), (
+            "B must still be queued behind A's row lock, not already finished"
+        )
+
+        await a.commit()
+        second = await second_task
+        await b.commit()
+
+    assert second is False, "B must be told the free import was already taken"
+    async with session_factory() as check:
+        stamped = await check.scalar(
+            text("SELECT count(*) FROM users WHERE id = :uid AND free_import_used_at IS NOT NULL"),
+            {"uid": str(user.id)},
+        )
+    assert stamped == 1
+
+
+async def test_a_second_free_import_claim_after_the_first_committed_is_refused(
+    session: AsyncSession, user: User
+) -> None:
+    assert await claim_free_import(session, user.id) is True
+    await session.commit()
+    assert await claim_free_import(session, user.id) is False
+    assert await claim_free_import(session, uuid.uuid4()) is False  # a missing row claims nothing
