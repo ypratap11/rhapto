@@ -103,12 +103,19 @@ async def claim_trial_run(session: AsyncSession, user_id: uuid.UUID, limit: int)
     return int(row[0]) if row is not None else None
 
 
-async def claim_free_import(session: AsyncSession, user_id: uuid.UUID) -> bool:  # MUTANT
-    current = await session.scalar(select(User.free_import_used_at).where(User.id == user_id))
-    if current is not None:
-        return False
+async def claim_free_import(session: AsyncSession, user_id: uuid.UUID) -> bool:
+    """Atomically spend this account's one free resume import. True if this call spent it.
+
+    One conditional UPDATE, never a read-then-write: two simultaneous imports (a double click, two
+    tabs) cannot both see NULL. The loser re-evaluates the WHERE under READ COMMITTED, finds the
+    column set and gets no row back. The caller must commit before the model call, as with
+    `claim_trial_run`.
+    """
     claim = await session.execute(
-        text("UPDATE users SET free_import_used_at = now() WHERE id = :uid RETURNING id"),
+        text(
+            "UPDATE users SET free_import_used_at = now() "
+            "WHERE id = :uid AND free_import_used_at IS NULL RETURNING id"
+        ),
         {"uid": str(user_id)},
     )
     return claim.first() is not None
