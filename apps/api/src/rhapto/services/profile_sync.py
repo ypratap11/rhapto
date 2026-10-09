@@ -78,14 +78,23 @@ def aggregator_row_to_model(row: db.Aggregator) -> AggregatorEntry:
     return AggregatorEntry(source=row.source, enabled=row.enabled, keywords=list(row.keywords))
 
 
-async def load_profile_from_db(session: AsyncSession, user_id: uuid.UUID) -> Profile:
+async def load_profile_from_db(
+    session: AsyncSession, user_id: uuid.UUID, *, require_library: bool = True
+) -> Profile:
+    """The user's profile from Postgres.
+
+    `require_library=False` is for tune mode, which rewrites the user's own document and never reads
+    blocks or tracks: it returns whatever exists (possibly nothing) and still returns the answers
+    and guardrails, falling back to `default_guardrails()`. Blocks mode keeps the default and still
+    refuses an empty library.
+    """
     blocks = [block_row_to_model(r) for r in await repo.list_blocks(session, user_id)]
-    if not blocks:
+    if require_library and not blocks:
         raise ProfileError(
             "profile has no blocks; import one with `rhapto profile import` or add blocks in the UI"
         )
     tracks = [track_row_to_model(r) for r in await repo.list_tracks(session, user_id)]
-    if not tracks:
+    if require_library and not tracks:
         raise ProfileError("profile has no tracks")
     base_rows = await repo.list_bases(session, user_id)
     bases = (

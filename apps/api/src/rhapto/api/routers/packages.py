@@ -387,9 +387,9 @@ async def patch_package(
     job = await job_repo.get_job(session, user_id, parent.job_id)
     if job is None:
         raise not_found("job", parent.job_id)
-    profile = await load_profile_from_db(session, user_id)
-    extract = JDExtract.model_validate(parent.jd_extract_json)
     tune = parent.mode == "tune"
+    profile = await load_profile_from_db(session, user_id, require_library=not tune)
+    extract = JDExtract.model_validate(parent.jd_extract_json)
     if body.edits is not None:
         if not tune:
             raise HTTPException(

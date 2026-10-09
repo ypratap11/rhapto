@@ -2,10 +2,11 @@ from __future__ import annotations
 
 import uuid
 from collections.abc import Sequence
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any, cast
 
-from sqlalchemy import CursorResult, delete, func, select
+from sqlalchemy import CursorResult, delete, exists, func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -399,3 +400,16 @@ async def delete_all_profile_rows(session: AsyncSession, user_id: uuid.UUID) -> 
     for model in (ResumeBlock, ResumeBase, Track, Guardrail, Answers, WatchlistEntry):
         await session.execute(delete(model).where(model.user_id == user_id))
     await session.flush()
+
+
+@dataclass(frozen=True)
+class LibraryState:
+    blocks: bool
+    tracks: bool
+
+
+async def library_state(session: AsyncSession, user_id: uuid.UUID) -> LibraryState:
+    """Whether this user has any blocks and any tracks, without loading either list."""
+    has_blocks = await session.scalar(select(exists().where(ResumeBlock.user_id == user_id)))
+    has_tracks = await session.scalar(select(exists().where(Track.user_id == user_id)))
+    return LibraryState(blocks=bool(has_blocks), tracks=bool(has_tracks))

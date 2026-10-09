@@ -176,3 +176,16 @@ async def test_put_watchlist_round_trips_the_discovered_flag(
     await session.commit()
     rows = {r.board: r.discovered for r in await repo.list_watchlist(session, user.id)}
     assert rows == {"foundco": True, "typedco": False}
+
+
+async def test_load_without_library_is_allowed_when_not_required(
+    session: AsyncSession, user: User
+) -> None:
+    """Tune mode's contract: no blocks and no tracks is a valid, empty profile, with default
+    guardrails and the user's answers."""
+    profile = await load_profile_from_db(session, user.id, require_library=False)
+    assert profile.blocks == [] and profile.tracks == [] and profile.bases == []
+    assert {g.rule for g in profile.guardrails} >= {"no-invented-entities", "date-consistency"}
+    assert profile.answers == {}
+    with pytest.raises(ProfileError, match="no blocks"):  # the default is unchanged
+        await load_profile_from_db(session, user.id)

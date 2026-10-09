@@ -374,6 +374,78 @@ async def test_tune_mode_unrepairable_is_blocked(profile: Profile) -> None:
     assert result.docx == b""  # nothing safe to write back into the user's document
 
 
+def _without_library(profile: Profile) -> Profile:
+    """What the worker hands the engine for a user who only has a stored document."""
+    return profile.model_copy(update={"blocks": [], "tracks": [], "bases": []})
+
+
+async def test_tune_mode_runs_with_no_blocks_and_no_tracks(profile: Profile) -> None:
+    doc, data = _source()
+    llm = FakeLLMProvider([demo_extract(), tune_output(CLEAN_BULLET)])
+    result = await tailor(
+        tune_request(doc, data), _without_library(profile), llm, FakeEmbeddingProvider()
+    )
+    assert result.package.mode == "tune"
+    assert result.package.status == "draft" and result.package.guardrail_report.passed
+    assert result.package.track_id == ""  # the sentinel: no track to name
+    assert result.docx[:2] == b"PK"
+
+
+async def test_tune_mode_accepts_an_unknown_track_id(profile: Profile) -> None:
+    """A stale `job.best_track_id` (the worker passes it when the request names none) must not fail
+    a tune run. With tracks present it falls back to the first one, as `get_track(None)` always did."""
+    doc, data = _source()
+    llm = FakeLLMProvider([demo_extract(), tune_output(CLEAN_BULLET)])
+    result = await tailor(
+        tune_request(doc, data, track_id="a-track-that-was-deleted"),
+        profile,
+        llm,
+        FakeEmbeddingProvider(),
+    )
+    assert result.package.status == "draft"
+    assert result.package.track_id == "data-pm"
+
+
+async def test_tune_mode_unknown_track_id_with_no_tracks_records_the_sentinel(
+    profile: Profile,
+) -> None:
+    doc, data = _source()
+    llm = FakeLLMProvider([demo_extract(), tune_output(CLEAN_BULLET)])
+    result = await tailor(
+        tune_request(doc, data, track_id="deleted"),
+        _without_library(profile),
+        llm,
+        FakeEmbeddingProvider(),
+    )
+    assert result.package.track_id == ""
+
+
+async def test_tune_guardrails_still_block_without_a_library(profile: Profile) -> None:
+    """No library must not mean no guardrails: the document rules stand in for provenance and
+    no-unverified-metrics. A new number is caught, the repair also fails, and NO DOCX is produced."""
+    doc, data = _source()
+    llm = FakeLLMProvider([demo_extract(), tune_output(DIRTY_BULLET), tune_output(DIRTY_BULLET)])
+    result = await tailor(
+        tune_request(doc, data), _without_library(profile), llm, FakeEmbeddingProvider()
+    )
+    assert result.package.status == "blocked"
+    assert not result.package.guardrail_report.passed
+    assert result.docx == b""
+    assert "no-new-numbers" in result.package.guardrail_report.rules_run
+
+
+async def test_blocks_mode_still_rejects_a_missing_track_before_any_model_call(
+    profile: Profile,
+) -> None:
+    """The lenient lookup is tune-only: blocks mode keeps failing fast, before the extract call."""
+    llm = FakeLLMProvider([])
+    with pytest.raises(ProfileError):
+        await tailor(
+            TailorRequest(jd_text=JD, track_id="nope"), profile, llm, FakeEmbeddingProvider()
+        )
+    assert llm.calls == []
+
+
 async def test_tune_mode_malformed_repair_keeps_the_blocked_draft(profile: Profile) -> None:
     doc, data = _source()
     llm = FakeLLMProvider([demo_extract(), tune_output(DIRTY_BULLET), MALFORMED])
