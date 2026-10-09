@@ -43,6 +43,7 @@ PAGE_AREAS = (
     "pipeline",
     "profile",
     "settings",
+    "coach",
     "other",
 )
 COACH_STEPS = (

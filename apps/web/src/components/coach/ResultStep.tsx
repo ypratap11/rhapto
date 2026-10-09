@@ -22,6 +22,12 @@ const RULE_WORDS: Record<string, string> = {
   "date-consistency": "Dates that don't line up with your resume",
 };
 
+/** The spec's headline says the draft "added something", which is true only of these two rules; any
+ * other rule gets the neutral sentence (controller ruling 2026-10-09). */
+const ADDED_SOMETHING = new Set(["no-new-numbers", "no-invented-entities"]);
+const HEADLINE_ADDED = "Rhapto stopped this draft because it added something that isn't in your resume";
+const HEADLINE_CHECK = "Rhapto stopped this draft because it didn't pass one of its checks";
+
 export function ResultStep({
   packageId,
   transcript,
@@ -69,7 +75,7 @@ export function ResultStep({
     const fired = (data.guardrail_report?.violations ?? []).filter((v) => v.severity === "error");
     return (
       <CoachFrame title="Rhapto stopped this draft" transcript={transcript}>
-        <p>Rhapto stopped this draft because it added something that isn&apos;t in your resume</p>
+        <p>{fired.every((v) => ADDED_SOMETHING.has(v.rule)) ? HEADLINE_ADDED : HEADLINE_CHECK}</p>
         {fired.length > 0 ? (
           <section aria-labelledby="coach-fired" className="space-y-2">
             <h2 id="coach-fired" className="text-base font-medium">What stopped it</h2>

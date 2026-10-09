@@ -15,6 +15,10 @@ instant as the default of `score_requested_at`), because their scores already ex
 `created_at::date` on a timestamptz is not IMMUTABLE and Postgres will not index it.
 `UNIQUE (user_id, step, day)` makes the fire-and-forget client idempotent per day.
 
+`feedback.page_area` gains `coach` (quick feedback from /start): `ck_feedback_page_area` is dropped
+and recreated with it. Downgrade first rewrites every `coach` row to `other` (the row and its text
+survive; only the area is lost), then restores 0013's CHECK.
+
 **Downgrade drops the column and every coach event.** There is no copy. Take `scripts/backup-db.sh`
 first if any of it matters.
 """
@@ -32,6 +36,23 @@ branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
 STEPS = ("started", "resume_in", "role_confirmed", "jobs_shown", "tailor_started", "downloaded")
+# 0013's areas, frozen here: this migration must not follow later edits to the model tuple.
+AREAS_0013 = (
+    "dashboard",
+    "jobs",
+    "job_detail",
+    "review",
+    "resumes",
+    "pipeline",
+    "profile",
+    "settings",
+    "other",
+)
+AREAS_0014 = (*AREAS_0013[:-1], "coach", "other")
+
+
+def _area_check(areas: tuple[str, ...]) -> str:
+    return "page_area IS NULL OR page_area IN (" + ", ".join(f"'{a}'" for a in areas) + ")"
 
 
 def upgrade() -> None:
@@ -71,10 +92,16 @@ def upgrade() -> None:
     )
     op.add_column("tracks", sa.Column("scored_at", sa.DateTime(timezone=True), nullable=True))
     op.execute("UPDATE tracks SET scored_at = now()")
+    op.drop_constraint("ck_feedback_page_area", "feedback", type_="check")
+    op.create_check_constraint("ck_feedback_page_area", "feedback", _area_check(AREAS_0014))
 
 
 def downgrade() -> None:
-    """Drops the table, every coach event in it, the free-import flag and the track scoring marker."""
+    """Drops the table, every coach event in it, the free-import flag and the track scoring marker.
+    Coach feedback rows are kept but become `other` before 0013's CHECK comes back."""
+    op.execute("UPDATE feedback SET page_area = 'other' WHERE page_area = 'coach'")
+    op.drop_constraint("ck_feedback_page_area", "feedback", type_="check")
+    op.create_check_constraint("ck_feedback_page_area", "feedback", _area_check(AREAS_0013))
     op.drop_column("tracks", "scored_at")
     op.drop_column("tracks", "score_requested_at")
     op.drop_index("ix_coach_events_user_id", table_name="coach_events")

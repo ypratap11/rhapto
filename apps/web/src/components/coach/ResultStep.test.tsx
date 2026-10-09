@@ -101,6 +101,33 @@ describe("ResultStep", () => {
     expect(fired).not.toHaveTextContent("tune-scope"); // a warning did not stop the draft
   });
 
+  const blockedBy = (...rules: string[]) =>
+    ({
+      ...blocked,
+      guardrail_report: {
+        passed: false,
+        rules_run: rules,
+        violations: rules.map((rule, i) => ({ rule, severity: "error", path: `edits[${i}]`, message: `${rule} said no` })),
+      },
+    }) as unknown as PackageOut;
+
+  it("blocked_by_invented_content_says_it_added_something_not_in_the_resume", () => {
+    pkg.current = blockedBy("no-new-numbers", "no-invented-entities");
+    mount();
+    expect(screen.getByText("Rhapto stopped this draft because it added something that isn't in your resume")).toBeInTheDocument();
+    expect(screen.queryByText(/didn't pass one of its checks/)).toBeNull();
+  });
+
+  it("blocked_by_any_other_rule_says_it_failed_a_check_and_still_names_the_rule", () => {
+    pkg.current = blockedBy("no-new-numbers", "date-consistency");
+    mount();
+    expect(screen.getByText("Rhapto stopped this draft because it didn't pass one of its checks")).toBeInTheDocument();
+    expect(screen.queryByText(/added something that isn't in your resume/)).toBeNull();
+    const fired = screen.getByRole("list", { name: /what stopped it/i });
+    expect(fired).toHaveTextContent("date-consistency");
+    expect(fired).toHaveTextContent("Dates that don't line up with your resume");
+  });
+
   it("the retry is disabled while a retry is starting", () => {
     pkg.current = blocked;
     mount({ retryBusy: true });

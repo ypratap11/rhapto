@@ -35,6 +35,8 @@ describe("areaForPath", () => {
     ["/pipeline/board", "pipeline"],
     ["/profile", "profile"],
     ["/settings", "settings"],
+    ["/start", "coach"],
+    ["/start/", "coach"],
     ["/somewhere-new", "other"],
     ["/", "other"],
   ])("%s -> %s", (path, area) => {
@@ -44,6 +46,7 @@ describe("areaForPath", () => {
   it("does not let a prefix of one route claim a longer, different one", () => {
     expect(areaForPath("/jobsfoo")).toBe("other");
     expect(areaForPath("/profiles")).toBe("other");
+    expect(areaForPath("/starter")).toBe("other");
   });
 });
 

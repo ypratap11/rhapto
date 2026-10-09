@@ -785,6 +785,7 @@
                   "pipeline",
                   "profile",
                   "settings",
+                  "coach",
                   "other"
                 ],
                 "type": "string"

@@ -1385,7 +1385,7 @@ export interface components {
             /** Package Id */
             package_id?: string | null;
             /** Page Area */
-            page_area?: ("dashboard" | "jobs" | "job_detail" | "review" | "resumes" | "pipeline" | "profile" | "settings" | "other") | null;
+            page_area?: ("dashboard" | "jobs" | "job_detail" | "review" | "resumes" | "pipeline" | "profile" | "settings" | "coach" | "other") | null;
         };
         /**
          * FeedbackOut

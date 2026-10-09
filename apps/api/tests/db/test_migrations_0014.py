@@ -120,6 +120,26 @@ async def test_the_same_step_twice_in_a_day_is_rejected_by_the_unique(
     assert "uq_coach_events_user_step_day" in str(info.value.orig)
 
 
+_FEEDBACK = (
+    "INSERT INTO feedback (id, user_id, form, page_area, schema_version, answers, app_version) "
+    "VALUES (:id, :uid, 'quick', :area, 1, '{}'::jsonb, '0.1.0')"
+)
+
+
+async def test_0014_lets_feedback_carry_the_coach_area(session: AsyncSession, user: User) -> None:
+    """Quick feedback from /start is stored as `coach`; 0013's CHECK refused it."""
+    await session.execute(
+        text(_FEEDBACK), {"id": str(uuid.uuid4()), "uid": str(user.id), "area": "coach"}
+    )
+    await session.commit()
+    area = (
+        await session.execute(
+            text("SELECT page_area FROM feedback WHERE user_id = :uid"), {"uid": str(user.id)}
+        )
+    ).scalar_one()
+    assert area == "coach"
+
+
 async def test_day_defaults_to_the_utc_date(session: AsyncSession, user: User) -> None:
     await _insert(session, user, "resume_in")
     row = (
@@ -253,8 +273,28 @@ async def test_0014_round_trips_on_a_scratch_database(monkeypatch: pytest.Monkey
             tables, user_cols = await state()
             assert "coach_events" in tables and "free_import_used_at" in user_cols
             assert {"tracks.scored_at", "tracks.score_requested_at"} <= user_cols
+            uid = uuid.uuid4()
+            async with scratch_engine.begin() as conn:
+                await conn.execute(
+                    text(
+                        "INSERT INTO users (id, email, settings_json, created_at, updated_at) "
+                        "VALUES (:id, 'coach-feedback@example.com', '{}'::jsonb, now(), now())"
+                    ),
+                    {"id": str(uid)},
+                )
+                await conn.execute(
+                    text(_FEEDBACK), {"id": str(uuid.uuid4()), "uid": str(uid), "area": "coach"}
+                )
             await asyncio.to_thread(command.downgrade, cfg, "0013")
             tables, user_cols = await state()
+            # The coach feedback row survives the downgrade as `other`, under 0013's CHECK.
+            async with scratch_engine.connect() as conn:
+                area = (
+                    await conn.execute(
+                        text("SELECT page_area FROM feedback WHERE user_id = :u"), {"u": str(uid)}
+                    )
+                ).scalar_one()
+            assert area == "other"
             assert "coach_events" not in tables and "free_import_used_at" not in user_cols
             assert (
                 "tracks.scored_at" not in user_cols and "tracks.score_requested_at" not in user_cols
