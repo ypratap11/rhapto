@@ -198,7 +198,8 @@ async def tailor_job(ctx: dict[str, Any], task_id: str) -> None:
             job = await session.get(Job, uuid.UUID(request["job_id"]))
             if job is None or job.user_id != user_id:
                 raise ValueError(f"job {request['job_id']} not found for task {task_id}")
-            profile = await load_profile_from_db(session, user_id)
+            mode = request.get("mode") or "blocks"
+            profile = await load_profile_from_db(session, user_id, require_library=mode != "tune")
             previous = None
             parent_id = (
                 uuid.UUID(request["parent_package_id"])
@@ -218,7 +219,6 @@ async def tailor_job(ctx: dict[str, Any], task_id: str) -> None:
 
             # Tune mode rewrites the user's own document, which is too big to ride along on the
             # task row: the request carries only the mode and the worker loads both halves here.
-            mode = request.get("mode") or "blocks"
             source_document = None
             source_docx = None
             if mode == "tune":

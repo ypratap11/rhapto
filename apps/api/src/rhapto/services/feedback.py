@@ -36,6 +36,7 @@ PageArea = Literal[
     "pipeline",
     "profile",
     "settings",
+    "coach",
     "other",
 ]
 Rating = Annotated[int, Field(ge=1, le=5)]
@@ -133,7 +134,8 @@ class QuickAnswers(_Strict):
 # Which quick-feedback areas the report prints under which survey section. `other` maps to no
 # section ("Other pages").
 SECTION_AREAS: dict[str, tuple[PageArea, ...]] = {
-    "getting_started": ("settings",),
+    # The coach (/start) is the first-run path, so its quick feedback reads with "Getting started".
+    "getting_started": ("settings", "coach"),
     "profile": ("profile",),
     "finding_jobs": ("dashboard", "jobs", "job_detail"),
     "review": ("review",),

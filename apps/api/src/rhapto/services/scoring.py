@@ -4,7 +4,7 @@ import logging
 import uuid
 from collections.abc import Mapping
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from rhapto.db.models import EMBEDDING_DIMENSIONS, Job, JobScore
@@ -224,7 +224,11 @@ async def score_and_store(
 async def rescore_user(
     session: AsyncSession, user_id: uuid.UUID, embedder: EmbeddingProvider
 ) -> int:
+    # Database time, read BEFORE the tracks are loaded and from the same clock as
+    # `tracks.score_requested_at`: a track saved after this instant is never marked by this run.
+    started = (await session.execute(select(func.now()))).scalar_one()
     rows = await profile_repo.list_tracks(session, user_id)
+    loaded_ids = [r.track_id for r in rows]  # exactly the set this run scores
     # Scores of tracks that no longer exist are never rewritten by an upsert; drop them here so a
     # deleted track (or a rescore that raced its delete) cannot leave rows behind. With no tracks
     # left `not_in([])` matches every row of the user, which is what is wanted.
@@ -239,4 +243,8 @@ async def rescore_user(
     # A whole queue can be hundreds of jobs; commit per chunk so a timeout leaves the work done
     # so far on disk instead of starting over on the next attempt.
     await score_and_store(session, user_id, jobs, embedder, commit_each_chunk=True)
+    # Only reached if score_and_store returned: a run that raised marks nothing. A chunk that
+    # failed inside it was logged and skipped, so the run still counts as finished. The caller
+    # (`rescore_jobs`) commits this UPDATE.
+    await profile_repo.mark_tracks_scored(session, user_id, loaded_ids, started)
     return len(jobs)

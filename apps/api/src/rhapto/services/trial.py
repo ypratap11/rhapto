@@ -26,7 +26,7 @@ from typing import Literal
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from rhapto.config import Settings
-from rhapto.db.repositories.users import claim_trial_run, trial_runs_used
+from rhapto.db.repositories.users import claim_free_import, claim_trial_run, trial_runs_used
 from rhapto.engine.providers.registry import FAKE_PROVIDER_ID
 from rhapto.services.llm import env_llm_config, same_key, stored_llm_config
 from rhapto.services.secrets import SecretsError
@@ -245,3 +245,22 @@ async def llm_setup_status(
     # `llm_key` flips to False at zero because at that point the user IS blocked, and the row's job
     # is to give them the next action -- "add your own key" -- rather than read done.
     return LlmSetupStatus(llm_key=left > 0, llm_key_source="trial", trial_runs_left=left)
+
+
+async def claim_import_allowance(
+    session: AsyncSession, settings: Settings, user_id: uuid.UUID
+) -> None:
+    """The resume import's claim: the account's first import is free, later ones cost one run.
+
+    The order is the architect's (coach review I1): ask `trial_limit_for` FIRST, so an own-key,
+    fake-provider or cap-disabled account (limit None) neither spends its free import nor is
+    counted, and a zero cap still refuses (limit 0 skips the free import and falls to the counted
+    claim, which fails exactly as before). THE CALLER MUST COMMIT before the model call.
+    """
+    limit = await trial_limit_for(session, settings, user_id)
+    if limit is None:
+        return
+    if limit > 0 and await claim_free_import(session, user_id):
+        return
+    if await claim_trial_run(session, user_id, limit) is None:
+        raise TrialLimitExceededError(await trial_runs_used(session, user_id), limit)

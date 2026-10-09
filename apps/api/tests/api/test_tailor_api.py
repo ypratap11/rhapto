@@ -7,8 +7,10 @@ import httpx
 import pytest
 from helpers import default_tailor_script, demo_extract
 from helpers_docx import build_fixture_docx
+from sqlalchemy import update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from rhapto.db.models import Job
 from rhapto.db.repositories.llm_settings import upsert_llm_settings
 from rhapto.db.repositories.users import get_or_create_user
 from rhapto.engine.compose import AnswerItem
@@ -64,6 +66,7 @@ async def test_tailor_runs_inline_and_task_succeeds(
     assert len(llm_resolver.calls) == 1
 
 
+@pytest.mark.usefixtures("imported_profile")
 async def test_tailor_is_409_when_the_stored_key_cannot_be_decrypted(
     client: httpx.AsyncClient,
     session_factory: async_sessionmaker[AsyncSession],
@@ -88,6 +91,7 @@ async def test_tailor_is_409_when_the_stored_key_cannot_be_decrypted(
     assert body["code"] == "llm_key_unreadable" and "Settings" in body["detail"]
 
 
+@pytest.mark.usefixtures("imported_profile")
 @pytest.mark.parametrize("env_llm_key", [""], indirect=True)
 async def test_tailor_is_409_when_no_llm_is_configured(client: httpx.AsyncClient) -> None:
     job_id = await _job(client)
@@ -111,10 +115,10 @@ async def test_tailor_validates_track_and_parent(client: httpx.AsyncClient) -> N
     assert (await client.post(f"/api/v1/jobs/{missing}/tailor", json={})).status_code == 404
 
 
-async def test_tailor_without_profile_marks_task_failed(client: httpx.AsyncClient) -> None:
+async def test_tailor_without_profile_is_refused_up_front(client: httpx.AsyncClient) -> None:
     job_id = await _job(client)
-    task = (await client.post(f"/api/v1/jobs/{job_id}/tailor", json={})).json()
-    assert task["status"] == "failed" and "no blocks" in task["error"]
+    response = await client.post(f"/api/v1/jobs/{job_id}/tailor", json={})
+    assert response.status_code == 422
 
 
 @pytest.mark.usefixtures("imported_profile")
@@ -266,3 +270,108 @@ async def test_tailor_mode_blocks_still_works_with_document(
     package = (await client.get(f"/api/v1/packages/{task['result_ref']}")).json()
     assert package["mode"] == "blocks" and package["edits"] == []
     assert package["source_document"] is None
+
+
+async def _tune_run(client: httpx.AsyncClient, fake_llm: Any) -> tuple[str, dict[str, Any]]:
+    await _upload_document(client)
+    fake_llm.script(demo_extract(), tune_output())
+    job_id = await _job(client)
+    accepted = await client.post(f"/api/v1/jobs/{job_id}/tailor", json={})
+    assert accepted.status_code == 202, accepted.text
+    task = accepted.json()
+    assert task["status"] == "succeeded", task
+    package = (await client.get(f"/api/v1/packages/{task['result_ref']}")).json()
+    return job_id, package
+
+
+async def test_tune_tailor_completes_with_no_blocks_and_no_tracks(
+    client: httpx.AsyncClient, fake_llm
+) -> None:  # type: ignore[no-untyped-def]
+    """The coach's fallback path: the import failed, the document is stored, nothing else is."""
+    _, package = await _tune_run(client, fake_llm)
+    assert package["mode"] == "tune" and package["status"] == "draft"
+    assert package["track_id"] == ""
+
+
+@pytest.mark.usefixtures("imported_profile")
+async def test_tune_tailor_completes_with_no_tracks(client: httpx.AsyncClient, fake_llm) -> None:  # type: ignore[no-untyped-def]
+    for track_id in ("data-pm", "ai-pm"):
+        assert (await client.delete(f"/api/v1/profile/tracks/{track_id}")).status_code == 204
+    _, package = await _tune_run(client, fake_llm)
+    assert package["status"] == "draft" and package["track_id"] == ""
+
+
+@pytest.mark.usefixtures("imported_profile")
+async def test_tune_tailor_survives_a_best_track_id_naming_a_deleted_track(
+    client: httpx.AsyncClient,
+    fake_llm,
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:  # type: ignore[no-untyped-def]
+    await _upload_document(client)
+    job_id = await _job(client)
+    async with session_factory() as session:
+        await session.execute(
+            update(Job).where(Job.id == uuid.UUID(job_id)).values(best_track_id="gone-track")
+        )
+        await session.commit()
+    fake_llm.script(demo_extract(), tune_output())
+    task = (await client.post(f"/api/v1/jobs/{job_id}/tailor", json={})).json()
+    assert task["status"] == "succeeded", task
+    package = (await client.get(f"/api/v1/packages/{task['result_ref']}")).json()
+    assert package["status"] == "draft" and package["track_id"] == "data-pm"
+
+
+async def test_tune_patch_works_with_no_library(client: httpx.AsyncClient, fake_llm) -> None:  # type: ignore[no-untyped-def]
+    _, package = await _tune_run(client, fake_llm)
+    body = {
+        "edits": [
+            {
+                "paragraph_id": "p9",
+                "after": "Led the Snowflake migration for 12 teams and cut warehouse cost 30%.",
+            }
+        ]
+    }
+    patched = await client.patch(f"/api/v1/packages/{package['id']}", json=body)
+    assert patched.status_code in (200, 201), patched.text
+    new = patched.json()
+    assert new["version"] == package["version"] + 1 and new["track_id"] == ""
+
+
+async def test_a_package_with_an_empty_track_id_regenerates(
+    client: httpx.AsyncClient, fake_llm
+) -> None:  # type: ignore[no-untyped-def]
+    job_id, package = await _tune_run(client, fake_llm)
+    fake_llm.script(tune_output())  # the stored extract is reused: one call
+    body = {
+        "feedback": "lean harder on the migration",
+        "parent_package_id": package["id"],
+        "track_id": None,
+    }
+    task = (await client.post(f"/api/v1/jobs/{job_id}/tailor", json=body)).json()
+    assert task["status"] == "succeeded", task
+    again = (await client.get(f"/api/v1/packages/{task['result_ref']}")).json()
+    assert again["version"] == 2 and again["track_id"] == ""
+    # And why the web maps "" to null: the API still rejects an unknown track named explicitly.
+    rejected = await client.post(f"/api/v1/jobs/{job_id}/tailor", json={**body, "track_id": ""})
+    assert rejected.status_code == 422
+
+
+async def test_blocks_mode_without_a_library_is_422_for_the_resolved_default_mode(
+    client: httpx.AsyncClient,
+) -> None:
+    """No `mode` in the body and no stored document resolves to blocks, and this user has neither
+    blocks nor tracks: a plain 422 now, not a 202 whose task dies in the worker."""
+    job_id = await _job(client)
+    response = await client.post(f"/api/v1/jobs/{job_id}/tailor", json={})
+    assert response.status_code == 422, response.text
+    assert "resume document" in response.json()["detail"]
+    explicit = await client.post(f"/api/v1/jobs/{job_id}/tailor", json={"mode": "blocks"})
+    assert explicit.status_code == 422
+
+
+@pytest.mark.parametrize("env_llm_key", [""], indirect=True)
+async def test_blocks_mode_422_comes_before_the_key_check(client: httpx.AsyncClient) -> None:
+    """House order: validation 422s first, `resolve_llm_config`'s 409 last. With no key anywhere and
+    no library, the user hears about the missing library (422), not the missing key (409)."""
+    job_id = await _job(client)
+    assert (await client.post(f"/api/v1/jobs/{job_id}/tailor", json={})).status_code == 422

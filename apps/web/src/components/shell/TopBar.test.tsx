@@ -1,4 +1,5 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { TopBar } from "./TopBar";
@@ -12,63 +13,112 @@ vi.mock("@/components/feedback/FeedbackButton", async (importOriginal) => {
   return { FeedbackButton: () => (realButton.on ? <actual.FeedbackButton /> : null) };
 });
 
-const pathname = vi.fn(() => "/jobs");
+// `SAME_ORIGIN_DEPLOYMENT` is a build-time const; a getter mock is the only way to see both modes
+// (the pattern Landing.test.tsx and TokenGate.test.tsx use).
+const sameOrigin = { value: true };
+vi.mock("@/lib/api/client", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/api/client")>();
+  return {
+    ...actual,
+    get SAME_ORIGIN_DEPLOYMENT() {
+      return sameOrigin.value;
+    },
+  };
+});
+
+const pathname = vi.fn(() => "/start");
 vi.mock("next/navigation", () => ({ usePathname: () => pathname() }));
 
 describe("TopBar", () => {
-  it("lists the five portal tabs in order and marks the current one", () => {
+  it("lists the three coach tabs in order and marks the current one", () => {
+    pathname.mockReturnValue("/resumes");
     render(<TopBar />);
     const nav = screen.getByRole("navigation", { name: "Primary" });
     expect([...nav.querySelectorAll("a")].map((a) => a.textContent)).toEqual([
-      "Dashboard",
-      "Jobs",
-      "Resumes",
-      "Pipeline",
-      "Profile",
+      "Tailor a resume",
+      "My resumes",
+      "Feedback",
     ]);
-    expect(screen.getByRole("link", { name: "Jobs" })).toHaveAttribute("aria-current", "page");
-    expect(screen.getByRole("link", { name: "Dashboard" })).not.toHaveAttribute("aria-current");
+    expect(screen.getByRole("link", { name: "My resumes" })).toHaveAttribute("aria-current", "page");
+    expect(screen.getByRole("link", { name: "Tailor a resume" })).toHaveAttribute("href", "/start");
+    expect(screen.getByRole("link", { name: "Tailor a resume" })).not.toHaveAttribute("aria-current");
+    expect(screen.getByRole("link", { name: "Feedback" })).toHaveAttribute("href", "/feedback");
   });
 
-  it("points the Dashboard tab at /dashboard and marks it current there", () => {
-    pathname.mockReturnValue("/dashboard");
-    render(<TopBar />);
-    expect(screen.getByRole("link", { name: "Dashboard" })).toHaveAttribute("href", "/dashboard");
-    expect(screen.getByRole("link", { name: "Dashboard" })).toHaveAttribute("aria-current", "page");
-  });
-
-  it("does not mark Dashboard current at /", () => {
+  it("marks Tailor a resume current on /start and nothing current on /", () => {
+    pathname.mockReturnValue("/start");
+    const { unmount } = render(<TopBar />);
+    expect(screen.getByRole("link", { name: "Tailor a resume" })).toHaveAttribute("aria-current", "page");
+    unmount();
     pathname.mockReturnValue("/");
     render(<TopBar />);
-    expect(screen.getByRole("link", { name: "Dashboard" })).not.toHaveAttribute("aria-current");
+    expect(screen.getByRole("link", { name: "Tailor a resume" })).not.toHaveAttribute("aria-current");
   });
 
-  it("points the logo at /dashboard, not /, so a signed-in person's way back is the app, not the pitch", () => {
-    pathname.mockReturnValue("/dashboard");
+  it("keeps the old tabs out of the primary nav and behind Advanced, closed by default", async () => {
+    pathname.mockReturnValue("/start");
+    render(<TopBar />);
+    const nav = screen.getByRole("navigation", { name: "Primary" });
+    for (const old of ["Dashboard", "Jobs", "Pipeline", "Profile"]) {
+      expect(within(nav).queryByRole("link", { name: old })).toBeNull();
+      expect(screen.queryByRole("link", { name: old })).toBeNull(); // menu closed
+    }
+    const trigger = screen.getByRole("button", { name: /advanced/i });
+    expect(trigger).toHaveAttribute("aria-expanded", "false");
+
+    const user = userEvent.setup({ delay: null });
+    await user.click(trigger);
+    expect(trigger).toHaveAttribute("aria-expanded", "true");
+    const menu = screen.getByRole("list", { name: "Advanced" });
+    expect([...menu.querySelectorAll("a")].map((a) => [a.textContent, a.getAttribute("href")])).toEqual([
+      ["Dashboard", "/dashboard"],
+      ["Jobs", "/jobs"],
+      ["Pipeline", "/pipeline"],
+      ["Profile", "/profile"],
+    ]);
+  });
+
+  it("closes the Advanced menu on Escape and marks the trigger active on an advanced page", async () => {
+    pathname.mockReturnValue("/jobs/abc");
+    render(<TopBar />);
+    const trigger = screen.getByRole("button", { name: /advanced/i });
+    expect(trigger).toHaveAttribute("data-active", "true");
+    const user = userEvent.setup({ delay: null });
+    await user.click(trigger);
+    expect(screen.getByRole("link", { name: "Jobs" })).toHaveAttribute("aria-current", "page");
+    await user.keyboard("{Escape}");
+    expect(trigger).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByRole("link", { name: "Jobs" })).toBeNull();
+  });
+
+  it("points the logo at /start in hosted mode and at /dashboard in token mode", () => {
+    pathname.mockReturnValue("/start");
+    sameOrigin.value = true;
+    const { unmount } = render(<TopBar />);
+    expect(screen.getByRole("link", { name: "Rhapto" })).toHaveAttribute("href", "/start");
+    unmount();
+    sameOrigin.value = false;
     render(<TopBar />);
     expect(screen.getByRole("link", { name: "Rhapto" })).toHaveAttribute("href", "/dashboard");
   });
 
   it("offers the theme toggle, Settings and Help", () => {
-    pathname.mockReturnValue("/dashboard");
     render(<TopBar />);
     expect(screen.getByRole("button", { name: /toggle theme/i })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Settings" })).toHaveAttribute("href", "/settings");
     expect(screen.getByRole("link", { name: "Help" })).toHaveAttribute("href", "/settings#help");
   });
 
-  it("orders the trailing controls as theme toggle, then Settings, then Help", () => {
-    pathname.mockReturnValue("/dashboard");
+  it("orders the trailing icon controls as theme toggle, then Settings, then Help", () => {
     render(<TopBar />);
-    const trailing = [...screen.getByRole("banner").querySelectorAll("button, a[aria-label]")].map((el) =>
+    const trailing = [...screen.getByRole("banner").querySelectorAll("button[aria-label], a[aria-label]")].map((el) =>
       el.getAttribute("aria-label"),
     );
     expect(trailing).toEqual(["Toggle theme", "Settings", "Help"]);
   });
 
-  it("shows the feedback button, by its aria-label, before the theme toggle on /dashboard", async () => {
+  it("shows the feedback button, by its aria-label, before the theme toggle", async () => {
     realButton.on = true;
-    pathname.mockReturnValue("/dashboard");
     setSettings({ token: "tok", apiUrl: "http://localhost:8000" });
     vi.stubGlobal(
       "fetch",
@@ -85,17 +135,15 @@ describe("TopBar", () => {
         <TopBar />
       </QueryClientProvider>,
     );
-    const button = await screen.findByRole("button", { name: "Feedback on this page" });
-    const trailing = [...screen.getByRole("banner").querySelectorAll("button, a[aria-label]")].map((el) =>
+    await screen.findByRole("button", { name: "Feedback on this page" });
+    const trailing = [...screen.getByRole("banner").querySelectorAll("button[aria-label], a[aria-label]")].map((el) =>
       el.getAttribute("aria-label"),
     );
     expect(trailing).toEqual(["Feedback on this page", "Toggle theme", "Settings", "Help"]);
-    expect(button).toBeInTheDocument();
   });
 
   it("lets the tabs drop to their own sideways-scrolling row on phones instead of overflowing the bar", () => {
-    // jsdom cannot measure layout; this pins the classes that do the work. Live check at 375px: the
-    // one-row bar overflowed to ~550px and pushed the icons off-screen.
+    // jsdom cannot measure layout; this pins the classes that do the work (PR #6).
     render(<TopBar />);
     const nav = screen.getByRole("navigation", { name: "Primary" });
     expect(nav.className.split(" ")).toEqual(expect.arrayContaining(["w-full", "overflow-x-auto"]));
@@ -105,6 +153,7 @@ describe("TopBar", () => {
 
 afterEach(() => {
   realButton.on = false;
+  sameOrigin.value = true;
   vi.unstubAllGlobals();
   window.localStorage.clear();
 });

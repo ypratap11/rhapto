@@ -16,6 +16,7 @@ The starred cases in the architecture (§8 tests 14, 18 and 19) are
 
 from __future__ import annotations
 
+import asyncio
 import itertools
 import logging
 import uuid
@@ -108,6 +109,16 @@ async def stored_own_key(
 async def _used(session_factory: async_sessionmaker[AsyncSession], user_id: uuid.UUID) -> int:
     async with session_factory() as session:
         return await trial_runs_used(session, user_id)
+
+
+async def _free_import_used(
+    session_factory: async_sessionmaker[AsyncSession], user_id: uuid.UUID
+) -> bool:
+    async with session_factory() as session:
+        value = await session.scalar(
+            text("SELECT free_import_used_at FROM users WHERE id = :uid"), {"uid": str(user_id)}
+        )
+    return value is not None
 
 
 async def _task_count(session_factory: async_sessionmaker[AsyncSession]) -> int:
@@ -369,28 +380,29 @@ async def _import_resume(client: httpx.AsyncClient) -> httpx.Response:
     )
 
 
-async def test_importing_a_resume_consumes_exactly_one_run(
+async def test_first_import_is_free_then_counted(
     client: httpx.AsyncClient,
     import_llm: FakeLLMProvider,
     session_factory: async_sessionmaker[AsyncSession],
     user_id: uuid.UUID,
 ) -> None:
-    """The spec bounded tailoring and left this open. It spends the deployment's key synchronously on
-    the request path, on a whole uploaded resume, and writes no package row -- so under a mechanism
-    that counts packages it is both invisible and unbounded."""
-    response = await _import_resume(client)
-    assert response.status_code == 200, response.text
+    """Spec 3.2: the first import costs the tester nothing; every later one is one run."""
+    assert (await _import_resume(client)).status_code == 200
     assert len(import_llm.calls) == 1
-    assert await _used(session_factory, user_id) == 1
+    assert await _used(session_factory, user_id) == 0
+    assert await _free_import_used(session_factory, user_id)
+
+    assert (await _import_resume(client)).status_code == 200
+    assert await _used(session_factory, user_id) == 1  # the second import consumes one run
 
 
-async def test_importing_a_resume_past_the_limit_is_refused_without_a_model_call(
+async def test_importing_past_the_limit_after_the_free_one_is_refused_without_a_model_call(
     client: httpx.AsyncClient,
     import_llm: FakeLLMProvider,
     session_factory: async_sessionmaker[AsyncSession],
     user_id: uuid.UUID,
 ) -> None:
-    for _ in range(LIMIT):
+    for _ in range(LIMIT + 1):
         assert (await _import_resume(client)).status_code == 200
     assert await _used(session_factory, user_id) == LIMIT
     calls_before = len(import_llm.calls)
@@ -400,6 +412,67 @@ async def test_importing_a_resume_past_the_limit_is_refused_without_a_model_call
     assert refused.json()["code"] == "trial_limit_reached"
     assert len(import_llm.calls) == calls_before, "the refusal must precede the model call"
     assert ENV_KEY not in refused.text and ENV_KEY[-4:] not in refused.text
+
+
+async def test_two_concurrent_imports_give_exactly_one_free(
+    client: httpx.AsyncClient,
+    import_llm: FakeLLMProvider,
+    session_factory: async_sessionmaker[AsyncSession],
+    user_id: uuid.UUID,
+) -> None:
+    """SMOKE TEST ONLY. A bare `gather` does not force the interleaving, so it passes for a
+    SELECT-then-UPDATE implementation whenever one request finishes first (this repo said so in
+    `tests/db/test_trial_claim.py`). The discriminating test is
+    `test_two_concurrent_free_import_claims_give_exactly_one` below the claim tests. What this one
+    proves is that the route wires the claim in at all: two imports, one free, one counted."""
+    first, second = await asyncio.gather(_import_resume(client), _import_resume(client))
+    assert first.status_code == 200 and second.status_code == 200
+    assert await _used(session_factory, user_id) == 1
+    assert await _free_import_used(session_factory, user_id)
+
+
+async def test_zero_cap_refuses_the_first_import_and_leaves_the_column_alone(
+    client: httpx.AsyncClient,
+    import_llm: FakeLLMProvider,
+    api_settings: Settings,
+    session_factory: async_sessionmaker[AsyncSession],
+    user_id: uuid.UUID,
+) -> None:
+    """RHAPTO_TRIAL_RUNS=0 means this instance offers no free runs: the free import must not
+    bypass it."""
+    api_settings.rhapto_trial_runs = 0
+    refused = await _import_resume(client)
+    assert refused.status_code == 409, refused.text
+    assert refused.json()["code"] == "trial_limit_reached"
+    assert len(import_llm.calls) == 0
+    assert not await _free_import_used(session_factory, user_id)
+
+
+async def test_cap_disabled_import_makes_no_claim(
+    client: httpx.AsyncClient,
+    import_llm: FakeLLMProvider,
+    api_settings: Settings,
+    session_factory: async_sessionmaker[AsyncSession],
+    user_id: uuid.UUID,
+) -> None:
+    api_settings.rhapto_trial_runs = -1  # an operator disabled the cap
+    assert (await _import_resume(client)).status_code == 200
+    assert await _used(session_factory, user_id) == 0
+    assert not await _free_import_used(session_factory, user_id)
+
+
+@pytest.mark.usefixtures("stored_own_key")
+async def test_own_key_import_leaves_the_free_import_unspent(
+    client: httpx.AsyncClient,
+    import_llm: FakeLLMProvider,
+    session_factory: async_sessionmaker[AsyncSession],
+    user_id: uuid.UUID,
+) -> None:
+    """Checking the flag before `trial_limit_for` would burn an own-key user's free import on a
+    call the deployment never paid for."""
+    assert (await _import_resume(client)).status_code == 200
+    assert not await _free_import_used(session_factory, user_id)
+    assert await _used(session_factory, user_id) == 0
 
 
 @pytest.mark.usefixtures("stored_own_key")

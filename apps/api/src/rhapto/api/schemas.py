@@ -709,6 +709,18 @@ class DashboardOut(BaseModel):
     due_followups: list[FollowUpOut]
 
 
+CoachStep = Literal[
+    "started", "resume_in", "role_confirmed", "jobs_shown", "tailor_started", "downloaded"
+]
+
+
+class CoachEventIn(BaseModel):
+    """One coach step reached. Counts only; `extra="forbid"` so no text can be sent along."""
+
+    model_config = ConfigDict(extra="forbid")
+    step: CoachStep
+
+
 class FeedbackIn(BaseModel):
     """One tester response. `user_id` and `app_version` are deliberately absent (and `extra="forbid"`
     rejects them): identity comes from `UserDep`, the version from the server."""
@@ -753,3 +765,9 @@ class FeedbackOut(BaseModel):
 
     id: uuid.UUID
     created_at: datetime
+
+
+class ReadinessOut(BaseModel):
+    """Spec 3.3: has the track's latest save been covered by a rescore that finished?"""
+
+    ready: bool

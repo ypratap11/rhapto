@@ -24,6 +24,7 @@ const AREA_RULES: ReadonlyArray<readonly [RegExp, PageArea]> = [
   [/^\/pipeline(?:\/board)?$/, "pipeline"],
   [/^\/profile$/, "profile"],
   [/^\/settings$/, "settings"],
+  [/^\/start$/, "coach"],
 ];
 
 export function areaForPath(pathname: string): PageArea {

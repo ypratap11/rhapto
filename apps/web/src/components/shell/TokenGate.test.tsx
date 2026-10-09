@@ -5,6 +5,7 @@ import { act } from "react";
 import { hydrateRoot } from "react-dom/client";
 import { renderToString } from "react-dom/server";
 import { TokenGate, useSignedIn } from "./TokenGate";
+import { ACCESS_REQUEST_MAILTO, ACCESS_REQUEST_URL } from "@/components/landing/access";
 import { Landing } from "@/components/landing/Landing";
 import { ApiError, setSettings } from "@/lib/api/client";
 import { useBootstrap, useMe } from "@/lib/api/queries";
@@ -259,6 +260,19 @@ describe("TokenGate in access mode", () => {
     expect(screen.queryByText("secret content")).not.toBeInTheDocument();
     expect(screen.getByText(/invite-only/i)).toBeInTheDocument();
     expect(screen.queryByText(/Connect to your Rhapto API/i)).not.toBeInTheDocument();
+  });
+
+  it("the hosted refusal says it is invite-only and links to the request-access form", () => {
+    vi.mocked(useMe).mockReturnValue({
+      isPending: false,
+      isSuccess: false,
+      error: new ApiError(403, null, "Forbidden"),
+    } as unknown as ReturnType<typeof useMe>);
+    pathname.current = "/start";
+    renderGate(<TokenGate><p>secret content</p></TokenGate>);
+    expect(screen.getByText("Rhapto is invite-only right now")).toBeInTheDocument();
+    const link = screen.getByRole("link", { name: /request access/i });
+    expect(link).toHaveAttribute("href", ACCESS_REQUEST_URL || ACCESS_REQUEST_MAILTO);
   });
 
   // --- fix-round finding I1: a 500/network failure is not "you are not invited" ---

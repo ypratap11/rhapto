@@ -95,6 +95,10 @@ services:
         # become true; `:-` would silently override that back to the localhost default and the
         # same-origin proxy would never be used (fix-round finding I3).
         NEXT_PUBLIC_API_URL: ${RHAPTO_PUBLIC_API_URL-http://localhost:8000}
+        # Public pages quote the free-run cap, and cannot call an authenticated endpoint, so it is
+        # baked in at build time from the SAME variable the API reads. Changing RHAPTO_TRIAL_RUNS
+        # therefore needs `docker compose build web`. Empty/unset/0/negative => the copy names no number.
+        NEXT_PUBLIC_TRIAL_RUNS: ${RHAPTO_TRIAL_RUNS-3}
     restart: unless-stopped
     ports:
       - "127.0.0.1:3000:3000"

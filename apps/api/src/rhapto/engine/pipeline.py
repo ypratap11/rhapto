@@ -23,7 +23,6 @@ from rhapto.models.guardrail_report import GuardrailReport
 from rhapto.models.jd_extract import JDExtract
 from rhapto.models.package import ApplicationPackage, JobSnapshot
 from rhapto.models.package import TokenUsage as PackageTokenUsage
-from rhapto.models.profile.tracks import Track
 from rhapto.models.resume_document import ResumeDocument
 from rhapto.models.source_document import Edit, SourceDocument
 
@@ -31,6 +30,20 @@ from rhapto.models.source_document import Edit, SourceDocument
 # added but never removed: the web progress bar maps task events onto these names.
 STEPS = ("extract", "select", "compose", "tune", "validate", "repair", "render")
 ProgressCallback = Callable[[str], Awaitable[None]]
+
+#: The `track_id` a tune package records when the user has no track to name. `packages.track_id`
+#: is NOT NULL and the package schema has no `minLength`, so the empty string needs no migration;
+#: the web maps it back to `null` before sending it anywhere (see RegenerateDialog).
+NO_TRACK_ID = ""
+
+
+def _tune_track_id(profile: Profile, track_id: str | None) -> str:
+    """The track a tune run is stamped with. Tune never reads the track's content, so a missing,
+    unknown or stale id is not an error: use the named track if it exists, else the first one (what
+    `Profile.get_track(None)` always did), else the sentinel."""
+    if track_id is not None and any(t.id == track_id for t in profile.tracks):
+        return track_id
+    return profile.tracks[0].id if profile.tracks else NO_TRACK_ID
 
 
 class LLMBudgetExceeded(EngineError):
@@ -114,7 +127,7 @@ async def _repair_call[R](
 
 def _build_package(
     request: TailorRequest,
-    track: Track,
+    track_id: str,
     jd_extract: JDExtract,
     resume: ResumeDocument,
     cover_note: str,
@@ -133,7 +146,7 @@ def _build_package(
         job=JobSnapshot(
             company=jd_extract.company, title=jd_extract.title, jd_text=request.jd_text
         ),
-        track_id=track.id,
+        track_id=track_id,
         jd_extract=jd_extract,
         resume=resume,
         cover_note=cover_note,
@@ -169,7 +182,9 @@ async def tailor(
     nothing to compose (the paragraphs already exist). The call budget is unchanged.
     """
     budget = budget or CallBudget()
-    track = profile.get_track(request.track_id)
+    # Blocks mode resolves its track up front so an unknown id fails before any model call. Tune
+    # mode never reads the track, only stamps its id, so it looks the id up leniently below.
+    track = None if request.mode == "tune" else profile.get_track(request.track_id)
 
     await _notify(on_step, "extract")
     # A caller holding the extract from a previous run of the same unchanged JD passes it in; the
@@ -178,8 +193,16 @@ async def tailor(
     if jd_extract is None:
         jd_extract = await _structured_call(budget, lambda: extract(request.jd_text, llm))
 
-    if request.mode == "tune":
-        return await _tune_branch(request, profile, track, jd_extract, llm, budget, on_step)
+    if track is None:  # tune mode
+        return await _tune_branch(
+            request,
+            profile,
+            _tune_track_id(profile, request.track_id),
+            jd_extract,
+            llm,
+            budget,
+            on_step,
+        )
 
     await _notify(on_step, "select")
     selection = await select_blocks(jd_extract, profile, track, embedder, selection_config)
@@ -225,7 +248,7 @@ async def tailor(
 
     package = _build_package(
         request,
-        track,
+        track.id,
         jd_extract,
         resume,
         output.cover_note,
@@ -247,7 +270,7 @@ async def tailor(
 async def _tune_branch(
     request: TailorRequest,
     profile: Profile,
-    track: Track,
+    track_id: str,
     jd_extract: JDExtract,
     llm: LLMProvider,
     budget: CallBudget,
@@ -302,7 +325,7 @@ async def _tune_branch(
 
     package = _build_package(
         request,
-        track,
+        track_id,
         jd_extract,
         resume,
         output.cover_note,

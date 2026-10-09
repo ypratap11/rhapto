@@ -50,7 +50,7 @@ from rhapto.services.profile_sync import (
 )
 from rhapto.services.storage import PackageStorage
 from rhapto.services.taxonomy import find_field, find_role, validate_track_taxonomy
-from rhapto.services.trial import consume_trial_run
+from rhapto.services.trial import claim_import_allowance
 
 logger = logging.getLogger(__name__)
 
@@ -350,9 +350,9 @@ async def import_resume_endpoint(
     llm = await resolve_llm(session, settings, user_id)
     # This endpoint spends a provider key synchronously, on the request path, on a whole uploaded
     # resume -- and it writes no package row, so any mechanism that counted packages would leave it
-    # both invisible and unbounded. Same allowance, same sentence, same 409 as the tailoring path.
+    # both invisible and unbounded. Same allowance, same sentence, same 409 as the tailoring path, except the account's first import is free.
     # The claim is committed before the call, not after it.
-    await consume_trial_run(session, settings, user_id)
+    await claim_import_allowance(session, settings, user_id)
     await session.commit()
     try:
         proposal, _usage = await import_resume(document, llm)

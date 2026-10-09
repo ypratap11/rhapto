@@ -28,7 +28,7 @@ from rhapto.db.repositories import documents as documents_repo
 from rhapto.db.repositories import jobs as job_repo
 from rhapto.db.repositories import packages as package_repo
 from rhapto.db.repositories import tasks as task_repo
-from rhapto.db.repositories.profile import get_track
+from rhapto.db.repositories.profile import get_track, library_state
 from rhapto.services.enqueue import Enqueuer
 from rhapto.services.eventbus import EventBus, task_channel
 from rhapto.services.llm import resolve_llm_config
@@ -86,6 +86,21 @@ async def tailor_job_endpoint(
             status_code=422,
             detail="upload a resume document before tailoring in tune mode",
         )
+    # Resolve the mode HERE, before the key check: the default is tune when a document is stored, so
+    # checking only `body.mode == "blocks"` would miss the common case. Blocks mode needs a block
+    # library and a track; saying so now beats a 202 whose task can only fail in the worker.
+    mode = body.mode or ("tune" if has_document else "blocks")
+    if mode == "blocks":
+        library = await library_state(session, user_id)
+        if not (library.blocks and library.tracks):
+            raise HTTPException(
+                status_code=422,
+                detail=(
+                    "Rhapto needs your experience before it can build a resume from your library. "
+                    "Upload a resume document to tune it instead, or add your blocks and a track "
+                    "in Profile."
+                ),
+            )
     # Fail here rather than leaving a task row that can only fail in the worker: without a provider
     # key there is nothing to run. LLMNotConfiguredError becomes the 409 the web app turns into
     # "set up your LLM in Settings" (see api.errors). Last of the checks, so a request that is also
@@ -99,7 +114,6 @@ async def tailor_job_endpoint(
     await check_trial_allowance(session, settings, user_id)
     # The worker loads the document itself (the bytes never travel through the task row), so
     # all the request carries is the resolved mode.
-    mode = body.mode or ("tune" if has_document else "blocks")
     request = {
         "job_id": str(job_id),
         "track_id": body.track_id,

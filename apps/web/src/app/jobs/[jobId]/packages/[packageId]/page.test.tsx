@@ -75,6 +75,18 @@ describe("PackageReviewPage", () => {
     expect(screen.queryByText(/select a bullet to see the block/i)).not.toBeInTheDocument();
   });
 
+  it("prints the track only when the package has one", () => {
+    const usageLine = (container: HTMLElement) => Array.from(container.querySelectorAll("p")).find((p) => p.textContent?.includes("LLM calls"))?.textContent ?? "";
+    pkg.current = tunePackage;
+    const first = render(<PackageReviewPage />);
+    expect(usageLine(first.container)).toContain("track platform");
+    first.unmount();
+    pkg.current = { ...tunePackage, track_id: "" } as unknown as PackageOut;
+    const second = render(<PackageReviewPage />);
+    expect(usageLine(second.container)).toContain("1 LLM calls");
+    expect(usageLine(second.container)).not.toMatch(/\btrack\b/i);
+  });
+
   it("shows a muted usage line with calls, tokens and estimated cost", () => {
     pkg.current = tunePackage;
     render(<PackageReviewPage />);

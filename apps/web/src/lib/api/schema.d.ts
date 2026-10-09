@@ -41,6 +41,44 @@ export interface paths {
         patch: operations["patch_application_api_v1_applications__application_id__patch"];
         trace?: never;
     };
+    "/api/v1/coach/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Record Coach Event */
+        post: operations["record_coach_event_api_v1_coach_events_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/coach/readiness": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Coach Readiness
+         * @description Has the latest save of this track been covered by a rescore that finished? The coach waits on
+         *     this, not on scores: a rescore commits every SCORE_CHUNK jobs, so scores appear long before it ends.
+         */
+        get: operations["coach_readiness_api_v1_coach_readiness_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/dashboard": {
         parameters: {
             query?: never;
@@ -1256,6 +1294,17 @@ export interface components {
             /** Verified Blocks */
             verified_blocks: number;
         };
+        /**
+         * CoachEventIn
+         * @description One coach step reached. Counts only; `extra="forbid"` so no text can be sent along.
+         */
+        CoachEventIn: {
+            /**
+             * Step
+             * @enum {string}
+             */
+            step: "started" | "resume_in" | "role_confirmed" | "jobs_shown" | "tailor_started" | "downloaded";
+        };
         /** DashboardOut */
         DashboardOut: {
             checklist: components["schemas"]["ChecklistOut"];
@@ -1336,7 +1385,7 @@ export interface components {
             /** Package Id */
             package_id?: string | null;
             /** Page Area */
-            page_area?: ("dashboard" | "jobs" | "job_detail" | "review" | "resumes" | "pipeline" | "profile" | "settings" | "other") | null;
+            page_area?: ("dashboard" | "jobs" | "job_detail" | "review" | "resumes" | "pipeline" | "profile" | "settings" | "coach" | "other") | null;
         };
         /**
          * FeedbackOut
@@ -1992,6 +2041,14 @@ export interface components {
             rating?: number | null;
             /** Text */
             text?: string | null;
+        };
+        /**
+         * ReadinessOut
+         * @description Spec 3.3: has the track's latest save been covered by a rescore that finished?
+         */
+        ReadinessOut: {
+            /** Ready */
+            ready: boolean;
         };
         /** ResumeBase */
         ResumeBase: {
@@ -2773,6 +2830,72 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ApplicationOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    record_coach_event_api_v1_coach_events_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CoachEventIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    coach_readiness_api_v1_coach_readiness_get: {
+        parameters: {
+            query: {
+                track: string;
+            };
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReadinessOut"];
                 };
             };
             /** @description Validation Error */
