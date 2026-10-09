@@ -753,3 +753,9 @@ class FeedbackOut(BaseModel):
 
     id: uuid.UUID
     created_at: datetime
+
+
+class ReadinessOut(BaseModel):
+    """Spec 3.3: has the track's latest save been covered by a rescore that finished?"""
+
+    ready: bool

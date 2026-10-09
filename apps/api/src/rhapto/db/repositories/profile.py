@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any, cast
 
-from sqlalchemy import CursorResult, delete, exists, func, select
+from sqlalchemy import CursorResult, Table, delete, exists, func, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -199,6 +199,8 @@ async def upsert_track(
     if embedding_stale:
         row.embedding = None
     row.updated_at = datetime.now(UTC)
+    # Spec 3.3: a SQL expression, so it is the DATABASE's now(), the same clock `rescore_user` reads.
+    row.score_requested_at = func.now()
     await session.flush()
     return row
 
@@ -413,3 +415,39 @@ async def library_state(session: AsyncSession, user_id: uuid.UUID) -> LibrarySta
     has_blocks = await session.scalar(select(exists().where(ResumeBlock.user_id == user_id)))
     has_tracks = await session.scalar(select(exists().where(Track.user_id == user_id)))
     return LibraryState(blocks=bool(has_blocks), tracks=bool(has_tracks))
+
+
+async def mark_tracks_scored(
+    session: AsyncSession, user_id: uuid.UUID, track_ids: Sequence[str], started: datetime
+) -> None:
+    """Record that a rescore which STARTED at `started` (database time) finished scoring exactly these
+    tracks. One Core UPDATE; a track saved after `started` has a later `score_requested_at`, so it
+    stays not-ready, and a track created after the rescore loaded its set is not in `track_ids`."""
+    if not track_ids:
+        return
+    tracks = cast(Table, Track.__table__)
+    await session.execute(
+        update(tracks)
+        .where(tracks.c.user_id == user_id, tracks.c.track_id.in_(list(track_ids)))
+        .values(scored_at=started)
+    )
+
+
+async def track_readiness(session: AsyncSession, user_id: uuid.UUID, track_id: str) -> bool | None:
+    """True when the track's latest save has been covered by a finished rescore; None if this user has
+    no such track. Never reads `updated_at` (spec 3.3)."""
+    row = (
+        await session.execute(
+            select(Track.scored_at, Track.score_requested_at).where(
+                Track.user_id == user_id, Track.track_id == track_id
+            )
+        )
+    ).first()
+    if row is None:
+        return None
+    # MUTANT (withdrawn probe): "any job_scores row exists for this track". Replaced in the next commit.
+    return bool(
+        await session.scalar(
+            select(exists().where(JobScore.user_id == user_id, JobScore.track_id == track_id))
+        )
+    )
