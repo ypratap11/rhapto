@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useSyncExternalStore } from "react";
+import { accessRequestLink } from "@/components/landing/access";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ApiError, hasToken, SAME_ORIGIN_DEPLOYMENT } from "@/lib/api/client";
@@ -140,15 +141,18 @@ export function TokenGate({ children }: { children: React.ReactNode }) {
       );
     const deniedByAllowlist = me.error instanceof ApiError && (me.error.status === 401 || me.error.status === 403);
     if (deniedByAllowlist) {
+      const access = accessRequestLink();
       return (
         <Card className="mx-auto max-w-md">
           <CardHeader>
-            <CardTitle>Access refused</CardTitle>
+            <CardTitle>Rhapto is invite-only right now</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3 text-sm text-muted-foreground">
+            <p>Your email is not on the invite list yet.</p>
             <p>
-              This Rhapto instance is invite-only. If you believe you should have access, ask the
-              owner to add your email to the invite list.
+              <a href={access.href} target={access.external ? "_blank" : undefined} rel={access.external ? "noreferrer" : undefined} className="text-primary underline underline-offset-4">
+                Request access
+              </a>
             </p>
           </CardContent>
         </Card>
