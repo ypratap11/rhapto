@@ -1,6 +1,6 @@
 # Homepage coach tour and "same identity, more energy" refresh — design
 
-Status: revision 2 (architect review `.superpowers/sdd/tour-refresh/architecture-review.md`, APPROVED WITH
+Status: revision 2, architect APPROVED on re-check (architect review `.superpowers/sdd/tour-refresh/architecture-review.md`, APPROVED WITH
 CONDITIONS; all conditions addressed below) · Date: 2026-10-09 · Branch: `spec/tour-refresh` (from `main` 73b44d7)
 
 ## 1. Why
@@ -62,8 +62,8 @@ The `Landing.tsx` header comment is updated: the coach tour is on `/`; the older
   new shared module `lib/coach/copy.ts` that both the coach step components and `coachTourData.ts` import, so a
   copy change in the coach changes the tour, and a test fails if a panel shows a string the coach does not:
   1. **Upload** — title "Upload your resume", hint "A Word (.docx) file, up to 5 MB.", a file chip
-     "maya-chen-resume.docx", and the transcript line the coach shows after upload ("Resume: maya-chen-resume.docx").
-     No invented status line.
+     "maya-chen-resume.docx". No transcript line (the coach shows "Resume: …" only from step 2 on) and no invented
+     status line.
   2. **Role** — the coach's role question ("Looks like you're aiming for: Data Program Manager. Right?") with its
      two buttons ("Yes, that's right" / "Something else"), via a `roleQuestion(name)` helper the real `RoleStep`
      also uses.
