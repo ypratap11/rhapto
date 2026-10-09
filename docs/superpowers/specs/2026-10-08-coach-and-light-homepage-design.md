@@ -1,6 +1,6 @@
 # Coach (/start) and light homepage — design
 
-Date: 2026-10-08 · Status: revision 2, after the architect review (NOT APPROVED → revised) ·
+Date: 2026-10-08 · Status: revision 3 — architect APPROVED WITH CONDITIONS (R2-1..R2-4 folded in); awaiting owner ·
 Branch: `spec/coach-homepage` · Review: `.superpowers/sdd/coach-homepage/architecture-review.md`
 
 ## Why
@@ -73,8 +73,9 @@ step, where the ones who did not finish stopped.
 2. **Three steps:** "Upload your resume · Pick a job · Download your tailored resume". Text and
    icons only.
 3. **One before/after proof:** a tune-mode catch. A sentence from the user's own document is shown
-   with a number or employer the model tried to add, and Rhapto stops it. This uses the
-   `no-new-numbers` / tune `no-invented-entities` rules that the coach actually runs.
+   with a number the model tried to add, and Rhapto stops it. It leads with `no-new-numbers`,
+   which, like `tune-scope`, always runs in tune mode. `no-invented-entities` is user-configurable,
+   so it is not the headline claim. Rule names are quoted exactly, as CaughtDemo does.
    - The current `CaughtDemo` shows the blocks-only rules (`provenance`, `no-unverified-metrics`),
      which tune mode skips (`engine/guardrails/tune.py:43`). It moves to `/about` unchanged, where
      it describes the full-profile path.
@@ -105,8 +106,8 @@ one job.
 |---|---|---|
 | 1 | "Upload your resume" (.docx) | The upload control is disabled while a request is in flight. **In sequence:** first `POST /resume-document`. If that fails, stop; nothing has been spent. Then `POST /import-resume`. If import fails, the document is already stored, so the user can paste a job. Event `resume_in`. |
 | 2 | "Looks like you're aiming for: **{top proposed track}**. Right?" | One tap confirms. "Something else" shows the other proposed tracks plus a typeahead over the `GET /taxonomy` roles (names and titles). On confirm the coach saves **only that one track**, plus the location answers, merged into `answers` the same way `ImportResume` does. It saves **no blocks** (see below). Event `role_confirmed`. |
-| 3 | "Finding your best matches…" | Polls `GET /jobs?sort=fit&recommended=true&track=<confirmed id>`. That only matches once a rescore that knows the new track has finished. It shows results as soon as one row comes back. After 60 s it offers "Paste a job you like instead" and keeps polling in the background. If the reason from `/jobs/empty-reason` (same query) says nothing will come, it shows that reason and the paste option. |
-| 4 | "Your top 5" | Five cards: title, company, a match label instead of a raw number, and "Tailor this one" (disabled on click). The label is "Strong match" at or above the track's `min_fit`, otherwise "Worth a look". The cards show the runs left when a trial applies. A "Paste a job instead" link is always visible. Event `jobs_shown`. |
+| 3 | "Finding your best matches…" | Polls `GET /jobs?sort=fit&recommended=true&track=<confirmed id>`. That only matches once a rescore that knows the new track has finished. It shows results as soon as one row comes back. After 60 s it offers "Paste a job you like instead" and keeps polling in the background. **Empty handling:** `/jobs/empty-reason` (same query) is final only when it says `no_jobs`: show that reason and the paste option. Any other cause means keep waiting, because the reason is the same while the rescore is pending. The completion probe takes one job id from `GET /jobs?recommended=true` (no `track`) and calls `GET /jobs/{id}`. Once that job's `scores` contain the confirmed track id, the rescore has committed and an empty list is real: show "No strong matches for {role} yet", with "Paste a job" and "Show other jobs" (the same query without `track`). |
+| 4 | "Your top 5" | Five cards: title, company, a match label instead of a raw number, and "Tailor this one" (disabled on click). The label is "Strong match" at or above the track's `min_fit`, otherwise "Good match". Every row shown already clears the recommended floor. Before the copy is final, the thresholds are checked against the score spread on the scratch restore; scores cluster between 30 and 60, so with `min_fit` 60 almost nothing would read "Strong". The cards show the runs left when a trial applies. A "Paste a job instead" link is always visible. Event `jobs_shown`. |
 | 5 | Tailoring | Tune-mode tailor with the existing progress steps. The task id goes in the URL (`?task=<id>`) so a reload re-attaches to `GET /tasks/{id}`. Event `tailor_started`. |
 | 6 | "Your tailored resume" | The coach's own result screen: status in plain words, Download DOCX/PDF, a short "what changed" list (from the package's tune edits) and a "See full details" link to the existing package page. Event `downloaded` on download. If the package is blocked, see §3.4. |
 | 7 | "Done. Try another?" | Back to step 4. |
@@ -130,7 +131,7 @@ furthest step that server state allows.
 | Server state | Start at |
 |---|---|
 | A running task id in the URL | 5 (re-attach) |
-| Stored document and at least one track | 4, using the track most recently updated |
+| Stored document and at least one track | 4, using the coach's last confirmed track id (kept per user in `localStorage`), falling back to `tracks[0]`; the API's `Track` model has no `updated_at` |
 | Stored document, no track, a cached import proposal | 2 |
 | Stored document, no track, no cached proposal | 2, as the taxonomy role picker without a suggestion |
 | No stored document | 1 |
@@ -160,6 +161,8 @@ any stored document; the step 1 screen says so when one exists.
   - It returns whatever blocks and tracks exist, possibly none.
   - It does not raise on an empty library.
 - The worker passes False for tune runs. The tune path of `PATCH /packages/{id}` passes False too.
+  It currently loads the profile (`packages.py:390`) before computing `tune` (`:392`), so the
+  check moves above the load.
 - `tailor()` resolves the track only in the blocks branch. In tune mode it looks the track up
   leniently: it accepts no track, an unknown `track_id`, or a stale `job.best_track_id`.
 - A tune package with no resolvable track records `track_id = ""`. This needs no migration, schema
