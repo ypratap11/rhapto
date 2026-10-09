@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { readTaskEvents } from "@/lib/api/sse";
 import { COACH_QUEUE_NOTICE_MS } from "@/lib/coach/constants";
-import { describeCoachError } from "@/lib/coach/errors";
+import { describeCoachError, type CoachError } from "@/lib/coach/errors";
 import { initialProgress, reduceTaskEvent, type ProgressState } from "@/lib/task-progress";
 import { CoachErrorNote, CoachFrame, type TranscriptItem } from "./CoachFrame";
 
@@ -24,6 +24,7 @@ export function TailorStep({
   onDone,
   onRetry,
   onPickAnother,
+  error = null,
 }: {
   taskId: string;
   transcript?: TranscriptItem[];
@@ -31,6 +32,8 @@ export function TailorStep({
   /** May return the start's promise: the button stays disabled until it settles. */
   onRetry: () => void | Promise<void>;
   onPickAnother: () => void;
+  /** Why the last retry was refused (trial used up, no key, no access, offline), in plain words. */
+  error?: CoachError | null;
 }) {
   const [state, setState] = useState<ProgressState>(initialProgress);
   const [slow, setSlow] = useState(false);
@@ -111,7 +114,7 @@ export function TailorStep({
       {lost ? <p className="text-sm text-muted-foreground">We lost the connection. Reload this page to pick up where you left off.</p> : null}
       {state.status === "failed" ? (
         <>
-          <CoachErrorNote error={describeCoachError(new Error(state.error ?? "The run failed"), "tailor")} />
+          <CoachErrorNote error={error ?? describeCoachError(new Error(state.error ?? "The run failed"), "tailor")} />
           <div className="flex flex-wrap gap-3">
             <Button type="button" disabled={retrying} onClick={() => void retry()}>Try again</Button>
             <Button type="button" variant="outline" onClick={onPickAnother}>Pick another job</Button>

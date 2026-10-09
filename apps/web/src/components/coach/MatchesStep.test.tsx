@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { JobOut } from "@/lib/api/queries";
@@ -38,6 +38,11 @@ describe("MatchesStep", () => {
     render(<MatchesStep {...base} onTailor={vi.fn()} />);
     expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(/finding your best matches/i);
     expect(screen.queryByRole("button", { name: /paste a job/i })).toBeNull();
+  });
+
+  it("tells the tester the wait is a minute or two", () => {
+    render(<MatchesStep {...base} onTailor={vi.fn()} />);
+    expect(screen.getByRole("status")).toHaveTextContent("This can take a minute or two.");
   });
 
   it("offers 'Paste a job you like instead' once the wait is long, and keeps showing that it is still looking", async () => {
@@ -99,6 +104,23 @@ describe("MatchesStep", () => {
     await waitFor(() => expect(screen.getAllByRole("button", { name: /tailor this one|starting/i }).every((b) => (b as HTMLButtonElement).disabled)).toBe(true));
     release();
     await waitFor(() => expect(screen.getAllByRole("button", { name: /tailor this one/i })[0]).not.toBeDisabled());
+  });
+
+  it("two clicks fired in the same tick start one task (the ref lock, not the disabled state, stops the second)", async () => {
+    matches.state = { kind: "ready", jobs: [job("a", 71)], final: true };
+    const onTailor = vi.fn<(job: JobOut) => Promise<void>>(() => new Promise<void>(() => undefined));
+    render(<MatchesStep {...base} onTailor={onTailor} />);
+    const button = screen.getAllByRole("button", { name: /tailor this one/i })[0]!;
+    // Both events are dispatched before React can re-render the disabled state.
+    const fireBoth = () => {
+      button.click();
+      button.click();
+    };
+    act(() => {
+      // batch both clicks inside one act so no render happens between them
+      fireBoth();
+    });
+    expect(onTailor).toHaveBeenCalledTimes(1);
   });
 
   it("an error from starting is shown in plain words and the buttons come back", () => {

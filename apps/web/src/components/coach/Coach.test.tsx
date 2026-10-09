@@ -219,6 +219,32 @@ describe("Coach: the flow", () => {
     expect(tailorMutate).toHaveBeenCalledWith({ jobId: "j1", body: { mode: "tune" } });
   });
 
+  const trialRefusal = () =>
+    new ApiError(409, { title: "x", status: 409, code: "trial_limit_reached", detail: "You have used all 3 free tailoring runs on this instance. Add your own provider API key in Settings to keep going." }, "x");
+
+  it("a refused retry on the failed-run screen hands the error to TailorStep (it is not silent)", async () => {
+    start();
+    tailorMutate.mockResolvedValueOnce({ id: "t1", status: "running" });
+    await (seen.matches!.onTailor as (job: { id: string }) => Promise<void>)({ id: "j1" });
+    await waitFor(() => expect(screen.getByTestId("tailor")).toBeInTheDocument());
+    tailorMutate.mockRejectedValueOnce(trialRefusal());
+    await act(async () => { await (seen.tailor!.onRetry as () => Promise<void>)(); });
+    await waitFor(() => expect(seen.tailor!.error).toMatchObject({ next: "settings", link: { href: "/settings" } }));
+    expect(screen.getByTestId("tailor")).toBeInTheDocument(); // still on the same screen
+  });
+
+  it("a refused retry on the blocked screen hands the error to ResultStep (it is not silent)", async () => {
+    start();
+    tailorMutate.mockResolvedValueOnce({ id: "t1", status: "running" });
+    await (seen.matches!.onTailor as (job: { id: string }) => Promise<void>)({ id: "j1" });
+    await waitFor(() => expect(screen.getByTestId("tailor")).toBeInTheDocument());
+    (seen.tailor!.onDone as (id: string) => void)("pk1");
+    await waitFor(() => expect(screen.getByTestId("result")).toBeInTheDocument());
+    tailorMutate.mockRejectedValueOnce(trialRefusal());
+    await act(async () => { (seen.result!.onRetry as (pkg: { id: string; job_id: string }) => void)({ id: "pk1", job_id: "j1" }); });
+    await waitFor(() => expect(seen.result!.error).toMatchObject({ next: "settings", link: { href: "/settings" } }));
+  });
+
   it("pasting a job starts a tailor for it, and Cancel returns", async () => {
     start();
     (seen.matches!.onPaste as () => void)();

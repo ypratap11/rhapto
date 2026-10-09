@@ -55,18 +55,37 @@ describe("TailorStep", () => {
     await waitFor(() => expect(p.onDone).toHaveBeenCalledWith("pk9"));
   });
 
-  it("a failed run shows the reason and two ways forward", async () => {
+  it("a failed run says so in plain words and offers two ways forward", async () => {
     const p = props();
     render(<TailorStep {...p} />);
     act(() => driver.emit({ event: "error", data: { message: "The model returned an unreadable answer." } }));
     act(() => driver.end());
-    expect(await screen.findByRole("alert")).toHaveTextContent("The model returned an unreadable answer.");
+    expect(await screen.findByRole("alert")).toHaveTextContent("The run didn't finish. Try again, or pick another job.");
     const user = userEvent.setup({ delay: null, advanceTimers: vi.advanceTimersByTime });
     await user.click(screen.getByRole("button", { name: /try again/i }));
     await user.click(screen.getByRole("button", { name: /pick another job/i }));
     expect(p.onRetry).toHaveBeenCalledTimes(1);
     expect(p.onPickAnother).toHaveBeenCalledTimes(1);
     expect(p.onDone).not.toHaveBeenCalled();
+  });
+
+  it("a refused retry is shown on the failed screen, with the Settings way forward for a used-up trial", async () => {
+    const trial = { message: "You have used all 3 free tailoring runs on this instance. Add your own provider API key in Settings to keep going.", next: "settings" as const, link: { label: "Open Settings", href: "/settings" } };
+    render(<TailorStep {...props()} error={trial} />);
+    act(() => driver.emit({ event: "error", data: { message: "MalformedOutputError: boom" } }));
+    act(() => driver.end());
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("You have used all 3 free tailoring runs");
+    expect(screen.getByRole("link", { name: "Open Settings" })).toHaveAttribute("href", "/settings");
+    expect(document.body.textContent).not.toMatch(/MalformedOutputError/);
+  });
+
+  it("a failed run never shows the engine's exception text", async () => {
+    render(<TailorStep {...props()} />);
+    act(() => driver.emit({ event: "error", data: { message: "MalformedOutputError: model returned 3 tool calls" } }));
+    act(() => driver.end());
+    expect(await screen.findByRole("alert")).toHaveTextContent("The run didn't finish. Try again, or pick another job.");
+    expect(document.body.textContent).not.toMatch(/MalformedOutputError/);
   });
 
   it("a double tap on 'Try again' starts one run, and the button is disabled while it starts", async () => {

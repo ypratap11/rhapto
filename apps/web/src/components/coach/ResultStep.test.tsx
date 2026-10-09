@@ -27,7 +27,7 @@ const ready = {
 const blocked = { ...ready, status: "blocked", has_docx: false, has_pdf: false } as unknown as PackageOut;
 
 const mount = (over: Partial<React.ComponentProps<typeof ResultStep>> = {}) =>
-  render(<ResultStep packageId="pk1" retryBusy={false} onRetry={vi.fn()} onAnother={vi.fn()} {...over} />);
+  render(<ResultStep packageId="pk1" error={null} retryBusy={false} onRetry={vi.fn()} onAnother={vi.fn()} {...over} />);
 
 beforeEach(() => { fire.mockClear(); download.mockClear(); pkg.current = ready; });
 
@@ -132,5 +132,13 @@ describe("ResultStep", () => {
     pkg.current = blocked;
     mount({ retryBusy: true });
     expect(screen.getByRole("button", { name: /try again/i })).toBeDisabled();
+  });
+
+  it("blocked: a refused retry is shown next to the button, with the Settings way forward", () => {
+    pkg.current = blocked;
+    mount({ error: { message: "You have used all 3 free tailoring runs on this instance. Add your own provider API key in Settings to keep going.", next: "settings", link: { label: "Open Settings", href: "/settings" } } });
+    expect(screen.getByRole("alert")).toHaveTextContent("You have used all 3 free tailoring runs");
+    expect(screen.getByRole("link", { name: "Open Settings" })).toHaveAttribute("href", "/settings");
+    expect(screen.getByRole("button", { name: /try again \(uses another run\)/i })).toBeInTheDocument();
   });
 });

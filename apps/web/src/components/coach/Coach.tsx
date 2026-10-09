@@ -194,8 +194,8 @@ export function Coach() {
         />
       );
     case 5:
-      return <TailorStep key={view.taskId} taskId={view.taskId} transcript={transcript} onDone={onTaskDone} onRetry={retryRun} onPickAnother={backToMatches} />;
+      return <TailorStep key={view.taskId} taskId={view.taskId} transcript={transcript} onDone={onTaskDone} onRetry={retryRun} onPickAnother={backToMatches} error={error} />;
     case 6:
-      return <ResultStep packageId={view.packageId} transcript={transcript} retryBusy={retryBusy} onRetry={(pkg) => void retryBlocked(pkg)} onAnother={backToMatches} />;
+      return <ResultStep packageId={view.packageId} transcript={transcript} retryBusy={retryBusy} error={error} onRetry={(pkg) => void retryBlocked(pkg)} onAnother={backToMatches} />;
   }
 }

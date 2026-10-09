@@ -133,7 +133,7 @@ export function MatchesStep({
       <CoachFrame title="Finding your best matches…" transcript={transcript}>
         <CoachErrorNote error={error} />
         <p role="status" className="text-sm text-muted-foreground">
-          Scoring jobs against {roleName}. This can take a minute.
+          Scoring jobs against {roleName}. This can take a minute or two.
         </p>
         {state.offerPaste ? (
           <p className="text-sm">

@@ -32,12 +32,15 @@ export function ResultStep({
   packageId,
   transcript,
   retryBusy,
+  error: retryError = null,
   onRetry,
   onAnother,
 }: {
   packageId: string;
   transcript?: TranscriptItem[];
   retryBusy: boolean;
+  /** Why the last retry was refused, in plain words. */
+  error?: CoachError | null;
   onRetry: (pkg: PackageOut) => void;
   onAnother: () => void;
 }) {
@@ -92,6 +95,7 @@ export function ResultStep({
           </section>
         ) : null}
         <p className="text-sm text-muted-foreground">Nothing was saved for download. You can try again, or pick another job.</p>
+        <CoachErrorNote error={retryError} />
         <div className="flex flex-wrap gap-3">
           <Button type="button" disabled={retryBusy} onClick={() => onRetry(data)}>
             Try again (uses another run)

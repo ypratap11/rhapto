@@ -47,11 +47,33 @@ describe("describeCoachError (spec 3.4, one row per case, always one way forward
     expect(error.next).toBe("feedback");
     expect(error.link?.href).toBe("/feedback");
   });
-  it("a failed task's reason is shown as is, with retry", () => {
-    expect(describeCoachError(new Error("The model returned an unreadable answer."), "tailor")).toEqual({
-      message: "The model returned an unreadable answer.",
-      next: "retry",
-    });
+  it("a failed task's raw exception text is never shown: a plain sentence and retry instead", () => {
+    for (const raw of ["MalformedOutputError: model returned 3 tool calls, expected 1", "LLMBudgetExceeded: spent 4.2 of 4.0", "The model returned an unreadable answer."]) {
+      const out = describeCoachError(new Error(raw), "tailor");
+      expect(out).toEqual({ message: "The run didn't finish. Try again, or pick another job.", next: "retry" });
+    }
+  });
+  it("a provider error body never reaches the screen, whether it is an Error or an ApiError", () => {
+    const body = 'AuthenticationError: Error code: 401 - {"error": {"message": "Incorrect API key provided", "type": "invalid_request_error"}} anthropic openrouter';
+    for (const error of [new Error(body), new ApiError(422, problem(422, { detail: body }), body)]) {
+      const out = describeCoachError(error, "tailor");
+      expect(out.message).not.toMatch(/401|Error code|anthropic|openrouter|AuthenticationError|\{/i);
+      expect(out.next).toBe("retry");
+    }
+  });
+  it("the known plain task sentences are shown verbatim, with the Settings way forward", () => {
+    for (const sentence of [
+      "You have used all 5 free tailoring runs on this instance. Add your own provider API key in Settings to keep going.",
+      "This instance's shared LLM key was refused by its provider. Add your own key in Settings to keep going, or ask whoever runs this instance to check it.",
+      "Your stored API key can no longer be decrypted (the server secret changed). Re-enter it in Settings.",
+    ]) {
+      expect(describeCoachError(new Error(sentence), "tailor")).toEqual({ message: sentence, next: "settings", link: { label: "Open Settings", href: "/settings" } });
+    }
+  });
+  it("a 409 trial code with a sentence we do not know is not shown verbatim either", () => {
+    const out = describeCoachError(new ApiError(409, problem(409, { code: "trial_limit_reached", detail: "OpenRouter credit balance 0.02" }), "x"), "tailor");
+    expect(out.message).not.toMatch(/openrouter|0\.02/i);
+    expect(out.next).toBe("settings");
   });
   it("a 5xx or a network failure never leaks a status code", () => {
     for (const error of [new ApiError(500, problem(500), "HTTP 500"), new TypeError("Failed to fetch")]) {
