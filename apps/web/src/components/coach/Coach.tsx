@@ -7,7 +7,7 @@ import { describeCoachError, type CoachError } from "@/lib/coach/errors";
 import { fireCoachEvent } from "@/lib/coach/events";
 import { deriveStartStep, jobIdFromTask, parseStepHint } from "@/lib/coach/state";
 import { readConfirmedTrack, readProposal, type CachedProposal } from "@/lib/coach/storage";
-import type { TranscriptItem } from "./CoachFrame";
+import { CoachErrorNote, CoachFrame, type TranscriptItem } from "./CoachFrame";
 import { MatchesStep } from "./MatchesStep";
 import { PasteJob } from "./PasteJob";
 import { ResultStep } from "./ResultStep";
@@ -84,11 +84,11 @@ export function Coach() {
   }, [view, filename, doc.data, tracks.data, userId]);
 
   const startTailor = useCallback(
-    async (id: string, parentPackageId?: string) => {
+    async (id: string) => {
       setError(null);
       setJobId(id);
       try {
-        const task = await tailor.mutateAsync({ jobId: id, body: { mode: "tune", ...(parentPackageId ? { parent_package_id: parentPackageId } : {}) } });
+        const task = await tailor.mutateAsync({ jobId: id, body: { mode: "tune" } });
         void fireCoachEvent("tailor_started");
         router.replace(`/start?task=${task.id}`);
         setPasting(false);
@@ -111,9 +111,17 @@ export function Coach() {
 
   const onTaskDone = useCallback((packageId: string) => setOverride({ step: 6, packageId }), []);
 
+  // A second guard behind TailorStep's: whatever calls this, one retry at a time claims a run.
+  const retrying = useRef(false);
   const retryRun = useCallback(async () => {
-    if (currentJobId) await startTailor(currentJobId);
-    else backToMatches();
+    if (retrying.current) return;
+    retrying.current = true;
+    try {
+      if (currentJobId) await startTailor(currentJobId);
+      else backToMatches();
+    } finally {
+      retrying.current = false;
+    }
   }, [currentJobId, startTailor, backToMatches]);
 
   const retryBlocked = useCallback(
@@ -130,8 +138,20 @@ export function Coach() {
     [startTailor],
   );
 
+  if (userId === null && me.error) {
+    // TokenGate handles 401/403 before this mounts; this is a 5xx or a dropped connection.
+    return (
+      <CoachFrame title="Rhapto can't start right now">
+        <CoachErrorNote error={describeCoachError(me.error, "jobs")} />
+      </CoachFrame>
+    );
+  }
   if (!view || userId === null) {
-    return <p role="status" className="mx-auto max-w-2xl text-sm text-muted-foreground">Getting things ready…</p>;
+    return (
+      <CoachFrame title="Tailor a resume">
+        <p role="status" className="text-sm text-muted-foreground">Getting things ready…</p>
+      </CoachFrame>
+    );
   }
 
   if (pasting) {
@@ -174,7 +194,7 @@ export function Coach() {
         />
       );
     case 5:
-      return <TailorStep key={view.taskId} taskId={view.taskId} transcript={transcript} onDone={onTaskDone} onRetry={() => void retryRun()} onPickAnother={backToMatches} />;
+      return <TailorStep key={view.taskId} taskId={view.taskId} transcript={transcript} onDone={onTaskDone} onRetry={retryRun} onPickAnother={backToMatches} />;
     case 6:
       return <ResultStep packageId={view.packageId} transcript={transcript} retryBusy={retryBusy} onRetry={(pkg) => void retryBlocked(pkg)} onAnother={backToMatches} />;
   }

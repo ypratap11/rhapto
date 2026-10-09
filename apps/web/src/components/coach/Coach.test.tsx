@@ -1,10 +1,11 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "@/lib/api/client";
 import { writeConfirmedTrack, writeProposal } from "@/lib/coach/storage";
 import { Coach } from "./Coach";
 
 const server = {
+  me: { data: { user_id: "u1" }, isLoading: false, error: null } as { data?: { user_id: string }; isLoading: boolean; error: Error | null },
   doc: null as { filename: string } | null,
   tracks: [] as { id: string; name: string }[],
   task: undefined as { progress: { request: { job_id: string } } } | undefined,
@@ -34,7 +35,7 @@ vi.mock("next/navigation", () => ({
 vi.mock("@/lib/coach/events", () => ({ fireCoachEvent: (step: string) => fire(step) }));
 vi.mock("@/lib/api/queries", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/api/queries")>()),
-  useMe: () => ({ data: { user_id: "u1" }, isLoading: false }),
+  useMe: () => server.me,
   useResumeDocument: () => ({ data: server.doc, isLoading: false, isFetched: true }),
   useTracks: () => ({ data: server.tracks, isLoading: false, isFetched: true }),
   useTailor: () => ({ mutateAsync: tailorMutate }),
@@ -48,7 +49,7 @@ vi.mock("./TailorStep", () => ({ TailorStep: stub("tailor") }));
 vi.mock("./ResultStep", () => ({ ResultStep: stub("result") }));
 
 beforeEach(() => {
-  Object.assign(server, { doc: null, tracks: [], task: undefined });
+  Object.assign(server, { me: { data: { user_id: "u1" }, isLoading: false, error: null }, doc: null, tracks: [], task: undefined });
   search.value = "";
   replace.mockReset();
   tailorMutate.mockReset();
@@ -125,6 +126,23 @@ describe("Coach: where it starts (server state wins)", () => {
   });
 });
 
+describe("Coach: before it can start", () => {
+  it("the loading screen carries the way out", () => {
+    server.me = { data: undefined, isLoading: true, error: null };
+    render(<Coach />);
+    expect(screen.getByRole("status")).toHaveTextContent(/getting things ready/i);
+    expect(screen.getByRole("link", { name: /skip to the full app/i })).toHaveAttribute("href", "/dashboard");
+  });
+
+  it("a failed /me is a plain error with the way out, not an endless spinner", () => {
+    server.me = { data: undefined, isLoading: false, error: new TypeError("Failed to fetch") };
+    render(<Coach />);
+    expect(screen.getByRole("alert")).toHaveTextContent("Something went wrong on our side. Try again in a moment.");
+    expect(screen.queryByText(/getting things ready/i)).toBeNull();
+    expect(screen.getByRole("link", { name: /skip to the full app/i })).toHaveAttribute("href", "/dashboard");
+  });
+});
+
 describe("Coach: the flow", () => {
   const start = () => {
     server.doc = { filename: "x.docx" };
@@ -183,6 +201,22 @@ describe("Coach: the flow", () => {
     (seen.result!.onRetry as (pkg: { id: string; job_id: string }) => void)({ id: "pk1", job_id: "j1" });
     await waitFor(() => expect(tailorMutate).toHaveBeenLastCalledWith({ jobId: "j1", body: { mode: "tune" } }));
     await waitFor(() => expect(replace).toHaveBeenLastCalledWith("/start?task=t2"));
+  });
+
+  it("a double tap on a failed run's 'Try again' starts exactly one run", async () => {
+    start();
+    tailorMutate.mockResolvedValueOnce({ id: "t1", status: "running" });
+    await (seen.matches!.onTailor as (job: { id: string }) => Promise<void>)({ id: "j1" });
+    await waitFor(() => expect(screen.getByTestId("tailor")).toBeInTheDocument());
+    tailorMutate.mockClear();
+    let finish: (v: { id: string; status: string }) => void = () => undefined;
+    tailorMutate.mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; }));
+    const retry = seen.tailor!.onRetry as () => Promise<void>;
+    const first = retry();
+    const second = retry();
+    await act(async () => { finish({ id: "t2", status: "running" }); await Promise.all([first, second]); });
+    expect(tailorMutate).toHaveBeenCalledTimes(1);
+    expect(tailorMutate).toHaveBeenCalledWith({ jobId: "j1", body: { mode: "tune" } });
   });
 
   it("pasting a job starts a tailor for it, and Cancel returns", async () => {

@@ -69,6 +69,21 @@ describe("TailorStep", () => {
     expect(p.onDone).not.toHaveBeenCalled();
   });
 
+  it("a double tap on 'Try again' starts one run, and the button is disabled while it starts", async () => {
+    let finish: () => void = () => undefined;
+    const p = { ...props(), onRetry: vi.fn(() => new Promise<void>((resolve) => { finish = resolve; })) };
+    render(<TailorStep {...p} />);
+    act(() => driver.emit({ event: "error", data: { message: "The model returned an unreadable answer." } }));
+    act(() => driver.end());
+    const retry = await screen.findByRole("button", { name: /try again/i });
+    const user = userEvent.setup({ delay: null, advanceTimers: vi.advanceTimersByTime });
+    await user.dblClick(retry);
+    expect(p.onRetry).toHaveBeenCalledTimes(1);
+    expect(retry).toBeDisabled();
+    await act(async () => finish());
+    expect(retry).toBeEnabled();
+  });
+
   it("a dropped connection tells the tester to reload, which re-attaches through the URL", async () => {
     render(<TailorStep {...props()} />);
     act(() => driver.emit({ event: "progress", data: { step: "tune" } }));

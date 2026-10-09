@@ -28,12 +28,28 @@ export function TailorStep({
   taskId: string;
   transcript?: TranscriptItem[];
   onDone: (packageId: string) => void;
-  onRetry: () => void;
+  /** May return the start's promise: the button stays disabled until it settles. */
+  onRetry: () => void | Promise<void>;
   onPickAnother: () => void;
 }) {
   const [state, setState] = useState<ProgressState>(initialProgress);
   const [slow, setSlow] = useState(false);
   const [lost, setLost] = useState(false);
+  // A retry claims a paid run, so a double tap must start one: the ref locks synchronously (two clicks
+  // in one frame both see `retrying === false`), the state disables the button for everyone to see.
+  const retryLock = useRef(false);
+  const [retrying, setRetrying] = useState(false);
+  async function retry() {
+    if (retryLock.current) return;
+    retryLock.current = true;
+    setRetrying(true);
+    try {
+      await onRetry();
+    } finally {
+      retryLock.current = false;
+      setRetrying(false);
+    }
+  }
 
   // `onDone` is read through a ref, so a parent that forgets `useCallback` cannot restart the stream.
   const done = useRef(onDone);
@@ -97,7 +113,7 @@ export function TailorStep({
         <>
           <CoachErrorNote error={describeCoachError(new Error(state.error ?? "The run failed"), "tailor")} />
           <div className="flex flex-wrap gap-3">
-            <Button type="button" onClick={onRetry}>Try again</Button>
+            <Button type="button" disabled={retrying} onClick={() => void retry()}>Try again</Button>
             <Button type="button" variant="outline" onClick={onPickAnother}>Pick another job</Button>
           </div>
         </>
