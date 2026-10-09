@@ -2,9 +2,9 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { render, screen, within } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ACCESS_REQUEST_EMAIL, ACCESS_REQUEST_MAILTO, ACCESS_REQUEST_URL } from "./access";
-import { Landing } from "./Landing";
+import { About } from "./About";
 
 // `SAME_ORIGIN_DEPLOYMENT` is a `const` computed from an env var at module load, so a module mock is
 // the only way to exercise both deployments -- the same pattern about/page.test.tsx and
@@ -31,15 +31,18 @@ vi.mock("./access", async (importOriginal) => {
   };
 });
 
+beforeEach(() => vi.stubEnv("NEXT_PUBLIC_TRIAL_RUNS", "5"));
+
 afterEach(() => {
+  vi.unstubAllEnvs();
   sameOriginFlag.value = false;
   accessUrl.value = "";
 });
 
-describe("Landing, the way in", () => {
-  it("hosted hero: Request beta access is the one button, the tour is a link, sign-in is small text", () => {
+describe("About, the full pitch", () => {
+  it("hosted hero: Request beta access is the one button, the tour is a link, Tailor my resume is small text", () => {
     sameOriginFlag.value = true;
-    render(<Landing />);
+    render(<About />);
 
     // The hero is the first band on the page. Scoped to it, because that is where a stranger looks --
     // a page-wide query passes on the footer alone.
@@ -49,27 +52,30 @@ describe("Landing, the way in", () => {
     expect(links.map((l) => l.textContent)).toEqual([
       "Request beta access",
       "Watch the 2-minute tour",
-      "Sign in",
+      "Tailor my resume",
     ]);
 
-    const [request, tour, signIn] = links as HTMLAnchorElement[];
+    const [request, tour, tailor] = links as HTMLAnchorElement[];
     expect(request).toHaveAttribute("href", ACCESS_REQUEST_MAILTO);
     expect(tour).toHaveAttribute("href", "#tour");
-    expect(signIn).toHaveAttribute("href", "/dashboard");
+    expect(tailor).toHaveAttribute("href", "/start");
     // Hierarchy: only the request link is a filled button; the other two are plain text links.
     expect(request!.className).toMatch(/bg-primary/);
     expect(tour!.className).not.toMatch(/bg-primary|border-border/);
-    expect(signIn!.className).not.toMatch(/bg-primary|border-border/);
-    // "Already invited?" is the plain text that leads into the Sign in link.
-    expect(signIn!.parentElement!.textContent).toMatch(/Already invited\?\s*Sign in/);
+    expect(tailor!.className).not.toMatch(/bg-primary|border-border/);
+    // "Already invited?" is the plain text that leads into the link.
+    expect(tailor!.parentElement!.textContent).toMatch(/Already invited\?\s*Tailor my resume/);
 
     expect(screen.queryByRole("link", { name: /open your dashboard/i })).toBeNull();
     expect(screen.queryByRole("link", { name: /^request access$/i })).toBeNull();
 
-    // Footer mirrors it, so the Sign-in count stays two.
-    const signInAll = screen.getAllByRole("link", { name: /^sign in$/i });
-    expect(signInAll).toHaveLength(2);
-    for (const link of signInAll) expect(link).toHaveAttribute("href", "/dashboard");
+    // Footer mirrors it, so the count stays two. Owner decision 2026-10-09: hosted About has no
+    // "Sign in" link and nothing points at /dashboard.
+    const tailorAll = screen.getAllByRole("link", { name: /^tailor my resume$/i });
+    expect(tailorAll).toHaveLength(2);
+    for (const link of tailorAll) expect(link).toHaveAttribute("href", "/start");
+    expect(screen.queryAllByRole("link", { name: /sign in/i })).toHaveLength(0);
+    for (const link of screen.getAllByRole("link")) expect(link).not.toHaveAttribute("href", "/dashboard");
     const requestAll = screen.getAllByRole("link", { name: /^request beta access$/i });
     expect(requestAll).toHaveLength(2);
     for (const link of requestAll) {
@@ -88,7 +94,7 @@ describe("Landing, the way in", () => {
   it("with the shipped request URL, both request buttons open it in a new tab and the address is not printed", () => {
     sameOriginFlag.value = true;
     accessUrl.value = ACCESS_REQUEST_URL;
-    render(<Landing />);
+    render(<About />);
     const requestAll = screen.getAllByRole("link", { name: /^request beta access$/i });
     expect(requestAll).toHaveLength(2);
     for (const link of requestAll) {
@@ -101,7 +107,7 @@ describe("Landing, the way in", () => {
   });
 
   it("gives the tour section the #tour anchor, on Landing's wrapper", () => {
-    render(<Landing />);
+    render(<About />);
     const target = document.getElementById("tour");
     expect(target).not.toBeNull();
     expect(target!.tagName).toBe("SECTION");
@@ -111,7 +117,7 @@ describe("Landing, the way in", () => {
   });
 
   it("orders the page: hero, tour, why, chatbot, how it works, before you start, developers", () => {
-    render(<Landing />);
+    render(<About />);
     const at = (name: RegExp) => screen.getByRole("heading", { level: 2, name });
     const order = [
       screen.getByRole("heading", { level: 1 }),
@@ -133,7 +139,7 @@ describe("Landing, the way in", () => {
 
   it("says private beta in the hero with no pronoun and no turnaround, and keeps the allowlist truth under Before you start", () => {
     sameOriginFlag.value = true;
-    render(<Landing />);
+    render(<About />);
     const hero = screen.getAllByTestId("hero-band")[0]!;
     const line = within(hero).getByText(/Private beta: sign-in is invite-only, so request access first\./);
     // Nobody has committed to answering, so this line must not imply a turnaround or a grant.
@@ -149,7 +155,7 @@ describe("Landing, the way in", () => {
   });
 
   it("offers a self-hoster neither sign-in nor request access, because they have nobody to ask", () => {
-    render(<Landing />);
+    render(<About />);
     expect(screen.getByRole("link", { name: /^get started$/i })).toHaveAttribute("href", "/settings");
     expect(screen.queryByRole("link", { name: /^sign in$/i })).toBeNull();
     expect(screen.queryByRole("link", { name: /request (beta )?access/i })).toBeNull();
@@ -171,7 +177,7 @@ describe("Landing, the way in", () => {
     // asserted, in both modes, since neither audience may lose its half.
     for (const hosted of [false, true]) {
       sameOriginFlag.value = hosted;
-      const { unmount } = render(<Landing />);
+      const { unmount } = render(<About />);
       const heading = screen.getByRole("heading", { level: 3, name: /wherever you run it/i });
       // Moved word for word into "For developers & self-hosting".
       expect(heading.closest("section")).toBe(
@@ -192,7 +198,7 @@ describe("Landing, the way in", () => {
   });
 
   it("tells the journey once: six beats, no second telling underneath them", () => {
-    render(<Landing />);
+    render(<About />);
     const journey = screen.getByRole("list", { name: /from asking for access to pressing send/i });
     expect(within(journey).getAllByRole("listitem")).toHaveLength(6);
     // The five cards said the same thing a second time and the paragraph between them existed only
@@ -205,7 +211,7 @@ describe("Landing, the way in", () => {
   });
 
   it("leads with the catch: plain headline, the kicker, and a lede that says what happens inside a run", () => {
-    render(<Landing />);
+    render(<About />);
     const hero = screen.getAllByTestId("hero-band")[0]!;
     expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(
       "A resume you can defend in any interview.",
@@ -228,7 +234,7 @@ describe("Landing, the way in", () => {
   });
 
   it("goes two-column at lg, not md", () => {
-    render(<Landing />);
+    render(<About />);
     const hero = screen.getAllByTestId("hero-band")[0]!;
     const grid = hero.querySelector('[class*="lg:grid-cols-"]');
     expect(grid).not.toBeNull();
@@ -236,7 +242,7 @@ describe("Landing, the way in", () => {
   });
 
   it("no longer overclaims: no 'refuses to do either', no 'cannot happen', no unconditional title/date promise", () => {
-    const { container } = render(<Landing />);
+    const { container } = render(<About />);
     const text = container.textContent ?? "";
     expect(text).not.toMatch(/refuses to do either/i);
     expect(text).not.toMatch(/so that cannot happen/i);
@@ -249,14 +255,14 @@ describe("Landing, the way in", () => {
   });
 
   it("says a failed number check first gets one fix, and blocks only if that fails", () => {
-    render(<Landing />);
+    render(<About />);
     const card = screen.getByText("Use numbers you can support").closest("[data-slot='card']")!;
     expect(card.textContent).toMatch(/one try at a fix/i);
     expect(card.textContent).toMatch(/if that fails, the whole package is marked blocked/i);
   });
 
   it("benefit-led card titles, and the third card is kept whole", () => {
-    render(<Landing />);
+    render(<About />);
     expect(screen.getByText("Know where each claim came from")).toBeInTheDocument();
     expect(screen.getByText("Use numbers you can support")).toBeInTheDocument();
     const last = screen.getByText("The last click is yours").closest("[data-slot='card']")!;
@@ -266,7 +272,7 @@ describe("Landing, the way in", () => {
   });
 
   it("makes the chatbot comparison precise, without 'shows you anything that fails' or 'catches everything'", () => {
-    const { container } = render(<Landing />);
+    const { container } = render(<About />);
     const section = screen.getByRole("heading", { name: /why not just ask a chatbot/i }).closest("section")!;
     const t = section.textContent ?? "";
     expect(t).toMatch(/details you didn.t confirm/i);
@@ -280,7 +286,7 @@ describe("Landing, the way in", () => {
   });
 
   it("names what Rhapto checks and what you still review, in the main flow", () => {
-    render(<Landing />);
+    render(<About />);
     const heading = screen.getByRole("heading", { name: /what rhapto checks — and what you still review/i });
     expect(heading.closest("section")).toBe(
       screen.getByRole("heading", { name: /why not just ask a chatbot/i }).closest("section"),
@@ -288,7 +294,7 @@ describe("Landing, the way in", () => {
   });
 
   it("says what the checks do not catch, next to the promises", () => {
-    render(<Landing />);
+    render(<About />);
     const line = screen.getByText(/What the checks do not catch/i);
     expect(line.textContent).toMatch(/stretch the wording of its source/i);
     // The completeness check keeps every role that was picked; one never picked is still not flagged,
@@ -302,31 +308,31 @@ describe("Landing, the way in", () => {
     // in the copy there is no way to learn where to write, and this is the one path the whole change
     // exists to create.
     sameOriginFlag.value = true;
-    render(<Landing />);
+    render(<About />);
     const hero = screen.getAllByTestId("hero-band")[0]!;
     expect(within(hero).getByText(/private beta/i).textContent ?? "").toContain(ACCESS_REQUEST_EMAIL);
   });
 
   it("drops the redundant 'already set up' line in hosted mode, keeps it where it names a different page", () => {
     sameOriginFlag.value = true;
-    const { unmount } = render(<Landing />);
-    // In hosted mode the button beside it is "Sign in" -> /dashboard, so this sentence was a second,
+    const { unmount } = render(<About />);
+    // In hosted mode the button beside it is "Tailor my resume" -> /start, so this sentence was a second,
     // contradictory framing of the same destination.
     expect(screen.queryByText(/Already set up\?/i)).toBeNull();
     unmount();
 
     sameOriginFlag.value = false;
-    render(<Landing />);
+    render(<About />);
     // In token mode the button goes to /settings, so it genuinely names somewhere else.
     expect(screen.getByText(/Already set up\?/i)).toBeInTheDocument();
   });
 
-  it("pricing: hosted says 5 AI runs on us, import uses one, paid plan coming; token mode says free and open source", () => {
+  it("pricing: hosted says 5 AI runs on us, first import is free, paid plan coming; token mode says free and open source", () => {
     sameOriginFlag.value = true;
-    const { container, unmount } = render(<Landing />);
+    const { container, unmount } = render(<About />);
     const before = screen.getByRole("heading", { name: /before you start/i }).closest("section")!;
     const hosted = within(before).getByText(/Free during the beta/i).closest("[data-slot='card']")!;
-    expect(hosted.textContent).toMatch(/5 AI runs on us \(importing your resume uses one\)/);
+    expect(hosted.textContent).toMatch(/5 AI runs on us \(your first resume import is free\)/);
     expect(hosted.textContent).toMatch(/then use your own AI key/i);
     expect(hosted.textContent).toMatch(/A paid plan with AI usage included is coming/i);
     expect(container.textContent).not.toMatch(/\d tailored resumes/i);
@@ -335,7 +341,7 @@ describe("Landing, the way in", () => {
     unmount();
 
     sameOriginFlag.value = false;
-    const r = render(<Landing />);
+    const r = render(<About />);
     const t = r.container.textContent ?? "";
     expect(t).toMatch(/Free and open source \(AGPL-3\.0\); you use your own AI key/);
     expect(t).not.toMatch(/AI runs on us/i);
@@ -345,7 +351,7 @@ describe("Landing, the way in", () => {
 
   it("privacy one-liner: hosted names the beta's provider for free runs, token mode does not", () => {
     sameOriginFlag.value = true;
-    const { unmount } = render(<Landing />);
+    const { unmount } = render(<About />);
     const line = screen.getByText(/Your documents and career record stay in your account\./);
     expect(line.textContent).toMatch(
       /To draft, Rhapto sends text from them to one AI provider: this beta.s during your free runs, then yours\./,
@@ -357,7 +363,7 @@ describe("Landing, the way in", () => {
     unmount();
 
     sameOriginFlag.value = false;
-    render(<Landing />);
+    render(<About />);
     const tokenLine = screen.getByText(/Your documents and career record stay in your account\./);
     expect(tokenLine.textContent).toMatch(/one AI provider/i);
     expect(tokenLine.textContent).not.toMatch(/beta|free runs/i);
@@ -366,7 +372,7 @@ describe("Landing, the way in", () => {
     ).not.toMatch(/beta|free runs/i);
   });
 
-  it("keeps the client boundary in the children, not in Landing", () => {
+  it("keeps the client boundary in the children, not in About", () => {
     // `Landing` is mounted at `/about` as a server component. A hook added directly to it fails at
     // build time, not in jsdom, so the only way a unit test can pin this constraint is to read the
     // modules: the interactivity must live behind its own "use client", as ProductTour already
@@ -375,7 +381,7 @@ describe("Landing, the way in", () => {
     const read = (name: string) => readFileSync(join(dir, name), "utf8");
     // Comments stripped first: Landing's own comments discuss `"use client"` and would otherwise
     // make this pass or fail on prose rather than on code.
-    const code = read("Landing.tsx")
+    const code = read("About.tsx")
       .replace(/\/\*[\s\S]*?\*\//g, "")
       .replace(/^[ \t]*\/\/.*$/gm, "");
     expect(code).not.toMatch(/"use client"/);

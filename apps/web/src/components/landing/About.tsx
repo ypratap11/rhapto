@@ -3,12 +3,9 @@
  * know before starting, and then, clearly separated, the developer and self-hosting material
  * (licence, where data lives, per-model costs).
  *
- * Rendered at two mounts, which is why it is a component and not just a page: `/about` (its own
- * URL, linkable, readable by anyone) and `/` (its own page, `apps/web/src/app/page.tsx`, which
- * `TokenGate` renders unconditionally for everyone -- signed in or not -- since "/" is one of its
- * `PUBLIC_ROUTES`). Keep it free of client hooks: it is a server component in both mounts, and
- * `SAME_ORIGIN_DEPLOYMENT` is a build-time constant, not a runtime read, so branching on it below
- * needs no client boundary. */
+ * Rendered at `/about` only. `/` is the light `Landing`; this is the full pitch it links to. Keep it
+ * free of client hooks: it is a server component, and `SAME_ORIGIN_DEPLOYMENT` is a build-time
+ * constant, not a runtime read, so branching on it below needs no client boundary. */
 import Link from "next/link";
 import { Ban, BadgeCheck, Coins, Fingerprint, Hand, ListChecks } from "lucide-react";
 import { HeroBand } from "@/components/shell/HeroBand";
@@ -17,6 +14,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { SAME_ORIGIN_DEPLOYMENT } from "@/lib/api/client";
 import { ACCESS_REQUEST_EMAIL, accessRequestLink } from "./access";
 import { CaughtDemo } from "./CaughtDemo";
+import { pricingLine } from "./copy";
 import { JourneyWalkthrough } from "./JourneyWalkthrough";
 import { ProductTour } from "./ProductTour";
 
@@ -41,7 +39,7 @@ const PROMISES = [
   },
 ] as const;
 
-export function Landing() {
+export function About() {
   // Hosted only in practice (the buttons below render only when SAME_ORIGIN_DEPLOYMENT), computed
   // once so the hero and the footer cannot disagree about where "Request beta access" goes.
   const access = accessRequestLink();
@@ -82,11 +80,10 @@ export function Landing() {
             (`nativeButton={false}`) or a dev-mode console error. Same house style, neither cost —
             the pattern JobCard and RepostNotice already settled on. */}
         <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-3">
-          {/* Hosted: one filled button, the way in. The tour is a plain text link and sign-in is small
-              text, so a stranger sees a single obvious next step and an invited person still finds
-              the door. Sign-in is "Sign in" rather than "Open your dashboard" because /dashboard sits
-              behind Cloudflare Access, so following this link IS the sign-in flow; there is no /login
-              route to point at. Token mode (self-hosted) keeps "Get started" -> /settings, with
+          {/* Hosted: one filled button, the way in. The tour is a plain text link and "Tailor my resume" is
+              small text, so a stranger sees a single obvious next step and an invited person still
+              finds the door. It goes to /start (owner decision 2026-10-09, replacing "Sign in"):
+              /start sits behind Cloudflare Access, so following it IS the sign-in flow. Token mode (self-hosted) keeps "Get started" -> /settings, with
               nobody to request access from. */}
           {SAME_ORIGIN_DEPLOYMENT ? (
             <>
@@ -98,8 +95,8 @@ export function Landing() {
               </a>
               <p className="text-sm text-muted-foreground">
                 Already invited?{" "}
-                <Link href="/dashboard" className="text-primary underline underline-offset-4">
-                  Sign in
+                <Link href="/start" className="text-primary underline underline-offset-4">
+                  Tailor my resume
                 </Link>
               </p>
             </>
@@ -265,13 +262,10 @@ export function Landing() {
             </CardHeader>
             <CardContent className="space-y-3 text-sm text-muted-foreground">
               {/* "5 AI runs", not "5 tailored resumes": resume import spends a run too, and blocked
-                  or failed runs count. The number is the server's RHAPTO_TRIAL_RUNS (5 as of
-                  2026-09-29); nothing here reads it, so changing it means editing this sentence.
-                  Hosted only: a self-hoster has no free runs. */}
+                  or failed runs count. The number is NEXT_PUBLIC_TRIAL_RUNS (build arg sourced
+                  from the server's RHAPTO_TRIAL_RUNS), via copy.ts. Hosted only: a self-hoster has no free runs. */}
               <p>
-                {SAME_ORIGIN_DEPLOYMENT
-                  ? "Free during the beta: 5 AI runs on us (importing your resume uses one), then use your own AI key. A paid plan with AI usage included is coming."
-                  : "Free and open source (AGPL-3.0); you use your own AI key."}
+                {pricingLine(SAME_ORIGIN_DEPLOYMENT)}
               </p>
               <p>
                 <a href="#developers" className="text-primary underline underline-offset-4">
@@ -332,7 +326,7 @@ export function Landing() {
       <div className="mb-12 flex flex-wrap items-center gap-x-4 gap-y-3 border-t border-border pt-6">
         {/* Mirrors the hero, and keeps the same labels: someone who has read the whole page should not
             have to scroll back up to find the way in, and should not meet a different word for the
-            same action down here. Two "Sign in" links on the page, one per place. */}
+            same action down here. Two "Tailor my resume" links on the page, one per place. */}
         {SAME_ORIGIN_DEPLOYMENT ? (
           <>
             <a {...accessAttrs} className={buttonVariants()}>
@@ -340,8 +334,8 @@ export function Landing() {
             </a>
             <p className="text-sm text-muted-foreground">
               Already invited?{" "}
-              <Link href="/dashboard" className="text-primary underline underline-offset-4">
-                Sign in
+              <Link href="/start" className="text-primary underline underline-offset-4">
+                Tailor my resume
               </Link>
             </p>
           </>
@@ -350,7 +344,7 @@ export function Landing() {
             <Link href="/settings" className={buttonVariants()}>
               Connect your instance
             </Link>
-            {/* Token mode only. In hosted mode "Sign in" already goes to /dashboard; here the button
+            {/* Token mode only. In hosted mode "Tailor my resume" already goes to /start; here the button
                 beside it goes to /settings, so "head to the dashboard" names a different page for
                 someone who has already connected. */}
             <p className="text-sm text-muted-foreground">
