@@ -115,7 +115,7 @@ function PackageReviewPageInner() {
             <h1 className="text-2xl">{job.data.title ?? "Package review"}</h1>
             <p className="mt-1 flex items-center gap-2 text-sm text-muted-foreground">
               <StatusBadge tone={PACKAGE_STATUS_TONE[pkg.data.status] ?? "neutral"}>{`v${pkg.data.version} · ${pkg.data.status}`}</StatusBadge>
-              created {formatDate(pkg.data.created_at)} · {pkg.data.llm_calls} LLM calls · track {pkg.data.track_id}
+              created {formatDate(pkg.data.created_at)} · {pkg.data.llm_calls} LLM calls{pkg.data.track_id ? ` · track ${pkg.data.track_id}` : ""}
             </p>
             <p className="mt-0.5 text-xs text-muted-foreground">
               {pkg.data.llm_calls} call{pkg.data.llm_calls === 1 ? "" : "s"} · {formatTokens(pkg.data.input_tokens ?? 0)} in /{" "}

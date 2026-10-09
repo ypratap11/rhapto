@@ -48,7 +48,7 @@ export function RegenerateDialog({ job, pkg, open, onOpenChange }: { job: JobOut
     }
     setError(null);
     try {
-      const task = await tailor.mutateAsync({ jobId: job.id, body: { feedback: text, parent_package_id: pkg.id, track_id: trackId, mode: selectedMode } });
+      const task = await tailor.mutateAsync({ jobId: job.id, body: { feedback: text, parent_package_id: pkg.id, track_id: trackId === "" ? null : trackId, mode: selectedMode } });
       if (task.status === "succeeded" && task.result_ref) {
         onOpenChange(false);
         router.push(`/jobs/${job.id}/packages/${task.result_ref}`);
@@ -76,21 +76,23 @@ export function RegenerateDialog({ job, pkg, open, onOpenChange }: { job: JobOut
             <Label htmlFor="feedback">Feedback</Label>
             <Textarea id="feedback" rows={4} value={feedback} onChange={(e) => setFeedback(e.target.value)} placeholder="e.g. lean harder on the migration work; drop the side project" />
           </div>
-          <div className="space-y-1">
-            <Label>Track</Label>
-            <Select value={trackId} onValueChange={(v) => setTrackId(v ?? pkg.track_id)}>
-              <SelectTrigger aria-label="Track">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {(tracks.data ?? []).map((t) => (
-                  <SelectItem key={t.id} value={t.id}>
-                    {t.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+          {(tracks.data ?? []).length > 0 ? (
+            <div className="space-y-1">
+              <Label>Track</Label>
+              <Select value={trackId} onValueChange={(v) => setTrackId(v ?? pkg.track_id)}>
+                <SelectTrigger aria-label="Track">
+                  <SelectValue placeholder="Let Rhapto pick" />
+                </SelectTrigger>
+                <SelectContent>
+                  {(tracks.data ?? []).map((t) => (
+                    <SelectItem key={t.id} value={t.id}>
+                      {t.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          ) : null}
           <div className="space-y-1">
             <Label>Mode</Label>
             <Select value={selectedMode} onValueChange={(value: string | null) => value && setMode(value as "blocks" | "tune")}>
