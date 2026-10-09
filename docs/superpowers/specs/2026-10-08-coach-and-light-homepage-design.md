@@ -1,6 +1,6 @@
 # Coach (/start) and light homepage — design
 
-Date: 2026-10-08 · Status: revision 3 — architect APPROVED WITH CONDITIONS (R2-1..R2-4 folded in); awaiting owner ·
+Date: 2026-10-08 · Status: revision 4 — owner-approved rev 3 + readiness marker (plan-review C1, architect ruling) ·
 Branch: `spec/coach-homepage` · Review: `.superpowers/sdd/coach-homepage/architecture-review.md`
 
 ## Why
@@ -106,10 +106,10 @@ one job.
 |---|---|---|
 | 1 | "Upload your resume" (.docx) | The upload control is disabled while a request is in flight. **In sequence:** first `POST /resume-document`. If that fails, stop; nothing has been spent. Then `POST /import-resume`. If import fails, the document is already stored, so the user can paste a job. Event `resume_in`. |
 | 2 | "Looks like you're aiming for: **{top proposed track}**. Right?" | One tap confirms. "Something else" shows the other proposed tracks plus a typeahead over the `GET /taxonomy` roles (names and titles). On confirm the coach saves **only that one track**, plus the location answers, merged into `answers` the same way `ImportResume` does. It saves **no blocks** (see below). Event `role_confirmed`. |
-| 3 | "Finding your best matches…" | Polls `GET /jobs?sort=fit&recommended=true&track=<confirmed id>`. That only matches once a rescore that knows the new track has finished. It shows results as soon as one row comes back. After 60 s it offers "Paste a job you like instead" and keeps polling in the background. **Empty handling:** `/jobs/empty-reason` (same query) is final only when it says `no_jobs`: show that reason and the paste option. Any other cause means keep waiting, because the reason is the same while the rescore is pending. The completion probe takes one job id from `GET /jobs?recommended=true` (no `track`) and calls `GET /jobs/{id}`. Once that job's `scores` contain the confirmed track id, the rescore has committed and an empty list is real: show "No strong matches for {role} yet", with "Paste a job" and "Show other jobs" (the same query without `track`). |
+| 3 | "Finding your best matches…" | Polls `GET /api/v1/coach/readiness?track=<confirmed id>` and `GET /jobs?sort=fit&recommended=true&track=<confirmed id>` together. Rows are shown as they appear (scoring commits every 50 jobs, so early rows are partial), and polling continues until `ready` is true; the top 5 is final only then. After 60 s it offers "Paste a job you like instead" and keeps polling in the background. **Empty handling:** `/jobs/empty-reason` (same query) saying `no_jobs` is final at once: show that reason and the paste option. Otherwise an empty list is real only when `ready` is true: show "No strong matches for {role} yet", with "Paste a job" and "Show other jobs" (the same query without `track`). A rescore that raises entirely never marks ready; the 60 s paste offer covers it. |
 | 4 | "Your top 5" | Five cards: title, company, a match label instead of a raw number, and "Tailor this one" (disabled on click). The label is "Strong match" at or above the track's `min_fit`, otherwise "Good match". Every row shown already clears the recommended floor. Before the copy is final, the thresholds are checked against the score spread on the scratch restore; scores cluster between 30 and 60, so with `min_fit` 60 almost nothing would read "Strong". The cards show the runs left when a trial applies. A "Paste a job instead" link is always visible. Event `jobs_shown`. |
 | 5 | Tailoring | Tune-mode tailor with the existing progress steps. The task id goes in the URL (`?task=<id>`) so a reload re-attaches to `GET /tasks/{id}`. Event `tailor_started`. |
-| 6 | "Your tailored resume" | The coach's own result screen: status in plain words, Download DOCX/PDF, a short "what changed" list (from the package's tune edits) and a "See full details" link to the existing package page. Event `downloaded` on download. If the package is blocked, see §3.4. |
+| 6 | "Your tailored resume" | The coach's own result screen: status in plain words, Download DOCX/PDF, a short "what changed" list (from the package's tune edits) and a "See full details" link to the existing package page. Event `downloaded` on download. If the package is blocked, see §3.5. |
 | 7 | "Done. Try another?" | Back to step 4. |
 
 `/start` fires `started` on first render. Every screen has a "Skip to the full app" link to
@@ -205,7 +205,27 @@ switch to any rule.
   `test_importing_a_resume_past_the_limit_is_refused_without_a_model_call` change to "the second
   import consumes one run" and "past the limit, after the free one".
 
-### 3.3 Step events
+### 3.3 Scoring readiness (plan-review C1, architect ruling)
+
+Rescoring commits every `SCORE_CHUNK` (50) jobs (`services/scoring.py:182-218`), so the presence of
+any score is not a completion signal, and `tracks.updated_at` cannot serve either: it changes on
+every ORM update, including the rescore's own embedding writes (`db/base.py:22-24`).
+
+- Migration 0014 adds `tracks.score_requested_at timestamptz NOT NULL DEFAULT now()` and
+  `tracks.scored_at timestamptz NULL`.
+- Only `upsert_track` writes `score_requested_at = now()` (covers `PUT /profile/tracks/{id}` and
+  profile replace).
+- `rescore_user` reads `started` from the database's `now()` before loading tracks; after
+  `score_and_store` returns it sets `scored_at = started` with one Core UPDATE on exactly the track
+  ids it loaded. A rescore that started before the latest save can never mark that save ready.
+- Ready means `scored_at IS NOT NULL AND scored_at >= score_requested_at`.
+- `GET /api/v1/coach/readiness?track=<id>` returns `{ready: bool}`, scoped to the current user;
+  404 for an unknown or another user's track.
+- Tests: a real multi-chunk rescore (`SCORE_CHUNK` patched small) is not ready after chunk 1 and
+  ready at the end; the stale-start race; an embedding-only write leaves readiness unchanged; the
+  cross-user 404.
+
+### 3.4 Step events
 
 - A new table in migration 0014: `coach_events (id, user_id, step, day, created_at)`.
   - `user_id` is a foreign key with `ON DELETE CASCADE`, indexed (as in 0013).
@@ -221,7 +241,7 @@ switch to any rule.
 - The funnel script (October plan, item 2) reads this table. It is an operator tool, never an API.
 - The migration downgrade drops the column and all coach events; the docstring says so.
 
-### 3.4 Errors (plain words, always one way forward)
+### 3.5 Errors (plain words, always one way forward)
 
 | Case | Message direction | Way forward |
 |---|---|---|
@@ -250,7 +270,7 @@ switch to any rule.
   - Event endpoint: validation, auth, idempotence and the 204 on conflict.
   - Migration 0014 round-trip on a scratch database (`test_migrations_0014.py`).
 - **Web (vitest + Testing Library):**
-  - Each step component, including every §3.4 row.
+  - Each step component, including every §3.5 row.
   - The start-step derivation table.
   - The upload order, and a document failure stopping before import.
   - The double-click guards.
