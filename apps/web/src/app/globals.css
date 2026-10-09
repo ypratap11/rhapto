@@ -13,6 +13,19 @@
   --color-band-peach: var(--band-peach);
   --color-band-mint: var(--band-mint);
   --color-band-sand: var(--band-sand);
+  --color-link-on-band: var(--link-on-band);
+  --color-glow-from: var(--glow-from);
+  --color-glow-mid: var(--glow-mid);
+  --color-glow-to: var(--glow-to);
+  --color-decor-red: var(--decor-red);
+  --color-decor-amber: var(--decor-amber);
+  --color-decor-teal: var(--decor-teal);
+  --color-step-1: var(--step-1);
+  --color-step-2: var(--step-2);
+  --color-step-3: var(--step-3);
+  --color-step-1-fg: var(--step-1-fg);
+  --color-step-2-fg: var(--step-2-fg);
+  --color-step-3-fg: var(--step-3-fg);
   --color-fit-high: var(--fit-high);
   --color-fit-high-bg: var(--fit-high-bg);
   --color-fit-mid: var(--fit-mid);
@@ -68,7 +81,7 @@
 /* Not `inline`, so `rounded-card`/`rounded-control`/`rounded-chip` and the band heights resolve
    through the custom property. Same in both themes (spec §8). */
 @theme {
-  --radius-card: 10px;
+  --radius-card: 12px;
   --radius-control: 8px;
   --radius-chip: 6px;
   --height-band-tall: 160px;
@@ -83,17 +96,32 @@
   --input: #e7e1d8;
   --foreground: #1c1917;
   --muted-foreground: #6b6259;
-  --primary: #b4432e;
+  --primary: #b63a1c;
   --primary-foreground: #ffffff;
-  --primary-hover: #9a3826;
-  --ring: #b4432e;
+  --primary-hover: #9c3a24;
+  --ring: #b63a1c;
   --destructive: #a32d2d;
   --band-peach: #f8e3d2;
   --band-mint: #d9efe6;
   --band-sand: #f1ece4;
-  /* spec §8 says #2f7d4f; 4.26:1 on --fit-high-bg is below AA, darkened to pass. */
-  --fit-high: #2b7349;
-  --fit-high-bg: #dff0e5;
+  --link-on-band: #9c3a24;
+  --glow-from: #ffe0cc;
+  --glow-mid: #fbe7d8;
+  --glow-to: var(--background);
+  /* Shapes and fills only, never a text colour. Not named accent-N: --accent is shadcn's grey hover. */
+  --decor-red: #d9482b;
+  --decor-amber: #e9a23b;
+  --decor-teal: #2a9d8f;
+  /* Numbered circles on the homepage steps: absolute colours, identical in both themes. */
+  --step-1: #b63a1c;
+  --step-1-fg: #ffffff;
+  --step-2: #e9a23b;
+  --step-2-fg: #1c1917;
+  --step-3: #1d7368;
+  --step-3-fg: #ffffff;
+  /* Teal since 2026-10: also the app's done/success colour (ProfileChecklist, TaskProgress, LlmProviderSection). --diff-add stays green: a different meaning. */
+  --fit-high: #1d7368;
+  --fit-high-bg: #e3f4f1;
   /* spec §8 says #a65f0f; 4.11:1 on --fit-mid-bg is below AA, darkened to pass. */
   --fit-mid: #95540d;
   --fit-mid-bg: #f8e9cf;
@@ -112,22 +140,23 @@
   --muted: #f1ece4;
   --accent: #f1ece4;
   --accent-foreground: #1c1917;
-  --chart-1: #b4432e;
+  --chart-1: #b63a1c;
   --chart-2: #2b7349;
   --chart-3: #95540d;
   --chart-4: #6b6259;
   --chart-5: #e7e1d8;
   --radius: 0.5rem;
-  --shadow-card: 0 1px 2px rgb(28 25 23 / 0.05), 0 4px 14px rgb(28 25 23 / 0.06);
-  --shadow-card-hover: 0 1px 2px rgb(28 25 23 / 0.05), 0 4px 14px rgb(28 25 23 / 0.06), 0 8px 24px rgb(28 25 23 / 0.09);
+  --shadow-card: 0 1px 2px rgb(156 58 36 / 0.05), 0 4px 14px rgb(156 58 36 / 0.06);
+  --shadow-card-hover: 0 1px 2px rgb(156 58 36 / 0.05), 0 4px 14px rgb(156 58 36 / 0.06), 0 8px 24px rgb(156 58 36 / 0.09);
+  --shadow-cta: 0 6px 14px rgb(182 58 28 / 0.28);
   --sidebar: #ffffff;
   --sidebar-foreground: #1c1917;
-  --sidebar-primary: #b4432e;
+  --sidebar-primary: #b63a1c;
   --sidebar-primary-foreground: #ffffff;
   --sidebar-accent: #f1ece4;
   --sidebar-accent-foreground: #1c1917;
   --sidebar-border: #e7e1d8;
-  --sidebar-ring: #b4432e;
+  --sidebar-ring: #b63a1c;
 }
 
 .dark {
@@ -138,16 +167,30 @@
   --input: #3a332e;
   --foreground: #f3ede6;
   --muted-foreground: #b3a89c;
-  --primary: #e0715a;
+  --primary: #ec7a5f;
   --primary-foreground: #191614;
-  --primary-hover: #e98a76;
-  --ring: #e0715a;
+  --primary-hover: #f2937c;
+  --ring: #ec7a5f;
   --destructive: #f08a8a;
   --band-peach: #3a2a22;
   --band-mint: #1f3029;
   --band-sand: #2b2622;
-  --fit-high: #7fd19a;
-  --fit-high-bg: #1f3d2b;
+  --link-on-band: #f2937c;
+  --glow-from: #3a2a22;
+  --glow-mid: #2b2622;
+  --glow-to: var(--background);
+  --decor-red: #d9482b;
+  --decor-amber: #e9a23b;
+  --decor-teal: #2a9d8f;
+  --step-1: #b63a1c;
+  --step-1-fg: #ffffff;
+  --step-2: #e9a23b;
+  --step-2-fg: #1c1917;
+  --step-3: #1d7368;
+  --step-3-fg: #ffffff;
+  --shadow-cta: 0 6px 14px rgb(0 0 0 / 0.45);
+  --fit-high: #6fd1c1;
+  --fit-high-bg: #1d3330;
   --fit-mid: #f0b35a;
   --fit-mid-bg: #3f2d10;
   --fit-low: #b3a89c;
@@ -165,7 +208,7 @@
   --muted: #2b2622;
   --accent: #2b2622;
   --accent-foreground: #f3ede6;
-  --chart-1: #e0715a;
+  --chart-1: #ec7a5f;
   --chart-2: #7fd19a;
   --chart-3: #f0b35a;
   --chart-4: #b3a89c;
@@ -174,12 +217,12 @@
   --shadow-card-hover: 0 1px 2px rgb(0 0 0 / 0.45), 0 4px 14px rgb(0 0 0 / 0.4), 0 8px 24px rgb(0 0 0 / 0.5);
   --sidebar: #221e1b;
   --sidebar-foreground: #f3ede6;
-  --sidebar-primary: #e0715a;
+  --sidebar-primary: #ec7a5f;
   --sidebar-primary-foreground: #191614;
   --sidebar-accent: #2b2622;
   --sidebar-accent-foreground: #f3ede6;
   --sidebar-border: #3a332e;
-  --sidebar-ring: #e0715a;
+  --sidebar-ring: #ec7a5f;
 }
 
 @layer base {
@@ -232,6 +275,20 @@
 
 @utility shadow-card-hover {
   box-shadow: var(--shadow-card-hover);
+}
+
+@utility shadow-cta {
+  box-shadow: var(--shadow-cta);
+}
+
+/* Front-page hero band only (HeroBand tone="glow"). */
+@utility bg-hero-glow {
+  background-image: radial-gradient(ellipse 80% 120% at 15% 0%, var(--glow-from), var(--glow-mid) 55%, var(--glow-to));
+}
+
+/* The highlighter under one headline word: a background gradient on a span, not <mark>. */
+@utility highlight-underline {
+  background-image: linear-gradient(transparent 62%, color-mix(in srgb, var(--decor-amber) 55%, transparent) 62% 92%, transparent 92%);
 }
 
 /* The hover lift used by cards and rows: shadow plus a 1px rise, 150ms ease-out. */
