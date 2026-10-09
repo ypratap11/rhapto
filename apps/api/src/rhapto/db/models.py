@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any
 
 from pgvector.sqlalchemy import Vector
 from sqlalchemy import (
     Boolean,
     CheckConstraint,
+    Date,
     DateTime,
     ForeignKey,
     Index,
@@ -17,6 +18,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
     func,
+    text,
 )
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlalchemy.orm import Mapped, mapped_column
@@ -42,6 +44,14 @@ PAGE_AREAS = (
     "profile",
     "settings",
     "other",
+)
+COACH_STEPS = (
+    "started",
+    "resume_in",
+    "role_confirmed",
+    "jobs_shown",
+    "tailor_started",
+    "downloaded",
 )
 
 
@@ -74,6 +84,10 @@ class User(TimestampMixin, Base):
     trial_runs_used: Mapped[int] = mapped_column(
         Integer, default=0, server_default="0", nullable=False
     )
+    # Set once, atomically, by the first resume import that is free (`claim_free_import`). NULL
+    # means "this account has not used its free import". Never cleared by code; reset by hand if
+    # an operator wants to give someone another.
+    free_import_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class ResumeBlock(UserScopedMixin, TimestampMixin, Base):
@@ -125,6 +139,14 @@ class Track(UserScopedMixin, TimestampMixin, Base):
     field: Mapped[str | None] = mapped_column(String(50))
     role: Mapped[str | None] = mapped_column(String(50))
     embedding: Mapped[list[float] | None] = mapped_column(Vector(EMBEDDING_DIMENSIONS))
+    # Spec 3.3. `score_requested_at` is written ONLY by `upsert_track` (a track save); `scored_at` ONLY by
+    # `rescore_user`, as the database time at which that rescore started. Ready = scored_at IS NOT NULL
+    # AND scored_at >= score_requested_at. Deliberately not `updated_at`: that changes on every ORM
+    # update, including the rescore's own embedding writes.
+    score_requested_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    scored_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class Guardrail(UserScopedMixin, TimestampMixin, Base):
@@ -439,3 +461,28 @@ class FeedbackRow(UserScopedMixin, TimestampMixin, Base):
     app_version: Mapped[str] = mapped_column(String(64), nullable=False)
     job_id: Mapped[uuid.UUID | None] = mapped_column()
     package_id: Mapped[uuid.UUID | None] = mapped_column()
+
+
+class CoachEvent(UserScopedMixin, Base):
+    """One coach step reached by one user on one UTC day. Counts only: no text of any kind.
+
+    Insert-only and idempotent per (user, step, day). Read by the owner's funnel script on the
+    server, never over HTTP.
+    """
+
+    __tablename__ = "coach_events"
+    __table_args__ = (
+        CheckConstraint(
+            "step IN (" + ", ".join(f"'{s}'" for s in COACH_STEPS) + ")",
+            name="ck_coach_events_step",
+        ),
+        UniqueConstraint("user_id", "step", "day", name="uq_coach_events_user_step_day"),
+    )
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=new_uuid)
+    step: Mapped[str] = mapped_column(String(20), nullable=False)
+    day: Mapped[date] = mapped_column(
+        Date, server_default=text("(now() AT TIME ZONE 'UTC')::date"), nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
