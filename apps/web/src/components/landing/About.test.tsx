@@ -233,6 +233,15 @@ describe("About, the full pitch", () => {
     expect(within(hero).getByText(/A new account starts empty/i)).toBeInTheDocument();
   });
 
+  it("uses the glow band, a 600-weight headline, and link-on-band for text links on it", () => {
+    render(<About />);
+    // /about renders several HeroBands (tour and walkthrough below); the hero is the first.
+    const band = screen.getAllByTestId("hero-band")[0]!;
+    expect(band.className).toContain("bg-hero-glow");
+    expect(screen.getByRole("heading", { level: 1 }).className).toContain("font-semibold");
+    expect(band.querySelectorAll("a.text-primary")).toHaveLength(0);
+  });
+
   it("goes two-column at lg, not md", () => {
     render(<About />);
     const hero = screen.getAllByTestId("hero-band")[0]!;

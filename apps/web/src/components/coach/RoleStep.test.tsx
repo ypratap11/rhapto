@@ -5,6 +5,7 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "@/lib/api/client";
+import * as copy from "@/lib/coach/copy";
 import { readConfirmedTrack, readProposal, writeProposal } from "@/lib/coach/storage";
 import { RoleStep } from "./RoleStep";
 
@@ -66,6 +67,13 @@ describe("RoleStep", () => {
     expect(fire).toHaveBeenCalledWith("role_confirmed");
     expect(readConfirmedTrack("u1")).toBe("tpm");
     expect(readProposal("u1")).toBeNull(); // consumed
+  });
+
+  it("shows the shared coach copy", () => {
+    render(<RoleStep userId="u1" proposal={proposal} importError={null} onConfirmed={vi.fn()} />);
+    expect(screen.getByRole("heading", { level: 1, name: copy.roleQuestion("Technical Program Manager") })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: copy.ROLE_YES })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: copy.ROLE_OTHER })).toBeInTheDocument();
   });
 
   it("a double click on Yes saves once", async () => {

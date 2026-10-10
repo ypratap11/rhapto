@@ -66,6 +66,8 @@ describe("TaskProgress", () => {
     // A blocks run never tunes, so claiming a finished `tune` step would be a lie.
     expect(screen.queryByText("tune")).not.toBeInTheDocument();
     expect(screen.getByText("render").className).toContain("border-accent");
+    expect(screen.getByText("render").className).toContain("text-fit-high");
+    expect(screen.getByText("render").className).not.toContain("text-accent");
   });
 
   it("shows a tune run its own pills: tune, and no select or compose", () => {
@@ -79,6 +81,8 @@ describe("TaskProgress", () => {
     expect(screen.queryByText("select")).not.toBeInTheDocument();
     expect(screen.queryByText("compose")).not.toBeInTheDocument();
     expect(screen.getByText("validate").className).toContain("border-accent");
+    expect(screen.getByText("validate").className).toContain("text-fit-high");
+    expect(screen.getByText("validate").className).not.toContain("text-accent");
   });
 
   it("resolves the real package status on a state-replay and never announces a blocked package as ready", async () => {

@@ -3,6 +3,7 @@
 import { useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { useTaxonomy } from "@/lib/api/queries";
+import { ROLE_OTHER, ROLE_YES, roleQuestion } from "@/lib/coach/copy";
 import { describeCoachError, type CoachError } from "@/lib/coach/errors";
 import { fireCoachEvent } from "@/lib/coach/events";
 import { searchRoles, useSaveCoachRole, type RoleSource } from "@/lib/coach/role";
@@ -55,7 +56,7 @@ export function RoleStep({
     }
   }
 
-  const title = top ? `Looks like you're aiming for: ${top.name}. Right?` : "What role are you aiming for?";
+  const title = top ? roleQuestion(top.name) : "What role are you aiming for?";
   return (
     <CoachFrame title={title} transcript={transcript}>
       <CoachErrorNote error={importError} />
@@ -63,11 +64,11 @@ export function RoleStep({
       {top ? (
         <div className="flex flex-wrap gap-3">
           <Button type="button" size="lg" disabled={!ready || isSaving} onClick={() => void confirm({ kind: "proposed", track: top })}>
-            Yes, that&apos;s right
+            {ROLE_YES}
           </Button>
           {!other ? (
             <Button type="button" size="lg" variant="outline" onClick={() => setOther(true)}>
-              Something else
+              {ROLE_OTHER}
             </Button>
           ) : null}
         </div>

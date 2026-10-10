@@ -24,4 +24,21 @@ describe("HeroBand", () => {
     render(<HeroBand tone="mint">band</HeroBand>);
     expect(screen.getByTestId("hero-band").className).toContain("min-h-band-short");
   });
+
+  it("glow tone paints the radial glow with two decorative shapes instead of the stitch motif", () => {
+    const { container } = render(<HeroBand tone="glow"><h1>x</h1></HeroBand>);
+    const band = screen.getByTestId("hero-band");
+    expect(band.className).toContain("bg-hero-glow");
+    expect(container.querySelector("svg")).toBeNull();
+    const shapes = container.querySelectorAll("[data-decor]");
+    expect(shapes).toHaveLength(2);
+    shapes.forEach((s) => {
+      expect(s).toHaveAttribute("aria-hidden", "true");
+      expect(s.className).toContain("pointer-events-none");
+    });
+    expect(shapes[0]!.className).toContain("bg-decor-amber");
+    expect(shapes[0]!.className).toContain("opacity-20");
+    expect(shapes[1]!.className).toContain("bg-decor-teal");
+    expect(shapes[1]!.className).toContain("opacity-15");
+  });
 });

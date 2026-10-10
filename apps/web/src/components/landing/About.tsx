@@ -50,7 +50,7 @@ export function About() {
   };
   return (
     <>
-      <HeroBand tone="peach" height="tall">
+      <HeroBand tone="glow" height="tall">
         {/* Two columns at `lg` only (1024): at 768 each column would be ~340px and the headline
             would wrap to five-plus lines. `minmax(0, ...)` on both tracks so a long mono path in
             the demo can never widen its track past the viewport. Below `lg` the demo stacks under
@@ -60,10 +60,12 @@ export function About() {
         <p className="text-sm font-medium text-muted-foreground">
           Tailored for each job, with every line checked against your own record.
         </p>
-        {/* Plain on purpose: no coloured word. The `clamp` keeps one class readable from a 360px
-            phone (2.5rem floor) to the two-column desktop layout, where the ceiling is lower than
-            the old full-width 5rem because the copy column is only about half the band. */}
-        <h1 className="max-w-4xl font-heading text-[clamp(2.5rem,2.5vw+1.5rem,4rem)] leading-[0.98] font-medium tracking-tight">
+        {/* Plain on purpose: no coloured word (weight 600 here and on the homepage; the
+            highlighter span is homepage-only). The `clamp` keeps one class readable from a
+            360px phone (2.5rem floor) to the two-column desktop layout, where the ceiling is
+            lower than the old full-width 5rem because the copy column is only about half the
+            band. */}
+        <h1 className="max-w-4xl font-heading text-[clamp(2.5rem,2.5vw+1.5rem,4rem)] leading-[0.98] font-semibold tracking-tight">
           A resume you can defend in any interview.
         </h1>
         {/* What is true inside a run: the model's draft is checked, a caught line gets one repair,
@@ -90,12 +92,12 @@ export function About() {
               <a {...accessAttrs} className={buttonVariants({ size: "lg" })}>
                 Request beta access
               </a>
-              <a href="#tour" className="text-sm text-primary underline underline-offset-4">
+              <a href="#tour" className="text-sm text-link-on-band underline underline-offset-4">
                 Watch the 2-minute tour
               </a>
               <p className="text-sm text-muted-foreground">
                 Already invited?{" "}
-                <Link href="/start" className="text-primary underline underline-offset-4">
+                <Link href="/start" className="text-link-on-band underline underline-offset-4">
                   Tailor my resume
                 </Link>
               </p>
@@ -105,7 +107,7 @@ export function About() {
               <Link href="/settings" className={buttonVariants({ size: "lg" })}>
                 Get started
               </Link>
-              <a href="#how" className="text-sm text-primary underline underline-offset-4">
+              <a href="#how" className="text-sm text-link-on-band underline underline-offset-4">
                 See how it works
               </a>
             </>
@@ -125,7 +127,7 @@ export function About() {
         <p className="max-w-2xl text-sm text-muted-foreground">
           A new account starts empty. You will need a resume to upload (or a few blocks written by
           hand), one track, and your contact details before Rhapto can produce anything.{" "}
-          <a href="#honest" className="text-primary underline underline-offset-4">
+          <a href="#honest" className="text-link-on-band underline underline-offset-4">
             What that means
           </a>
         </p>

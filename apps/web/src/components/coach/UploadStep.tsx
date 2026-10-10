@@ -3,6 +3,7 @@
 import { useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { useImportResume, useUploadResumeDocument } from "@/lib/api/queries";
+import { CHOOSE_FILE, UPLOAD_HINT, UPLOAD_TITLE } from "@/lib/coach/copy";
 import { checkResumeFile, describeCoachError, type CoachError } from "@/lib/coach/errors";
 import { fireCoachEvent } from "@/lib/coach/events";
 import { writeProposal, type CachedProposal } from "@/lib/coach/storage";
@@ -66,7 +67,7 @@ export function UploadStep({
   }
 
   return (
-    <CoachFrame title="Upload your resume" hint="A Word (.docx) file, up to 5 MB.">
+    <CoachFrame title={UPLOAD_TITLE} hint={UPLOAD_HINT}>
       {existingDocumentName ? (
         <p className="text-sm text-muted-foreground">
           You already have <span className="text-foreground">{existingDocumentName}</span> on file. Uploading a new one replaces it.
@@ -87,7 +88,7 @@ export function UploadStep({
         }}
       />
       <Button type="button" size="lg" disabled={busy} onClick={() => input.current?.click()}>
-        Choose a file
+        {CHOOSE_FILE}
       </Button>
       {busy ? (
         <p role="status" className="text-sm text-muted-foreground">

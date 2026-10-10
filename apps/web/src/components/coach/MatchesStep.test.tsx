@@ -1,7 +1,8 @@
-import { act, render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { JobOut } from "@/lib/api/queries";
+import * as copy from "@/lib/coach/copy";
 import type { MatchesState } from "@/lib/coach/matches";
 import { MatchesStep } from "./MatchesStep";
 
@@ -61,6 +62,8 @@ describe("MatchesStep", () => {
     expect(cards[0]).toHaveTextContent("Role a");
     expect(cards[0]).toHaveTextContent("Strong match");
     expect(cards[1]).toHaveTextContent("Good match");
+    expect(within(cards[0]!).getByText("Strong match").className).toContain("bg-fit-high-bg");
+    expect(within(cards[1]!).getByText("Good match").className).toContain("bg-surface-muted");
     expect(document.body.textContent).not.toMatch(/\b71\b|\b46\b/);
     expect(screen.getByText("3 free runs left")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /paste a job instead/i })).toBeInTheDocument();
@@ -76,6 +79,13 @@ describe("MatchesStep", () => {
     await userEvent.setup({ delay: null }).click(screen.getByRole("button", { name: /tailor this one/i }));
     expect(onTailor).toHaveBeenCalledTimes(1);
     expect(fire).toHaveBeenCalledWith("jobs_shown");
+  });
+
+  it("shows the shared coach copy", () => {
+    matches.state = { kind: "ready", jobs: [job("a", 71)], final: true };
+    render(<MatchesStep {...base} onTailor={vi.fn()} />);
+    expect(screen.getByRole("heading", { level: 1, name: copy.matchesTitle("Technical Program Manager") })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: copy.TAILOR_THIS })).toBeInTheDocument();
   });
 
   it("a final list does not say more are coming", () => {
