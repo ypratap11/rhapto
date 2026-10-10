@@ -28,8 +28,7 @@ def mentions_quota(message: str) -> bool:
     """True when a 429 is about a spent allowance rather than a momentary rate limit.
 
     Only for SDKs that expose no machine-readable error code (Gemini); OpenAI's `insufficient_quota`
-    code is read directly instead. Deliberately narrow: OpenAI's ordinary rate-limit text points at
-    the billing page, so matching words like "billing" turned retryable limits into terminal
-    credential errors.
+    code is read directly instead. This matches the word "quota" only; the Gemini caller adds its own
+    "billing" and "credit" checks on top, deliberately.
     """
     return "quota" in message.lower()

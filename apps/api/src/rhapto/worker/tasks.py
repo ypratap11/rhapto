@@ -369,6 +369,14 @@ async def tailor_job(ctx: dict[str, Any], task_id: str) -> None:
                     sentence = user_key_message(exc.kind, stored_id) if stored_id else None
                     if sentence is not None:
                         reportable = sentence
+                        # The task row now keeps only the fixed sentence, so keep the provider's own
+                        # text where the operator can read it (a misclassified 429, for one).
+                        logger.warning(
+                            "user key failure (%s, %s): %s",
+                            stored_id,
+                            exc.kind,
+                            redact(str(exc), *secrets),
+                        )
             detail = reportable if isinstance(exc, SETUP_ERRORS) else f"{type(exc).__name__}: {exc}"
             if failed_tid is not None:
                 failed_task = await session.get(Task, failed_tid)
