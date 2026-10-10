@@ -22,7 +22,12 @@ unless changed here.
   menu, no settings/help icons on `/`.
 - Every link to a protected route in the header and on `/` uses `prefetch={false}` (or is a plain `<a>`), so a
   signed-out visit to `/` makes no request to a protected route (no console errors).
-- Inside the app (non-public routes) the header is unchanged except the logo target.
+- Inside the app (non-public routes) the header is unchanged on desktop except the logo target.
+- **Phones (< md), every page** (owner, 2026-10-10: "jobquest.ai — they just have three dash on right top"): the
+  header is one row: logo left, a ☰ menu button right (`aria-label="Menu"`, `aria-expanded`). It opens the existing
+  `components/ui/sheet.tsx` from the right, holding that page's header items as a vertical list (public: Sign in /
+  Get started, Request beta access in hosted mode, theme toggle; in-app: the tabs, the Advanced pages, settings,
+  help, theme toggle). Closes on Escape, on outside click and on navigation. No wrapped two-row header on phones.
 
 ## 2. Remove `/about`
 - Delete `app/about/`, `components/landing/{About,ProductTour,tourSteps,JourneyWalkthrough,CaughtDemo}` and their
