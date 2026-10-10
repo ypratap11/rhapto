@@ -57,7 +57,7 @@ export function PackageActions({
 
   return (
     <div className="flex flex-wrap items-center gap-3">
-      <div data-slot="button-group" className="inline-flex divide-x divide-border overflow-hidden rounded-control border border-border">
+      <div data-slot="button-group" className="inline-flex divide-x divide-border overflow-hidden rounded-full border border-border">
         <Button variant="outline" className="rounded-none border-0" onClick={() => downloadFile("pdf")} disabled={blocked || !pkg.has_pdf} {...documentButtonProps}>
           <Download className="size-4" aria-hidden /> Download PDF
         </Button>

@@ -21,6 +21,7 @@
 
 import { useEffect, useId, useRef, useState, useSyncExternalStore } from "react";
 import type { KeyboardEvent } from "react";
+import { buttonVariants } from "@/components/ui/button";
 import { SAME_ORIGIN_DEPLOYMENT } from "@/lib/api/client";
 import { cn } from "cn";
 import { accessRequestLink } from "./access";
@@ -33,14 +34,8 @@ const HOST = "rhapto.augaster.com";
 const focusRing =
   "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring";
 
-const primaryBtn = cn(
-  "inline-flex items-center justify-center rounded-control bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90",
-  focusRing,
-);
-const quietBtn = cn(
-  "inline-flex items-center justify-center rounded-control border border-border bg-transparent px-3 py-1.5 text-sm text-foreground transition-colors hover:bg-muted disabled:opacity-50",
-  focusRing,
-);
+const primaryBtn = cn(buttonVariants({ size: "lg" }), "px-5 font-semibold", focusRing);
+const quietBtn = cn(buttonVariants({ variant: "outline" }), "px-3", focusRing);
 
 function Caption({ body }: { body: readonly Seg[] }) {
   return (
