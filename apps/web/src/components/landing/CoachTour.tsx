@@ -18,6 +18,9 @@ import { accessRequestLink } from "./access";
 import { TOUR_CHANGES, TOUR_FILE, TOUR_JOBS, TOUR_ROLE, TOUR_TABS } from "./coachTourData";
 import { primaryCta } from "./cta";
 
+/** Base UI makes the active panel tabbable; the shared TabsContent sets outline-none, so draw the ring here. */
+const PANEL_FOCUS = "rounded-card focus-visible:ring-3 focus-visible:ring-ring/50";
+
 function Drawn({ children, outline = false, size = "lg" }: { children: React.ReactNode; outline?: boolean; size?: "lg" | "default" }) {
   return (
     <span aria-hidden="true" className={cn(buttonVariants({ variant: outline ? "outline" : "default", size }), "pointer-events-none")}>
@@ -57,7 +60,7 @@ export function CoachTour() {
             variant="line"
             activateOnFocus
             loopFocus
-            className="w-full flex-wrap justify-start gap-1 group-data-horizontal/tabs:h-auto"
+            className="w-full flex-wrap justify-start gap-x-1 gap-y-2 group-data-horizontal/tabs:h-auto"
           >
             {TOUR_TABS.map((t) => (
               <TabsTrigger key={t.value} value={t.value} className="h-auto flex-none px-3 py-1.5">
@@ -66,13 +69,13 @@ export function CoachTour() {
             ))}
           </TabsList>
 
-          <TabsContent value="upload" keepMounted>
+          <TabsContent value="upload" keepMounted className={PANEL_FOCUS}>
             <Screen title={copy.UPLOAD_TITLE} hint={copy.UPLOAD_HINT}>
               <p className="inline-flex items-center rounded-full border border-border bg-surface-muted px-3 py-1 text-sm">{TOUR_FILE}</p>
             </Screen>
           </TabsContent>
 
-          <TabsContent value="role" keepMounted>
+          <TabsContent value="role" keepMounted className={PANEL_FOCUS}>
             <Screen title={copy.roleQuestion(TOUR_ROLE)}>
               <div className="flex flex-wrap gap-3">
                 <Drawn>{copy.ROLE_YES}</Drawn>
@@ -81,7 +84,7 @@ export function CoachTour() {
             </Screen>
           </TabsContent>
 
-          <TabsContent value="matches" keepMounted>
+          <TabsContent value="matches" keepMounted className={PANEL_FOCUS}>
             <Screen title={copy.matchesTitle(TOUR_ROLE)}>
               <ul className="space-y-3">
                 {TOUR_JOBS.map((job) => (
@@ -100,7 +103,7 @@ export function CoachTour() {
             </Screen>
           </TabsContent>
 
-          <TabsContent value="result" keepMounted>
+          <TabsContent value="result" keepMounted className={PANEL_FOCUS}>
             <Screen title={copy.RESULT_TITLE}>
               <p className="text-sm text-muted-foreground">{copy.RESULT_READY}</p>
               <div className="flex flex-wrap gap-3">

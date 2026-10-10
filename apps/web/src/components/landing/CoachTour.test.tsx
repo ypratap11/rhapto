@@ -36,6 +36,11 @@ describe("CoachTour", () => {
     expect(screen.getByRole("heading", { level: 2, name: "See the coach, step by step" })).toBeInTheDocument();
   });
 
+  it("each panel carries a visible keyboard focus ring (the shared TabsContent removes the outline)", () => {
+    render(<CoachTour />);
+    for (const panel of panels()) expect(panel.className).toContain("focus-visible:ring");
+  });
+
   it("is a section with the #tour anchor and room under the sticky bar", () => {
     const { container } = render(<CoachTour />);
     const section = container.querySelector("section#tour")!;

@@ -88,6 +88,7 @@ describe("Landing, the light front door", () => {
 
   it("hero copy: badge, subline, facts strip, free-limit line", () => {
     render(<Landing />);
+    expect(screen.getByText(/first resume import and 5 AI runs are on us/)).toBeInTheDocument(); // NEXT_PUBLIC_TRIAL_RUNS=5 via vi.stubEnv
     expect(screen.getByText("Every number checked against your resume")).toBeInTheDocument();
     expect(screen.getByText("Upload your resume, pick a job, and get your own document rewritten for it.")).toBeInTheDocument();
     expect(screen.getByText("Open source · You always submit · Your own document")).toBeInTheDocument();

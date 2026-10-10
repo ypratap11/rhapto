@@ -235,7 +235,7 @@ describe("About, the full pitch", () => {
 
   it("uses the glow band, a 600-weight headline, and link-on-band for text links on it", () => {
     render(<About />);
-    // /about renders two HeroBands (the second wraps ProductTour); the hero is the first.
+    // /about renders several HeroBands (tour and walkthrough below); the hero is the first.
     const band = screen.getAllByTestId("hero-band")[0]!;
     expect(band.className).toContain("bg-hero-glow");
     expect(screen.getByRole("heading", { level: 1 }).className).toContain("font-semibold");

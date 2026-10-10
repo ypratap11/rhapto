@@ -60,9 +60,11 @@ export function About() {
         <p className="text-sm font-medium text-muted-foreground">
           Tailored for each job, with every line checked against your own record.
         </p>
-        {/* Plain on purpose: no coloured word (weight 600 here and on the homepage; the highlighter span is homepage-only). The `clamp` keeps one class readable from a 360px
-            phone (2.5rem floor) to the two-column desktop layout, where the ceiling is lower than
-            the old full-width 5rem because the copy column is only about half the band. */}
+        {/* Plain on purpose: no coloured word (weight 600 here and on the homepage; the
+            highlighter span is homepage-only). The `clamp` keeps one class readable from a
+            360px phone (2.5rem floor) to the two-column desktop layout, where the ceiling is
+            lower than the old full-width 5rem because the copy column is only about half the
+            band. */}
         <h1 className="max-w-4xl font-heading text-[clamp(2.5rem,2.5vw+1.5rem,4rem)] leading-[0.98] font-semibold tracking-tight">
           A resume you can defend in any interview.
         </h1>

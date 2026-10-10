@@ -1,5 +1,5 @@
 /** The coach's own wording, in one place. The step components under components/coach and the public
- * homepage tour (components/landing/coachTourData.ts) both import from here, so a copy change in the
+ * homepage tour (components/landing/CoachTour.tsx) both import from here, so a copy change in the
  * coach changes the tour and CoachTour.test.tsx fails if a panel shows a string the coach does not. */
 export const UPLOAD_TITLE = "Upload your resume";
 export const UPLOAD_HINT = "A Word (.docx) file, up to 5 MB.";
