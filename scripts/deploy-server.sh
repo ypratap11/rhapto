@@ -64,6 +64,18 @@ echo "==> Syncing tracked source (excluding .env, profile/, .git)"
 # gitignored data, and in particular no profile/ even if it exists locally.
 git archive --format=tar "$REF" | "$SSH" "$HOST" "cd '$DEST' && tar -xf - --exclude='.env' --exclude='profile/*'"
 
+echo "==> Removing files this ref no longer ships"
+# tar -x only adds and overwrites, so a file deleted in git used to stay on the server and could break
+# the build (2026-10-10: a stale About.tsx). deploy-prune.sh removes exactly the files the previous
+# deploy shipped and this one does not, using a manifest of tracked paths; nothing that was never
+# deployed (.env, profile/, backups/) can be in a manifest, so nothing else is touched.
+MANIFEST="$(mktemp)"
+trap 'rm -f "$MANIFEST"' EXIT
+git ls-tree -r --name-only "$REF" > "$MANIFEST"
+LINES="$(wc -l < "$MANIFEST" | tr -d ' ')"
+"$SSH" "$HOST" "cat > '$DEST/.deploy-manifest.new'" < "$MANIFEST"
+"$SSH" "$HOST" "bash '$DEST/scripts/deploy-prune.sh' '$DEST' '$DEST/.deploy-manifest.new' '$LINES' && rm -f '$DEST/.deploy-manifest.new'" </dev/null
+
 echo "==> Rebuilding: ${SERVICES[*]}"
 "$SSH" "$HOST" "cd '$DEST' && RHAPTO_BUILD_ID='$(git rev-parse --short=9 "$REF")' docker compose build ${SERVICES[*]} && docker compose up -d ${SERVICES[*]}"
 
