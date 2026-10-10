@@ -52,13 +52,22 @@ def _mapped_error(exc: Exception) -> EngineError:
     """Every SDK failure leaves the adapter as an EngineError; the SDK is imported here so the
     module stays import-light.
 
-    401/403 is a credential problem the user must fix (ProviderAuthError); a 429, a timeout or a
-    5xx is a plain EngineError, retryable and not about the key.
+    401/403 is a credential problem and exhausted credit (a 400 "credit balance is too low", a 402
+    or a billing_error) is a spent allowance; the user must fix either (ProviderAuthError, kind
+    "auth" or "quota"). A 429, a timeout or a 5xx is a plain EngineError, retryable and not about
+    the key.
     """
     import anthropic
 
     if isinstance(exc, anthropic.AuthenticationError | anthropic.PermissionDeniedError):
         return ProviderAuthError(PROVIDER_ID, str(exc))
+    # Exhausted credit arrives as a 400 ("Your credit balance is too low ...") or a 402, not a 401.
+    if isinstance(exc, anthropic.APIStatusError) and (
+        exc.status_code == 402
+        or getattr(exc, "type", None) == "billing_error"
+        or "credit balance" in str(exc).lower()
+    ):
+        return ProviderAuthError(PROVIDER_ID, str(exc), kind="quota")
     return EngineError(str(exc))
 
 

@@ -1,6 +1,12 @@
 from __future__ import annotations
 
+from typing import Literal
+
 from rhapto.engine.types import EngineError
+
+#: auth: the key was not accepted (401/403, invalid, expired, revoked). quota: its allowance is spent
+#: (insufficient credit, billing). The worker words each differently for the user.
+KeyFailureKind = Literal["auth", "quota"]
 
 
 class ProviderAuthError(EngineError):
@@ -12,9 +18,10 @@ class ProviderAuthError(EngineError):
     callers can tell "the user must fix their credentials" from "try again".
     """
 
-    def __init__(self, provider: str, message: str) -> None:
+    def __init__(self, provider: str, message: str, *, kind: KeyFailureKind = "auth") -> None:
         super().__init__(message)
         self.provider = provider
+        self.kind = kind
 
 
 def mentions_quota(message: str) -> bool:

@@ -119,7 +119,50 @@ async def test_anthropic_auth_failures_become_provider_auth_error(status: int) -
             system=[], messages=[Message(role="user", content="go")], output_schema=Answer
         )
     assert excinfo.value.provider == "anthropic"
+    assert excinfo.value.kind == "auth"
     assert "invalid x-api-key" in str(excinfo.value)
+
+
+def _anthropic_bad_request(message: str, body: Any = None) -> AnthropicProvider:
+    import anthropic
+    import httpx
+
+    response = httpx.Response(400, request=httpx.Request("POST", "https://api.anthropic.com/v1"))
+    error = anthropic.BadRequestError(message, response=response, body=body)
+    return AnthropicProvider(
+        model="claude-sonnet-5", client=SimpleNamespace(messages=_RaisingMessages(error))
+    )
+
+
+async def test_anthropic_exhausted_credit_is_kind_quota() -> None:
+    provider = _anthropic_bad_request(
+        "Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing."
+    )
+    with pytest.raises(ProviderAuthError) as excinfo:
+        await provider.complete_structured(
+            system=[], messages=[Message(role="user", content="go")], output_schema=Answer
+        )
+    assert excinfo.value.kind == "quota" and excinfo.value.provider == "anthropic"
+
+
+async def test_anthropic_billing_error_type_is_kind_quota() -> None:
+    provider = _anthropic_bad_request(
+        "Billing problem.", body={"error": {"type": "billing_error", "message": "x"}}
+    )
+    with pytest.raises(ProviderAuthError) as excinfo:
+        await provider.complete_structured(
+            system=[], messages=[Message(role="user", content="go")], output_schema=Answer
+        )
+    assert excinfo.value.kind == "quota"
+
+
+async def test_anthropic_unrelated_400_stays_a_plain_engine_error() -> None:
+    provider = _anthropic_bad_request("max_tokens: too large")
+    with pytest.raises(EngineError) as excinfo:
+        await provider.complete_structured(
+            system=[], messages=[Message(role="user", content="go")], output_schema=Answer
+        )
+    assert not isinstance(excinfo.value, ProviderAuthError)
 
 
 async def test_anthropic_other_sdk_failures_become_plain_engine_errors() -> None:
