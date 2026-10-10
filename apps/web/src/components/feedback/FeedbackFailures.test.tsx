@@ -2,7 +2,8 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { FeedbackButton } from "./FeedbackButton";
+import { useState } from "react";
+import { QuickFeedbackDialog } from "./QuickFeedbackDialog";
 import { SurveyWizard } from "./SurveyWizard";
 import { SURVEY_STEPS } from "@/lib/feedback";
 
@@ -79,10 +80,15 @@ function wrap(ui: React.ReactElement) {
   return render(<QueryClientProvider client={client}>{ui}</QueryClientProvider>);
 }
 
+function DialogHarness() {
+  const [open, setOpen] = useState(true);
+  return <QuickFeedbackDialog open={open} onOpenChange={setOpen} target={{ area: "other" }} />;
+}
+
 async function openQuick() {
   const user = userEvent.setup();
-  wrap(<FeedbackButton />);
-  await user.click(await screen.findByRole("button", { name: "Feedback on this page" }));
+  wrap(<DialogHarness />);
+  await screen.findByRole("dialog");
   await user.click(screen.getByRole("radio", { name: /bug/i }));
   await user.type(screen.getByRole("textbox"), "Words I do not want to lose \u{1F600} שלום");
   return user;

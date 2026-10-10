@@ -23,6 +23,12 @@ export default function DashboardPage() {
     [applications.data],
   );
 
+  // Follow-ups due today or overdue, by application id (the old dashboard's "Follow up today").
+  const dueIds = useMemo(() => {
+    const today = new Date().toISOString().slice(0, 10);
+    return new Set((dashboard.data?.due_followups ?? []).filter((f) => f.follow_up_at.slice(0, 10) <= today).map((f) => f.application_id));
+  }, [dashboard.data]);
+
   // A paused query (no network) is not "empty": same two-boolean shape the old page used.
   const hasIssue = Boolean(applications.error) || applications.isPaused;
   const loading = applications.isLoading || resume.isLoading;
@@ -47,7 +53,7 @@ export default function DashboardPage() {
           <WaitingBanner count={dashboard.data?.needs_review_count ?? 0} />
           <FinishSetupLine checklist={dashboard.data?.checklist} />
           {rows.length > 0 ? (
-            <ApplicationsSection rows={rows} />
+            <ApplicationsSection rows={rows} dueIds={dueIds} />
           ) : hasIssue ? null : (
             <section aria-labelledby="applications-heading" className="space-y-2">
               <h2 id="applications-heading" className="font-sans text-base font-semibold">Your applications</h2>

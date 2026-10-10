@@ -87,4 +87,40 @@ describe("ApplicationsSection", () => {
     const dialog = await screen.findByRole("dialog", { name: "Co 3" });
     expect(within(dialog).getByRole("combobox", { name: "Status" })).toBeInTheDocument();
   });
+
+  describe("follow-ups due", () => {
+    const due = new Set(["2", "x1"]);
+
+    it("badges only the rows whose follow-up is due", () => {
+      render(<ApplicationsSection rows={all} dueIds={due} />);
+      const items = within(screen.getByRole("list")).getAllByRole("listitem");
+      const badged = items.filter((li) => within(li).queryByText("Follow up"));
+      expect(badged).toHaveLength(1);
+      expect(within(badged[0]!).getByText("Co 2")).toBeInTheDocument();
+    });
+
+    it("says how many are due and filters to them on click", async () => {
+      const user = userEvent.setup({ delay: null });
+      render(<ApplicationsSection rows={all} dueIds={due} />);
+      await user.click(screen.getByRole("button", { name: "2 follow-ups due today" }));
+      const items = within(screen.getByRole("list")).getAllByRole("listitem");
+      expect(items.map((li) => li.textContent)).toEqual([expect.stringContaining("Co 2"), expect.stringContaining("Co x1")]);
+    });
+
+    it("uses the singular for one", () => {
+      render(<ApplicationsSection rows={all} dueIds={new Set(["3"])} />);
+      expect(screen.getByRole("button", { name: "1 follow-up due today" })).toBeInTheDocument();
+    });
+
+    it("is hidden when nothing is due", () => {
+      render(<ApplicationsSection rows={all} dueIds={new Set()} />);
+      expect(screen.queryByText(/due today/)).toBeNull();
+      expect(screen.queryByText("Follow up")).toBeNull();
+    });
+
+    it("ignores due ids that match no row", () => {
+      render(<ApplicationsSection rows={seven} dueIds={new Set(["gone"])} />);
+      expect(screen.queryByText(/due today/)).toBeNull();
+    });
+  });
 });

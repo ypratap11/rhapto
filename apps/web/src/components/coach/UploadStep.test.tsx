@@ -115,6 +115,6 @@ describe("UploadStep", () => {
 
   it("has the skip link", () => {
     render(<UploadStep userId="u1" existingDocumentName={null} onDone={vi.fn()} />);
-    expect(screen.getByRole("link", { name: /skip to the full app/i })).toHaveAttribute("href", "/dashboard");
+    expect(screen.getByRole("link", { name: /back to your dashboard/i })).toHaveAttribute("href", "/dashboard");
   });
 });

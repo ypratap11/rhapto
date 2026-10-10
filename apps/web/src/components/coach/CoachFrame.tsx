@@ -6,7 +6,7 @@ import type { CoachError } from "@/lib/coach/errors";
 export type TranscriptItem = { label: string; value: string };
 
 /** One coach screen: the steps already taken (short, above), the current question, and the way out.
- * Every screen carries "Skip to the full app" (spec 2). */
+ * Every screen carries a way back to the dashboard. */
 export function CoachFrame({
   title,
   hint,
@@ -35,8 +35,8 @@ export function CoachFrame({
         {children}
       </section>
       <p className="text-sm">
-        <Link href="/dashboard" className="text-muted-foreground underline underline-offset-4 hover:text-foreground">
-          Skip to the full app
+        <Link href="/dashboard" className="inline-flex min-h-11 items-center text-muted-foreground underline underline-offset-4 hover:text-foreground">
+          Back to your dashboard
         </Link>
       </p>
     </div>

@@ -13,17 +13,33 @@ import { cn } from "cn";
 
 const PAGE = 10;
 
-export function ApplicationsSection({ rows }: { rows: ApplicationOut[] }) {
+/** `dueIds`: application ids whose follow-up is due today or overdue (from the dashboard's due_followups). */
+export function ApplicationsSection({ rows, dueIds }: { rows: ApplicationOut[]; dueIds?: ReadonlySet<string> }) {
   const [chip, setChip] = useState<ChipId>("all");
   const [showAll, setShowAll] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const counts = useMemo(() => chipCounts(rows), [rows]);
-  const visible = useMemo(() => rowsForChip(rows, chip), [rows, chip]);
+  const dueRows = useMemo(() => rows.filter((r) => dueIds?.has(r.id)), [rows, dueIds]);
+  const [dueOnly, setDueOnly] = useState(false);
+  const visible = useMemo(() => (dueOnly && dueRows.length > 0 ? dueRows : rowsForChip(rows, chip)), [rows, chip, dueOnly, dueRows]);
   const shown = showAll ? visible : visible.slice(0, PAGE);
   const selected = rows.find((r) => r.id === selectedId) ?? null;
 
   return (
     <section aria-labelledby="applications-heading" className="space-y-3">
+      {dueRows.length > 0 ? (
+        <button
+          type="button"
+          aria-pressed={dueOnly}
+          onClick={() => {
+            setDueOnly((v) => !v);
+            setShowAll(false);
+          }}
+          className="inline-flex min-h-11 items-center text-sm font-medium text-primary underline underline-offset-4 md:min-h-9"
+        >
+          {dueRows.length} follow-up{dueRows.length === 1 ? "" : "s"} due today
+        </button>
+      ) : null}
       <h2 id="applications-heading" className="font-sans text-base font-semibold">
         Your applications
       </h2>
@@ -35,6 +51,7 @@ export function ApplicationsSection({ rows }: { rows: ApplicationOut[] }) {
             aria-pressed={chip === id}
             onClick={() => {
               setChip(id);
+              setDueOnly(false);
               setShowAll(false);
             }}
             className={cn(
@@ -64,6 +81,7 @@ export function ApplicationsSection({ rows }: { rows: ApplicationOut[] }) {
                   <span className="block truncate text-sm text-muted-foreground">{a.job.title ?? "Untitled role"}</span>
                   <span className="block text-xs text-muted-foreground">{formatDate(lastChange(a))}</span>
                 </span>
+                {dueIds?.has(a.id) ? <StatusBadge tone="mid">Follow up</StatusBadge> : null}
                 <StatusBadge tone={statusTone(a.status)}>{statusWords(a)}</StatusBadge>
                 <ChevronRight className="size-4 shrink-0 text-muted-foreground" aria-hidden />
               </button>

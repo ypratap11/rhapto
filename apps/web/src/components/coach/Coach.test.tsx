@@ -131,7 +131,7 @@ describe("Coach: before it can start", () => {
     server.me = { data: undefined, isLoading: true, error: null };
     render(<Coach />);
     expect(screen.getByRole("status")).toHaveTextContent(/getting things ready/i);
-    expect(screen.getByRole("link", { name: /skip to the full app/i })).toHaveAttribute("href", "/dashboard");
+    expect(screen.getByRole("link", { name: /back to your dashboard/i })).toHaveAttribute("href", "/dashboard");
   });
 
   it("a failed /me is a plain error with the way out, not an endless spinner", () => {
@@ -139,7 +139,7 @@ describe("Coach: before it can start", () => {
     render(<Coach />);
     expect(screen.getByRole("alert")).toHaveTextContent("Something went wrong on our side. Try again in a moment.");
     expect(screen.queryByText(/getting things ready/i)).toBeNull();
-    expect(screen.getByRole("link", { name: /skip to the full app/i })).toHaveAttribute("href", "/dashboard");
+    expect(screen.getByRole("link", { name: /back to your dashboard/i })).toHaveAttribute("href", "/dashboard");
   });
 });
 

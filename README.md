@@ -114,20 +114,18 @@ open http://localhost:3000
 
 On first visit the app shows `/`, an explainer of what Rhapto does — the dashboard moved to `/dashboard`, so
 update any bookmark. From there, "Get started" leads to the API URL (`http://localhost:8000`) and bearer
-token form from your `.env` (`RHAPTO_API_TOKEN`). The portal has six screens:
+token form from your `.env` (`RHAPTO_API_TOKEN`). The portal has five screens:
 
-1. **Dashboard** (`/dashboard`) — where you land once connected: new fits, resumes waiting for review, your
-   profile checklist, saved searches, and what's active in your pipeline.
+1. **Dashboard** (`/dashboard`) — where you land once connected: new fits, resumes waiting for review, a short finish-setup line, and **Your applications**: every application you've sent, with filters, a
+   follow-up badge, and a sheet for status and notes.
 2. **Jobs** (`/jobs`) — search the whole market and browse everything Rhapto has found; Tailor kicks off a
    package, with progress streaming live.
 3. **Resumes** (`/resumes`) — every tailored package and what it's waiting on (needs review, blocked by
    guardrails, ready to apply); the review step highlights the exact block behind each bullet and lists
    anything the guardrails blocked.
-4. **Pipeline** (`/pipeline`) — every application you've sent, independent of the resume behind it: drag
-   across stages and keep notes and history.
-5. **Profile** (`/profile`) — everything Rhapto needs to know about you: your blocks, tracks, guardrails, and
+4. **Profile** (`/profile`) — everything Rhapto needs to know about you: your blocks, tracks, guardrails, and
    answers. Import your five YAML files (or the demo `profile.example` to try it).
-6. **Settings** (`/settings`) — your AI provider, job sources, saved searches, profile import/export, and the
+5. **Settings** (`/settings`) — your AI provider, job sources, saved searches, profile import/export, and the
    browser's connection to the API.
 
 The user guide under `docs/user-guide/` covers each screen in detail; this is just the map.

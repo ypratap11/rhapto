@@ -53,9 +53,9 @@ place. A package moves through **needs review → ready → applied** as you wor
 needing your review, you mark it ready once you're happy with it, and it becomes applied once you
 confirm you sent it. A guardrail failure diverts it to **blocked** instead of ready.
 
-## Pipeline
+## Your applications
 
-The pipeline tracks what you've actually applied to, independent of the resume that got you there.
+The Dashboard's **Your applications** list tracks what you've actually applied to, independent of the resume that got you there.
 An application moves **applied → screen → interview → offer**, or is **closed** with one of four
 reasons (rejected, withdrew, no response, filled). Every application keeps notes, a status history,
 and an optional follow-up date.

@@ -8,7 +8,7 @@ stage is a dead end.
 | Job (grid, recommendations, job page) | **Tailor** | **Not interested** hides the job (`jobs.hidden_at`); Undo toast for 8 s; "Show hidden" toggle on Jobs |
 | Resume | **Review** → **Mark ready** → **Apply** | **Skip** archives the package (`packages.archived_at`) and hides the job; **Regenerate** makes a new version; **Blocked** lists violations with a Fix link |
 | Apply | Opens the posting in a new tab and downloads the resume; on return the card asks "Did you apply?" **Yes / Not yet / Skip** | Yes creates or updates the application as Applied with today's date |
-| Pipeline | **Screen → Interview → Offer**, each with date and optional note | **Closed** with reason `rejected \| withdrew \| no_response \| filled`; **Follow-up** date puts a reminder on the Dashboard |
+| Your applications (Dashboard) | **Screen → Interview → Offer**, each with date and optional note | **Closed** with reason `rejected \| withdrew \| no_response \| filled`; **Follow-up** date puts a reminder on the Dashboard |
 
 ## Not interested
 
@@ -32,7 +32,7 @@ to the offending bullet, paragraph, or field so you can fix it and regenerate.
 
 ## Closed
 
-An application in the pipeline is closed with one of four reasons, so a closed application always
+An application is closed with one of four reasons, so a closed application always
 says why:
 
 - **Rejected** — the employer turned you down.
@@ -42,13 +42,11 @@ says why:
 
 ## Follow-up
 
-Any application in the pipeline can carry a follow-up date. A follow-up due today (or earlier)
-surfaces on the Dashboard's Active applications panel with a red "Follow up today" chip, so it
-doesn't silently sit unnoticed in a tab you don't have open.
+Any application can carry a follow-up date. A follow-up due today (or earlier) puts a "Follow up"
+badge on its row in the Dashboard's **Your applications** list, and a line above the list ("N
+follow-ups due today") filters to those rows, so it doesn't silently sit unnoticed.
 
 ![The job page](../user-guide/images/job-light.png)
-
-![The pipeline](../user-guide/images/pipeline-light.png)
 
 ## Closed postings and reposts
 
