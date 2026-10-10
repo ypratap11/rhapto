@@ -353,3 +353,43 @@
     transform: translateY(8px);
   }
 }
+
+/* tour motion */
+@keyframes tour-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes tour-progress {
+  from { transform: scaleX(0); }
+  to { transform: scaleX(1); }
+}
+@keyframes tour-hl {
+  from { background-color: transparent; }
+  to { background-color: color-mix(in srgb, var(--decor-amber) 25%, transparent); }
+}
+/* I-3: the changed line is `text-foreground` on a LIGHT amber wash (25%), not muted text on the 55% band
+ * (which measured 3.94:1 light / 2.17:1 dark). The wash is fully present for everyone; only its fade-in
+ * animates. The pair is in contrast.mjs for both themes. */
+.tour-hl {
+  background-color: color-mix(in srgb, var(--decor-amber) 25%, transparent);
+}
+/* Homepage tour, in-panel motion. CSS only, transform/opacity, each animation <= 400 ms. Everything that
+ * animates is inside this block, so under prefers-reduced-motion nothing is hidden-then-revealed and
+ * nothing moves. An inactive panel is `hidden` (display: none), so showing it restarts the animations. */
+@media (prefers-reduced-motion: no-preference) {
+  .tour-panel:not([hidden]) {
+    animation: tour-in 300ms ease-out both;
+  }
+  .tour-panel:not([hidden]) .tour-row {
+    animation: tour-in 300ms ease-out both;
+    animation-delay: calc(80ms + var(--i, 0) * 60ms);
+  }
+  .tour-hl {
+    animation: tour-hl 350ms ease-out 450ms both;
+  }
+  .tour-progress {
+    animation-name: tour-progress;
+    animation-timing-function: linear;
+    animation-fill-mode: forwards;
+  }
+}
