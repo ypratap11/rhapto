@@ -375,18 +375,19 @@
 }
 /* Homepage tour, in-panel motion. CSS only, transform/opacity, each animation <= 400 ms. Everything that
  * animates is inside this block, so under prefers-reduced-motion nothing is hidden-then-revealed and
- * nothing moves. An inactive panel is `hidden` (display: none), so showing it restarts the animations. */
+ * nothing moves. An inactive panel is `invisible` (data-hidden) and the animation is scoped to :not([data-hidden]), so showing it restarts the animations. */
 @media (prefers-reduced-motion: no-preference) {
-  .tour-panel:not([hidden]) {
+  .tour-panel:not([data-hidden]) {
     animation: tour-in 300ms ease-out both;
   }
-  .tour-panel:not([hidden]) .tour-row {
+  .tour-panel:not([data-hidden]) .tour-row {
     animation: tour-in 300ms ease-out both;
     animation-delay: calc(80ms + var(--i, 0) * 60ms);
   }
   .tour-hl {
     animation: tour-hl 350ms ease-out 450ms both;
   }
+  /* Deliberate exception to the <= 400 ms rule: the bar tracks the 4 s slide timer (TOUR_INTERVAL_MS). */
   .tour-progress {
     animation-name: tour-progress;
     animation-timing-function: linear;

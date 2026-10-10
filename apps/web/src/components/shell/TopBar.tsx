@@ -125,6 +125,8 @@ function MobileMenu({ pathname, visitor }: { pathname: string; visitor: boolean 
   const [open, setOpen] = useState(false);
   const close = () => setOpen(false);
   const access = accessRequestLink();
+  // EntryLink renders nothing on /settings in token mode; skip its row too so no blank 44px line shows.
+  const showEntry = SAME_ORIGIN_DEPLOYMENT || pathname !== primaryCta(false).href;
   return (
     <Sheet open={open} onOpenChange={setOpen}>
       <SheetTrigger render={<Button variant="ghost" size="icon-sm" aria-label="Menu" aria-expanded={open} className="size-11 md:hidden" />}>
@@ -137,9 +139,11 @@ function MobileMenu({ pathname, visitor }: { pathname: string; visitor: boolean 
         <ul className="flex flex-col gap-1 px-4 pb-4">
           {visitor ? (
             <>
-              <li className="flex min-h-11 items-center px-3">
-                <EntryLink pathname={pathname} onClick={close} />
-              </li>
+              {showEntry ? (
+                <li className="px-3">
+                  <EntryLink pathname={pathname} onClick={close} className="min-h-11 inline-flex items-center" />
+                </li>
+              ) : null}
               {SAME_ORIGIN_DEPLOYMENT ? (
                 <li>
                   <a

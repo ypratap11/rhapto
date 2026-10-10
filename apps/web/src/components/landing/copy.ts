@@ -15,14 +15,6 @@ function noFreeRuns(): boolean {
   return raw !== undefined && raw.trim() !== "" && Number(raw) === 0;
 }
 
-export function pricingLine(hosted: boolean): string {
-  if (!hosted) return "Free and open source (AGPL-3.0); you use your own AI key.";
-  if (noFreeRuns()) return "Bring your own AI key. A paid plan with AI usage included is coming.";
-  const n = freeRuns();
-  const runs = n === null ? "a few AI runs" : `${n} AI runs`;
-  return `Free during the beta: ${runs} on us (your first resume import is free), then use your own AI key. A paid plan with AI usage included is coming.`;
-}
-
 /** The muted line under the hero button. */
 export function freeLimitLine(hosted: boolean): string {
   if (!hosted) return "Free and open source (AGPL-3.0); you use your own AI key.";

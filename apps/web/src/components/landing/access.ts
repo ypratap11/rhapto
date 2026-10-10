@@ -16,8 +16,8 @@ export const ACCESS_REQUEST_MAILTO = `mailto:${ACCESS_REQUEST_EMAIL}?subject=${e
   "Rhapto access request",
 )}`;
 
-/** Where "Request beta access" goes (the owner's Google Form). Both `Landing` and the
- * tour's outro read it through `accessRequestLink`, so they cannot drift apart. Emptying it falls
+/** Where "Request beta access" goes (the owner's Google Form). `Landing` and the
+ * `Footer`/TopBar menu read it through `accessRequestLink`, so they cannot drift apart. Emptying it falls
  * back to the mailto above, which is the one-line way to switch back. */
 export const ACCESS_REQUEST_URL = "https://forms.gle/1GUeGcKB9fCiJAdFA";
 

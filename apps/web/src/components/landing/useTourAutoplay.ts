@@ -55,6 +55,9 @@ export function useTourAutoplay<T extends string>(values: readonly T[]) {
       if (e.pointerType !== "touch") setHover(true);
     },
     onPointerLeave: () => setHover(false),
+    // Touch has no hover or focus either: a touch in the stage means the visitor is driving, like a tab click.
+    // (Not onScroll: the programmatic scrollLeft re-centring fires scroll events too.)
+    onTouchStart: () => setChoice("off"),
     onFocus: () => setFocus(true),
     onBlur: (e: React.FocusEvent<HTMLElement>) => {
       if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setFocus(false);

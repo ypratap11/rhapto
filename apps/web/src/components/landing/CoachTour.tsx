@@ -24,7 +24,11 @@ const PANEL_FOCUS = "rounded-card focus-visible:ring-3 focus-visible:ring-ring/5
 
 const TOUR_VALUES = TOUR_TABS.map((t) => t.value);
 type TourTab = (typeof TOUR_TABS)[number]["value"];
-const PANEL = cn(PANEL_FOCUS, "tour-panel");
+// All four panels share ONE grid cell, so the wrapper is as tall as the tallest panel at every width and nothing
+// below the tour moves when the tab changes. Base UI marks an inactive keepMounted panel `hidden`
+// (display: none), which would drop it from the grid, so each panel overrides hidden={false} and is hidden with
+// `invisible` (data-hidden) instead; Base UI still sets inert on it, and aria-hidden is added for good measure.
+const PANEL = cn(PANEL_FOCUS, "tour-panel flex flex-col [grid-area:1/1] data-[hidden]:invisible");
 
 function Drawn({ children, outline = false, size = "lg" }: { children: React.ReactNode; outline?: boolean; size?: "lg" | "default" }) {
   return (
@@ -36,7 +40,7 @@ function Drawn({ children, outline = false, size = "lg" }: { children: React.Rea
 
 function Screen({ title, hint, children }: { title: string; hint?: string; children?: React.ReactNode }) {
   return (
-    <div className="space-y-4 rounded-card border border-border bg-surface p-5 text-left shadow-card">
+    <div className="flex-1 space-y-4 rounded-card border border-border bg-surface p-5 text-left shadow-card">
       <p className="font-heading text-xl font-medium">{title}</p>
       {hint ? <p className="text-sm text-muted-foreground">{hint}</p> : null}
       {children}
@@ -64,7 +68,7 @@ export function CoachTour() {
       <h2 id={headingId} className="mb-4 text-center font-heading text-xl font-semibold tracking-tight">
         See the coach, step by step
       </h2>
-      <div className="overflow-hidden rounded-t-card border border-border bg-background shadow-card">
+      <div className="overflow-hidden rounded-card border border-border bg-background shadow-card">
         <div className="flex items-center gap-3 border-b border-border bg-surface-muted px-3 py-2">
           <div aria-hidden="true" className="flex gap-1.5">
             <span className="size-2.5 rounded-full bg-border" />
@@ -76,7 +80,7 @@ export function CoachTour() {
             type="button"
             aria-label={playing ? "Pause demo" : "Play demo"}
             onClick={toggle}
-            className="ml-auto inline-flex size-7 items-center justify-center rounded-control text-muted-foreground hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50 max-sm:size-11"
+            className="ml-auto inline-flex size-7 items-center justify-center rounded-control text-muted-foreground hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50 max-md:size-11"
           >
             {playing ? <Pause className="size-4" aria-hidden="true" /> : <Play className="size-4" aria-hidden="true" />}
           </button>
@@ -91,10 +95,11 @@ export function CoachTour() {
             onClick={(e) => {
               if ((e.target as HTMLElement).closest('[role="tab"]')) takeOver(); // M-4: clicking the active tab also stops autoplay
             }}
+            /* relative: the scrollLeft effect reads each tab's offsetLeft, which needs this list as the offsetParent */
             className="relative w-full flex-nowrap justify-start gap-x-1 overflow-x-auto pb-3 sm:justify-center [scrollbar-width:none] [&::-webkit-scrollbar]:hidden group-data-horizontal/tabs:h-auto"
           >
             {TOUR_TABS.map((t) => (
-              <TabsTrigger key={t.value} value={t.value} className="h-auto flex-none px-3 py-1.5 max-sm:min-h-11">
+              <TabsTrigger key={t.value} value={t.value} className="h-auto flex-none px-3 py-1.5 max-md:min-h-11">
                 {t.label}
                 {running && !reduced && t.value === value ? (
                   <span
@@ -108,15 +113,15 @@ export function CoachTour() {
             ))}
           </TabsList>
 
-          {/* One fixed min-height for all four panels, so changing slide never moves the page (measured in Step 8). */}
-          <div data-tour-panels="" className="min-h-[26rem] sm:min-h-[22rem]">
-            <TabsContent value="upload" keepMounted className={PANEL}>
+          {/* Equal-height stack: see PANEL. The wrapper is as tall as the tallest panel, each card stretches to fill it. */}
+          <div data-tour-panels="" className="grid">
+            <TabsContent value="upload" keepMounted hidden={false} aria-hidden={value !== "upload"} className={PANEL}>
               <Screen title={copy.UPLOAD_TITLE} hint={copy.UPLOAD_HINT}>
                 <p className="inline-flex items-center rounded-full border border-border bg-surface-muted px-3 py-1 text-sm">{TOUR_FILE}</p>
               </Screen>
             </TabsContent>
 
-            <TabsContent value="role" keepMounted className={PANEL}>
+            <TabsContent value="role" keepMounted hidden={false} aria-hidden={value !== "role"} className={PANEL}>
               <Screen title={copy.roleQuestion(TOUR_ROLE)}>
                 <div className="flex flex-wrap gap-3">
                   <Drawn>{copy.ROLE_YES}</Drawn>
@@ -125,7 +130,7 @@ export function CoachTour() {
               </Screen>
             </TabsContent>
 
-            <TabsContent value="matches" keepMounted className={PANEL}>
+            <TabsContent value="matches" keepMounted hidden={false} aria-hidden={value !== "matches"} className={PANEL}>
               <Screen title={copy.matchesTitle(TOUR_ROLE)}>
                 <ul className="space-y-3">
                   {TOUR_JOBS.map((job, i) => (
@@ -148,7 +153,7 @@ export function CoachTour() {
               </Screen>
             </TabsContent>
 
-            <TabsContent value="result" keepMounted className={PANEL}>
+            <TabsContent value="result" keepMounted hidden={false} aria-hidden={value !== "result"} className={PANEL}>
               <Screen title={copy.RESULT_TITLE}>
                 <p className="text-sm text-muted-foreground">{copy.RESULT_READY}</p>
                 <div className="flex flex-wrap gap-3">
@@ -176,7 +181,7 @@ export function CoachTour() {
       </div>
       <div className="mt-3 flex flex-wrap items-center justify-center gap-x-4 gap-y-2 text-sm">
         <p className="text-muted-foreground">Example with a fictional person, Maya Chen.</p>
-        <a href={cta.href} className="font-medium text-link-on-band underline underline-offset-4">
+        <a href={cta.href} className="font-medium text-link-on-band underline underline-offset-4 max-md:inline-flex max-md:min-h-11 max-md:items-center">
           Try it with your resume →
         </a>
       </div>

@@ -304,6 +304,21 @@ describe("TopBar", () => {
       expect(within(dialog).getAllByRole("link").map((a) => a.textContent)).toEqual(["Get started"]);
     });
 
+    it("visitor menu has 44px tap targets for its links; no empty row on token-mode /settings", async () => {
+      pathname.mockReturnValue("/");
+      sameOrigin.value = true;
+      const { unmount } = render(<TopBar />);
+      let { dialog } = await open();
+      for (const a of within(dialog).getAllByRole("link")) expect(a.className).toContain("min-h-11");
+      unmount();
+      pathname.mockReturnValue("/settings");
+      sameOrigin.value = false;
+      render(<TopBar />);
+      ({ dialog } = await open());
+      expect(within(dialog).queryAllByRole("link")).toHaveLength(0);
+      expect(dialog.querySelectorAll("li")).toHaveLength(1); // only the theme toggle row
+    });
+
     it("closes on Escape", async () => {
       pathname.mockReturnValue("/start");
       render(<TopBar />);

@@ -55,7 +55,7 @@ describe("CoachTour", () => {
     const cls = screen.getByRole("tablist").className;
     expect(cls).not.toContain("flex-wrap");
     for (const c of ["flex-nowrap", "overflow-x-auto", "justify-start", "sm:justify-center", "[scrollbar-width:none]", "group-data-horizontal/tabs:h-auto"]) expect(cls).toContain(c);
-    expect(screen.getAllByRole("tab")[0]!.className).toContain("max-sm:min-h-11");
+    expect(screen.getAllByRole("tab")[0]!.className).toContain("max-md:min-h-11");
   });
 
   it("moves selection by click and by arrow keys, wrapping, Home and End", async () => {
@@ -305,6 +305,14 @@ describe("CoachTour autoplay", () => {
     expect(selected()).toBe(1);
   });
 
+  it("a touch in the stage takes over autoplay; Play resumes it", () => {
+    render(<CoachTour />);
+    fireEvent.touchStart(stage());
+    advance(60_000);
+    expect(selected()).toBe(0);
+    expect(screen.getByRole("button", { name: "Play demo" })).toBeInTheDocument();
+  });
+
   it("Play works while the button is focused and hovered: the bar is outside the hold zone (architect I2)", async () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     render(<CoachTour />);
@@ -361,12 +369,21 @@ describe("CoachTour autoplay", () => {
     render(<CoachTour />);
     expect(screen.getByText("Live demo")).toBeInTheDocument();
     for (const panel of panels()) expect(panel.querySelector("button")).toBeNull();
-    expect(screen.getByRole("button", { name: /demo$/ }).className).toContain("max-sm:size-11");
+    expect(screen.getByRole("button", { name: /demo$/ }).className).toContain("max-md:size-11");
   });
 
-  it("panels sit in one fixed min-height wrapper; panel 3 rows and panel 4's changed line carry the motion hooks", () => {
+  it("all panels share one grid cell, so the wrapper is as tall as the tallest; inactive ones are invisible+inert, not display:none", () => {
     const { container } = render(<CoachTour />);
-    expect(container.querySelector("[data-tour-panels]")!.className).toMatch(/min-h-\[/);
+    expect(container.querySelector("[data-tour-panels]")!.className).toContain("grid");
+    panels().forEach((panel, i) => {
+      expect(panel.className).toContain("[grid-area:1/1]");
+      expect(panel.className).toContain("data-[hidden]:invisible");
+      expect(panel).not.toHaveAttribute("hidden"); // `hidden` would be display:none and drop it from the grid
+      expect(panel.hasAttribute("inert")).toBe(i !== 0);
+      expect(panel.getAttribute("aria-hidden")).toBe(i === 0 ? "false" : "true");
+      expect(panel.hasAttribute("data-hidden")).toBe(i !== 0);
+      expect(panel.firstElementChild!.className).toContain("flex-1"); // the card fills the wrapper: no empty band
+    });
     for (const panel of panels()) expect(panel.className).toContain("tour-panel");
     expect(panels()[2]!.querySelectorAll(".tour-row")).toHaveLength(3);
     expect(panels()[3]!.querySelectorAll(".tour-hl")).toHaveLength(1);
@@ -379,7 +396,7 @@ describe("CoachTour autoplay", () => {
     const media = css.indexOf("@media (prefers-reduced-motion: no-preference)", marker);
     expect(media).toBeGreaterThan(marker);
     const block = css.slice(media);
-    for (const sel of [".tour-panel:not([hidden])", ".tour-row", "animation: tour-hl", ".tour-progress"]) expect(block, sel).toContain(sel);
+    for (const sel of [".tour-panel:not([data-hidden])", ".tour-row", "animation: tour-hl", ".tour-progress"]) expect(block, sel).toContain(sel);
     // nothing outside the block starts an animation on these classes
     expect(css.slice(marker, media)).not.toMatch(/\.tour-(panel|row|progress)[^{]*\{[^}]*animation/);
   });

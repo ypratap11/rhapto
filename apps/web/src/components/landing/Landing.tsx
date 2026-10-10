@@ -22,7 +22,7 @@ const STEPS = [
 export function Landing() {
   const access = accessRequestLink();
   const cta = primaryCta(SAME_ORIGIN_DEPLOYMENT);
-  const ctaClass = cn(buttonVariants({ size: "lg" }), "shadow-cta cta-lift");
+  const ctaClass = cn(buttonVariants({ size: "lg" }), "shadow-cta cta-lift max-md:h-11");
   const requestLine = SAME_ORIGIN_DEPLOYMENT ? (
     <p className="text-sm text-muted-foreground">
       No invite yet?{" "}

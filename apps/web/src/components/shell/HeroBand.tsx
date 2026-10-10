@@ -25,12 +25,14 @@ export function HeroBand({
   children: React.ReactNode;
 }) {
   const glow = tone === "glow";
+  // Glow: the band's own bottom padding (py-8 / sm:py-12) plus mb-8 makes the gap to the next section 64px on
+  // phones and 80px from sm, the same as the sections' mb-16 / sm:mb-20.
   return (
     <div
       data-testid="hero-band"
       className={cn(
         "relative mx-[calc(50%-50vw)] -mt-8 w-screen overflow-hidden px-6 py-8 text-foreground",
-        glow ? "mb-16 border-b-0 sm:mb-20 sm:py-12" : "mb-8 border-b border-border",
+        glow ? "mb-8 border-b-0 sm:py-12" : "mb-8 border-b border-border",
         TONE_CLASS[tone],
         HEIGHT_CLASS[height],
       )}

@@ -4,7 +4,7 @@ export type FeedbackIn = components["schemas"]["FeedbackIn"];
 export type FeedbackQuickAnswers = components["schemas"]["QuickAnswers"];
 export type PageArea = NonNullable<FeedbackIn["page_area"]>;
 
-/** Where the shell feedback button stays out of the way: the pitch pages and the survey itself. */
+/** Where the shell feedback button stays out of the way: the front page and the survey itself. */
 export const FEEDBACK_HIDDEN_ROUTES: ReadonlySet<string> = new Set(["/", "/feedback"]);
 
 const UUID = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}";
