@@ -2,17 +2,9 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { TopBar } from "./TopBar";
+import { activeTab, TopBar } from "./TopBar";
 import { setSettings } from "@/lib/api/client";
 import visibility from "@/lib/edge-visibility.json";
-
-// Most TopBar tests render <TopBar/> with no QueryClientProvider, which the real button (it calls
-// useMe) needs; stub it to nothing there, and let one test opt in to the real component.
-const realButton = { on: false };
-vi.mock("@/components/feedback/FeedbackButton", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@/components/feedback/FeedbackButton")>();
-  return { FeedbackButton: () => (realButton.on ? <actual.FeedbackButton /> : null) };
-});
 
 // `SAME_ORIGIN_DEPLOYMENT` is a build-time const; a getter mock is the only way to see both modes
 // (the pattern Landing.test.tsx and TokenGate.test.tsx use).
@@ -47,145 +39,61 @@ function prefetchedProtectedLinks(root: ParentNode): string[] {
     .map((a) => a.getAttribute("href")!);
 }
 
+/** Visitor tests: TopBar now calls useMe (disabled for visitors, so no request), which needs a client. */
+function renderPlain() {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return render(
+    <QueryClientProvider client={client}>
+      <TopBar />
+    </QueryClientProvider>,
+  );
+}
+
+function renderBar(authMode: "access" | "token" = "access") {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () =>
+      new Response(JSON.stringify({ auth_mode: authMode, email: "maya@example.com", llm_configured: true, user_id: "11111111-1111-4111-8111-111111111111" }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
+    ),
+  );
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return render(
+    <QueryClientProvider client={client}>
+      <TopBar />
+    </QueryClientProvider>,
+  );
+}
+
 describe("TopBar", () => {
-  it("lists the three coach tabs in order and marks the current one", () => {
-    pathname.mockReturnValue("/resumes");
-    render(<TopBar />);
-    const nav = screen.getByRole("navigation", { name: "Primary" });
-    expect([...nav.querySelectorAll("a")].map((a) => a.textContent)).toEqual([
-      "Tailor a resume",
-      "My resumes",
-      "Feedback",
-    ]);
-    expect(screen.getByRole("link", { name: "My resumes" })).toHaveAttribute("aria-current", "page");
-    expect(screen.getByRole("link", { name: "Tailor a resume" })).toHaveAttribute("href", "/start");
-    expect(screen.getByRole("link", { name: "Tailor a resume" })).not.toHaveAttribute("aria-current");
-    expect(screen.getByRole("link", { name: "Feedback" })).toHaveAttribute("href", "/feedback");
-  });
-
-  it("marks Tailor a resume current on /start; the visitor header on / has no tabs", () => {
-    pathname.mockReturnValue("/start");
-    const { unmount } = render(<TopBar />);
-    expect(screen.getByRole("link", { name: "Tailor a resume" })).toHaveAttribute("aria-current", "page");
-    unmount();
+  it("the visitor header on / has no tabs", () => {
     pathname.mockReturnValue("/");
-    render(<TopBar />);
+    renderPlain();
     expect(screen.queryByRole("link", { name: "Tailor a resume" })).toBeNull();
+    expect(screen.queryByRole("navigation", { name: "Primary" })).toBeNull();
   });
 
-  it("keeps the old tabs out of the primary nav and behind Advanced, closed by default", async () => {
-    pathname.mockReturnValue("/start");
-    render(<TopBar />);
-    const nav = screen.getByRole("navigation", { name: "Primary" });
-    for (const old of ["Dashboard", "Jobs", "Pipeline", "Profile"]) {
-      expect(within(nav).queryByRole("link", { name: old })).toBeNull();
-      expect(screen.queryByRole("link", { name: old })).toBeNull(); // menu closed
+  it("points the visitor logo at /", () => {
+    for (const hosted of [true, false]) {
+      pathname.mockReturnValue("/");
+      sameOrigin.value = hosted;
+      const { unmount } = renderPlain();
+      expect(screen.getByRole("link", { name: "Rhapto" })).toHaveAttribute("href", "/");
+      unmount();
     }
-    const trigger = screen.getByRole("button", { name: /advanced/i });
-    expect(trigger).toHaveAttribute("aria-expanded", "false");
-
-    const user = userEvent.setup({ delay: null });
-    await user.click(trigger);
-    expect(trigger).toHaveAttribute("aria-expanded", "true");
-    const menu = screen.getByRole("list", { name: "Advanced" });
-    expect([...menu.querySelectorAll("a")].map((a) => [a.textContent, a.getAttribute("href")])).toEqual([
-      ["Dashboard", "/dashboard"],
-      ["Jobs", "/jobs"],
-      ["Pipeline", "/pipeline"],
-      ["Profile", "/profile"],
-    ]);
-  });
-
-  it("closes the Advanced menu on Escape and marks the trigger active on an advanced page", async () => {
-    pathname.mockReturnValue("/jobs/abc");
-    render(<TopBar />);
-    const trigger = screen.getByRole("button", { name: /advanced/i });
-    expect(trigger).toHaveAttribute("data-active", "true");
-    const user = userEvent.setup({ delay: null });
-    await user.click(trigger);
-    expect(screen.getByRole("link", { name: "Jobs" })).toHaveAttribute("aria-current", "page");
-    await user.keyboard("{Escape}");
-    expect(trigger).toHaveAttribute("aria-expanded", "false");
-    expect(screen.queryByRole("link", { name: "Jobs" })).toBeNull();
-  });
-
-  it("points the logo at / in both modes and on every kind of page", () => {
-    for (const path of ["/", "/start", "/settings"]) {
-      for (const hosted of [true, false]) {
-        pathname.mockReturnValue(path);
-        sameOrigin.value = hosted;
-        const { unmount } = render(<TopBar />);
-        expect(screen.getByRole("link", { name: "Rhapto" })).toHaveAttribute("href", "/");
-        unmount();
-      }
-    }
-  });
-
-  it("offers the theme toggle, Settings and Help", () => {
-    render(<TopBar />);
-    expect(screen.getByRole("button", { name: /toggle theme/i })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Settings" })).toHaveAttribute("href", "/settings");
-    expect(screen.getByRole("link", { name: "Help" })).toHaveAttribute("href", "/settings#help");
-  });
-
-  it("orders the trailing icon controls as theme toggle, then Settings, then Help", () => {
-    render(<TopBar />);
-    const trailing = [...screen.getByRole("banner").querySelectorAll("button[aria-label], a[aria-label]")].map((el) =>
-      el.getAttribute("aria-label"),
-    );
-    expect(trailing).toEqual(["Toggle theme", "Settings", "Help", "Menu"]);
-  });
-
-  it("shows the feedback button, by its aria-label, before the theme toggle", async () => {
-    pathname.mockReturnValue("/start"); // not left over from an earlier test
-    realButton.on = true;
-    setSettings({ token: "tok", apiUrl: "http://localhost:8000" });
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async () =>
-        new Response(
-          JSON.stringify({ auth_mode: "token", email: "tester-a@example.com", llm_configured: true, user_id: "11111111-1111-4111-8111-111111111111" }),
-          { status: 200, headers: { "content-type": "application/json" } },
-        ),
-      ),
-    );
-    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    render(
-      <QueryClientProvider client={client}>
-        <TopBar />
-      </QueryClientProvider>,
-    );
-    await screen.findByRole("button", { name: "Feedback on this page" });
-    const trailing = [...screen.getByRole("banner").querySelectorAll("button[aria-label], a[aria-label]")].map((el) =>
-      el.getAttribute("aria-label"),
-    );
-    expect(trailing).toEqual(["Feedback on this page", "Toggle theme", "Settings", "Help", "Menu"]);
-  });
-
-  it("is one row on every width: nav and icons hidden below md, Menu hidden from md, 44px phone targets", () => {
-    // jsdom cannot measure layout; this pins the classes that do the work.
-    pathname.mockReturnValue("/start");
-    render(<TopBar />);
-    const nav = screen.getByRole("navigation", { name: "Primary" });
-    expect(nav.className.split(" ")).toEqual(expect.arrayContaining(["hidden", "md:flex"]));
-    expect(nav.className).not.toContain("overflow-x-auto");
-    expect(screen.getByRole("link", { name: "Settings" }).parentElement!.className).toContain("hidden");
-    const menu = screen.getByRole("button", { name: "Menu" });
-    expect(menu.className).toContain("md:hidden");
-    expect(menu.className).toContain("size-11");
-    expect(screen.getByRole("link", { name: "Rhapto" }).className).toContain("min-h-11");
-    expect(screen.getByRole("banner").firstElementChild!.className).not.toContain("flex-wrap");
   });
 
   describe("visitor header (/ and token-mode /settings without a token)", () => {
     const hrefs = () => [...screen.getByRole("banner").querySelectorAll("a")].map((a) => [a.textContent, a.getAttribute("href")]);
     const buttonNames = () => [...screen.getByRole("banner").querySelectorAll("button")].map((b) => b.getAttribute("aria-label"));
 
-    it("hosted /: exactly logo -> /, theme toggle and Sign in -> /start; nothing else", () => {
+    it("hosted /: exactly logo -> /, theme toggle and Sign in -> /dashboard; nothing else", () => {
       pathname.mockReturnValue("/");
       sameOrigin.value = true;
-      render(<TopBar />);
-      expect(hrefs()).toEqual([["Rhapto", "/"], ["Sign in", "/start"]]);
+      renderPlain();
+      expect(hrefs()).toEqual([["Rhapto", "/"], ["Sign in", "/dashboard"]]);
       expect(buttonNames()).toEqual(["Toggle theme", "Menu"]);
       expect(screen.queryByRole("navigation", { name: "Primary" })).toBeNull();
       expect(screen.queryByRole("button", { name: /advanced/i })).toBeNull();
@@ -195,14 +103,14 @@ describe("TopBar", () => {
     it("token mode /: logo and Get started -> /settings", () => {
       pathname.mockReturnValue("/");
       sameOrigin.value = false;
-      render(<TopBar />);
+      renderPlain();
       expect(hrefs()).toEqual([["Rhapto", "/"], ["Get started", "/settings"]]);
     });
 
     it("token mode /settings without a token: visitor header, no link to itself", () => {
       pathname.mockReturnValue("/settings");
       sameOrigin.value = false;
-      render(<TopBar />);
+      renderPlain();
       expect(hrefs()).toEqual([["Rhapto", "/"]]);
       expect(screen.queryByRole("navigation", { name: "Primary" })).toBeNull();
     });
@@ -211,24 +119,24 @@ describe("TopBar", () => {
       setSettings({ token: "tok", apiUrl: "http://localhost:8000" });
       pathname.mockReturnValue("/settings");
       sameOrigin.value = false;
-      render(<TopBar />);
-      expect(screen.getByRole("navigation", { name: "Primary" })).toBeInTheDocument();
-      expect(screen.getByRole("button", { name: /advanced/i })).toBeInTheDocument();
+      renderBar("token");
+      expect(within(screen.getByRole("navigation", { name: "Primary" })).getAllByRole("link").map((a) => a.textContent)).toEqual(["Dashboard", "My resumes"]);
+      expect(screen.queryByRole("button", { name: /advanced/i })).toBeNull();
     });
 
-    it("hosted /settings is an in-app screen: tabs and Advanced present", () => {
+    it("hosted /settings is an in-app screen: two tabs, no Advanced", () => {
       pathname.mockReturnValue("/settings");
       sameOrigin.value = true;
-      render(<TopBar />);
-      expect(screen.getByRole("navigation", { name: "Primary" })).toBeInTheDocument();
-      expect(screen.getByRole("button", { name: /advanced/i })).toBeInTheDocument();
+      renderBar();
+      expect(within(screen.getByRole("navigation", { name: "Primary" })).getAllByRole("link").map((a) => a.textContent)).toEqual(["Dashboard", "My resumes"]);
+      expect(screen.queryByRole("button", { name: /advanced/i })).toBeNull();
     });
 
     it("every protected link in the visitor header has prefetch disabled", () => {
       for (const hosted of [true, false]) {
         pathname.mockReturnValue("/");
         sameOrigin.value = hosted;
-        const { container, unmount } = render(<TopBar />);
+        const { container, unmount } = renderPlain();
         expect(container.querySelectorAll("a[data-link]").length).toBeGreaterThan(1);
         expect(prefetchedProtectedLinks(container)).toEqual([]);
         unmount();
@@ -255,8 +163,8 @@ describe("TopBar", () => {
     };
 
     it("is a closed button named Menu (aria-expanded=false) that opens a dialog titled Menu (aria-expanded=true)", async () => {
-      pathname.mockReturnValue("/start");
-      render(<TopBar />);
+      pathname.mockReturnValue("/dashboard");
+      renderBar();
       const trigger = screen.getByRole("button", { name: "Menu" });
       expect(trigger).toHaveAttribute("aria-expanded", "false");
       expect(screen.queryByRole("dialog")).toBeNull();
@@ -265,33 +173,14 @@ describe("TopBar", () => {
       expect(trigger).toHaveAttribute("aria-expanded", "true");
     });
 
-    it("in-app: tabs, Advanced pages, Settings, Help and the theme toggle", async () => {
-      pathname.mockReturnValue("/start");
-      render(<TopBar />);
-      const { dialog } = await open();
-      expect(within(dialog).getAllByRole("link").map((a) => [a.textContent, a.getAttribute("href")])).toEqual([
-        ["Tailor a resume", "/start"],
-        ["My resumes", "/resumes"],
-        ["Feedback", "/feedback"],
-        ["Dashboard", "/dashboard"],
-        ["Jobs", "/jobs"],
-        ["Pipeline", "/pipeline"],
-        ["Profile", "/profile"],
-        ["Settings", "/settings"],
-        ["Help", "/settings#help"],
-      ]);
-      expect(within(dialog).getByRole("link", { name: "Tailor a resume" })).toHaveAttribute("aria-current", "page");
-      expect(within(dialog).getByRole("button", { name: /toggle theme/i })).toBeInTheDocument();
-    });
-
     it("visitor, hosted: Sign in, Request beta access, theme toggle; no app links", async () => {
       pathname.mockReturnValue("/");
       sameOrigin.value = true;
-      render(<TopBar />);
+      renderPlain();
       const { dialog } = await open();
       const links = within(dialog).getAllByRole("link");
       expect(links.map((a) => a.textContent)).toEqual(["Sign in", "Request beta access"]);
-      expect(links[0]).toHaveAttribute("href", "/start");
+      expect(links[0]).toHaveAttribute("href", "/dashboard");
       expect(links[0]).toHaveAttribute("data-prefetch", "false");
       expect(within(dialog).getByRole("button", { name: /toggle theme/i })).toBeInTheDocument();
     });
@@ -299,29 +188,30 @@ describe("TopBar", () => {
     it("visitor, token mode: Get started and the theme toggle only", async () => {
       pathname.mockReturnValue("/");
       sameOrigin.value = false;
-      render(<TopBar />);
+      renderPlain();
       const { dialog } = await open();
       expect(within(dialog).getAllByRole("link").map((a) => a.textContent)).toEqual(["Get started"]);
+      expect(within(dialog).getByRole("link", { name: "Get started" })).toHaveAttribute("href", "/settings");
     });
 
     it("visitor menu has 44px tap targets for its links; no empty row on token-mode /settings", async () => {
       pathname.mockReturnValue("/");
       sameOrigin.value = true;
-      const { unmount } = render(<TopBar />);
+      const { unmount } = renderPlain();
       let { dialog } = await open();
       for (const a of within(dialog).getAllByRole("link")) expect(a.className).toContain("min-h-11");
       unmount();
       pathname.mockReturnValue("/settings");
       sameOrigin.value = false;
-      render(<TopBar />);
+      renderPlain();
       ({ dialog } = await open());
       expect(within(dialog).queryAllByRole("link")).toHaveLength(0);
       expect(dialog.querySelectorAll("li")).toHaveLength(1); // only the theme toggle row
     });
 
     it("closes on Escape", async () => {
-      pathname.mockReturnValue("/start");
-      render(<TopBar />);
+      pathname.mockReturnValue("/dashboard");
+      renderBar();
       const { user } = await open();
       await user.keyboard("{Escape}");
       await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
@@ -331,48 +221,269 @@ describe("TopBar", () => {
     it("closes when a link is clicked, even a hash link that leaves the pathname unchanged", async () => {
       pathname.mockReturnValue("/settings");
       sameOrigin.value = true;
-      render(<TopBar />);
+      renderBar();
       const { user, dialog } = await open();
       await user.click(within(dialog).getByRole("link", { name: "Help" }));
       await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
     });
 
     it("closes when the route changes", async () => {
-      pathname.mockReturnValue("/start");
-      const { rerender } = render(<TopBar />);
+      pathname.mockReturnValue("/dashboard");
+      const { rerender } = renderBar();
       await open();
       pathname.mockReturnValue("/resumes");
-      rerender(<TopBar />);
-      expect(screen.queryByRole("dialog")).toBeNull();
-    });
-
-    it("in-app, the feedback button stays in the one-row bar, not inside the sheet", async () => {
-      realButton.on = true;
-      setSettings({ token: "tok", apiUrl: "http://localhost:8000" });
-      vi.stubGlobal(
-        "fetch",
-        vi.fn(async () =>
-          new Response(JSON.stringify({ auth_mode: "token", email: "t@example.com", llm_configured: true, user_id: "11111111-1111-4111-8111-111111111111" }), {
-            status: 200,
-            headers: { "content-type": "application/json" },
-          }),
-        ),
-      );
-      pathname.mockReturnValue("/start");
-      render(
+      rerender(
         <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
           <TopBar />
         </QueryClientProvider>,
       );
-      const bar = await screen.findByRole("button", { name: "Feedback on this page" });
-      expect(bar.closest("[role='dialog']")).toBeNull();
-      expect(bar.parentElement!.className).not.toContain("hidden"); // not inside the md-only group
+      expect(screen.queryByRole("dialog")).toBeNull();
+    });
+  });
+});
+
+describe("signed-in header", () => {
+  it("has exactly two tabs, Dashboard then My resumes, and marks the current one", () => {
+    pathname.mockReturnValue("/resumes");
+    renderBar();
+    const nav = screen.getByRole("navigation", { name: "Primary" });
+    expect([...nav.querySelectorAll("a")].map((a) => [a.textContent, a.getAttribute("href")])).toEqual([
+      ["Dashboard", "/dashboard"],
+      ["My resumes", "/resumes"],
+    ]);
+    expect(within(nav).getByRole("link", { name: "My resumes" })).toHaveAttribute("aria-current", "page");
+    expect(within(nav).getByRole("link", { name: "Dashboard" })).not.toHaveAttribute("aria-current");
+  });
+
+  it("maps pages to tabs", () => {
+    expect(activeTab("/dashboard")).toBe("/dashboard");
+    expect(activeTab("/jobs")).toBe("/dashboard");
+    expect(activeTab("/jobs/abc")).toBe("/dashboard");
+    expect(activeTab("/resumes")).toBe("/resumes");
+    expect(activeTab("/jobs/abc/packages/def")).toBe("/resumes");
+    expect(activeTab("/start")).toBeNull();
+    expect(activeTab("/profile")).toBeNull();
+    expect(activeTab("/settings")).toBeNull();
+  });
+
+  it("has no Advanced menu and no Feedback, Jobs, Pipeline, Profile or Tailor tab", () => {
+    pathname.mockReturnValue("/dashboard");
+    renderBar();
+    expect(screen.queryByRole("button", { name: /advanced/i })).toBeNull();
+    const nav = screen.getByRole("navigation", { name: "Primary" });
+    for (const old of ["Feedback", "Jobs", "Pipeline", "Profile", "Tailor a resume"]) {
+      expect(within(nav).queryByRole("link", { name: old })).toBeNull();
+    }
+  });
+
+  it("has a primary Tailor a resume link (desktop pill and phone +) to /start", () => {
+    pathname.mockReturnValue("/dashboard");
+    renderBar();
+    const links = screen.getAllByRole("link", { name: "Tailor a resume" });
+    expect(links).toHaveLength(2);
+    for (const a of links) expect(a).toHaveAttribute("href", "/start");
+  });
+
+  it("points the logo at /dashboard on every signed-in page, including hosted /settings", () => {
+    for (const path of ["/dashboard", "/start", "/settings", "/resumes"]) {
+      pathname.mockReturnValue(path);
+      const { unmount } = renderBar();
+      expect(screen.getByRole("link", { name: "Rhapto" })).toHaveAttribute("href", "/dashboard");
+      unmount();
+    }
+  });
+
+  it("opens an Account disclosure with profile, settings, help, feedback, theme and (hosted) sign out", async () => {
+    pathname.mockReturnValue("/dashboard");
+    sameOrigin.value = true;
+    renderBar();
+    const user = userEvent.setup({ delay: null });
+    const trigger = await screen.findByRole("button", { name: "Account" });
+    expect(trigger).not.toHaveAttribute("role", "menu");
+    expect(trigger).toHaveAttribute("aria-expanded", "false");
+    await waitFor(() => expect(trigger).toHaveTextContent("M"));
+    await user.click(trigger);
+    const menu = screen.getByRole("list", { name: "Account" });
+    expect([...menu.querySelectorAll("a")].map((a) => [a.textContent, a.getAttribute("href")])).toEqual([
+      ["Your profile", "/profile"],
+      ["Settings", "/settings"],
+      ["Help", "/settings#help"],
+      ["Sign out", "/cdn-cgi/access/logout"],
+    ]);
+    expect(await within(menu).findByRole("button", { name: "Send feedback" })).toBeInTheDocument();
+    expect(within(menu).getByRole("button", { name: "Dark mode" })).toBeInTheDocument();
+    expect(within(menu).getByText("Sign out")).not.toHaveAttribute("data-link"); // a plain anchor: no router, no prefetch
+  });
+
+  it("has no Sign out in token mode", async () => {
+    pathname.mockReturnValue("/dashboard");
+    sameOrigin.value = false;
+    setSettings({ token: "tok", apiUrl: "http://localhost:8000" });
+    renderBar("token");
+    const user = userEvent.setup({ delay: null });
+    await user.click(await screen.findByRole("button", { name: "Account" }));
+    expect(screen.queryByText("Sign out")).toBeNull();
+  });
+
+  it("Escape closes the disclosure and returns focus to the avatar button", async () => {
+    pathname.mockReturnValue("/dashboard");
+    renderBar();
+    const user = userEvent.setup({ delay: null });
+    const trigger = await screen.findByRole("button", { name: "Account" });
+    await user.click(trigger);
+    // Move focus INTO the panel first. A click leaves focus on the trigger already, so without this the
+    // assertion below would pass even if the implementation never restored focus.
+    await user.tab();
+    expect(screen.getByRole("link", { name: "Your profile" })).toHaveFocus();
+    await user.keyboard("{Escape}");
+    expect(trigger).toHaveAttribute("aria-expanded", "false");
+    expect(trigger).toHaveFocus();
+  });
+
+  it("Send feedback closes the menu and opens the dialog, which stays open", async () => {
+    pathname.mockReturnValue("/dashboard");
+    renderBar();
+    const user = userEvent.setup({ delay: null });
+    await user.click(await screen.findByRole("button", { name: "Account" }));
+    await user.click(await screen.findByRole("button", { name: "Send feedback" }));
+    expect(screen.queryByRole("list", { name: "Account" })).toBeNull();
+    expect(await screen.findByRole("dialog")).toBeInTheDocument();
+    await new Promise((r) => setTimeout(r, 50));
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+  });
+
+  it("offers no Send feedback when /me is refused (signed in at Cloudflare, not on the allowlist)", async () => {
+    pathname.mockReturnValue("/dashboard");
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ detail: "forbidden" }), { status: 403, headers: { "content-type": "application/json" } }));
+    vi.stubGlobal("fetch", fetchMock);
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={client}>
+        <TopBar />
+      </QueryClientProvider>,
+    );
+    const user = userEvent.setup({ delay: null });
+    await user.click(await screen.findByRole("button", { name: "Account" }));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    await new Promise((r) => setTimeout(r, 50)); // let the refusal land so "absent" is not just "not yet loaded"
+    expect(screen.queryByRole("button", { name: "Send feedback" })).toBeNull();
+  });
+
+  it("fixes the feedback area and job at open time", async () => {
+    const JOB = "11111111-1111-4111-8111-111111111111";
+    pathname.mockReturnValue(`/jobs/${JOB}`);
+    const posts: unknown[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = input instanceof Request ? input.url : String(input);
+        if (url.endsWith("/api/v1/feedback")) {
+          const text = input instanceof Request ? await input.clone().text() : String(init?.body ?? "");
+          posts.push(JSON.parse(text));
+          return new Response(JSON.stringify({ id: "22222222-2222-4222-8222-222222222222", created_at: "2026-10-01T00:00:00Z" }), {
+            status: 201,
+            headers: { "content-type": "application/json" },
+          });
+        }
+        return new Response(JSON.stringify({ auth_mode: "access", email: "maya@example.com", llm_configured: true, user_id: "11111111-1111-4111-8111-111111111111" }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      }),
+    );
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const tree = (
+      <QueryClientProvider client={client}>
+        <TopBar />
+      </QueryClientProvider>
+    );
+    const { rerender } = render(tree);
+    const user = userEvent.setup({ delay: null });
+    await user.click(await screen.findByRole("button", { name: "Account" }));
+    await user.click(await screen.findByRole("button", { name: "Send feedback" }));
+    await screen.findByRole("dialog");
+    // Navigate while the dialog is open: it must keep the target it opened with.
+    pathname.mockReturnValue("/resumes");
+    rerender(tree);
+    await user.click(screen.getByRole("radio", { name: /it worked well/i }));
+    await user.click(screen.getByRole("button", { name: /send/i }));
+    await waitFor(() => expect(posts).toHaveLength(1));
+    expect(posts[0]).toMatchObject({ form: "quick", job_id: JOB });
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+
+    // A second open is tagged for the new page.
+    await user.click(await screen.findByRole("button", { name: "Account" }));
+    await user.click(await screen.findByRole("button", { name: "Send feedback" }));
+    await user.click(await screen.findByRole("radio", { name: /it worked well/i }));
+    await user.click(screen.getByRole("button", { name: /send/i }));
+    await waitFor(() => expect(posts).toHaveLength(2));
+    expect(posts[1]).not.toHaveProperty("job_id");
+    expect((posts[1] as { page_area: string }).page_area).not.toBe((posts[0] as { page_area: string }).page_area);
+  });
+
+  it("hides Send feedback on the feedback page itself", async () => {
+    pathname.mockReturnValue("/feedback");
+    renderBar();
+    const user = userEvent.setup({ delay: null });
+    await user.click(await screen.findByRole("button", { name: "Account" }));
+    await new Promise((r) => setTimeout(r, 50));
+    expect(screen.queryByRole("button", { name: "Send feedback" })).toBeNull();
+  });
+
+  it("is one row: nav, pill and avatar hidden below md; + and Menu hidden from md; 44px targets", () => {
+    pathname.mockReturnValue("/dashboard");
+    renderBar();
+    expect(screen.getByRole("navigation", { name: "Primary" }).className).toEqual(expect.stringContaining("hidden"));
+    const menu = screen.getByRole("button", { name: "Menu" });
+    expect(menu.className).toContain("md:hidden");
+    expect(menu.className).toContain("size-11");
+    const [pill, plus] = screen.getAllByRole("link", { name: "Tailor a resume" });
+    expect(pill!.className).toContain("hidden");
+    expect(plus!.className).toContain("md:hidden");
+    expect(plus!.className).toContain("size-11");
+    expect(screen.getByRole("button", { name: "Account" }).parentElement!.className).toContain("hidden");
+    expect(screen.getByRole("button", { name: "Account" }).className).toContain("size-11");
+    expect(screen.getByRole("link", { name: "Rhapto" }).className).toContain("min-h-11");
+    expect(screen.getByRole("banner").firstElementChild!.className).not.toContain("flex-wrap");
+  });
+
+  describe("phone sheet", () => {
+    it("groups Dashboard, My resumes / Your profile, Settings, Help, Send feedback, Theme, Sign out", async () => {
+      pathname.mockReturnValue("/dashboard");
+      sameOrigin.value = true;
+      renderBar();
+      const user = userEvent.setup({ delay: null });
+      await user.click(screen.getByRole("button", { name: "Menu" }));
+      const dialog = await screen.findByRole("dialog", { name: "Menu" });
+      expect(within(dialog).getAllByRole("link").map((a) => [a.textContent, a.getAttribute("href")])).toEqual([
+        ["Dashboard", "/dashboard"],
+        ["My resumes", "/resumes"],
+        ["Your profile", "/profile"],
+        ["Settings", "/settings"],
+        ["Help", "/settings#help"],
+        ["Sign out", "/cdn-cgi/access/logout"],
+      ]);
+      expect(within(dialog).getByText("Account")).toBeInTheDocument();
+      expect(await within(dialog).findByRole("button", { name: "Send feedback" })).toBeInTheDocument();
+      expect(within(dialog).getByRole("button", { name: "Dark mode" })).toBeInTheDocument();
+      expect(within(dialog).getByRole("link", { name: "Dashboard" })).toHaveAttribute("aria-current", "page");
+      for (const a of within(dialog).getAllByRole("link")) expect(a.className).toContain("min-h-11");
+    });
+
+    it("Send feedback closes the sheet and opens the dialog", async () => {
+      pathname.mockReturnValue("/dashboard");
+      renderBar();
+      const user = userEvent.setup({ delay: null });
+      await user.click(screen.getByRole("button", { name: "Menu" }));
+      const sheet = await screen.findByRole("dialog", { name: "Menu" });
+      await user.click(await within(sheet).findByRole("button", { name: "Send feedback" }));
+      await waitFor(() => expect(screen.queryByRole("dialog", { name: "Menu" })).toBeNull());
+      expect(await screen.findByRole("dialog")).toBeInTheDocument();
     });
   });
 });
 
 afterEach(() => {
-  realButton.on = false;
   sameOrigin.value = true;
   vi.unstubAllGlobals();
   window.localStorage.clear();

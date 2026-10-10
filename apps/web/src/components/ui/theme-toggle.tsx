@@ -44,3 +44,14 @@ export function ThemeToggle({ className }: { className?: string }) {
     </Button>
   );
 }
+
+/** The same switch as a labelled row for the account menu and the phone sheet: the words name the
+ * mode you will get, so a menu never shows a bare icon. */
+export function ThemeMenuItem({ className }: { className?: string }) {
+  const dark = useSyncExternalStore(subscribe, isDark, () => false);
+  return (
+    <button type="button" className={className} onClick={() => applyTheme(!isDark())}>
+      {dark ? "Light mode" : "Dark mode"}
+    </button>
+  );
+}
