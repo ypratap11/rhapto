@@ -305,12 +305,35 @@ describe("CoachTour autoplay", () => {
     expect(selected()).toBe(1);
   });
 
-  it("a touch in the stage takes over autoplay; Play resumes it", () => {
+  it("a tap in the stage takes over autoplay; Play resumes it", () => {
     render(<CoachTour />);
-    fireEvent.touchStart(stage());
+    fireEvent.touchStart(stage(), { touches: [{ clientX: 50, clientY: 50 }] });
+    advance(100);
+    fireEvent.touchEnd(stage());
     advance(60_000);
     expect(selected()).toBe(0);
     expect(screen.getByRole("button", { name: "Play demo" })).toBeInTheDocument();
+  });
+
+  it("a finger held down pauses autoplay; a swipe (moved over 10px) resumes it on release", () => {
+    render(<CoachTour />);
+    fireEvent.touchStart(stage(), { touches: [{ clientX: 50, clientY: 50 }] });
+    fireEvent.touchMove(stage(), { touches: [{ clientX: 50, clientY: 90 }] });
+    advance(10_000);
+    expect(selected()).toBe(0); // still held while the finger is down
+    fireEvent.touchEnd(stage());
+    expect(screen.getByRole("button", { name: "Pause demo" })).toBeInTheDocument();
+    advance(4000);
+    expect(selected()).toBe(1);
+  });
+
+  it("a long press without movement is not a tap: autoplay resumes", () => {
+    render(<CoachTour />);
+    fireEvent.touchStart(stage(), { touches: [{ clientX: 5, clientY: 5 }] });
+    advance(600);
+    fireEvent.touchEnd(stage());
+    advance(4000);
+    expect(selected()).toBe(1);
   });
 
   it("Play works while the button is focused and hovered: the bar is outside the hold zone (architect I2)", async () => {

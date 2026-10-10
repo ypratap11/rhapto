@@ -27,13 +27,19 @@ export function HeroBand({
   const glow = tone === "glow";
   // Glow: the band's own bottom padding (py-8 / sm:py-12) plus mb-8 makes the gap to the next section 64px on
   // phones and 80px from sm, the same as the sections' mb-16 / sm:mb-20.
+  // Glow: the band stays in main's own column (main's px-6 is the content padding, so the content is exactly as
+  // wide as the sections below) and only its wash breaks out, as a viewport-wide ::before centred on that
+  // column. A `w-screen` band would be centred on the viewport, whose 100vw includes the scrollbar, and its
+  // content would sit half a scrollbar wider per side than the sections.
+  const GLOW =
+    "isolate mb-8 border-b-0 sm:py-12 py-8 before:pointer-events-none before:absolute before:inset-y-0 before:left-1/2 before:-z-10 before:w-screen before:-translate-x-1/2 before:bg-hero-glow";
   return (
     <div
       data-testid="hero-band"
       className={cn(
-        "relative mx-[calc(50%-50vw)] -mt-8 w-screen overflow-hidden px-6 py-8 text-foreground",
-        glow ? "mb-8 border-b-0 sm:py-12" : "mb-8 border-b border-border",
-        TONE_CLASS[tone],
+        "relative -mt-8 text-foreground",
+        glow ? GLOW : "mx-[calc(50%-50vw)] mb-8 w-screen overflow-hidden border-b border-border px-6 py-8",
+        glow ? null : TONE_CLASS[tone],
         HEIGHT_CLASS[height],
       )}
     >

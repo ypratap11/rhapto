@@ -28,7 +28,8 @@ describe("HeroBand", () => {
   it("glow tone is a faint wash: no shapes, no motif, centred children, the page's section gap below", () => {
     const { container } = render(<HeroBand tone="glow"><h1>x</h1></HeroBand>);
     const band = screen.getByTestId("hero-band");
-    expect(band.className).toContain("bg-hero-glow");
+    expect(band.className).toContain("before:bg-hero-glow"); // the wash is a viewport-wide ::before; the band keeps main's column width
+    expect(band.className).not.toMatch(/(^|s)w-screen/);
     expect(band.className).toContain("border-b-0");
     expect(band.className).toContain("mb-8");
     expect(band.className).not.toContain("mb-16"); // band padding + mb-8 = the 64/80 section gap

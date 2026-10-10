@@ -5,8 +5,8 @@
  * Home/End, wrapping and focusable panels come with it). `keepMounted` renders all four panels in
  * the server HTML, the inactive ones hidden. Everything inside a panel is inert: drawn buttons are
  * aria-hidden spans, so the only interactive elements in the window are the four tabs. Wording the
- * real coach shows comes from lib/coach/copy.ts. Self-playing (useTourAutoplay): 4 s per slide, held while the pointer or focus is in the stage or the tour is off-screen, off for good once the visitor picks a tab, off under prefers-reduced-motion. It never moves focus, never scrolls the page and has no live region. */
-import { Pause, Play } from "lucide-react";
+ * real coach shows comes from lib/coach/copy.ts. Self-playing (useTourAutoplay): 4 s per slide, held while the pointer, focus or a finger is in the stage or the tour is off-screen, off for good once the visitor picks a tab, off under prefers-reduced-motion. It never moves focus, never scrolls the page and has no live region. */
+import { FileText, Pause, Play, Upload } from "lucide-react";
 import { useEffect, useId } from "react";
 import { MatchChip } from "@/components/coach/MatchChip";
 import { buttonVariants } from "@/components/ui/button";
@@ -117,7 +117,13 @@ export function CoachTour() {
           <div data-tour-panels="" className="grid">
             <TabsContent value="upload" keepMounted hidden={false} aria-hidden={value !== "upload"} className={PANEL}>
               <Screen title={copy.UPLOAD_TITLE} hint={copy.UPLOAD_HINT}>
-                <p className="inline-flex items-center rounded-full border border-border bg-surface-muted px-3 py-1 text-sm">{TOUR_FILE}</p>
+                <div className="flex flex-1 flex-col items-center justify-center gap-3 rounded-card border border-dashed border-border bg-surface-muted/40 p-6">
+                  <Upload className="size-8 text-muted-foreground" aria-hidden="true" />
+                  <p className="inline-flex items-center gap-2 rounded-full border border-border bg-surface-muted px-3 py-1 text-sm">
+                    <FileText className="size-4 text-muted-foreground" aria-hidden="true" />
+                    {TOUR_FILE}
+                  </p>
+                </div>
               </Screen>
             </TabsContent>
 
