@@ -40,7 +40,7 @@ function Drawn({ children, outline = false, size = "lg" }: { children: React.Rea
 
 function Screen({ title, hint, children }: { title: string; hint?: string; children?: React.ReactNode }) {
   return (
-    <div className="flex-1 space-y-4 rounded-card border border-border bg-surface p-5 text-left shadow-card">
+    <div className="flex flex-1 flex-col gap-4 rounded-card border border-border bg-surface p-5 text-left shadow-card">
       <p className="font-heading text-xl font-medium">{title}</p>
       {hint ? <p className="text-sm text-muted-foreground">{hint}</p> : null}
       {children}
