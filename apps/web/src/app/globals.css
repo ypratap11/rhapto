@@ -281,9 +281,15 @@
   box-shadow: var(--shadow-cta);
 }
 
-/* Front-page hero band only (HeroBand tone="glow"). */
+/* Front-page hero band only (HeroBand tone="glow"): a faint warm wash from the top centre that has
+ * faded into --background by the bottom edge. Mixes only existing glow tokens. */
 @utility bg-hero-glow {
-  background-image: radial-gradient(ellipse 80% 120% at 15% 0%, var(--glow-from), var(--glow-mid) 55%, var(--glow-to));
+  background-image: radial-gradient(
+    ellipse 90% 100% at 50% 0%,
+    color-mix(in srgb, var(--glow-from) 60%, var(--glow-to)),
+    color-mix(in srgb, var(--glow-mid) 45%, var(--glow-to)) 55%,
+    var(--glow-to)
+  );
 }
 
 /* The highlighter under one headline word: a background gradient on a span, not <mark>. */
@@ -303,6 +309,19 @@
   }
 }
 
+/* The primary call to action: lifts 1px with a slightly deeper shadow. The transform is cancelled under
+ * prefers-reduced-motion (see the reduce block below); the shadow change stays. */
+@utility cta-lift {
+  transition-property: box-shadow, transform;
+  transition-duration: 150ms;
+  transition-timing-function: cubic-bezier(0, 0, 0.2, 1);
+
+  &:hover {
+    transform: translateY(-1px);
+    box-shadow: var(--shadow-cta), var(--shadow-card-hover);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -314,7 +333,23 @@
   }
   /* Only the decorative transforms go: drag-and-drop and popup positioning still need theirs. */
   .hover-lift,
-  .hover-lift:hover {
+  .hover-lift:hover,
+  .cta-lift:hover {
     transform: none !important;
+  }
+}
+
+/* Sections below the fold fade up 8px once as they enter the viewport. `RevealOnScroll` marks a section
+ * data-reveal="armed" only after mount, only if IntersectionObserver exists, motion is allowed and the
+ * section is not already on screen, then data-reveal="in" the first time it intersects (never undone).
+ * Without JS, or under reduced motion, nothing is ever armed, so the content is simply visible.
+ * Transform and opacity only: no layout shift. */
+@media (prefers-reduced-motion: no-preference) {
+  [data-reveal] {
+    transition: opacity 400ms ease-out, transform 400ms ease-out;
+  }
+  [data-reveal="armed"] {
+    opacity: 0;
+    transform: translateY(8px);
   }
 }

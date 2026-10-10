@@ -14,7 +14,6 @@ import { SAME_ORIGIN_DEPLOYMENT } from "@/lib/api/client";
 import * as copy from "@/lib/coach/copy";
 import { matchLabel } from "@/lib/coach/labels";
 import { cn } from "cn";
-import { accessRequestLink } from "./access";
 import { TOUR_CHANGES, TOUR_FILE, TOUR_JOBS, TOUR_ROLE, TOUR_TABS } from "./coachTourData";
 import { primaryCta } from "./cta";
 
@@ -43,10 +42,9 @@ export function CoachTour() {
   const headingId = useId();
   const hosted = SAME_ORIGIN_DEPLOYMENT;
   const cta = primaryCta(hosted);
-  const access = accessRequestLink();
   return (
-    <section id="tour" aria-labelledby={headingId} className="mt-6 w-full max-w-3xl scroll-mt-20">
-      <h2 id={headingId} className="mb-3 font-heading text-xl font-semibold tracking-tight">
+    <section id="tour" aria-labelledby={headingId} className="mx-auto mt-8 w-full max-w-5xl scroll-mt-20">
+      <h2 id={headingId} className="mb-4 text-center font-heading text-xl font-semibold tracking-tight">
         See the coach, step by step
       </h2>
       <div className="overflow-hidden rounded-t-card border border-border bg-background shadow-card">
@@ -125,24 +123,11 @@ export function CoachTour() {
           </TabsContent>
         </Tabs>
       </div>
-      <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
+      <div className="mt-3 flex flex-wrap items-center justify-center gap-x-4 gap-y-2 text-sm">
         <p className="text-muted-foreground">Example with a fictional person, Maya Chen.</p>
         <a href={cta.href} className="font-medium text-link-on-band underline underline-offset-4">
           Try it with your resume →
         </a>
-        {hosted ? (
-          <p className="text-muted-foreground">
-            No invite yet?{" "}
-            <a
-              href={access.href}
-              target={access.external ? "_blank" : undefined}
-              rel={access.external ? "noreferrer" : undefined}
-              className="text-link-on-band underline underline-offset-4"
-            >
-              Request beta access
-            </a>
-          </p>
-        ) : null}
       </div>
     </section>
   );

@@ -3,7 +3,6 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import * as copy from "@/lib/coach/copy";
 import { matchLabel } from "@/lib/coach/labels";
-import { ACCESS_REQUEST_MAILTO, ACCESS_REQUEST_URL } from "./access";
 import { CoachTour } from "./CoachTour";
 import { primaryCta } from "./cta";
 import { TOUR_CHANGES, TOUR_FILE, TOUR_JOBS, TOUR_ROLE } from "./coachTourData";
@@ -138,13 +137,11 @@ describe("CoachTour", () => {
     for (const c of ["Contoso Robotics", "Fabrikam Health", "Tailspin Air"]) expect(third.textContent).toContain(c);
   });
 
-  it("hosted: 'Try it with your resume' matches the primary CTA, and the request-access link is beside it", () => {
+  it("hosted: 'Try it with your resume' matches the primary CTA; there is no request-access link or 'No invite yet?' under the tour", () => {
     render(<CoachTour />);
-    const cta = screen.getByRole("link", { name: /Try it with your resume/ });
-    expect(cta).toHaveAttribute("href", primaryCta(true).href);
-    const request = screen.getByRole("link", { name: "Request beta access" });
-    expect(request).toHaveAttribute("href", ACCESS_REQUEST_URL || ACCESS_REQUEST_MAILTO);
-    expect(screen.getByText(/No invite yet\?/)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Try it with your resume/ })).toHaveAttribute("href", primaryCta(true).href);
+    expect(screen.queryByRole("link", { name: /request beta access/i })).toBeNull();
+    expect(screen.queryByText(/No invite yet\?/)).toBeNull();
   });
 
   it("token mode: goes to /settings and shows neither /start nor a request link", () => {

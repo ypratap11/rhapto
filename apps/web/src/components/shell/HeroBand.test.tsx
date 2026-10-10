@@ -25,20 +25,26 @@ describe("HeroBand", () => {
     expect(screen.getByTestId("hero-band").className).toContain("min-h-band-short");
   });
 
-  it("glow tone paints the radial glow with two decorative shapes instead of the stitch motif", () => {
+  it("glow tone is a faint wash: no shapes, no motif, centred children, the page's section gap below", () => {
     const { container } = render(<HeroBand tone="glow"><h1>x</h1></HeroBand>);
     const band = screen.getByTestId("hero-band");
     expect(band.className).toContain("bg-hero-glow");
+    expect(band.className).toContain("border-b-0");
+    expect(band.className).toContain("mb-16");
+    expect(band.className).toContain("sm:mb-20");
     expect(container.querySelector("svg")).toBeNull();
-    const shapes = container.querySelectorAll("[data-decor]");
-    expect(shapes).toHaveLength(2);
-    shapes.forEach((s) => {
-      expect(s).toHaveAttribute("aria-hidden", "true");
-      expect(s.className).toContain("pointer-events-none");
-    });
-    expect(shapes[0]!.className).toContain("bg-decor-amber");
-    expect(shapes[0]!.className).toContain("opacity-20");
-    expect(shapes[1]!.className).toContain("bg-decor-teal");
-    expect(shapes[1]!.className).toContain("opacity-15");
+    expect(container.querySelector("[data-decor]")).toBeNull();
+    const inner = band.firstElementChild as HTMLElement;
+    for (const c of ["mx-auto", "max-w-5xl", "items-center", "text-center"]) expect(inner.className).toContain(c);
+  });
+
+  it("other tones keep the left-aligned max-w-6xl content, the stitch motif and mb-8", () => {
+    const { container } = render(<HeroBand tone="peach"><h1>x</h1></HeroBand>);
+    const band = screen.getByTestId("hero-band");
+    const inner = band.lastElementChild as HTMLElement;
+    expect(inner.className).toContain("max-w-6xl");
+    expect(inner.className).not.toContain("text-center");
+    expect(band.className).toContain("mb-8");
+    expect(container.querySelector("svg")).not.toBeNull();
   });
 });

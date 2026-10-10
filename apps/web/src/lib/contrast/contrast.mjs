@@ -39,6 +39,7 @@ export const PAIRS = [
   text("diff-add", "diff-add-bg", "diff added word"),
   text("diff-del", "diff-del-bg", "diff removed word"),
   ...BANDS.map((b) => text("foreground", b, `headline on ${b}`)),
+  ...GLOWS.map((b) => text("foreground", b, `headline on ${b}`)),
   // primary as TEXT (links, chips) on every surface it is painted on.
   ...ON_TINT.map((b) => text("primary", b, `primary text on ${b}`)),
   text("primary", "surface", "primary chip (10% primary over a card)", { token: "primary", alpha: 0.1 }),

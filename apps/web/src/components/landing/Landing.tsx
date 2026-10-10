@@ -6,10 +6,11 @@ import { HeroBand } from "@/components/shell/HeroBand";
 import { buttonVariants } from "@/components/ui/button";
 import { SAME_ORIGIN_DEPLOYMENT } from "@/lib/api/client";
 import { cn } from "cn";
-import { accessRequestLink } from "./access";
+import { accessRequestLink, REQUEST_LINK_CLASS } from "./access";
 import { CoachTour } from "./CoachTour";
 import { freeLimitLine } from "./copy";
 import { primaryCta } from "./cta";
+import { RevealOnScroll } from "./RevealOnScroll";
 import { TuneProof } from "./TuneProof";
 
 const STEPS = [
@@ -21,60 +22,57 @@ const STEPS = [
 export function Landing() {
   const access = accessRequestLink();
   const cta = primaryCta(SAME_ORIGIN_DEPLOYMENT);
+  const ctaClass = cn(buttonVariants({ size: "lg" }), "shadow-cta cta-lift");
+  const requestLine = SAME_ORIGIN_DEPLOYMENT ? (
+    <p className="text-sm text-muted-foreground">
+      No invite yet?{" "}
+      <a
+        href={access.href}
+        target={access.external ? "_blank" : undefined}
+        rel={access.external ? "noreferrer" : undefined}
+        className={REQUEST_LINK_CLASS}
+      >
+        Request beta access
+      </a>
+    </p>
+  ) : null;
   return (
     <>
+      <RevealOnScroll />
       <HeroBand tone="glow" height="tall">
-        <div className="flex min-w-0 max-w-3xl flex-col gap-3">
-          <p className="inline-flex w-fit items-center gap-2 rounded-full border border-border bg-surface px-3 py-1 text-sm font-medium text-foreground">
-            <span aria-hidden="true" className="size-2 rounded-full bg-decor-teal" />
-            Every number checked against your resume
-          </p>
+        <div className="flex min-w-0 max-w-3xl flex-col items-center gap-3">
           <h1 className="font-heading text-[clamp(2.5rem,2.5vw+1.5rem,4rem)] leading-[0.98] font-semibold tracking-tight">
             A resume you can <span className="highlight-underline">defend</span> in any interview.
           </h1>
           <p className="max-w-2xl text-base text-muted-foreground sm:text-lg">
             Upload your resume, pick a job, and get your own document rewritten for it.
           </p>
-          {/* Plain styled links, not the Base UI `Button` primitive: both navigate. */}
-          <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-3">
-            <Link href={cta.href} prefetch={false} className={cn(buttonVariants({ size: "lg" }), "shadow-cta")}>
+          {/* A plain styled link, not the Base UI `Button` primitive: it navigates. */}
+          <div className="mt-2 flex flex-wrap items-center justify-center gap-x-4 gap-y-3">
+            <Link href={cta.href} prefetch={false} className={ctaClass}>
               {cta.label} <span aria-hidden="true">→</span>
             </Link>
-            <a href="#tour" className="text-sm text-link-on-band underline underline-offset-4">
-              See how it works ↓
-            </a>
           </div>
-          {SAME_ORIGIN_DEPLOYMENT ? (
-            <p className="text-sm text-muted-foreground">
-              No invite yet?{" "}
-              <a
-                href={access.href}
-                target={access.external ? "_blank" : undefined}
-                rel={access.external ? "noreferrer" : undefined}
-                className="text-link-on-band underline underline-offset-4"
-              >
-                Request beta access
-              </a>
-            </p>
-          ) : null}
-          <p className="text-sm text-muted-foreground">Open source · You always submit · Your own document</p>
+          {requestLine}
+          <p className="text-sm text-muted-foreground">Open source · You always submit · Every number checked</p>
           <p className="max-w-2xl text-sm text-muted-foreground">{freeLimitLine(SAME_ORIGIN_DEPLOYMENT)}</p>
         </div>
         <CoachTour />
       </HeroBand>
 
-      <section aria-labelledby="steps-heading" className="mb-12">
-        <h2 id="steps-heading" className="sr-only">
-          Three steps
+      <section aria-labelledby="steps-heading" className="reveal mx-auto mb-16 w-full max-w-5xl sm:mb-20">
+        <h2 id="steps-heading" className="mb-6 text-center font-heading text-2xl font-semibold tracking-tight sm:text-3xl">
+          Three steps to a resume you can defend
         </h2>
         <ol aria-label="Three steps" className="grid gap-4 md:grid-cols-3">
           {STEPS.map(({ title, body, circle }, i) => (
-            <li key={title} className="rounded-card border border-border bg-surface p-4 shadow-card">
+            <li key={title} className="flex flex-col items-center rounded-card border border-border bg-surface p-4 text-center shadow-card">
               <span aria-hidden="true" className={cn("mb-2 flex size-9 items-center justify-center rounded-full text-sm font-semibold", circle)}>
                 {i + 1}
               </span>
               <p className="text-base font-semibold">
-                <span className="text-muted-foreground">{i + 1}. </span>
+                {/* The circle stays aria-hidden and the prefix is sr-only so the position is announced once. */}
+                <span className="sr-only">{i + 1}. </span>
                 {title}
               </p>
               <p className="mt-1 text-sm text-muted-foreground">{body}</p>
@@ -83,11 +81,27 @@ export function Landing() {
         </ol>
       </section>
 
-      <section aria-labelledby="proof-heading" className="mb-12">
+      <section aria-labelledby="proof-heading" className="reveal mx-auto mb-16 w-full max-w-5xl sm:mb-20">
         <h2 id="proof-heading" className="sr-only">
           What the check catches
         </h2>
         <TuneProof />
+      </section>
+
+      {/* Visitors who scroll to the end always have a next step. No numbers, logos or promises. mb-8 +
+          main's pb-8 gives the same gap before the footer as between the sections above. */}
+      <section
+        aria-labelledby="closing-heading"
+        className="reveal mx-auto mb-8 flex w-full max-w-5xl flex-col items-center gap-3 rounded-card bg-band-peach px-6 py-10 text-center text-foreground sm:mb-12"
+      >
+        <h2 id="closing-heading" className="font-heading text-2xl font-semibold tracking-tight sm:text-3xl">
+          Try it on your own resume
+        </h2>
+        <p className="max-w-xl text-base text-muted-foreground">Upload a Word file, pick a job, and read the result before you send anything.</p>
+        <Link href={cta.href} prefetch={false} className={cn(ctaClass, "mt-2")}>
+          {cta.label} <span aria-hidden="true">→</span>
+        </Link>
+        {requestLine}
       </section>
     </>
   );

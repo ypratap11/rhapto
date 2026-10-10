@@ -13,8 +13,8 @@ const HEIGHT_CLASS = { tall: "min-h-band-tall", short: "min-h-band-short" } as c
  * a page tall enough to scroll this would overflow the real viewport by a few pixels; `Shell`'s root
  * carries `overflow-x-clip` to swallow that instead of letting it grow into a horizontal scrollbar.
  * Layout correctness here is algebraic, not something jsdom can render — confirmed visually, not by
- * this component's unit tests. The "glow" tone (the front page only: /) swaps the stitch motif
- * for a radial gradient and two soft shapes. */
+ * this component's unit tests. The "glow" tone (the front page only) is a faint warm wash with centred
+ * content and no decoration. */
 export function HeroBand({
   tone,
   height = "short",
@@ -24,24 +24,23 @@ export function HeroBand({
   height?: "tall" | "short";
   children: React.ReactNode;
 }) {
+  const glow = tone === "glow";
   return (
     <div
       data-testid="hero-band"
       className={cn(
-        "relative mx-[calc(50%-50vw)] -mt-8 mb-8 w-screen overflow-hidden border-b border-border px-6 py-8 text-foreground",
+        "relative mx-[calc(50%-50vw)] -mt-8 w-screen overflow-hidden px-6 py-8 text-foreground",
+        glow ? "mb-16 border-b-0 sm:mb-20 sm:py-12" : "mb-8 border-b border-border",
         TONE_CLASS[tone],
         HEIGHT_CLASS[height],
       )}
     >
-      {tone === "glow" ? (
-        <>
-          <div data-decor aria-hidden="true" className="pointer-events-none absolute -right-16 -top-24 size-72 rounded-full bg-decor-amber opacity-20" />
-          <div data-decor aria-hidden="true" className="pointer-events-none absolute -bottom-28 -left-24 size-64 rounded-full bg-decor-teal opacity-15" />
-        </>
-      ) : (
-        <StitchMotif className="pointer-events-none absolute inset-y-0 right-0 hidden h-full w-1/3 md:block" />
-      )}
-      <div className="relative mx-auto flex h-full max-w-6xl flex-col justify-center gap-3">{children}</div>
+      {glow ? null : <StitchMotif className="pointer-events-none absolute inset-y-0 right-0 hidden h-full w-1/3 md:block" />}
+      {/* Glow: max-w-5xl is the front page's one content width (steps, tour, proof and closing use it
+          too). Other tones keep max-w-6xl: they are in-app pages whose content is left-aligned. */}
+      <div className={cn("relative mx-auto flex h-full w-full flex-col justify-center gap-3", glow ? "max-w-5xl items-center text-center" : "max-w-6xl")}>
+        {children}
+      </div>
     </div>
   );
 }
