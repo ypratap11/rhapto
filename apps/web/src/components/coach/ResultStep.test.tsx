@@ -2,6 +2,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { PackageOut } from "@/lib/api/queries";
+import * as copy from "@/lib/coach/copy";
 import { ResultStep } from "./ResultStep";
 
 const pkg: { current: Partial<PackageOut> } = { current: {} };
@@ -43,6 +44,15 @@ describe("ResultStep", () => {
     await userEvent.setup({ delay: null }).click(screen.getByRole("button", { name: /download docx/i }));
     await waitFor(() => expect(fire).toHaveBeenCalledWith("downloaded"));
     expect(download).toHaveBeenCalledWith("/api/v1/packages/pk1/files/resume.docx", "Maya_Chen_Resume.docx");
+  });
+
+  it("ready: shows the shared coach copy", () => {
+    mount();
+    expect(screen.getByRole("heading", { level: 1, name: copy.RESULT_TITLE })).toBeInTheDocument();
+    expect(screen.getByText(copy.RESULT_READY)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: copy.DOWNLOAD_DOCX })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: copy.DOWNLOAD_PDF })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: copy.WHAT_CHANGED })).toBeInTheDocument();
   });
 
   it("a failed download fires no event and says so in plain words", async () => {

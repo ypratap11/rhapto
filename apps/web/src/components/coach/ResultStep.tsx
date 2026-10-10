@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { useAnswers, usePackage, type PackageOut } from "@/lib/api/queries";
+import { DOWNLOAD_DOCX, DOWNLOAD_PDF, RESULT_READY, RESULT_TITLE, WHAT_CHANGED } from "@/lib/coach/copy";
 import { describeCoachError, type CoachError } from "@/lib/coach/errors";
 import { fireCoachEvent } from "@/lib/coach/events";
 import { downloadAuthenticated, resumeFilename } from "@/lib/download";
@@ -61,7 +62,7 @@ export function ResultStep({
   const data = pkg.data;
   if (!data) {
     return (
-      <CoachFrame title="Your tailored resume" transcript={transcript}>
+      <CoachFrame title={RESULT_TITLE} transcript={transcript}>
         {pkg.error ? <CoachErrorNote error={describeCoachError(pkg.error, "jobs")} /> : <p role="status" className="text-sm text-muted-foreground">Opening your resume…</p>}
       </CoachFrame>
     );
@@ -111,15 +112,15 @@ export function ResultStep({
 
   const changes = data.edits.slice(0, MAX_CHANGES);
   return (
-    <CoachFrame title="Your tailored resume" transcript={transcript}>
-      <p className="text-sm text-muted-foreground">Ready for you to read. Check it before you send it.</p>
+    <CoachFrame title={RESULT_TITLE} transcript={transcript}>
+      <p className="text-sm text-muted-foreground">{RESULT_READY}</p>
       <CoachErrorNote error={error} />
       <div className="flex flex-wrap gap-3">
-        {data.has_docx ? <Button type="button" size="lg" onClick={() => void download("docx")}>Download DOCX</Button> : null}
-        {data.has_pdf ? <Button type="button" size="lg" variant="outline" onClick={() => void download("pdf")}>Download PDF</Button> : null}
+        {data.has_docx ? <Button type="button" size="lg" onClick={() => void download("docx")}>{DOWNLOAD_DOCX}</Button> : null}
+        {data.has_pdf ? <Button type="button" size="lg" variant="outline" onClick={() => void download("pdf")}>{DOWNLOAD_PDF}</Button> : null}
       </div>
       <section aria-labelledby="coach-changes" className="space-y-2">
-        <h2 id="coach-changes" className="text-base font-medium">What changed</h2>
+        <h2 id="coach-changes" className="text-base font-medium">{WHAT_CHANGED}</h2>
         {changes.length > 0 ? (
           <ul className="space-y-3">
             {changes.map((edit) => (

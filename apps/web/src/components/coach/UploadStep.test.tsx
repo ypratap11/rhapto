@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "@/lib/api/client";
 import { DOCX_MESSAGE } from "@/lib/coach/errors";
+import * as copy from "@/lib/coach/copy";
 import { readProposal } from "@/lib/coach/storage";
 import { UploadStep } from "./UploadStep";
 
@@ -103,6 +104,13 @@ describe("UploadStep", () => {
     render(<UploadStep userId="u1" existingDocumentName="Old_Resume.docx" onDone={vi.fn()} />);
     expect(screen.getByText(/Old_Resume\.docx/)).toBeInTheDocument();
     expect(screen.getByText(/replaces it/i)).toBeInTheDocument();
+  });
+
+  it("shows the shared coach copy", () => {
+    render(<UploadStep userId="u1" existingDocumentName={null} onDone={vi.fn()} />);
+    expect(screen.getByRole("heading", { level: 1, name: copy.UPLOAD_TITLE })).toBeInTheDocument();
+    expect(screen.getByText(copy.UPLOAD_HINT)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: copy.CHOOSE_FILE })).toBeInTheDocument();
   });
 
   it("has the skip link", () => {

@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { apiClient, unwrap } from "@/lib/api/client";
 import { useDashboard, useTracks, type JobOut } from "@/lib/api/queries";
+import { TAILOR_THIS, matchesTitle } from "@/lib/coach/copy";
 import type { CoachError } from "@/lib/coach/errors";
 import { fireCoachEvent } from "@/lib/coach/events";
 import { matchLabel, runsLeftLine } from "@/lib/coach/labels";
@@ -12,6 +13,7 @@ import { COACH_TOP_N } from "@/lib/coach/constants";
 import { useCoachMatches } from "@/lib/coach/matches";
 import { PICKER_MIN_FIT } from "@/lib/taxonomy";
 import { CoachErrorNote, CoachFrame, type TranscriptItem } from "./CoachFrame";
+import { MatchChip } from "./MatchChip";
 
 function JobChoices({
   jobs,
@@ -33,10 +35,10 @@ function JobChoices({
           <div className="min-w-0">
             <p className="font-medium">{job.title ?? "Untitled role"}</p>
             <p className="truncate text-sm text-muted-foreground">{job.company ?? "Unknown company"}</p>
-            <p className="mt-1 text-xs font-medium text-primary">{matchLabel(job.best_fit, minFit(job))}</p>
+            <p className="mt-1"><MatchChip label={matchLabel(job.best_fit, minFit(job))} /></p>
           </div>
           <Button type="button" disabled={disabled} onClick={() => onPick(job)}>
-            {pickedId === job.id ? "Starting..." : "Tailor this one"}
+            {pickedId === job.id ? "Starting..." : TAILOR_THIS}
           </Button>
         </li>
       ))}
@@ -145,7 +147,7 @@ export function MatchesStep({
   }
 
   return (
-    <CoachFrame title={`Your top matches for ${roleName}`} transcript={transcript}>
+    <CoachFrame title={matchesTitle(roleName)} transcript={transcript}>
       <CoachErrorNote error={error} />
       {state.final ? null : (
         <p role="status" className="text-sm text-muted-foreground">
