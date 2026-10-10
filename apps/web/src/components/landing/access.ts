@@ -16,8 +16,8 @@ export const ACCESS_REQUEST_MAILTO = `mailto:${ACCESS_REQUEST_EMAIL}?subject=${e
   "Rhapto access request",
 )}`;
 
-/** Where "Request beta access" goes (the owner's Google Form). Both `Landing` and the
- * tour's outro read it through `accessRequestLink`, so they cannot drift apart. Emptying it falls
+/** Where "Request beta access" goes (the owner's Google Form). `Landing` and the
+ * `Footer`/TopBar menu read it through `accessRequestLink`, so they cannot drift apart. Emptying it falls
  * back to the mailto above, which is the one-line way to switch back. */
 export const ACCESS_REQUEST_URL = "https://forms.gle/1GUeGcKB9fCiJAdFA";
 
@@ -38,3 +38,8 @@ export function accessRequestLink(url: string = ACCESS_REQUEST_URL): AccessReque
   }
   return { href: ACCESS_REQUEST_MAILTO, external: false };
 }
+
+/** The "Request beta access" link style on the hero and the closing CTA: the app's existing link
+ * convention (`underline underline-offset-4 hover:text-foreground`, as in CoachFrame), no invented effect.
+ * The footer's request link deliberately uses the footer's own `LINK` class like its siblings (M-5). */
+export const REQUEST_LINK_CLASS = "text-link-on-band underline underline-offset-4 hover:text-foreground";

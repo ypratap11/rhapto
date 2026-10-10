@@ -1,3 +1,4 @@
+import { Footer } from "./Footer";
 import { TopBar } from "./TopBar";
 import { TokenGate } from "./TokenGate";
 
@@ -11,6 +12,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
       <main className="mx-auto max-w-6xl px-6 py-8">
         <TokenGate>{children}</TokenGate>
       </main>
+      <Footer />
     </div>
   );
 }

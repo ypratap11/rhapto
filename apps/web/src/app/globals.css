@@ -281,9 +281,15 @@
   box-shadow: var(--shadow-cta);
 }
 
-/* Front-page hero band only (HeroBand tone="glow"). */
+/* Front-page hero band only (HeroBand tone="glow"): a faint warm wash from the top centre that has
+ * faded into --background by the bottom edge. Mixes only existing glow tokens. */
 @utility bg-hero-glow {
-  background-image: radial-gradient(ellipse 80% 120% at 15% 0%, var(--glow-from), var(--glow-mid) 55%, var(--glow-to));
+  background-image: radial-gradient(
+    ellipse 90% 100% at 50% 0%,
+    color-mix(in srgb, var(--glow-from) 60%, var(--glow-to)),
+    color-mix(in srgb, var(--glow-mid) 45%, var(--glow-to)) 55%,
+    var(--glow-to)
+  );
 }
 
 /* The highlighter under one headline word: a background gradient on a span, not <mark>. */
@@ -303,6 +309,19 @@
   }
 }
 
+/* The primary call to action: lifts 1px with a slightly deeper shadow. The transform is cancelled under
+ * prefers-reduced-motion (see the reduce block below); the shadow change stays. */
+@utility cta-lift {
+  transition-property: box-shadow, transform;
+  transition-duration: 150ms;
+  transition-timing-function: cubic-bezier(0, 0, 0.2, 1);
+
+  &:hover {
+    transform: translateY(-1px);
+    box-shadow: var(--shadow-cta), var(--shadow-card-hover);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -314,7 +333,64 @@
   }
   /* Only the decorative transforms go: drag-and-drop and popup positioning still need theirs. */
   .hover-lift,
-  .hover-lift:hover {
+  .hover-lift:hover,
+  .cta-lift:hover {
     transform: none !important;
+  }
+}
+
+/* Sections below the fold fade up 8px once as they enter the viewport. `RevealOnScroll` marks a section
+ * data-reveal="armed" only after mount, only if IntersectionObserver exists, motion is allowed and the
+ * section is not already on screen, then data-reveal="in" the first time it intersects (never undone).
+ * Without JS, or under reduced motion, nothing is ever armed, so the content is simply visible.
+ * Transform and opacity only: no layout shift. */
+@media (prefers-reduced-motion: no-preference) {
+  [data-reveal] {
+    transition: opacity 400ms ease-out, transform 400ms ease-out;
+  }
+  [data-reveal="armed"] {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+
+/* tour motion */
+@keyframes tour-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes tour-progress {
+  from { transform: scaleX(0); }
+  to { transform: scaleX(1); }
+}
+@keyframes tour-hl {
+  from { background-color: transparent; }
+  to { background-color: color-mix(in srgb, var(--decor-amber) 25%, transparent); }
+}
+/* I-3: the changed line is `text-foreground` on a LIGHT amber wash (25%), not muted text on the 55% band
+ * (which measured 3.94:1 light / 2.17:1 dark). The wash is fully present for everyone; only its fade-in
+ * animates. The pair is in contrast.mjs for both themes. */
+.tour-hl {
+  background-color: color-mix(in srgb, var(--decor-amber) 25%, transparent);
+}
+/* Homepage tour, in-panel motion. CSS only, transform/opacity, each animation <= 400 ms. Everything that
+ * animates is inside this block, so under prefers-reduced-motion nothing is hidden-then-revealed and
+ * nothing moves. An inactive panel is `invisible` (data-hidden) and the animation is scoped to :not([data-hidden]), so showing it restarts the animations. */
+@media (prefers-reduced-motion: no-preference) {
+  .tour-panel:not([data-hidden]) {
+    animation: tour-in 300ms ease-out both;
+  }
+  .tour-panel:not([data-hidden]) .tour-row {
+    animation: tour-in 300ms ease-out both;
+    animation-delay: calc(80ms + var(--i, 0) * 60ms);
+  }
+  .tour-hl {
+    animation: tour-hl 350ms ease-out 450ms both;
+  }
+  /* Deliberate exception to the <= 400 ms rule: the bar tracks the 4 s slide timer (TOUR_INTERVAL_MS). */
+  .tour-progress {
+    animation-name: tour-progress;
+    animation-timing-function: linear;
+    animation-fill-mode: forwards;
   }
 }

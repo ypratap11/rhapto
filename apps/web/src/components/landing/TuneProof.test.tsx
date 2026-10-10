@@ -3,15 +3,14 @@ import { describe, expect, it } from "vitest";
 import { TuneProof } from "./TuneProof";
 
 describe("TuneProof", () => {
-  it("proof_quotes_the_tune_rule_exactly", () => {
-    // Quoted from apps/api/src/rhapto/engine/guardrails/tune.py (NO_NEW_NUMBERS, the violation path
-    // and message). apps/api/tests/unit/test_guardrails_tune.py::test_homepage_proof_matches_the_engine_wording
-    // pins the same four strings against the engine: change the engine wording and both fail.
-    render(<TuneProof />);
-    expect(screen.getByText("no-new-numbers")).toBeInTheDocument();
-    expect(screen.getByText("edits[0]")).toBeInTheDocument();
-    expect(screen.getByText("number(s) not found in the document: 45")).toBeInTheDocument();
+  it("says in plain words what was stopped, with no rule ids or paths on the homepage", () => {
+    // The catch itself (the engine rejects 45 in this sentence) is still pinned by
+    // apps/api/tests/unit/test_guardrails_tune.py::test_homepage_proof_matches_the_engine_wording.
+    const { container } = render(<TuneProof />);
+    expect(screen.getByText("Rhapto stopped this draft: 45 is not in your resume.")).toBeInTheDocument();
     expect(screen.getByText(/Led the Snowflake migration for 12 teams, cutting warehouse cost 30%\./)).toBeInTheDocument();
+    const text = container.textContent ?? "";
+    for (const jargon of ["no-new-numbers", "edits[0]", "number(s) not found", "guardrail", "rule fired"]) expect(text).not.toContain(jargon);
   });
 
   it("does not advertise rules the coach path never runs", () => {

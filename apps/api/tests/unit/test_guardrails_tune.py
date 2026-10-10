@@ -394,10 +394,11 @@ def test_present_as_a_verb_is_not_a_date(demo_profile_dir: Path) -> None:
 
 
 def test_homepage_proof_matches_the_engine_wording(demo_profile_dir: Path) -> None:
-    """The landing page's proof (apps/web/src/components/landing/TuneProof.tsx) quotes this catch:
-    a sentence from the document with a number the model added. The rule name, the path and the
-    message are shown to visitors verbatim, so they are pinned here against the real guardrail. The
-    same four strings are asserted in TuneProof.test.tsx."""
+    """The landing page's proof (apps/web/src/components/landing/TuneProof.tsx) says, in plain words,
+    "Rhapto stopped this draft: 45 is not in your resume." That is this catch: a sentence from the
+    document with a number the model added. The page no longer prints the rule name, the path or the
+    engine message, but the claim it makes is exactly what the engine does, so the rule, path and
+    message stay pinned here against the real guardrail. TuneProof.test.tsx asserts the sentence."""
     doc = _doc()
     b = _bullet(doc)
     assert b.text == "Led the Snowflake migration for 12 teams, cutting warehouse cost 30%."

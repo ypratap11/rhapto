@@ -35,15 +35,15 @@ moving the dashboard to `/dashboard`; ship that first.
 
 ## SOLVED 2026-09-26 — the working configuration
 
-`https://rhapto.augaster.com/` is public. Verified with `scripts/check-access-boundary.sh`: `/`,
-`/about` and a real `/_next/static/media/*.woff2` all 200, and all nine data-bearing paths still 302 to
+`https://rhapto.augaster.com/` is public. Verified with `scripts/check-access-boundary.sh`: `/`
+and a real `/_next/static/media/*.woff2` 200, `/about` is a 308 to `/`, and all nine data-bearing paths still 302 to
 the Access login.
 
 **What works: invert the two applications so neither overlaps.**
 
 | Application | Destinations | Policy |
 |---|---|---|
-| `Rhapto-Public` | `rhapto.augaster.com/` , `/about` , `/_next/*` , `/favicon.ico` | Bypass / Everyone |
+| `Rhapto-Public` | `rhapto.augaster.com/` , `/about` (legacy, harmless: it only redirects to `/`; safe to remove) , `/_next/*` , `/favicon.ico` | Bypass / Everyone |
 | `rhapto` | the seven prefixes below, **not** the bare hostname | Email Policy / Allow |
 
 ```
@@ -113,7 +113,7 @@ existing application keeps protecting everything else.
 |---|---|
 | Application | `rhapto-public` |
 | Domain | `rhapto.augaster.com` |
-| Paths | `/` (exact), `/about`, `/_next/*`, `/favicon.ico` |
+| Paths | `/` (exact), `/about` (legacy, harmless: it only redirects to `/`; safe to remove), `/_next/*`, `/favicon.ico` |
 | Policy | one policy, action **Bypass**, rule **Everyone** |
 
 `/_next/*` is not optional. `next/font/google` self-hosts the fonts at build time under

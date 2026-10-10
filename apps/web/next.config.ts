@@ -6,7 +6,11 @@ const nextConfig: NextConfig = {
   // and are deliberately NOT redirected. 307 keeps the query, so /packages?filter=review still
   // lands on the Resumes page with its tab query intact.
   async redirects() {
-    return [{ source: "/packages", destination: "/resumes", permanent: false }];
+    return [
+      { source: "/packages", destination: "/resumes", permanent: false },
+      // The old pitch page is gone; its facts live on / . 308 so clients and search engines move to /.
+      { source: "/about", destination: "/", permanent: true },
+    ];
   },
 };
 

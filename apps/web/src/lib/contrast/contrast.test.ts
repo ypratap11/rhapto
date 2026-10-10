@@ -31,6 +31,13 @@ describe("design tokens meet WCAG AA", () => {
 });
 
 describe("the checker itself", () => {
+  it("the tour highlight: muted text on the old 55% band FAILS in dark, foreground on the 25% wash passes in both themes", () => {
+    const { light, dark } = parseThemes(css);
+    const over = (bg: string, amber: string, a: number) => mixHex(amber, a, bg);
+    expect(contrast(dark["muted-foreground"]!, over(dark["surface"]!, dark["decor-amber"]!, 0.55))).toBeLessThan(4.5);
+    for (const t of [light, dark]) expect(contrast(t["foreground"]!, over(t["surface"]!, t["decor-amber"]!, 0.25))).toBeGreaterThanOrEqual(4.5);
+  });
+
   it("computes known ratios", () => {
     expect(contrast("#000000", "#ffffff")).toBeCloseTo(21, 1);
     expect(contrast("#ffffff", "#b63a1c")).toBeCloseTo(5.82, 1);

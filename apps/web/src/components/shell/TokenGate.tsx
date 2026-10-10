@@ -11,7 +11,7 @@ import { useBootstrap, useMe } from "@/lib/api/queries";
 
 // Fix-round M1: a `sessionStorage` latch, not `bootstrap.isIdle` alone -- `isIdle` only protects a
 // single mount's effect running twice (see M2 below), but a signed-in user navigating through
-// /settings or /about (both bypass Bootstrapper) and back to /jobs unmounts and remounts this
+// /settings (which bypasses Bootstrapper) and back to /jobs unmounts and remounts this
 // component, and `isIdle` on a *fresh* `useBootstrap()` call is `true` again on every remount. The
 // latch is set synchronously before the request even resolves, so a session where the request
 // never actually completes (a network blip) does not retry until the next tab/session -- accepted
@@ -74,6 +74,14 @@ function getServerSnapshot(): boolean | null {
   return null;
 }
 
+/** TopBar and Footer both call this, so the header, the footer's Feedback link and the gate's notion of a
+ * public page cannot drift. */
+export function useVisitorHeader(): boolean {
+  const pathname = usePathname();
+  const tokenPresent = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
+  return isVisitorHeader(pathname, SAME_ORIGIN_DEPLOYMENT, tokenPresent);
+}
+
 // Reachable without being signed in, in *either* mode. /settings is where a token-mode user
 // enters credentials, and it is also the one screen an access-mode user needs if this build ever
 // ends up pointed at a token-mode API -- without this bypass applying there too, they would have
@@ -81,7 +89,7 @@ function getServerSnapshot(): boolean | null {
 // The token-mode "API connection" card that used to render unconditionally on /settings is now
 // hidden in access mode (apps/web/src/app/settings/page.tsx, fix-round finding N1) because saving
 // it there points the browser at another origin and silently disables the same-origin proxy.
-// /about is marketing copy that needs no session in either mode, and neither does / -- it is the
+// / needs no session in either mode -- it is the
 // domain's front door (apps/web/src/app/page.tsx renders <Landing/> there directly), so it must
 // render the same way for a first-time invited person as for anyone already signed in. This is a
 // client-side routing choice, not a claim that / is reachable by anyone unauthenticated: in an
@@ -89,10 +97,20 @@ function getServerSnapshot(): boolean | null {
 // ever runs, unless a separate, deliberate step (docs/runbook-public-landing.md) opens / there too.
 // This set is NOT the edge-bypass list -- it says "renders without a session", not "safe for the
 // internet". /settings is a member of this set precisely because it stays gated at the edge (the
-// runbook's bypass only ever adds /, /about, /_next/* and /favicon.ico, and
+// runbook's bypass only ever adds /, /_next/* and /favicon.ico, and
 // scripts/check-access-boundary.sh asserts /settings stays protected); adding a route here grants
 // it no edge exposure at all, only a client-side pass-through once a request already arrived.
-const PUBLIC_ROUTES = new Set(["/", "/settings", "/about"]);
+const PUBLIC_ROUTES = new Set(["/", "/settings"]);
+
+/** Which header a route gets. `PUBLIC_ROUTES` says "renders without a session"; the header says less.
+ * On / the visitor may be anyone, so show only the way in. /settings is a visitor page only in token
+ * mode and only until a token is stored: hosted /settings is a signed-in screen behind Cloudflare, and a
+ * self-hoster with a token needs the app header to get back into the app. `tokenPresent` is the store
+ * snapshot (null on the server and until read), so the server renders the visitor variant and the client
+ * swaps through the store, which React treats as an update, not a hydration mismatch. */
+export function isVisitorHeader(pathname: string, hosted: boolean, tokenPresent: boolean | null): boolean {
+  return pathname === "/" || (pathname === "/settings" && !hosted && tokenPresent !== true);
+}
 
 // The one definition of "this visitor is (or may be) signed in, so /me is worth asking": not on a
 // public route, and either an access-mode deployment (the edge already authenticated the request) or
@@ -201,7 +219,7 @@ export function TokenGate({ children }: { children: React.ReactNode }) {
         </Link>
         <p>
           New here?{" "}
-          <Link href="/about" className="text-accent underline">
+          <Link href="/" className="text-accent underline">
             See what Rhapto does
           </Link>{" "}
           first.

@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act } from "react";
 import { hydrateRoot } from "react-dom/client";
 import { renderToString } from "react-dom/server";
-import { TokenGate, useSignedIn } from "./TokenGate";
+import { isVisitorHeader, TokenGate, useSignedIn } from "./TokenGate";
 import { ACCESS_REQUEST_MAILTO, ACCESS_REQUEST_URL } from "@/components/landing/access";
 import { Landing } from "@/components/landing/Landing";
 import { ApiError, setSettings } from "@/lib/api/client";
@@ -52,6 +52,7 @@ describe("TokenGate", () => {
     renderGate(<TokenGate><p>secret content</p></TokenGate>);
     expect(screen.queryByText("secret content")).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: /open settings/i })).toHaveAttribute("href", "/settings");
+    expect(screen.getByRole("link", { name: "See what Rhapto does" })).toHaveAttribute("href", "/");
   });
 
   // Landing-default task: "/" is now in PUBLIC_ROUTES, so TokenGate no longer substitutes its own
@@ -218,7 +219,7 @@ describe("TokenGate in access mode", () => {
   });
 
   // --- fix-round finding M1/M2: a sessionStorage latch, not just `bootstrap.isIdle`, so a
-  // signed-in user remounting Bootstrapper (navigation through /settings or /about, or a React
+  // signed-in user remounting Bootstrapper (navigation through /settings, or a React
   // StrictMode dev-mode double-invoke) does not re-fire the request every time ---
 
   it("does not re-fire the bootstrap mutation on a second mount within the same browser session", () => {
@@ -370,13 +371,13 @@ describe("useSignedIn", () => {
     sameOriginFlag.value = false;
   });
 
-  it.each(["/", "/about", "/settings"])("is false on the public route %s, even with a token stored", (path) => {
+  it.each(["/", "/settings"])("is false on the public route %s, even with a token stored", (path) => {
     pathname.current = path;
     setSettings({ token: "tok", apiUrl: "http://localhost:8000" });
     expect(renderHook(() => useSignedIn()).result.current).toBe(false);
   });
 
-  it.each(["/", "/about", "/settings"])("is false on the public route %s in access mode", (path) => {
+  it.each(["/", "/settings"])("is false on the public route %s in access mode", (path) => {
     sameOriginFlag.value = true;
     pathname.current = path;
     expect(renderHook(() => useSignedIn()).result.current).toBe(false);
@@ -402,5 +403,23 @@ describe("useSignedIn", () => {
     expect(renderHook(() => useSignedIn()).result.current).toBe(false);
     setSettings({ token: "tok", apiUrl: "http://localhost:8000" });
     expect(renderHook(() => useSignedIn()).result.current).toBe(true);
+  });
+});
+
+describe("isVisitorHeader", () => {
+  it.each([
+    ["/", true, null, true],
+    ["/", false, true, true], // / is the front door even with a token
+    ["/settings", true, null, false], // hosted: an in-app screen behind Cloudflare
+    ["/settings", true, true, false],
+    ["/settings", false, null, true], // token mode, token not read yet / absent
+    ["/settings", false, false, true],
+    ["/settings", false, true, false], // self-hoster with a token keeps the app header
+    ["/start", true, null, false],
+    ["/start", false, false, false],
+    ["/resumes", true, null, false],
+    ["/about", true, null, false], // gone
+  ])("%s hosted=%s token=%s -> %s", (path, hosted, token, expected) => {
+    expect(isVisitorHeader(path, hosted, token)).toBe(expected);
   });
 });

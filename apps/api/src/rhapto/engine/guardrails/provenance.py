@@ -13,9 +13,7 @@ def check_provenance(ctx: GuardrailContext) -> list[Violation]:
     cited += [(p, b.source_block_id) for p, b in iter_bullets(ctx.resume)]
     for path, block_id in cited:
         if block_id not in ctx.blocks:
-            # The "does not exist" wording is quoted on the public landing page
-            # (apps/web/src/components/landing/CaughtDemo.tsx, pinned by CaughtDemo.test.tsx);
-            # change both or neither.
+            # No longer quoted by the web app (the landing-page demo that did was removed).
             out.append(
                 violation(RULE_NAME, f"source block {block_id!r} does not exist", path, block_id)
             )

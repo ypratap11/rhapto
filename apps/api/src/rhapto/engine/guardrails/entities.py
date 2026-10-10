@@ -39,9 +39,7 @@ def check_entities(ctx: GuardrailContext) -> list[Violation]:
                 out.append(
                     violation(
                         RULE_NAME,
-                        # This wording is quoted on the public landing page
-                        # (apps/web/src/components/landing/CaughtDemo.tsx, pinned by
-                        # CaughtDemo.test.tsx); change both or neither.
+                        # No longer quoted by the web app (the landing-page demo that did was removed).
                         f"{field_name} {value!r} does not match block {block.id!r} ({source!r})",
                         path,
                         block.id,
