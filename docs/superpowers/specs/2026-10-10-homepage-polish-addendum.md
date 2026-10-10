@@ -86,6 +86,16 @@ unless changed here.
 - One vertical rhythm on `/`: the same section spacing token between hero, steps, proof and footer.
 - Tap targets ≥ 44×44 px on phones for header icons, the ☰ button, the tour pause button and tabs.
 
+## 5c. Feel good, and bring people in (owner: "make it feel good - users need to be on the platform")
+- Closing call-to-action section before the footer, centred on a soft warm band: heading "Try it on your own
+  resume", one line "Upload a Word file, pick a job, and read the result before you send anything.", the primary CTA
+  pill (same target/label as the hero), and in hosted mode "No invite yet? Request beta access". Visitors who
+  scroll to the end are never left without a next step.
+- Gentle polish, all CSS, all off under `prefers-reduced-motion`: sections fade up 8 px once as they enter the
+  viewport (≤ 400 ms, no layout shift, content visible without JS); primary CTA lifts 1 px with a slightly deeper
+  shadow on hover; the "Request beta access" links get the same underline-offset hover as the rest of the app.
+- No new claims: no user counts, ratings, logos, testimonials or timing promises; no "only"/"first".
+
 ## 6. Testing (additions)
 - **UI-basics checklist** in QA and final review (owner rule 2026-10-10): centred to one content width; phone header
   one row with ☰; visitors see only visitor links; logo → `/`; tap targets ≥ 44 px; no wrapped controls; no
