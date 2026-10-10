@@ -1,4 +1,6 @@
+import { cn } from "cn";
 import Link from "next/link";
+import { buttonVariants } from "@/components/ui/button";
 import type { CoachError } from "@/lib/coach/errors";
 
 export type TranscriptItem = { label: string; value: string };
@@ -45,6 +47,7 @@ export function CoachFrame({
 export function CoachErrorNote({ error }: { error: CoachError | null }) {
   if (!error) return null;
   const external = error.link?.href.startsWith("http");
+  const asButton = error.next === "settings" && !external;
   return (
     <div role="alert" className="rounded-control border-l-4 border-destructive bg-surface-muted p-3 text-sm">
       <p>{error.message}</p>
@@ -54,7 +57,7 @@ export function CoachErrorNote({ error }: { error: CoachError | null }) {
             href={error.link.href}
             target={external ? "_blank" : undefined}
             rel={external ? "noreferrer" : undefined}
-            className="text-primary underline underline-offset-4"
+            className={asButton ? cn(buttonVariants({ variant: "outline", size: "sm" }), "max-md:min-h-11") : "text-primary underline underline-offset-4"}
           >
             {error.link.label}
           </a>

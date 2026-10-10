@@ -172,4 +172,31 @@ describe("TaskProgress", () => {
     await vi.waitFor(() => expect(onFinished).toHaveBeenCalled());
     expect(toastSuccess).toHaveBeenCalledWith("Poll finished");
   });
+
+  it("shows a refused-key sentence with an Open Settings link and toast action", async () => {
+    const sentence = "Your OpenAI key was refused. It may have expired or been revoked. Paste a new key in Settings, then try again.";
+    mockReadTaskEvents.mockImplementation(async (_taskId, onEvent) => {
+      onEvent({ event: "error", data: { message: sentence } });
+    });
+    const onFinished = vi.fn();
+    renderTaskProgress({ taskId: "t10", jobId: "j1", onFinished });
+
+    expect(await screen.findByText(new RegExp(sentence.slice(0, 30)))).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Open Settings" })).toHaveAttribute("href", "/settings");
+    await vi.waitFor(() => expect(onFinished).toHaveBeenCalled());
+    expect(toastError).toHaveBeenCalledWith(sentence, expect.objectContaining({ action: expect.objectContaining({ label: "Open Settings" }) }));
+  });
+
+  it("gives any other failure no Settings link", async () => {
+    mockReadTaskEvents.mockImplementation(async (_taskId, onEvent) => {
+      onEvent({ event: "error", data: { message: "Something else broke" } });
+    });
+    const onFinished = vi.fn();
+    renderTaskProgress({ taskId: "t11", jobId: "j1", onFinished });
+
+    expect(await screen.findByText("Something else broke")).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Open Settings" })).toBeNull();
+    await vi.waitFor(() => expect(onFinished).toHaveBeenCalled());
+    expect(toastError).toHaveBeenCalledWith("Something else broke");
+  });
 });

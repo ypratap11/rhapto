@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
+import { isSettingsSentence } from "@/lib/coach/errors";
 import { readTaskEvents } from "@/lib/api/sse";
 import { invalidateJobs } from "@/lib/api/queries";
 import { POLL_STEPS, initialProgress, pipelineSteps, reduceTaskEvent, resolvePackageStatus, type ProgressState } from "@/lib/task-progress";
@@ -83,7 +84,11 @@ export function TaskProgress({
             toast.success("Package created — open the review", { action });
           }
         } else if (current.status === "failed") {
-          toast.error(current.error ?? "Tailoring failed");
+          if (current.error && isSettingsSentence(current.error)) {
+            toast.error(current.error, { action: { label: "Open Settings", onClick: () => window.location.assign("/settings") } });
+          } else {
+            toast.error(current.error ?? "Tailoring failed");
+          }
         } else if (current.status === "running") {
           // The stream ended without a terminal ("done"/"error") event.
           toast.error("Tailoring was interrupted; refresh to check the job");
@@ -111,7 +116,17 @@ export function TaskProgress({
           );
         })}
       </ol>
-      {state.status === "failed" ? <p className="text-sm text-destructive">{state.error}</p> : null}
+      {state.status === "failed" ? (
+        <p className="text-sm text-destructive">
+          {state.error}
+          {state.error && isSettingsSentence(state.error) ? (
+            <>
+              {" "}
+              <Link href="/settings" className="underline">Open Settings</Link>
+            </>
+          ) : null}
+        </p>
+      ) : null}
       {kind === "tailor" && state.status === "succeeded" && state.packageId ? (
         <Link href={`/jobs/${jobId}/packages/${state.packageId}`} className="text-sm text-fit-high underline">
           Open package {state.packageStatus === "blocked" ? "(blocked)" : ""}

@@ -84,3 +84,24 @@ describe("describeCoachError (spec 3.4, one row per case, always one way forward
     }
   });
 });
+
+describe("user-key sentences", () => {
+  const rejected = (name: string) => `Your ${name} key was refused. It may have expired or been revoked. Paste a new key in Settings, then try again.`;
+  const quota = (name: string) => `Your ${name} account is out of credit. Add credit with ${name} or paste a different key in Settings.`;
+
+  it.each(["OpenAI", "Anthropic", "Google Gemini", "Groq", "OpenRouter"])("shows both sentences for %s verbatim with Open Settings", (name) => {
+    for (const text of [rejected(name), quota(name)]) {
+      expect(describeCoachError(new Error(text), "tailor")).toEqual({
+        message: text,
+        next: "settings",
+        link: { label: "Open Settings", href: "/settings" },
+      });
+    }
+  });
+
+  it("does not echo a sentence for an unknown provider or with extra text appended", () => {
+    for (const text of [rejected("Acme"), `${rejected("OpenAI")} sk-live-123`, `Incorrect API key provided: sk-abc`]) {
+      expect(describeCoachError(new Error(text), "tailor").message).toBe("The run didn't finish. Try again, or pick another job.");
+    }
+  });
+});
