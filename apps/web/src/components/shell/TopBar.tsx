@@ -87,8 +87,11 @@ function AccountMenu({
       ref={root}
       className="relative hidden md:block"
       onBlur={(e) => {
-        // Tabbing out of the panel closes it; focus moving within it does not.
-        if (open && !root.current?.contains(e.relatedTarget as Node | null)) setOpen(false);
+        // Tabbing out closes it; focus moving within it does not. Safari and Firefox on macOS do not focus a
+        // button on click, so relatedTarget is null then: only a known target outside the panel closes it
+        // (outside clicks and Escape have their own handlers).
+        const next = e.relatedTarget as Node | null;
+        if (open && next && !root.current?.contains(next)) setOpen(false);
       }}
     >
       <button
@@ -334,7 +337,10 @@ export function TopBar() {
         )}
       </div>
       {/* Once, outside both menus: a dialog rendered inside either would unmount the moment the menu closed. */}
-      {feedback ? <QuickFeedbackDialog open onOpenChange={(next) => {
+      {feedback ? (
+        <QuickFeedbackDialog
+          open
+          onOpenChange={(next) => {
             if (next) return;
             setFeedback(null);
             // The item that opened the dialog went with its menu, so hand focus to whichever trigger is on screen.
@@ -343,7 +349,10 @@ export function TopBar() {
               accountRef.current?.focus();
               if (document.activeElement !== accountRef.current) menuRef.current?.focus();
             });
-          }} target={feedback} /> : null}
+          }}
+          target={feedback}
+        />
+      ) : null}
     </header>
   );
 }

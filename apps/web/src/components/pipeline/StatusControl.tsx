@@ -96,7 +96,7 @@ export function StatusControl({ application }: { application: ApplicationOut }) 
           {/* Keyed on the stored value: an uncontrolled input's `defaultValue` only applies once, so
               a successful save (or any other external change to follow_up_at) must remount the
               input — via key, not an effect — rather than warn Base UI about a moving default. */}
-          <Input key={followUpValue || "none"} id="follow-up-date" type="date" defaultValue={followUpValue} ref={followUpRef} />
+          <Input key={followUpValue || "none"} id="follow-up-date" type="date" className="max-md:h-11" defaultValue={followUpValue} ref={followUpRef} />
           <Button type="button" size="sm" className="max-md:min-h-11" onClick={saveFollowUp} disabled={patch.isPending}>
             Save follow-up
           </Button>

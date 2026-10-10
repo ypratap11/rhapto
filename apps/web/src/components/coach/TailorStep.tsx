@@ -116,8 +116,8 @@ export function TailorStep({
         <>
           <CoachErrorNote error={error ?? describeCoachError(new Error(state.error ?? "The run failed"), "tailor")} />
           <div className="flex flex-wrap gap-3">
-            <Button type="button" disabled={retrying} onClick={() => void retry()}>Try again</Button>
-            <Button type="button" variant="outline" onClick={onPickAnother}>Pick another job</Button>
+            <Button type="button" className="max-md:min-h-11" disabled={retrying} onClick={() => void retry()}>Try again</Button>
+            <Button type="button" variant="outline" className="max-md:min-h-11" onClick={onPickAnother}>Pick another job</Button>
           </div>
         </>
       ) : null}

@@ -72,6 +72,22 @@ describe("ApplicationsSection chip row", () => {
   });
 });
 
+describe("ApplicationsSection initial scroll", () => {
+  it("starts at scrollLeft 0 on load, even though a chip is active", () => {
+    const offsetLeft = vi.spyOn(HTMLElement.prototype, "offsetLeft", "get").mockReturnValue(300);
+    const offsetWidth = vi.spyOn(HTMLElement.prototype, "offsetWidth", "get").mockReturnValue(40);
+    const clientWidth = vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(100);
+    try {
+      render(<ApplicationsSection rows={all} />);
+      expect(screen.getByRole("group", { name: "Filter applications" }).scrollLeft).toBe(0);
+    } finally {
+      offsetLeft.mockRestore();
+      offsetWidth.mockRestore();
+      clientWidth.mockRestore();
+    }
+  });
+});
+
 describe("ApplicationsSection", () => {
   it("lists the chips in order with counts", () => {
     render(<ApplicationsSection rows={all} />);

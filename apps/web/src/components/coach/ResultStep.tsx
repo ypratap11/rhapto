@@ -98,10 +98,10 @@ export function ResultStep({
         <p className="text-sm text-muted-foreground">Nothing was saved for download. You can try again, or pick another job.</p>
         <CoachErrorNote error={retryError} />
         <div className="flex flex-wrap gap-3">
-          <Button type="button" disabled={retryBusy} onClick={() => onRetry(data)}>
+          <Button type="button" className="max-md:min-h-11" disabled={retryBusy} onClick={() => onRetry(data)}>
             Try again (uses another run)
           </Button>
-          <Button type="button" variant="outline" onClick={onAnother}>
+          <Button type="button" variant="outline" className="max-md:min-h-11" onClick={onAnother}>
             Pick another job
           </Button>
         </div>

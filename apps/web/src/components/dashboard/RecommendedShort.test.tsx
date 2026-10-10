@@ -8,7 +8,8 @@ import { RecommendedShort } from "./RecommendedShort";
 const push = vi.fn();
 const mutateAsync = vi.fn();
 const fire = vi.fn();
-let recommended: { data: JobOut[]; isLoading: boolean; error: unknown; isPaused: boolean };
+const refetch = vi.fn();
+let recommended: { data: JobOut[]; isLoading: boolean; error: unknown; isPaused: boolean; refetch?: () => void };
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push }) }));
 vi.mock("@/lib/coach/events", () => ({ fireCoachEvent: (step: string) => fire(step) }));
 vi.mock("@/components/jobs/NotInterestedButton", () => ({
@@ -28,7 +29,8 @@ beforeEach(() => {
   push.mockReset();
   fire.mockReset();
   mutateAsync.mockReset().mockResolvedValue({ id: "t1" });
-  recommended = { data: Array.from({ length: 7 }, (_, i) => job(`j${i}`, 80)), isLoading: false, error: null, isPaused: false };
+  recommended = { data: Array.from({ length: 7 }, (_, i) => job(`j${i}`, 80)), isLoading: false, error: null, isPaused: false, refetch };
+  refetch.mockReset();
 });
 
 describe("RecommendedShort", () => {
@@ -89,6 +91,17 @@ describe("RecommendedShort", () => {
     expect(screen.queryByRole("list")).toBeNull();
     expect(screen.queryByRole("alert")).toBeNull();
     expect(screen.queryByText(/finding jobs that fit you/)).toBeNull();
+  });
+
+  it("says so quietly and offers a 44px Try again that refetches", async () => {
+    recommended = { data: [], isLoading: false, error: new Error("down"), isPaused: false, refetch };
+    const user = userEvent.setup({ delay: null });
+    render(<RecommendedShort />);
+    expect(screen.getByText("We couldn't load recommended jobs right now.")).toBeInTheDocument();
+    const retry = screen.getByRole("button", { name: "Try again" });
+    expect(retry.className).toMatch(/max-md:min-h-11/);
+    await user.click(retry);
+    expect(refetch).toHaveBeenCalledTimes(1);
   });
 
   it("shows a real ellipsis while starting", async () => {

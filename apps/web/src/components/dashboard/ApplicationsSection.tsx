@@ -26,7 +26,13 @@ export function ApplicationsSection({ rows, dueIds }: { rows: ApplicationOut[]; 
   const selected = rows.find((r) => r.id === selectedId) ?? null;
   const rowRef = useRef<HTMLDivElement>(null);
 
+  const mounted = useRef(false);
   useEffect(() => {
+    // Only a user's change moves the row; on load it stays at scrollLeft 0.
+    if (!mounted.current) {
+      mounted.current = true;
+      return;
+    }
     const row = rowRef.current;
     const active = row?.querySelector<HTMLElement>('[aria-pressed="true"]');
     if (!row || !active) return;

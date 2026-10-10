@@ -64,6 +64,13 @@ export function RecommendedShort() {
             Paste a job instead
           </Link>
         </div>
+      ) : jobs.length === 0 && query.error ? (
+        <p className="flex flex-wrap items-center gap-x-3 text-sm text-muted-foreground">
+          We couldn&apos;t load recommended jobs right now.
+          <Button type="button" variant="outline" size="sm" className="max-md:min-h-11" onClick={() => void query.refetch()}>
+            Try again
+          </Button>
+        </p>
       ) : jobs.length > 0 ? (
         <ul className="divide-y divide-border rounded-card border border-border bg-surface">
           {jobs.map((job) => (

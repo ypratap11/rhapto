@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -350,6 +350,30 @@ describe("signed-in header", () => {
     expect(trigger).toHaveAttribute("aria-expanded", "true");
     await screen.findByRole("button", { name: "Send feedback" });
     for (let i = 0; i < 12 && trigger.getAttribute("aria-expanded") === "true"; i++) await user.tab();
+    expect(trigger).toHaveAttribute("aria-expanded", "false");
+  });
+
+  it("a blur with a null relatedTarget (Safari/Firefox button click) keeps the panel open", async () => {
+    pathname.mockReturnValue("/dashboard");
+    renderBar();
+    const user = userEvent.setup({ delay: null });
+    const trigger = await screen.findByRole("button", { name: "Account" });
+    await user.click(trigger);
+    const send = await screen.findByRole("button", { name: "Send feedback" });
+    fireEvent.blur(send, { relatedTarget: null });
+    expect(trigger).toHaveAttribute("aria-expanded", "true");
+    await user.click(send);
+    expect(await screen.findByRole("dialog")).toBeInTheDocument();
+  });
+
+  it("a blur to an element outside the panel closes it", async () => {
+    pathname.mockReturnValue("/dashboard");
+    renderBar();
+    const user = userEvent.setup({ delay: null });
+    const trigger = await screen.findByRole("button", { name: "Account" });
+    await user.click(trigger);
+    const send = await screen.findByRole("button", { name: "Send feedback" });
+    fireEvent.blur(send, { relatedTarget: document.body });
     expect(trigger).toHaveAttribute("aria-expanded", "false");
   });
 
