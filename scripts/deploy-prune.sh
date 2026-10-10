@@ -1,0 +1,127 @@
+#!/usr/bin/env bash
+# Remove files that an earlier deploy shipped and the current deploy no longer contains.
+#
+# Runs ON THE SERVER, after deploy-server.sh has extracted the new tree over DEST. `tar -x` only adds
+# and overwrites, so without this a file deleted in git stays on the server forever; on 2026-10-10 a
+# stale About.tsx importing a removed export broke the production web build.
+#
+# Usage: deploy-prune.sh DEST NEW_MANIFEST EXPECTED_LINES [--dry-run|''] [OLD_OVERRIDE]
+#   DEST            the deploy directory (e.g. /opt/rhapto)
+#   NEW_MANIFEST    file listing every path the new deploy shipped, one per line (git ls-tree output)
+#   EXPECTED_LINES  how many lines the sender wrote; a truncated upload must not read as "all deleted"
+#   OLD_OVERRIDE    optional file used as the previous manifest for this run only (the one-time bootstrap).
+#                   DEST/.deploy-manifest is still only ever written by a real (non-dry) run, from NEW_MANIFEST.
+#
+# The only paths ever deleted are those listed in DEST/.deploy-manifest (written by the previous
+# deploy) and missing from NEW_MANIFEST. Anything no deploy ever shipped -- .env, profile/, backups/,
+# runtime data -- is never in a manifest, so it can never be deleted. The manifest is an ordinary
+# file, so it is still treated as untrusted. Second fence, per path:
+#   1. lexical: refuse empty paths, absolute paths, any empty / `.` / `..` component (./.env, a//b,
+#      a/./b, a/../b), control characters, a leading `"` (a git-quoted name) or `-`;
+#   2. physical: the target's parent directory is resolved (symlinks followed) and must be DEST or
+#      inside it, and the resolved target must not be DEST/.env or anything under DEST/profile.
+# Anything under apps/api/alembic/versions/ is also refused: a migration already applied to the prod DB
+# must never disappear from the server, even if it was deleted in git.
+# Empty-directory cleanup stops at DEST and never removes DEST itself or anything outside it.
+# With no previous manifest (the first run) nothing is deleted; the new manifest is installed.
+# If more than 20 files and over 25% of the previous deploy's files would go, it stops unless
+# RHAPTO_PRUNE_FORCE=1.
+# Note: deploying a ref older than this script's introduction makes the server's copy of this script
+# delete itself mid-run; that is safe on Linux (the open file stays valid) and the next deploy restores it.
+set -euo pipefail
+# `comm` needs its inputs sorted in the same collation as the `sort` that produced them.
+export LC_ALL=C
+
+USAGE="usage: deploy-prune.sh DEST NEW_MANIFEST EXPECTED_LINES [--dry-run|''] [OLD_OVERRIDE]"
+DEST="${1:?$USAGE}"
+NEW="${2:?$USAGE}"
+EXPECTED="${3:?$USAGE}"
+DRY_RUN="${4:-}"
+OLD="$DEST/.deploy-manifest"        # where the new manifest is installed
+PREV="${5:-$OLD}"                    # what is read as the previous manifest
+
+[[ -d "$DEST" ]] || { echo "FATAL: $DEST is not a directory" >&2; exit 1; }
+DEST_REAL="$(realpath -e -- "$DEST")"
+[[ -s "$NEW" ]] || { echo "FATAL: new manifest $NEW is missing or empty" >&2; exit 1; }
+got="$(wc -l < "$NEW" | tr -d ' ')"
+[[ "$got" == "$EXPECTED" ]] || {
+  echo "FATAL: new manifest has $got lines, sender wrote $EXPECTED; refusing to prune" >&2
+  exit 1
+}
+
+install_manifest() {
+  if [[ "$DRY_RUN" == "--dry-run" ]]; then return; fi
+  # Copy then rename, so an interrupted copy never leaves a truncated manifest.
+  cp "$NEW" "$OLD.tmp" && mv -f "$OLD.tmp" "$OLD"
+}
+
+if [[ ! -f "$PREV" ]]; then
+  echo "    prune: no previous manifest at $PREV; nothing removed (first run)"
+  install_manifest
+  exit 0
+fi
+
+stale="$(comm -23 <(sort -u "$PREV") <(sort -u "$NEW"))"
+if [[ -z "$stale" ]]; then
+  echo "    prune: nothing to remove"
+  install_manifest
+  exit 0
+fi
+
+old_count="$(sort -u "$PREV" | wc -l | tr -d ' ')"
+stale_count="$(printf '%s\n' "$stale" | wc -l | tr -d ' ')"
+# A normal release deletes a handful of files; losing more than 20 files AND over a quarter of the
+# tree means the wrong ref or a bad manifest, not a release.
+if (( stale_count > 20 && stale_count * 4 > old_count )) && [[ "${RHAPTO_PRUNE_FORCE:-}" != "1" ]]; then
+  echo "FATAL: $stale_count of $old_count previously deployed files would be removed (> 25%);" \
+    "refusing. Check the ref, or rerun with RHAPTO_PRUNE_FORCE=1." >&2
+  exit 1
+fi
+
+refuse() { echo "    prune: REFUSED unsafe path: $1" >&2; }
+
+removed=0
+while IFS= read -r path; do
+  # 1. lexical fence
+  case "$path" in
+    "" | /* | -* | '"'* | *[[:cntrl:]]* | */ | . | .. | ./* | ../* | */. | */.. | */./* | */../* | *//*)
+      refuse "$path"; continue ;;
+    .env | .env/* | profile | profile/* | apps/api/alembic/versions/*)
+      refuse "$path"; continue ;;
+  esac
+  target="$DEST/$path"
+  if [[ ! -e "$target" && ! -L "$target" ]]; then
+    continue
+  fi
+  # 2. physical fence: resolve the parent (following symlinks) and compare with the resolved DEST.
+  parent_real="$(realpath -e -- "$(dirname -- "$target")" 2>/dev/null)" || { refuse "$path"; continue; }
+  if [[ "$parent_real" != "$DEST_REAL" && "$parent_real" != "$DEST_REAL"/* ]]; then
+    refuse "$path"; continue
+  fi
+  target_real="$parent_real/$(basename -- "$target")"
+  if [[ "$target_real" == "$DEST_REAL/.env" || "$target_real" == "$DEST_REAL/profile" \
+        || "$target_real" == "$DEST_REAL/profile/"* \
+        || "$target_real" == "$DEST_REAL/apps/api/alembic/versions/"* ]]; then
+    refuse "$path"; continue
+  fi
+  if [[ -d "$target" && ! -L "$target" ]]; then
+    # Manifests list files, never directories; a directory here means the manifest is not ours.
+    echo "    prune: REFUSED directory: $path" >&2
+    continue
+  fi
+  if [[ "$DRY_RUN" == "--dry-run" ]]; then
+    echo "    prune: would remove $path"
+  else
+    rm -f -- "$target_real"
+    echo "    prune: removed $path"
+    # Drop now-empty parent directories, stopping at DEST (never DEST itself, never above it).
+    dir="$parent_real"
+    while [[ "$dir" != "$DEST_REAL" && "$dir" == "$DEST_REAL"/* ]] && rmdir -- "$dir" 2>/dev/null; do
+      dir="$(dirname -- "$dir")"
+    done
+  fi
+  removed=$((removed + 1))
+done <<< "$stale"
+
+echo "    prune: $removed stale file(s) $([[ "$DRY_RUN" == "--dry-run" ]] && echo "would be removed (dry run)" || echo "removed")"
+install_manifest
