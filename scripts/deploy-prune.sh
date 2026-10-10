@@ -5,10 +5,12 @@
 # and overwrites, so without this a file deleted in git stays on the server forever; on 2026-10-10 a
 # stale About.tsx importing a removed export broke the production web build.
 #
-# Usage: deploy-prune.sh DEST NEW_MANIFEST EXPECTED_LINES [--dry-run]
+# Usage: deploy-prune.sh DEST NEW_MANIFEST EXPECTED_LINES [--dry-run|''] [OLD_OVERRIDE]
 #   DEST            the deploy directory (e.g. /opt/rhapto)
 #   NEW_MANIFEST    file listing every path the new deploy shipped, one per line (git ls-tree output)
 #   EXPECTED_LINES  how many lines the sender wrote; a truncated upload must not read as "all deleted"
+#   OLD_OVERRIDE    optional file used as the previous manifest for this run only (the one-time bootstrap).
+#                   DEST/.deploy-manifest is still only ever written by a real (non-dry) run, from NEW_MANIFEST.
 #
 # The only paths ever deleted are those listed in DEST/.deploy-manifest (written by the previous
 # deploy) and missing from NEW_MANIFEST. Anything no deploy ever shipped -- .env, profile/, backups/,
@@ -18,6 +20,8 @@
 #      a/./b, a/../b), control characters, a leading `"` (a git-quoted name) or `-`;
 #   2. physical: the target's parent directory is resolved (symlinks followed) and must be DEST or
 #      inside it, and the resolved target must not be DEST/.env or anything under DEST/profile.
+# Anything under apps/api/alembic/versions/ is also refused: a migration already applied to the prod DB
+# must never disappear from the server, even if it was deleted in git.
 # Empty-directory cleanup stops at DEST and never removes DEST itself or anything outside it.
 # With no previous manifest (the first run) nothing is deleted; the new manifest is installed.
 # If more than 20 files and over 25% of the previous deploy's files would go, it stops unless
@@ -28,12 +32,13 @@ set -euo pipefail
 # `comm` needs its inputs sorted in the same collation as the `sort` that produced them.
 export LC_ALL=C
 
-USAGE="usage: deploy-prune.sh DEST NEW_MANIFEST EXPECTED_LINES [--dry-run]"
+USAGE="usage: deploy-prune.sh DEST NEW_MANIFEST EXPECTED_LINES [--dry-run|''] [OLD_OVERRIDE]"
 DEST="${1:?$USAGE}"
 NEW="${2:?$USAGE}"
 EXPECTED="${3:?$USAGE}"
 DRY_RUN="${4:-}"
-OLD="$DEST/.deploy-manifest"
+OLD="$DEST/.deploy-manifest"        # where the new manifest is installed
+PREV="${5:-$OLD}"                    # what is read as the previous manifest
 
 [[ -d "$DEST" ]] || { echo "FATAL: $DEST is not a directory" >&2; exit 1; }
 DEST_REAL="$(realpath -e -- "$DEST")"
@@ -50,20 +55,20 @@ install_manifest() {
   cp "$NEW" "$OLD.tmp" && mv -f "$OLD.tmp" "$OLD"
 }
 
-if [[ ! -f "$OLD" ]]; then
-  echo "    prune: no previous manifest at $OLD; nothing removed (first run)"
+if [[ ! -f "$PREV" ]]; then
+  echo "    prune: no previous manifest at $PREV; nothing removed (first run)"
   install_manifest
   exit 0
 fi
 
-stale="$(comm -23 <(sort -u "$OLD") <(sort -u "$NEW"))"
+stale="$(comm -23 <(sort -u "$PREV") <(sort -u "$NEW"))"
 if [[ -z "$stale" ]]; then
   echo "    prune: nothing to remove"
   install_manifest
   exit 0
 fi
 
-old_count="$(sort -u "$OLD" | wc -l | tr -d ' ')"
+old_count="$(sort -u "$PREV" | wc -l | tr -d ' ')"
 stale_count="$(printf '%s\n' "$stale" | wc -l | tr -d ' ')"
 # A normal release deletes a handful of files; losing more than 20 files AND over a quarter of the
 # tree means the wrong ref or a bad manifest, not a release.
@@ -81,7 +86,7 @@ while IFS= read -r path; do
   case "$path" in
     "" | /* | -* | '"'* | *[[:cntrl:]]* | */ | . | .. | ./* | ../* | */. | */.. | */./* | */../* | *//*)
       refuse "$path"; continue ;;
-    .env | .env/* | profile | profile/*)
+    .env | .env/* | profile | profile/* | apps/api/alembic/versions/*)
       refuse "$path"; continue ;;
   esac
   target="$DEST/$path"
@@ -95,7 +100,8 @@ while IFS= read -r path; do
   fi
   target_real="$parent_real/$(basename -- "$target")"
   if [[ "$target_real" == "$DEST_REAL/.env" || "$target_real" == "$DEST_REAL/profile" \
-        || "$target_real" == "$DEST_REAL/profile/"* ]]; then
+        || "$target_real" == "$DEST_REAL/profile/"* \
+        || "$target_real" == "$DEST_REAL/apps/api/alembic/versions/"* ]]; then
     refuse "$path"; continue
   fi
   if [[ -d "$target" && ! -L "$target" ]]; then

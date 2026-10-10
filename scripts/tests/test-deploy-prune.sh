@@ -124,6 +124,41 @@ else
 fi
 teardown
 
+# 4e. Migrations already applied to the prod DB must never be deleted from the server, even if git dropped them.
+setup
+mkdir -p "$D/apps/api/alembic/versions"; echo m > "$D/apps/api/alembic/versions/0010_x.py"
+printf 'apps/api/alembic/versions/0010_x.py\napps/web/src/about/About.tsx\n' > "$D/.deploy-manifest"
+printf 'apps/web/src/keep/Keep.tsx\n' > "$T/new"
+out="$(run_prune "$D" "$T/new" 2>&1)"
+check "migration file survives" test -f "$D/apps/api/alembic/versions/0010_x.py"
+check "migration refusal reported" grep -q "REFUSED unsafe path: apps/api/alembic/versions/0010_x.py" <<< "$out"
+check "other stale files are still removed" test ! -e "$D/apps/web/src/about/About.tsx"
+teardown
+
+# 4f. Bootstrap: the seeded "previous" manifest is an OVERRIDE file, never written to .deploy-manifest.
+# A dry run with it deletes nothing and writes no .deploy-manifest, so a following plain run deletes nothing.
+setup
+printf 'apps/web/src/about/About.tsx\napps/web/src/keep/Keep.tsx\n' > "$T/seed"
+printf 'apps/web/src/keep/Keep.tsx\n' > "$T/new"
+out="$(run_prune "$D" "$T/new" --dry-run "$T/seed" 2>&1)"
+check "bootstrap dry run names the stale file" grep -q "would remove apps/web/src/about/About.tsx" <<< "$out"
+check "bootstrap dry run deletes nothing" test -f "$D/apps/web/src/about/About.tsx"
+check "bootstrap dry run writes no .deploy-manifest" test ! -e "$D/.deploy-manifest"
+run_prune "$D" "$T/new" >/dev/null 2>&1
+check "plain run after a bootstrap dry run deletes nothing" test -f "$D/apps/web/src/about/About.tsx"
+check "plain run after it installs the new manifest" cmp -s "$T/new" "$D/.deploy-manifest"
+teardown
+
+# 4g. A real bootstrap run removes the historical leftovers and installs the NEW manifest as usual.
+setup
+printf 'apps/web/src/about/About.tsx\napps/web/src/keep/Keep.tsx\n' > "$T/seed"
+printf 'apps/web/src/keep/Keep.tsx\n' > "$T/new"
+run_prune "$D" "$T/new" "" "$T/seed" >/dev/null 2>&1
+check "real bootstrap removes the leftover" test ! -e "$D/apps/web/src/about/About.tsx"
+check "real bootstrap keeps tracked files" test -f "$D/apps/web/src/keep/Keep.tsx"
+check "real bootstrap installs the NEW manifest" cmp -s "$T/new" "$D/.deploy-manifest"
+teardown
+
 # 5. A directory named in a manifest is refused, not deleted.
 setup
 printf 'apps/web/src/about\napps/web/src/keep/Keep.tsx\n' > "$D/.deploy-manifest"
