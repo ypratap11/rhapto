@@ -122,14 +122,6 @@ export function TopBar() {
         <div className="flex items-center gap-1">
           {/* keyed by path: navigating remounts it closed, with no setState-in-effect */}
           <AdvancedMenu key={pathname} pathname={pathname} />
-          {/* Deliberately outside the Primary nav: "About" is the pitch, not a place you work.
-              Hidden below `sm` to keep the top row short on phones. */}
-          <Link
-            href="/about"
-            className="hidden px-1.5 text-sm text-muted-foreground hover:text-foreground sm:inline"
-          >
-            About
-          </Link>
           <FeedbackButton />
           <ThemeToggle />
           <Link href="/settings" aria-label="Settings" title="Settings" className="rounded-control p-1.5 text-muted-foreground hover:text-foreground">

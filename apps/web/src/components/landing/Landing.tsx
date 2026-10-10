@@ -1,7 +1,6 @@
-/** Rhapto's front door at `/`: a hero with the coach tour inside the band, the three steps, and one
- * proof. The coach tour (`CoachTour`) is on this page; the older 12-step click-through tour stays on
- * `/about` (`About.tsx`), linked from the proof. Server component: keep it free of client hooks;
- * `CoachTour` carries its own client boundary. */
+/** Rhapto's front door at `/`: a hero with the coach tour inside the band, the three steps, one proof and a
+ * closing call to action. Server component: keep it free of client hooks; `CoachTour` carries its own
+ * client boundary. */
 import Link from "next/link";
 import { HeroBand } from "@/components/shell/HeroBand";
 import { buttonVariants } from "@/components/ui/button";
@@ -89,11 +88,6 @@ export function Landing() {
           What the check catches
         </h2>
         <TuneProof />
-        <p className="mt-4 text-sm">
-          <Link href="/about" className="text-primary underline underline-offset-4">
-            How it works in detail
-          </Link>
-        </p>
       </section>
     </>
   );

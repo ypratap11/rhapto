@@ -5,7 +5,7 @@ export type FeedbackQuickAnswers = components["schemas"]["QuickAnswers"];
 export type PageArea = NonNullable<FeedbackIn["page_area"]>;
 
 /** Where the shell feedback button stays out of the way: the pitch pages and the survey itself. */
-export const FEEDBACK_HIDDEN_ROUTES: ReadonlySet<string> = new Set(["/", "/about", "/feedback"]);
+export const FEEDBACK_HIDDEN_ROUTES: ReadonlySet<string> = new Set(["/", "/feedback"]);
 
 const UUID = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}";
 const CONTEXT = new RegExp(`^/jobs/(${UUID})(?:/packages/(${UUID}))?(?:/|$)`, "i");

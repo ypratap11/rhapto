@@ -75,15 +75,16 @@ describe("Landing, the light front door", () => {
     expect(screen.getByText(/Free and open source \(AGPL-3\.0\)/)).toBeInTheDocument();
   });
 
-  it("links to the detail instead of containing it", () => {
+  it("does not link to /about and does not contain the moved detail", () => {
     const { container } = render(<Landing />);
-    expect(screen.getByRole("link", { name: /how it works in detail/i })).toHaveAttribute("href", "/about");
+    expect(container.querySelector("a[href='/about']")).toBeNull();
+    expect(screen.queryByRole("link", { name: /how it works in detail/i })).toBeNull();
     for (const moved of [/Why this exists/, /Why not just ask a chatbot/, /For developers/, /Before you start/, /What it costs/]) {
       expect(screen.queryByText(moved)).toBeNull();
     }
     expect(container.querySelector("#how, #honest, #developers")).toBeNull();
     expect(container.querySelectorAll("#tour")).toHaveLength(1);
-    expect(container.textContent).not.toMatch(/provenance|no-unverified-metrics/); // CaughtDemo's rules live on /about
+    expect(container.textContent).not.toMatch(/provenance|no-unverified-metrics/);
   });
 
   it("hero copy: badge, subline, facts strip, free-limit line", () => {

@@ -2,8 +2,8 @@
  * document. Tune mode is the only path the coach offers, so the rule shown is one tune mode always
  * runs (`no-new-numbers`, with `tune-scope`; `no-invented-entities` is user-configurable, so it is
  * not the headline claim). The blocks-only rules (`provenance`, `no-unverified-metrics`) are
- * deliberately absent: tune mode skips them (`engine/guardrails/tune.py` BLOCKS_ONLY), and `CaughtDemo`,
- * which shows them, lives on /about.
+ * deliberately absent: tune mode skips them (`engine/guardrails/tune.py` BLOCKS_ONLY), and the
+ * homepage does not show them.
  *
  * Inside a run the rejected draft is discarded after a repair; the visitor sees the rule only when the
  * package ends up blocked. So the copy says what happens inside a run and never "you see every catch".

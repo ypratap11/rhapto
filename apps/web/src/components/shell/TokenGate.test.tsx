@@ -52,6 +52,7 @@ describe("TokenGate", () => {
     renderGate(<TokenGate><p>secret content</p></TokenGate>);
     expect(screen.queryByText("secret content")).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: /open settings/i })).toHaveAttribute("href", "/settings");
+    expect(screen.getByRole("link", { name: "See what Rhapto does" })).toHaveAttribute("href", "/");
   });
 
   // Landing-default task: "/" is now in PUBLIC_ROUTES, so TokenGate no longer substitutes its own
@@ -218,7 +219,7 @@ describe("TokenGate in access mode", () => {
   });
 
   // --- fix-round finding M1/M2: a sessionStorage latch, not just `bootstrap.isIdle`, so a
-  // signed-in user remounting Bootstrapper (navigation through /settings or /about, or a React
+  // signed-in user remounting Bootstrapper (navigation through /settings, or a React
   // StrictMode dev-mode double-invoke) does not re-fire the request every time ---
 
   it("does not re-fire the bootstrap mutation on a second mount within the same browser session", () => {
@@ -370,13 +371,13 @@ describe("useSignedIn", () => {
     sameOriginFlag.value = false;
   });
 
-  it.each(["/", "/about", "/settings"])("is false on the public route %s, even with a token stored", (path) => {
+  it.each(["/", "/settings"])("is false on the public route %s, even with a token stored", (path) => {
     pathname.current = path;
     setSettings({ token: "tok", apiUrl: "http://localhost:8000" });
     expect(renderHook(() => useSignedIn()).result.current).toBe(false);
   });
 
-  it.each(["/", "/about", "/settings"])("is false on the public route %s in access mode", (path) => {
+  it.each(["/", "/settings"])("is false on the public route %s in access mode", (path) => {
     sameOriginFlag.value = true;
     pathname.current = path;
     expect(renderHook(() => useSignedIn()).result.current).toBe(false);

@@ -135,7 +135,7 @@ describe("FeedbackButton visibility", () => {
     sameOriginFlag.value = true;
   });
 
-  it.each(["/about", "/feedback"])("is hidden on %s", async (path) => {
+  it.each(["/feedback"])("is hidden on %s", async (path) => {
     pathname.current = path;
     renderButton();
     await settle();

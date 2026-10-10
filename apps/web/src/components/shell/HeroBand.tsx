@@ -13,7 +13,7 @@ const HEIGHT_CLASS = { tall: "min-h-band-tall", short: "min-h-band-short" } as c
  * a page tall enough to scroll this would overflow the real viewport by a few pixels; `Shell`'s root
  * carries `overflow-x-clip` to swallow that instead of letting it grow into a horizontal scrollbar.
  * Layout correctness here is algebraic, not something jsdom can render — confirmed visually, not by
- * this component's unit tests. The "glow" tone (front pages only: / and /about) swaps the stitch motif
+ * this component's unit tests. The "glow" tone (the front page only: /) swaps the stitch motif
  * for a radial gradient and two soft shapes. */
 export function HeroBand({
   tone,
