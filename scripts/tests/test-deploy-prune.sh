@@ -3,7 +3,7 @@
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PRUNE="$HERE/../deploy-prune.sh"
+PRUNE="${PRUNE:-$HERE/../deploy-prune.sh}"  # override to run against a mutated copy
 fails=0
 
 check() { # check "description" condition...
@@ -55,16 +55,73 @@ check "profile untouched" test -f "$D/profile/blocks.yaml"
 check "backups untouched" test -f "$D/backups/backup.dump"
 teardown
 
-# 4. Even if an old manifest names them, .env, profile/, absolute and .. paths are refused.
+# 4. Even if an old manifest names them, .env, profile/, absolute, `..` and `.` paths are refused, and
+# the victims (all inside the temp dir, never real system files) survive.
 setup
-printf '.env\nprofile/blocks.yaml\n/etc/hostname\n../outside\napps/web/src/keep/Keep.tsx\n' > "$D/.deploy-manifest"
-printf 'apps/web/src/keep/Keep.tsx\n' > "$T/new"
-echo out > "$T/outside"
+echo out > "$T/outside"; echo abs > "$T/abs-victim"; echo mid > "$T/victim"
+mkdir -p "$D/profile/sub"; echo p > "$D/profile/x"
+printf '%s\n' '.env' 'profile/blocks.yaml' "$T/abs-victim" '../outside' 'apps/../../victim' \
+  './.env' './profile/x' 'profile//x' 'apps/./web/src/keep/Keep.tsx' 'apps/web//src/keep/Keep.tsx' \
+  > "$D/.deploy-manifest"
+printf 'unrelated\n' > "$T/new"
 out="$(run_prune "$D" "$T/new" 2>&1)"
 check ".env refused" test -f "$D/.env"
 check "profile refused" test -f "$D/profile/blocks.yaml"
 check "parent-escape refused" test -f "$T/outside"
+check "absolute path refused (victim survives)" test -f "$T/abs-victim"
+check "middle .. refused (victim survives)" test -f "$T/victim"
+check "./.env refused (survives)" test -f "$D/.env"
+check "./profile/x refused (survives)" test -f "$D/profile/x"
+check "profile dir survives" test -d "$D/profile/sub"
 check "refusals are reported" grep -q "REFUSED unsafe path: .env" <<< "$out"
+check "a/./b refused" grep -q "REFUSED unsafe path: apps/./web" <<< "$out"
+check "a//b refused" grep -q "REFUSED unsafe path: apps/web//src" <<< "$out"
+check "a/./b and a//b targets survive" test -f "$D/apps/web/src/keep/Keep.tsx"
+teardown
+
+# 4b. A symlinked parent directory that points outside DEST must not let a delete escape.
+setup
+mkdir -p "$T/elsewhere"; echo v > "$T/elsewhere/victim"
+if ln -s "$T/elsewhere" "$D/lnk" 2>/dev/null && [[ -L "$D/lnk" ]]; then
+  printf 'lnk/victim\n' > "$D/.deploy-manifest"
+  printf 'unrelated\n' > "$T/new"
+  out="$(run_prune "$D" "$T/new" 2>&1)"
+  check "symlinked parent: file outside DEST survives" test -f "$T/elsewhere/victim"
+  check "symlinked parent: refusal reported" grep -q "REFUSED unsafe path: lnk/victim" <<< "$out"
+else
+  echo "skip - symlinked parent (this platform cannot create symlinks)"
+fi
+teardown
+
+# 4c. Empty-dir cleanup stops at DEST: DEST holds only the stale file's chain; neither DEST nor its
+# parent (with a sibling file) may be removed.
+setup
+rm -rf "$D"; mkdir -p "$T/parent/dest/a/b"; D="$T/parent/dest"
+echo sib > "$T/parent/sibling"; echo gone > "$D/a/b/stale"
+printf 'a/b/stale\n' > "$D/.deploy-manifest"
+printf 'unrelated\n' > "$T/new"
+run_prune "$D" "$T/new" >/dev/null
+check "cleanup: stale file removed" test ! -e "$D/a/b/stale"
+check "cleanup: its empty chain removed" test ! -d "$D/a"
+check "cleanup: DEST survives" test -d "$D"
+check "cleanup: DEST's parent and sibling survive" test -f "$T/parent/sibling"
+teardown
+
+# 4d. Locale robustness: under a UTF-8 locale `sort` and `comm` can disagree on mixed-case/underscore
+# paths unless the script pins LC_ALL=C. (If the locale is not installed this proves nothing; it says so.
+# On Debian/Ubuntu without root: localedef -i en_US -f UTF-8 /tmp/loc/en_US.UTF-8; export LOCPATH=/tmp/loc)
+setup
+mkdir -p "$D/a"; : > "$D/a/B.txt"; : > "$D/a/_c.txt"; : > "$D/a/a.txt"; : > "$D/a/Z_y.txt"; : > "$D/a/keep.txt"
+printf 'a/B.txt\na/_c.txt\na/a.txt\na/Z_y.txt\na/keep.txt\n' > "$D/.deploy-manifest"
+printf 'a/keep.txt\n' > "$T/new"
+if [[ "$(LC_ALL=en_US.UTF-8 locale charmap 2>/dev/null)" == "UTF-8" ]]; then
+  LC_ALL=en_US.UTF-8 run_prune "$D" "$T/new" >/dev/null 2>&1 && rc=0 || rc=$?
+  check "non-C locale: exits 0" test "$rc" = 0
+  check "non-C locale: mixed-case/underscore stale files removed" test ! -e "$D/a/B.txt" -a ! -e "$D/a/_c.txt" -a ! -e "$D/a/Z_y.txt" -a ! -e "$D/a/a.txt"
+  check "non-C locale: kept file stays" test -f "$D/a/keep.txt"
+else
+  echo "skip - en_US.UTF-8 locale not installed here"
+fi
 teardown
 
 # 5. A directory named in a manifest is refused, not deleted.

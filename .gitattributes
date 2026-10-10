@@ -1,0 +1,2 @@
+# Shell scripts are run on Linux (shipped by git archive); never let autocrlf give them CRLF.
+*.sh text eol=lf

@@ -10,6 +10,18 @@
 #   scripts/deploy-server.sh api worker web       # deploy origin/main, rebuild named services
 #   RHAPTO_REF=some-branch scripts/deploy-server.sh   # deploy a different committed ref
 #
+# Prune options (deploy-prune.sh removes files the ref no longer ships):
+#   RHAPTO_PRUNE_DRY_RUN=1   pass --dry-run to deploy-prune.sh: list what it would remove, delete nothing,
+#                            and continue the deploy.
+#   RHAPTO_PRUNE_FORCE=1     allow a prune that removes >20 files and >25% of the previous deploy
+#                            (e.g. a rollback to an old RHAPTO_REF, or the bootstrap below).
+#   RHAPTO_PRUNE_BOOTSTRAP=1 ONE-TIME, never automatic. Only if the server has no .deploy-manifest yet,
+#                            upload as the "previous" manifest every path ever added in git history, so
+#                            the first prune also removes files deleted long ago that are still on the
+#                            server. Run it FIRST with RHAPTO_PRUNE_DRY_RUN=1 and review the list; then
+#                            run for real (likely with RHAPTO_PRUNE_FORCE=1 if the guard trips). A dry
+#                            run still uploads the bootstrap manifest (harmless: nothing is deleted).
+#
 # Deploys origin/main by DEFAULT, not your checked-out branch: what reaches production should not
 # depend on which branch you happen to be on. Uncommitted edits are never deployed.
 # Never syncs .env or profile/ — those live only on the server.
@@ -42,6 +54,22 @@ git rev-parse --verify "${REF}^{commit}" >/dev/null 2>&1 || {
   exit 1
 }
 
+# Shell scripts must reach the server with LF endings (.gitattributes: *.sh eol=lf). CRLF makes bash fail
+# on `set -o pipefail\r`, which would abort the deploy after the tree was already replaced. Check the
+# bytes (Git Bash grep cannot see \r) before anything is touched.
+CR_BYTES="$(git archive "$REF" scripts/deploy-prune.sh | tar -xO | tr -cd '\r' | wc -c | tr -d ' ')"
+[[ "$CR_BYTES" == "0" ]] || {
+  echo "FATAL: scripts/deploy-prune.sh at ${REF} has ${CR_BYTES} CR byte(s) in the archive; the server's bash would reject it." >&2
+  echo "       Make sure that ref contains .gitattributes (*.sh text eol=lf) and the script is committed with LF." >&2
+  exit 1
+}
+PRUNE_FORCE="${RHAPTO_PRUNE_FORCE:-}"
+PRUNE_DRY="${RHAPTO_PRUNE_DRY_RUN:-}"
+PRUNE_BOOTSTRAP="${RHAPTO_PRUNE_BOOTSTRAP:-}"
+for v in RHAPTO_PRUNE_FORCE RHAPTO_PRUNE_DRY_RUN RHAPTO_PRUNE_BOOTSTRAP; do
+  [[ -z "${!v:-}" || "${!v}" == "1" ]] || { echo "FATAL: $v must be empty or 1" >&2; exit 1; }
+done
+
 echo "==> Deploying ref: ${REF} = $(git rev-parse --short=9 "$REF") $(git log -1 --format=%s "$REF")"
 echo "    services: ${SERVICES[*]}"
 # git archive reads the committed tree, so uncommitted edits are never deployed -- say so rather than
@@ -71,10 +99,24 @@ echo "==> Removing files this ref no longer ships"
 # deployed (.env, profile/, backups/) can be in a manifest, so nothing else is touched.
 MANIFEST="$(mktemp)"
 trap 'rm -f "$MANIFEST"' EXIT
-git ls-tree -r --name-only "$REF" > "$MANIFEST"
+git -c core.quotepath=off ls-tree -r --name-only "$REF" > "$MANIFEST"
 LINES="$(wc -l < "$MANIFEST" | tr -d ' ')"
+if [[ "$PRUNE_BOOTSTRAP" == "1" ]]; then
+  # One-time: seed the "previous" manifest with every path ever added, but only if the server has none.
+  if "$SSH" "$HOST" "test ! -e '$DEST/.deploy-manifest'" </dev/null; then
+    BOOT="$(mktemp)"
+    git -c core.quotepath=off log --all --diff-filter=A --name-only --pretty=format: | sed '/^$/d' | LC_ALL=C sort -u > "$BOOT"
+    echo "    bootstrap: seeding previous manifest with $(wc -l < "$BOOT" | tr -d ' ') historical path(s)"
+    "$SSH" "$HOST" "cat > '$DEST/.deploy-manifest'" < "$BOOT"
+    rm -f "$BOOT"
+  else
+    echo "    bootstrap: server already has a .deploy-manifest; skipped"
+  fi
+fi
+PRUNE_ARGS=""
+if [[ "$PRUNE_DRY" == "1" ]]; then PRUNE_ARGS="--dry-run"; echo "    prune: DRY RUN (nothing is deleted)"; fi
 "$SSH" "$HOST" "cat > '$DEST/.deploy-manifest.new'" < "$MANIFEST"
-"$SSH" "$HOST" "bash '$DEST/scripts/deploy-prune.sh' '$DEST' '$DEST/.deploy-manifest.new' '$LINES' && rm -f '$DEST/.deploy-manifest.new'" </dev/null
+"$SSH" "$HOST" "RHAPTO_PRUNE_FORCE='$PRUNE_FORCE' bash '$DEST/scripts/deploy-prune.sh' '$DEST' '$DEST/.deploy-manifest.new' '$LINES' $PRUNE_ARGS && rm -f '$DEST/.deploy-manifest.new'" </dev/null
 
 echo "==> Rebuilding: ${SERVICES[*]}"
 "$SSH" "$HOST" "cd '$DEST' && RHAPTO_BUILD_ID='$(git rev-parse --short=9 "$REF")' docker compose build ${SERVICES[*]} && docker compose up -d ${SERVICES[*]}"
