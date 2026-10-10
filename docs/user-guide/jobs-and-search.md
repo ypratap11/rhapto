@@ -50,6 +50,6 @@ pages one at a time rather than losing your place.
 Once you've run a search with a query, a "Save this search" button appears in the band (it's
 hidden once the current query is already saved). Saving turns the search into one Rhapto's worker
 polls on its normal schedule going forward, and it starts tracking "N new" — new matches since you
-last opened its results, shown on the Dashboard's Saved searches rail.
+last opened its results, shown next to the search in Settings → Saved searches; its name opens the results.
 
 ![Job page](images/job-light.png)

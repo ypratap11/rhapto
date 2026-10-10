@@ -169,7 +169,10 @@ export function SavedSearchesSection() {
               <li key={search.id} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border p-3">
                 <div className="min-w-0 space-y-1">
                   <div className="flex flex-wrap items-center gap-2">
-                    <p className="truncate text-sm font-medium">{search.name}</p>
+                    <Link href={`/jobs?search_id=${search.id}`} className="truncate text-sm font-medium underline-offset-4 hover:underline">
+                      {search.name}
+                    </Link>
+                    {search.new_count > 0 ? <StatusBadge tone="primary">{`${search.new_count} new`}</StatusBadge> : null}
                     {search.derived_from_track_id ? <StatusBadge tone="muted">from a track</StatusBadge> : null}
                     {/* A search that has polled and never matched is the silent zero this branch is
                         about. It gets a visible state, not an absence of one. */}

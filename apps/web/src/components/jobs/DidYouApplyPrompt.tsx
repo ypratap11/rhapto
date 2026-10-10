@@ -10,7 +10,7 @@ import { UNDO_TOAST_MS } from "./NotInterestedButton";
 
 /**
  * Shown once the user comes back to this tab after Apply sent them to the employer's posting
- * (spec §3.3). Rhapto never submits (CLAUDE.md rule 1) — this is the only way the pipeline learns
+ * (spec §3.3). Rhapto never submits (CLAUDE.md rule 1) — this is the only way the dashboard learns
  * what happened out there, so it asks rather than guessing.
  */
 export function DidYouApplyPrompt({ job, pkg }: { job: JobOut; pkg: PackageSummary }) {
@@ -31,8 +31,8 @@ export function DidYouApplyPrompt({ job, pkg }: { job: JobOut; pkg: PackageSumma
       // package, before any application for this job exists yet, so there is nothing to look up.
       await markApplied({ id: job.id }, pkg.id, null);
       clearApplyOpened(job.id);
-      toast.success("Added to your pipeline", {
-        action: { label: "Open pipeline", onClick: () => router.push("/pipeline") },
+      toast.success("Added to your applications", {
+        action: { label: "Open dashboard", onClick: () => router.push("/dashboard") },
       });
     } catch (e) {
       toast.error(e instanceof ApiError ? e.message : "Could not record the application");
@@ -70,7 +70,7 @@ export function DidYouApplyPrompt({ job, pkg }: { job: JobOut; pkg: PackageSumma
     <div className="space-y-3 rounded-card border border-primary/40 bg-band-peach p-4">
       <div>
         <h3 className="font-sans text-base font-semibold">Did you apply?</h3>
-        <p className="text-sm text-muted-foreground">Rhapto never submits for you — tell it what happened so the pipeline stays honest.</p>
+        <p className="text-sm text-muted-foreground">Rhapto never submits for you — tell it what happened so your dashboard stays honest.</p>
       </div>
       <div className="flex items-center gap-2">
         <Button onClick={() => void onYes()} disabled={applying}>

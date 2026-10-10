@@ -296,3 +296,38 @@ async def test_gemini_other_sdk_failures_become_plain_engine_errors(error: Excep
         )
     assert not isinstance(excinfo.value, ProviderAuthError | MalformedOutputError)
     assert excinfo.value.__cause__ is error
+
+
+@pytest.mark.parametrize(
+    ("code", "message", "status", "kind"),
+    [
+        (401, "Request had invalid authentication credentials.", "UNAUTHENTICATED", "auth"),
+        (400, "API key not valid. Please pass a valid API key.", "INVALID_ARGUMENT", "auth"),
+        (429, "Quota exceeded for quota metric 'Generate requests'", "RESOURCE_EXHAUSTED", "quota"),
+        (
+            429,
+            "Your project has exceeded its billing limit. Check your plan and billing details.",
+            "RESOURCE_EXHAUSTED",
+            "quota",
+        ),
+    ],
+)
+async def test_gemini_auth_failure_kind(code: int, message: str, status: str, kind: str) -> None:
+    provider = _provider(_FakeModels(error=_client_error(code, message, status)))
+    with pytest.raises(ProviderAuthError) as excinfo:
+        await provider.complete_structured(
+            system=[], messages=[Message(role="user", content="go")], output_schema=TuneOutput
+        )
+    assert excinfo.value.kind == kind
+
+
+async def test_gemini_per_minute_rate_limit_is_not_a_key_problem() -> None:
+    # Owner ruling: only explicit billing / credit / quota-exceeded signals are "quota". A bare
+    # RESOURCE_EXHAUSTED per-minute limit is retryable and keeps the generic path.
+    error = _client_error(429, "Rate limit reached. Please retry in 30s.", "RESOURCE_EXHAUSTED")
+    provider = _provider(_FakeModels(error=error))
+    with pytest.raises(EngineError) as excinfo:
+        await provider.complete_structured(
+            system=[], messages=[Message(role="user", content="go")], output_schema=TuneOutput
+        )
+    assert not isinstance(excinfo.value, ProviderAuthError)

@@ -1,60 +1,53 @@
 # Dashboard
 
-The Dashboard (`/dashboard`) is where you land once connected, and it reports facts about your own
-search rather than promotional copy. (`/` is the explainer, and it is shown there to everyone --
-including you when you are signed in. Bookmark `/dashboard`.)
+The Dashboard (`/dashboard`) is where you land once signed in. It answers two questions: where do
+my applications stand, and what should I apply to next. (`/` is the explainer, and it is shown
+there to everyone, including you when you are signed in. Bookmark `/dashboard`.)
 
 ![Dashboard](images/dashboard-light.png)
 
-## What the headline means
+## A resume waiting for you
 
-The hero band shows two numbers, both from one call to the API: how many new roles fit you this
-week, and how many resumes are waiting for your review. "New" means discovered in the last 7 days
-with a fit at or above your track's threshold, and not hidden or no-longer-listed. When both
-numbers are zero, the headline changes to "Nothing new yet" with buttons to start a new search or
-add a company to your watchlist instead.
+When Rhapto has tailored a resume that you have not reviewed yet, a line appears at the top: "1
+resume is waiting for your review", or "3 resumes are waiting for your review", with a link to the
+review tab on Resumes. When nothing is waiting, the line is not shown.
+
+## Finishing setup
+
+If your resume template or your career track is still missing, one line says "N things to finish in
+your profile" and links to Profile. You can dismiss it with the X, and it stays dismissed on that
+browser.
+
+## Your applications
+
+Five filters (**Applied, Interviewing, Offer, Closed, All**) show how many applications are at each
+stage. Each row shows the company, the role, the date of its last status change and a badge in plain
+words. Select a row to open its sheet, where you change the status, add notes, set a follow-up,
+open the resume you used, or delete the application. See "Tracking your applications" for the
+details.
+
+A row with a follow-up due today or overdue carries a "Follow up" badge, and a chip at the end of the filter row ("N follow-ups due") shows only those rows.
+
+The first time, before you have any applications, this area says your applications will show here
+once you tailor a resume and mark it as applied.
+
+## Recommended for you
+
+The five best-fitting jobs that have no resume and no application yet and are not hidden. Each shows
+the role, the company, the location and pay when known, and a plain "Strong match" or "Good match".
+**Tailor** starts a tailored resume for that job and takes you to the guided flow to follow it;
+**Not interested** hides the job, with an Undo for a few seconds. **See all matching jobs** opens
+the full list on Jobs, where Poll now also lives.
+
+If there is nothing to recommend yet, the section says Rhapto is finding jobs and offers **Paste a
+job instead**.
+
+## A brand-new account
+
+With no resume uploaded and no applications, the Dashboard shows only "Start with your resume" and
+an **Upload resume** button.
 
 ## When a refresh fails
 
-The Dashboard is careful to distinguish "nothing to show" from "couldn't refresh." If a background
-refresh of the dashboard fails — the API is briefly unreachable, for instance — and you already
-have data on screen from an earlier successful load, that content stays exactly as it was: the
-headline numbers, the profile checklist, and the saved searches rail all keep showing what they
-last loaded, stale but genuine. A banner appears above the hero band telling you the refresh
-failed, so the staleness is visible rather than silent, but nothing is cleared out from under you.
-Only when there is truly nothing cached yet — for example, the very first load fails — does a panel
-fall back to its own "Couldn't load" message instead of real content.
-
-## Recommended roles
-
-Below the search card, **Recommended roles** lists fit-ranked jobs that have no resume and no
-application yet, aren't hidden, and aren't marked no-longer-listed — ten per page, up to five
-pages. Each card is the same card the Jobs grid uses: fit ring, title, company, track chip,
-location-tier chip, source chip, a two-line excerpt of the description, and Tailor / Not interested
-buttons.
-
-## Active applications
-
-This panel shows your three most recently updated pipeline applications, plus any resume that's
-ready but not yet marked applied. Any of those with a follow-up due today sort to the front with a
-red "Follow up today" chip — the follow-up reminder set from the Pipeline page surfaces here rather
-than in a separate list you'd have to check on its own.
-
-## Profile checklist
-
-The right rail's checklist has six rows, each either checked or open, with an Edit link into the
-matching Profile card:
-
-1. **Resume template** — a `.docx` uploaded.
-2. **Contact and answers** — name, email, phone, location, and links filled in.
-3. **Tracks** — at least one track exists.
-4. **Verified blocks** — shown as "{verified} of {total} verified"; passes once at least one block
-   is verified.
-5. **Guardrails** — at least one guardrail rule configured (Rhapto's defaults count).
-6. **Location preferences** — home location, preferred areas, and remote preference all set.
-
-## Saved searches
-
-The rail also lists your saved searches, each with an "N new" count — jobs discovered since you
-last opened that search's results. Opening a saved search's results from here (or from Jobs) is
-what clears its count; the count doesn't clear just because time has passed.
+If the API cannot be reached, a banner says so above the sections. Content you already have on
+screen stays as it was; nothing is cleared out from under you.

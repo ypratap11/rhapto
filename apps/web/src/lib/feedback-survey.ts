@@ -139,7 +139,7 @@ export const SURVEY_STEPS: ReadonlyArray<SurveyStep> = [
   {
     id: "downloads",
     title: "Downloads and applying",
-    blurb: "The Resumes and Pipeline pages.",
+    blurb: "The Resumes and Dashboard pages.",
     fields: [
       {
         key: "looked_right",

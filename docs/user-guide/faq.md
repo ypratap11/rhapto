@@ -28,7 +28,7 @@ filter the grid by it today.
 ### What does "No longer listed" mean?
 
 A job a source stopped returning on two consecutive polls is marked no-longer-listed: it drops out
-of Recommended roles and the Resumes queue, and any application tied to it shows the label. If the
+of Recommended for you and the Resumes queue, and any application tied to it shows the label. If the
 same role reappears later, Rhapto links the new posting back to the original as a repost and offers
 to reuse the resume you already tailored for it.
 

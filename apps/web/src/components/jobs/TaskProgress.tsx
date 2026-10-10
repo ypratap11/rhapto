@@ -1,9 +1,11 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
+import { isSettingsSentence } from "@/lib/coach/errors";
 import { readTaskEvents } from "@/lib/api/sse";
 import { invalidateJobs } from "@/lib/api/queries";
 import { POLL_STEPS, initialProgress, pipelineSteps, reduceTaskEvent, resolvePackageStatus, type ProgressState } from "@/lib/task-progress";
@@ -22,6 +24,12 @@ export function TaskProgress({
   const [state, setState] = useState<ProgressState>(initialProgress);
   const finished = useRef(false);
   const queryClient = useQueryClient();
+  const router = useRouter();
+  // Read through a ref so a new router object never restarts the event stream.
+  const routerRef = useRef(router);
+  useEffect(() => {
+    routerRef.current = router;
+  }, [router]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -72,7 +80,7 @@ export function TaskProgress({
             current = { ...current, packageStatus };
             setState(current);
           }
-          const action = { label: "Review", onClick: () => window.location.assign(`/jobs/${jobId}/packages/${current.packageId}`) };
+          const action = { label: "Review", onClick: () => routerRef.current.push(`/jobs/${jobId}/packages/${current.packageId}`) };
           if (packageStatus === "blocked") {
             toast.success("Package blocked by guardrails", { action });
           } else if (packageStatus) {
@@ -83,7 +91,11 @@ export function TaskProgress({
             toast.success("Package created — open the review", { action });
           }
         } else if (current.status === "failed") {
-          toast.error(current.error ?? "Tailoring failed");
+          if (current.error && isSettingsSentence(current.error)) {
+            toast.error(current.error, { action: { label: "Open Settings", onClick: () => routerRef.current.push("/settings") } });
+          } else {
+            toast.error(current.error ?? "Tailoring failed");
+          }
         } else if (current.status === "running") {
           // The stream ended without a terminal ("done"/"error") event.
           toast.error("Tailoring was interrupted; refresh to check the job");
@@ -111,7 +123,17 @@ export function TaskProgress({
           );
         })}
       </ol>
-      {state.status === "failed" ? <p className="text-sm text-destructive">{state.error}</p> : null}
+      {state.status === "failed" ? (
+        <p className="text-sm text-destructive">
+          {state.error}
+          {state.error && isSettingsSentence(state.error) ? (
+            <>
+              {" "}
+              <Link href="/settings" className="inline-flex underline max-md:min-h-11 max-md:items-center">Open Settings</Link>
+            </>
+          ) : null}
+        </p>
+      ) : null}
       {kind === "tailor" && state.status === "succeeded" && state.packageId ? (
         <Link href={`/jobs/${jobId}/packages/${state.packageId}`} className="text-sm text-fit-high underline">
           Open package {state.packageStatus === "blocked" ? "(blocked)" : ""}

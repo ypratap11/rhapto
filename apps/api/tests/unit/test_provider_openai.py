@@ -222,6 +222,43 @@ async def test_openai_auth_failures_become_provider_auth_error(error: Exception)
     assert str(error) in str(excinfo.value)
 
 
+async def test_openai_insufficient_quota_is_kind_quota() -> None:
+    error = _status_error(
+        openai.RateLimitError,
+        429,
+        "You exceeded your current quota",
+        code="insufficient_quota",
+        type="insufficient_quota",
+    )
+    provider = _provider(_FakeCompletions(error=error))
+    with pytest.raises(ProviderAuthError) as excinfo:
+        await provider.complete_structured(
+            system=[], messages=[Message(role="user", content="go")], output_schema=JDExtract
+        )
+    assert excinfo.value.kind == "quota"
+
+
+async def test_openai_401_is_kind_auth() -> None:
+    error = _status_error(openai.AuthenticationError, 401, "Incorrect API key provided")
+    provider = _provider(_FakeCompletions(error=error))
+    with pytest.raises(ProviderAuthError) as excinfo:
+        await provider.complete_structured(
+            system=[], messages=[Message(role="user", content="go")], output_schema=JDExtract
+        )
+    assert excinfo.value.kind == "auth"
+
+
+async def test_openai_402_out_of_credit_is_kind_quota() -> None:
+    # OpenRouter signals exhausted credit with HTTP 402; the SDK has no class for it (a bare APIStatusError).
+    error = _status_error(openai.APIStatusError, 402, "This request requires more credits")
+    provider = _provider(_FakeCompletions(error=error))
+    with pytest.raises(ProviderAuthError) as excinfo:
+        await provider.complete_structured(
+            system=[], messages=[Message(role="user", content="go")], output_schema=JDExtract
+        )
+    assert excinfo.value.kind == "quota"
+
+
 @pytest.mark.parametrize(
     "error",
     [

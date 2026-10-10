@@ -36,7 +36,7 @@ moving the dashboard to `/dashboard`; ship that first.
 ## SOLVED 2026-09-26 — the working configuration
 
 `https://rhapto.augaster.com/` is public. Verified with `scripts/check-access-boundary.sh`: `/`
-and a real `/_next/static/media/*.woff2` 200, `/about` is a 308 to `/`, and all nine data-bearing paths still 302 to
+and a real `/_next/static/media/*.woff2` 200, `/about` is a 308 to `/`, and all eight data-bearing paths (the nine before /pipeline became a redirect) still 302 to
 the Access login.
 
 **What works: invert the two applications so neither overlaps.**
@@ -49,7 +49,7 @@ the Access login.
 ```
 rhapto.augaster.com/dashboard
 rhapto.augaster.com/jobs
-rhapto.augaster.com/pipeline
+rhapto.augaster.com/pipeline   (now only a redirect to /dashboard; harmless to keep, optional to remove)
 rhapto.augaster.com/profile
 rhapto.augaster.com/resumes
 rhapto.augaster.com/settings
@@ -63,11 +63,10 @@ redirect came from the hostname-wide app. A hostname and a root destination are 
 so specificity cannot break that tie. Removing the overlap is the fix, not reordering or specificity.
 
 **Seven prefixes are enough, and this was verified rather than assumed:** path matching covers nested
-routes. `/jobs/<uuid>` and `/jobs/<uuid>/packages/<uuid>` are both stopped, as are `/pipeline/board`
-and every `/api/v1/*`. What remains uncovered is exactly the public set.
+routes. `/jobs/<uuid>` and `/jobs/<uuid>/packages/<uuid>` are both stopped, as is every `/api/v1/*`. What remains uncovered is exactly the public set.
 
 **The standing risk: anything not in that list is public.** If a new top-level route is added, add it to
-the seven and re-run the boundary check. That check tests all nine data paths on every run precisely so
+the seven and re-run the boundary check. That check tests all eight data paths on every run precisely so
 this cannot rot quietly.
 
 ## Original attempt, kept because the diagnosis is the useful part

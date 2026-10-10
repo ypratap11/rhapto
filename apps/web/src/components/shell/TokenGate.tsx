@@ -202,7 +202,7 @@ export function TokenGate({ children }: { children: React.ReactNode }) {
         {children}
       </>
     );
-  // / is handled above by PUBLIC_ROUTES, so every route that reaches here (/jobs, /pipeline, ...)
+  // / is handled above by PUBLIC_ROUTES, so every route that reaches here (/dashboard, /jobs, ...)
   // is one someone navigated to directly, without a token -- they already know what Rhapto is and
   // just need to be let in, so the short Connect card is enough.
   return (
@@ -214,12 +214,12 @@ export function TokenGate({ children }: { children: React.ReactNode }) {
         <p>
           Enter the API URL and the bearer token from your <code>.env</code> to start.
         </p>
-        <Link href="/settings" className="text-accent underline">
+        <Link href="/settings" className="inline-flex min-h-11 items-center text-primary underline">
           Open settings
         </Link>
         <p>
           New here?{" "}
-          <Link href="/" className="text-accent underline">
+          <Link href="/" className="inline-flex min-h-11 items-center text-primary underline">
             See what Rhapto does
           </Link>{" "}
           first.

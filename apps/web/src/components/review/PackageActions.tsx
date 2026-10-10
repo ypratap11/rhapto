@@ -46,7 +46,7 @@ export function PackageActions({
     try {
       await markApplied(job, pkg.id, application);
       toast.success("Marked as applied", {
-        action: { label: "Open pipeline", onClick: () => router.push("/pipeline") },
+        action: { label: "Open dashboard", onClick: () => router.push("/dashboard") },
       });
     } catch (e) {
       toast.error(e instanceof ApiError ? e.message : "Could not update the application");

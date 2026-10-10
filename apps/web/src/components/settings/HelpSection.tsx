@@ -11,7 +11,7 @@ const USER_GUIDE: HelpDoc[] = [
   { title: "Your dashboard", path: "docs/user-guide/dashboard.md", slug: "dashboard" },
   { title: "Finding and searching jobs", path: "docs/user-guide/jobs-and-search.md", slug: "jobs-and-search" },
   { title: "Reviewing generated resumes", path: "docs/user-guide/resumes.md", slug: "resumes" },
-  { title: "Tracking your pipeline", path: "docs/user-guide/pipeline.md", slug: "pipeline" },
+  { title: "Tracking your applications", path: "docs/user-guide/pipeline.md", slug: "pipeline" },
   { title: "Your profile and tracks", path: "docs/user-guide/profile-and-tracks.md", slug: "profile-and-tracks" },
   { title: "Settings and job sources", path: "docs/user-guide/settings-and-sources.md", slug: "settings-and-sources" },
   { title: "Frequently asked questions", path: "docs/user-guide/faq.md", slug: "faq" },

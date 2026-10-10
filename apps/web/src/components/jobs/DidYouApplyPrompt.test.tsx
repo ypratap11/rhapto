@@ -1,11 +1,13 @@
 import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { toast } from "sonner";
 import { describe, expect, it, vi } from "vitest";
 import type { JobOut, PackageSummary } from "@/lib/api/queries";
 import { markApplyOpened } from "@/lib/apply-prompt";
 import { DidYouApplyPrompt } from "./DidYouApplyPrompt";
 
-vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn() }) }));
+const push = vi.fn();
+vi.mock("next/navigation", () => ({ useRouter: () => ({ push }) }));
 
 const markApplied = vi.fn().mockResolvedValue(undefined);
 const archive = vi.fn().mockResolvedValue({});
@@ -46,6 +48,18 @@ describe("DidYouApplyPrompt", () => {
     expect(await screen.findByText(/did you apply\?/i)).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Yes" }));
     expect(markApplied).toHaveBeenCalledWith({ id: "j1" }, "p1", null);
+  });
+
+  it("speaks of applications and the dashboard, not a pipeline", async () => {
+    const user = userEvent.setup({ delay: null });
+    show();
+    expect(await screen.findByText(/so your dashboard stays honest/i)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Yes" }));
+    const [message, options] = vi.mocked(toast.success).mock.calls.at(-1)!;
+    expect(message).toBe("Added to your applications");
+    expect(options?.action).toMatchObject({ label: "Open dashboard" });
+    (options!.action as unknown as { onClick: () => void }).onClick();
+    expect(push).toHaveBeenCalledWith("/dashboard");
   });
 
   it("keeps the resume ready on Not yet", async () => {

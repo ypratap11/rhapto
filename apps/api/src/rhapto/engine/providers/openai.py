@@ -49,7 +49,10 @@ def _mapped_error(exc: Exception) -> EngineError:
     if isinstance(exc, openai.AuthenticationError | openai.PermissionDeniedError):
         return ProviderAuthError(PROVIDER_ID, str(exc))
     if isinstance(exc, openai.RateLimitError) and _error_code(exc) == "insufficient_quota":
-        return ProviderAuthError(PROVIDER_ID, str(exc))
+        return ProviderAuthError(PROVIDER_ID, str(exc), kind="quota")
+    # OpenRouter signals exhausted credit with HTTP 402, which the SDK maps to a bare APIStatusError.
+    if isinstance(exc, openai.APIStatusError) and exc.status_code == 402:
+        return ProviderAuthError(PROVIDER_ID, str(exc), kind="quota")
     return EngineError(str(exc))
 
 

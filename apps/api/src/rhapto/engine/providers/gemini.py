@@ -27,8 +27,9 @@ def _mapped_error(exc: Exception) -> EngineError:
     module stays import-light.
 
     401/403, a 400 that names the API key, and a 429 whose message mentions quota are credential
-    problems the user must fix (Gemini has no machine-readable code for the last one). A 5xx, a
-    timeout or any other bad request is a plain EngineError: retryable, not the user's key.
+    problems the user must fix (Gemini has no machine-readable code for the last one). Quota here
+    means a 429 that mentions quota, billing or credit; a bare RESOURCE_EXHAUSTED is a retryable
+    EngineError. A 5xx, a timeout or any other bad request is likewise retryable, not the user's key.
     """
     from google.genai import errors as genai_errors
 
@@ -36,12 +37,12 @@ def _mapped_error(exc: Exception) -> EngineError:
         return EngineError(str(exc))
     code = getattr(exc, "code", None)
     message = getattr(exc, "message", None) or str(exc)
-    status = str(getattr(exc, "status", None) or "")
     lowered = message.lower()
     if code in (401, 403) or any(marker in lowered for marker in _INVALID_KEY_MARKERS):
         return ProviderAuthError(PROVIDER_ID, message)
-    if code == 429 and (mentions_quota(message) or status.upper() == "RESOURCE_EXHAUSTED"):
-        return ProviderAuthError(PROVIDER_ID, message)
+    # Only explicit signals are quota; a bare per-minute RESOURCE_EXHAUSTED stays a retryable EngineError.
+    if code == 429 and (mentions_quota(message) or "billing" in lowered or "credit" in lowered):
+        return ProviderAuthError(PROVIDER_ID, message, kind="quota")
     return EngineError(message)
 
 

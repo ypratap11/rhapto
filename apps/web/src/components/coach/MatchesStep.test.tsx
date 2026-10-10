@@ -157,6 +157,6 @@ describe("MatchesStep", () => {
 
   it("has the skip link", () => {
     render(<MatchesStep {...base} onTailor={vi.fn()} />);
-    expect(screen.getByRole("link", { name: /skip to the full app/i })).toHaveAttribute("href", "/dashboard");
+    expect(screen.getByRole("link", { name: /back to your dashboard/i })).toHaveAttribute("href", "/dashboard");
   });
 });

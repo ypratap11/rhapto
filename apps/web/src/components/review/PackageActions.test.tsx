@@ -1,5 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { toast } from "sonner";
 import { describe, expect, it, vi } from "vitest";
 import { PackageActions } from "./PackageActions";
 import type { ApplicationOut, JobOut, PackageOut } from "@/lib/api/queries";
@@ -10,7 +11,9 @@ vi.mock("@/lib/download", async (importOriginal) => ({
   downloadAuthenticated: (path: string, filename: string) => downloadAuthenticated(path, filename) as Promise<void>,
 }));
 
-vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn() }) }));
+const push = vi.fn();
+vi.mock("next/navigation", () => ({ useRouter: () => ({ push }) }));
+vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 
 const markApplied = vi.fn();
 vi.mock("@/lib/api/queries", async (importOriginal) => ({
@@ -85,6 +88,17 @@ describe("PackageActions", () => {
     render(<PackageActions job={job} pkg={pkg} application={application} onRegenerate={vi.fn()} />);
     await userEvent.click(screen.getByRole("button", { name: /mark applied/i }));
     expect(markApplied).toHaveBeenCalledWith(job, "p1", application);
+  });
+
+  it("offers the dashboard after marking applied", async () => {
+    markApplied.mockResolvedValueOnce(undefined);
+    render(<PackageActions job={job} pkg={pkg} application={null} onRegenerate={vi.fn()} />);
+    await userEvent.click(screen.getByRole("button", { name: /mark applied/i }));
+    const [message, options] = vi.mocked(toast.success).mock.calls.at(-1)!;
+    expect(message).toBe("Marked as applied");
+    expect(options?.action).toMatchObject({ label: "Open dashboard" });
+    (options!.action as unknown as { onClick: () => void }).onClick();
+    expect(push).toHaveBeenCalledWith("/dashboard");
   });
 
   it("shows the status badge instead of Mark applied once already applied", () => {

@@ -29,7 +29,7 @@ from rhapto.db.repositories.jobs import create_job
 from rhapto.db.repositories.llm_settings import upsert_llm_settings
 from rhapto.db.repositories.users import get_or_create_user, trial_runs_used
 from rhapto.engine.compose import AnswerItem, ComposeOutput
-from rhapto.engine.providers.errors import ProviderAuthError
+from rhapto.engine.providers.errors import KeyFailureKind, ProviderAuthError
 from rhapto.engine.providers.llm import LLMProvider, Message, StructuredResult, SystemBlock, T
 from rhapto.services.secrets import encrypt
 from rhapto.services.trial import trial_limit_message
@@ -92,8 +92,9 @@ class RejectingLLM:
 
     model: str | None = None
 
-    def __init__(self, message: str) -> None:
+    def __init__(self, message: str, kind: KeyFailureKind = "auth") -> None:
         self.message = message
+        self.kind = kind
 
     async def complete_structured(
         self,
@@ -103,7 +104,7 @@ class RejectingLLM:
         output_schema: type[T],
         max_tokens: int = 4096,
     ) -> StructuredResult[T]:
-        raise ProviderAuthError("openrouter", self.message)
+        raise ProviderAuthError("openrouter", self.message, kind=self.kind)
 
 
 @pytest.fixture
@@ -255,14 +256,14 @@ async def test_a_rejected_shared_key_does_not_relay_the_maintainers_provider_mes
 
 
 @pytest.mark.usefixtures("worker_profile")
-async def test_a_rejected_own_key_still_tells_the_user_what_the_provider_said(
+async def test_a_rejected_own_key_tells_the_user_what_to_do(
     worker_ctx: dict[str, Any],
     session_factory: async_sessionmaker[AsyncSession],
     trial_user: uuid.UUID,
     api_settings: Any,
 ) -> None:
-    """The other half. Without it the fix could be "suppress the provider message" outright, and a
-    user debugging their OWN key would lose the only sentence that tells them what is wrong.
+    """The other half. The user reads a fixed sentence naming THEIR stored provider and the next step,
+    never the provider's raw text (which can echo a key fragment).
     """
     async with session_factory() as session:
         await upsert_llm_settings(
@@ -286,7 +287,64 @@ async def test_a_rejected_own_key_still_tells_the_user_what_the_provider_said(
 
     row = await _task(session_factory, task_id)
     assert row.status == "failed"
-    assert "invalid_api_key" in (row.error or ""), row.error
+    assert row.error == (
+        "Your Anthropic key was refused. It may have expired or been revoked. "
+        "Paste a new key in Settings, then try again."
+    )
+    assert "invalid_api_key" not in (row.error or "")
+
+
+@pytest.mark.usefixtures("worker_profile")
+@pytest.mark.parametrize(
+    ("kind", "provider_id", "expected"),
+    [
+        (
+            "auth",
+            "groq",
+            "Your Groq key was refused. It may have expired or been revoked. "
+            "Paste a new key in Settings, then try again.",
+        ),
+        (
+            "quota",
+            "openrouter",
+            "Your OpenRouter account is out of credit. Add credit with OpenRouter "
+            "or paste a different key in Settings.",
+        ),
+    ],
+)
+async def test_the_sentence_names_the_stored_provider_and_never_the_key(
+    worker_ctx: dict[str, Any],
+    session_factory: async_sessionmaker[AsyncSession],
+    trial_user: uuid.UUID,
+    api_settings: Any,
+    event_bus: Any,
+    kind: KeyFailureKind,
+    provider_id: str,
+    expected: str,
+) -> None:
+    async with session_factory() as session:
+        await upsert_llm_settings(
+            session,
+            trial_user,
+            provider=provider_id,
+            model="some-model",
+            api_key_encrypted=encrypt(api_settings, OWN_KEY),
+        )
+        await session.commit()
+    rejecting = RejectingLLM(f"Incorrect API key provided: {OWN_KEY}", kind=kind)
+
+    async def resolver(session: Any, settings: Any, user_id: uuid.UUID) -> LLMProvider:
+        return rejecting  # type: ignore[return-value]
+
+    worker_ctx["llm_resolver"] = resolver
+    task_id = await _queued_task(session_factory, trial_user)
+    await tailor_job(worker_ctx, task_id)
+
+    row = await _task(session_factory, task_id)
+    assert row.error == expected
+    errors = [e for _c, e in event_bus.published if e.get("event") == "error"]
+    assert errors[-1]["message"] == expected
+    assert OWN_KEY not in str(event_bus.published) and OWN_KEY not in (row.error or "")
 
 
 @pytest.mark.usefixtures("worker_profile")

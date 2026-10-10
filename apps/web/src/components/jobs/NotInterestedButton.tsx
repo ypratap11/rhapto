@@ -9,7 +9,7 @@ import { useHideJob, useUnhideJob, type JobOut } from "@/lib/api/queries";
 /** Spec §4: every stage has a way out, and every way out is reversible for 8 seconds. */
 export const UNDO_TOAST_MS = 8000;
 
-export function NotInterestedButton({ job, size = "default" }: { job: JobOut; size?: "sm" | "default" }) {
+export function NotInterestedButton({ job, size = "default", className }: { job: JobOut; size?: "sm" | "default"; className?: string }) {
   const hide = useHideJob();
   const unhide = useUnhideJob();
   const label = `${job.company ?? "Unknown company"} · ${job.title ?? "Untitled role"}`;
@@ -36,7 +36,7 @@ export function NotInterestedButton({ job, size = "default" }: { job: JobOut; si
   }
 
   return (
-    <Button variant="ghost" size={size} onClick={onHide} disabled={hide.isPending}>
+    <Button variant="ghost" size={size} className={className} onClick={onHide} disabled={hide.isPending}>
       <EyeOff className="size-4" aria-hidden /> Not interested
     </Button>
   );

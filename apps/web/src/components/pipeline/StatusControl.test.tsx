@@ -30,8 +30,23 @@ describe("StatusControl", () => {
     const user = userEvent.setup({ delay: null });
     render(<StatusControl application={application} />);
     await user.click(screen.getByLabelText("Status"));
-    await user.click(await screen.findByRole("option", { name: "Interview" }));
+    await user.click(await screen.findByRole("option", { name: "Interviewing" }));
     expect(patch).toHaveBeenCalledWith({ id: "a1", body: { status: "interview" } });
+  });
+
+  it("offers Screening and shows a screen application in words, never the raw value", async () => {
+    const user = userEvent.setup({ delay: null });
+    render(<StatusControl application={{ ...application, status: "screen" } as ApplicationOut} />);
+    const trigger = screen.getByLabelText("Status");
+    expect(trigger).toHaveTextContent("Screening");
+    expect(trigger).not.toHaveTextContent(/^screen$/);
+    await user.click(trigger);
+    expect(await screen.findByRole("option", { name: "Screening" })).toBeInTheDocument();
+  });
+
+  it("shows the closed reason in words in its trigger", () => {
+    render(<StatusControl application={{ ...application, status: "closed", closed_reason: "no_response" } as ApplicationOut} />);
+    expect(screen.getByLabelText("Closed reason")).toHaveTextContent("No response");
   });
 
   it("asks for a reason only when the status is Closed", async () => {
@@ -41,7 +56,7 @@ describe("StatusControl", () => {
 
     rerender(<StatusControl application={{ ...application, status: "closed" } as ApplicationOut} />);
     await user.click(screen.getByLabelText("Closed reason"));
-    for (const label of ["Rejected", "Withdrew", "No response", "Filled"]) {
+    for (const label of ["Rejected", "Withdrew", "No response", "Position filled"]) {
       expect(await screen.findByRole("option", { name: label })).toBeInTheDocument();
     }
     await user.click(screen.getByRole("option", { name: "No response" }));

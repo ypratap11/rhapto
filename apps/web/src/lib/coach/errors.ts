@@ -14,15 +14,20 @@ const RUN_DID_NOT_FINISH = "The run didn't finish. Try again, or pick another jo
 
 /** The only server sentences that may reach the screen verbatim: they are written for the tester
  * (`trial_limit_message`, `SHARED_KEY_REJECTED_MESSAGE`, `KEY_UNREADABLE_MESSAGE` in the API) and each
- * has the same way forward, Settings. Anything else a task or a provider says is not shown. */
+ * has the same way forward, Settings. Anything else a task or a provider says is not shown.
+ * The two "Your ... key" sentences are `user_key_message` in apps/api/src/rhapto/worker/tasks.py, which
+ * must change in step with these patterns. */
+const KEY_PROVIDERS = "(?:OpenAI|Anthropic|Google Gemini|Groq|OpenRouter)";
 const SETTINGS_SENTENCES: RegExp[] = [
   /^You have used all \d+ free tailoring runs? on this instance\. Add your own provider API key in Settings to keep going\.$/,
   /^This instance does not offer free runs\. Add your own provider API key in Settings to use it\.$/,
   /^This instance's shared LLM key was refused by its provider\. Add your own key in Settings to keep going, or ask whoever runs this instance to check it\.$/,
   /^Your stored API key can no longer be decrypted \(the server secret changed\)\. Re-enter it in Settings\.$/,
+  new RegExp(`^Your ${KEY_PROVIDERS} key was refused\\. It may have expired or been revoked\\. Paste a new key in Settings, then try again\\.$`),
+  new RegExp(`^Your ${KEY_PROVIDERS} account is out of credit\\. Add credit with ${KEY_PROVIDERS} or paste a different key in Settings\\.$`),
 ];
 const SETTINGS_LINK = { label: "Open Settings", href: "/settings" };
-const isSettingsSentence = (text: string) => SETTINGS_SENTENCES.some((re) => re.test(text));
+export const isSettingsSentence = (text: string) => SETTINGS_SENTENCES.some((re) => re.test(text));
 
 /** Client-side pre-check, so a PDF never costs a request. The server enforces the same two rules. */
 export function checkResumeFile(file: { name: string; size: number }): CoachError | null {

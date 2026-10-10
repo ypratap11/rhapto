@@ -15,13 +15,13 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { StatusControl } from "@/components/pipeline/StatusControl";
 import { Textarea } from "@/components/ui/textarea";
 import { ApiError } from "@/lib/api/client";
 import { useDeleteApplication, usePatchApplication, type ApplicationOut } from "@/lib/api/queries";
 import { formatDate } from "@/lib/format";
-import { APPLICATION_STATUSES, STATUS_LABEL } from "@/lib/status";
+import { STATUS_LABEL, type ApplicationStatus } from "@/lib/status";
 
 export function ApplicationSheet({
   application,
@@ -44,9 +44,9 @@ function SheetBody({ application, onOpenChange }: { application: ApplicationOut;
   const remove = useDeleteApplication();
   const [notes, setNotes] = useState(application.notes);
 
-  async function save(body: { status?: string; notes?: string }) {
+  async function saveNotes() {
     try {
-      await patch.mutateAsync({ id: application.id, body });
+      await patch.mutateAsync({ id: application.id, body: { notes } });
       toast.success("Saved");
     } catch (e) {
       toast.error(e instanceof ApiError ? e.message : "Could not save");
@@ -54,57 +54,48 @@ function SheetBody({ application, onOpenChange }: { application: ApplicationOut;
   }
 
   return (
-    <SheetContent className="w-[420px] space-y-5 overflow-y-auto">
+    <SheetContent className="space-y-5 overflow-y-auto data-[side=right]:w-full data-[side=right]:sm:w-[420px] data-[side=right]:sm:max-w-[420px]">
       <SheetHeader>
         <SheetTitle>{application.job.company ?? "Application"}</SheetTitle>
         <p className="text-sm text-muted-foreground">{application.job.title}</p>
       </SheetHeader>
-      <div className="space-y-1">
-        <Label>Status</Label>
-        <Select value={application.status} onValueChange={(status) => status && save({ status })}>
-          <SelectTrigger aria-label="Status">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {APPLICATION_STATUSES.map((s) => (
-              <SelectItem key={s} value={s}>
-                {STATUS_LABEL[s]}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+      <div className="px-4">
+        <StatusControl application={application} />
       </div>
-      <div className="space-y-1">
+      <div className="space-y-1 px-4">
         <Label htmlFor="notes">Notes</Label>
         <Textarea id="notes" rows={5} value={notes} onChange={(e) => setNotes(e.target.value)} />
-        <Button size="sm" onClick={() => save({ notes })} disabled={patch.isPending}>
+        <Button size="sm" className="max-md:min-h-11" onClick={() => void saveNotes()} disabled={patch.isPending}>
           Save notes
         </Button>
       </div>
-      <div>
+      <div className="px-4">
         <h3 className="mb-1 font-sans text-xs font-semibold uppercase tracking-wide text-muted-foreground">History</h3>
         <ol className="space-y-1 text-sm">
           {application.status_history.map((h, i) => (
             <li key={`${h.status}-${h.at}-${i}`} className="flex justify-between">
-              <span>{STATUS_LABEL[h.status as keyof typeof STATUS_LABEL] ?? h.status}</span>
+              <span>{STATUS_LABEL[h.status as ApplicationStatus] ?? h.status}</span>
               <span className="font-mono text-xs text-muted-foreground">{formatDate(h.at)}</span>
             </li>
           ))}
         </ol>
       </div>
-      <div className="flex items-center justify-between">
-        {application.package_id ? (
-          <Link href={`/jobs/${application.job.id}/packages/${application.package_id}`} className="text-sm text-accent underline">
-            Open package
+      <div className="flex items-center justify-between px-4 pb-4">
+        <div className="flex flex-wrap gap-4">
+          <Link href={`/jobs/${application.job.id}`} className="inline-flex min-h-11 items-center text-sm text-primary underline">
+            View the job
           </Link>
-        ) : (
-          <span />
-        )}
+          {application.package_id ? (
+            <Link href={`/jobs/${application.job.id}/packages/${application.package_id}`} className="inline-flex min-h-11 items-center text-sm text-primary underline">
+              Open the resume used
+            </Link>
+          ) : null}
+        </div>
         <AlertDialog>
-          <AlertDialogTrigger render={<Button variant="ghost" size="sm" className="text-destructive" />}>Delete</AlertDialogTrigger>
+          <AlertDialogTrigger render={<Button variant="ghost" size="sm" className="text-destructive max-md:min-h-11" />}>Delete</AlertDialogTrigger>
           <AlertDialogContent>
             <AlertDialogHeader>
-              <AlertDialogTitle>Remove this application from the board?</AlertDialogTitle>
+              <AlertDialogTitle>Remove this application?</AlertDialogTitle>
             </AlertDialogHeader>
             <AlertDialogFooter>
               <AlertDialogCancel>Cancel</AlertDialogCancel>

@@ -17,6 +17,7 @@ from rhapto.config import Settings, get_settings
 from rhapto.db.models import EMBEDDING_DIMENSIONS, Job, Package, Task
 from rhapto.db.repositories import packages as package_repo
 from rhapto.db.repositories import tasks as task_repo
+from rhapto.db.repositories.llm_settings import get_llm_settings
 from rhapto.db.repositories.profile import get_block
 from rhapto.db.repositories.users import list_user_ids
 from rhapto.engine.pipeline import tailor
@@ -70,6 +71,38 @@ SHARED_KEY_REJECTED_MESSAGE = (
     "This instance's shared LLM key was refused by its provider. Add your own key in Settings to "
     "keep going, or ask whoever runs this instance to check it."
 )
+
+
+# Display names for the user-key sentences. Written out (not the registry label, which says
+# "Groq (free tier)") because these two sentences are matched word for word by the web
+# (`SETTINGS_SENTENCES` in apps/web/src/lib/coach/errors.ts). Change one side, change the other.
+PROVIDER_DISPLAY_NAMES = {
+    "openai": "OpenAI",
+    "anthropic": "Anthropic",
+    "gemini": "Google Gemini",
+    "groq": "Groq",
+    "openrouter": "OpenRouter",
+}
+
+
+def user_key_message(kind: str, provider_id: str) -> str | None:
+    """What a person whose OWN key was refused should read, or None for a provider we have no name for."""
+    name = PROVIDER_DISPLAY_NAMES.get(provider_id)
+    if name is None:
+        return None
+    if kind == "quota":
+        return f"Your {name} account is out of credit. Add credit with {name} or paste a different key in Settings."
+    return (
+        f"Your {name} key was refused. It may have expired or been revoked. "
+        "Paste a new key in Settings, then try again."
+    )
+
+
+async def _stored_provider_id(session: AsyncSession, user_id: uuid.UUID) -> str | None:
+    """The provider of the user's own stored key, or None when they have none."""
+    # The row's provider column only: the key is never decrypted on the error path.
+    row = await get_llm_settings(session, user_id)
+    return row.provider if row is not None else None
 
 
 @asynccontextmanager
@@ -326,10 +359,24 @@ async def tailor_job(ctx: dict[str, Any], task_id: str) -> None:
             # invited user would have seen the same sentence about an account they cannot see, act
             # on, or top up. Keep the detail in the task row for the operator; tell the user the one
             # thing that is both true and theirs to act on.
-            if isinstance(exc, ProviderAuthError) and await on_deployment_key(
-                session, settings, user_id
-            ):
-                reportable = SHARED_KEY_REJECTED_MESSAGE
+            if isinstance(exc, ProviderAuthError):
+                if await on_deployment_key(session, settings, user_id):
+                    reportable = SHARED_KEY_REJECTED_MESSAGE
+                else:
+                    # The user's own key. Name it from what they stored: the adapter's id says
+                    # "openai" for Groq and OpenRouter too.
+                    stored_id = await _stored_provider_id(session, user_id)
+                    sentence = user_key_message(exc.kind, stored_id) if stored_id else None
+                    if sentence is not None:
+                        reportable = sentence
+                        # The task row now keeps only the fixed sentence, so keep the provider's own
+                        # text where the operator can read it (a misclassified 429, for one).
+                        logger.warning(
+                            "user key failure (%s, %s): %s",
+                            stored_id,
+                            exc.kind,
+                            redact(str(exc), *secrets),
+                        )
             detail = reportable if isinstance(exc, SETUP_ERRORS) else f"{type(exc).__name__}: {exc}"
             if failed_tid is not None:
                 failed_task = await session.get(Task, failed_tid)
