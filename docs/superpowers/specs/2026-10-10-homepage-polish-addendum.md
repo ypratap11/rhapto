@@ -72,7 +72,25 @@ unless changed here.
 - The steps section gets a centred `h2` "Three steps to a resume you can defend" (visible), cards centred in the
   same content width; the TuneProof card is centred with the same width.
 
+## 5b. UI basics found in self-audit (not raised by the owner; fix in this batch)
+- Step cards: remove the duplicate numbering — keep the coloured numeral circle, drop the "1. " text prefix
+  (the circle numeral stops being `aria-hidden`, so the number is still read).
+- Tour tabs on phones: one row, never wrapped — horizontally scrollable tablist with no visible scrollbar and the
+  active tab scrolled into view; reverses the parent spec's "wrap" decision.
+- TuneProof card on `/`: replace developer wording with plain words. The rule/ID line ("Stopped by no-new-numbers
+  at edits[0]" and "number(s) not found in the document: 45") becomes "Rhapto stopped this draft: 45 is not in
+  your resume." Rule IDs stay in the app, not on the homepage.
+- Footer on `/` (and in-app, same component): one slim row — "Open source" (GitHub repo link), "Request beta
+  access" (hosted only, `accessRequestLink()`), "Feedback" (only inside the app, since it is protected),
+  "© 2026 Rhapto". Centred on phones.
+- One vertical rhythm on `/`: the same section spacing token between hero, steps, proof and footer.
+- Tap targets ≥ 44×44 px on phones for header icons, the ☰ button, the tour pause button and tabs.
+
 ## 6. Testing (additions)
+- **UI-basics checklist** in QA and final review (owner rule 2026-10-10): centred to one content width; phone header
+  one row with ☰; visitors see only visitor links; logo → `/`; tap targets ≥ 44 px; no wrapped controls; no
+  developer jargon on `/`; consistent section spacing; footer present; demo autoplays with pause and reduced-motion.
+
 - Header: on `/` in hosted mode, the header contains exactly logo (→ `/`), theme toggle, "Sign in" (→ `/start`);
   no other links; logo → `/` in token mode and inside the app.
 - Every `<a>` rendered on `/` whose href is a protected route has prefetch disabled (assert on the rendered markup or
