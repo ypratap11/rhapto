@@ -86,7 +86,7 @@ export function ResumePane({
               return (
                 <div key={ep} className={`rounded-md ${violationsByPath.has(ep) ? "ring-1 ring-amber-300" : ""}`}>
                   {head ? (
-                    <button type="button" onClick={() => onSelect(ep)} className={`mb-1 text-left font-medium ${selectedPath === ep ? "text-accent" : ""}`}>
+                    <button type="button" onClick={() => onSelect(ep)} className={`mb-1 text-left font-medium ${selectedPath === ep ? "text-primary" : ""}`}>
                       {head}
                     </button>
                   ) : null}

@@ -3,6 +3,7 @@
 import { Search } from "lucide-react";
 import Link from "next/link";
 import { Button, buttonVariants } from "@/components/ui/button";
+import { cn } from "cn";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Skeleton } from "@/components/ui/skeleton";
 import { applicableWiden, clearAllFilters, FILTER_LABEL, hasActiveFilters, WIDEN, type JobsEmptyReason } from "@/lib/jobs-empty";
@@ -101,7 +102,7 @@ export function EmptyJobsExplanation({
         title="No jobs yet"
         description="Rhapto has not found anything for this account. Check that a job source can run and that a search is active, then poll."
         action={
-          <Link href="/settings" className={buttonVariants({ size: "sm", variant: "outline" })}>
+          <Link href="/settings" className={cn(buttonVariants({ size: "sm", variant: "outline" }), "max-md:min-h-11")}>
             Open Settings
           </Link>
         }

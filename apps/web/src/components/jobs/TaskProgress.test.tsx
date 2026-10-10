@@ -6,6 +6,8 @@ import { readTaskEvents } from "@/lib/api/sse";
 import { toast } from "sonner";
 
 vi.mock("@/lib/api/sse", () => ({ readTaskEvents: vi.fn() }));
+const push = vi.fn();
+vi.mock("next/navigation", () => ({ useRouter: () => ({ push }) }));
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 
 const resolvePackageStatus = vi.fn();
@@ -30,6 +32,7 @@ afterEach(() => {
   mockReadTaskEvents.mockReset();
   toastSuccess.mockClear();
   toastError.mockClear();
+  push.mockClear();
   resolvePackageStatus.mockReset();
 });
 
@@ -185,6 +188,26 @@ describe("TaskProgress", () => {
     expect(screen.getByRole("link", { name: "Open Settings" })).toHaveAttribute("href", "/settings");
     await vi.waitFor(() => expect(onFinished).toHaveBeenCalled());
     expect(toastError).toHaveBeenCalledWith(sentence, expect.objectContaining({ action: expect.objectContaining({ label: "Open Settings" }) }));
+  });
+
+  it("the toast actions navigate with the router, not a hard reload", async () => {
+    const sentence = "Your OpenAI key was refused. It may have expired or been revoked. Paste a new key in Settings, then try again.";
+    mockReadTaskEvents.mockImplementation(async (_taskId, onEvent) => {
+      onEvent({ event: "error", data: { message: sentence } });
+    });
+    renderTaskProgress({ taskId: "t12", jobId: "j1", onFinished: vi.fn() });
+    await vi.waitFor(() => expect(toastError).toHaveBeenCalled());
+    const settings = (toastError.mock.calls[0]?.[1] as unknown as { action: { onClick: () => void } }).action;
+    settings.onClick();
+    expect(push).toHaveBeenCalledWith("/settings");
+
+    mockReadTaskEvents.mockReset().mockImplementation(async (_taskId, onEvent) => {
+      onEvent({ event: "done", data: { package_id: "pkg9", status: "ready" } });
+    });
+    renderTaskProgress({ taskId: "t13", jobId: "j1", onFinished: vi.fn() });
+    await vi.waitFor(() => expect(toastSuccess).toHaveBeenCalled());
+    (toastSuccess.mock.calls[0]?.[1] as unknown as { action: { onClick: () => void } }).action.onClick();
+    expect(push).toHaveBeenCalledWith("/jobs/j1/packages/pkg9");
   });
 
   it("gives any other failure no Settings link", async () => {

@@ -8,6 +8,7 @@ import { RecommendedShort } from "@/components/dashboard/RecommendedShort";
 import { WaitingBanner } from "@/components/dashboard/WaitingBanner";
 import { ApiErrorBanner } from "@/components/shell/ApiErrorBanner";
 import { buttonVariants } from "@/components/ui/button";
+import { cn } from "cn";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useApplications, useDashboard, useResumeDocument } from "@/lib/api/queries";
 import { isApplication } from "@/lib/applications-view";
@@ -44,7 +45,7 @@ export default function DashboardPage() {
         <section className="mx-auto flex max-w-md flex-col items-center gap-3 rounded-card border border-border bg-surface p-8 text-center shadow-card">
           <h2 className="font-heading text-xl font-medium">Start with your resume</h2>
           <p className="text-sm text-muted-foreground">Upload a Word (.docx) file. Rhapto only ever uses what&apos;s in it.</p>
-          <Link href="/start" className={buttonVariants({ size: "lg" })}>
+          <Link href="/start" className={cn(buttonVariants({ size: "lg" }), "max-md:min-h-11")}>
             Upload resume
           </Link>
         </section>

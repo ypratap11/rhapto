@@ -81,13 +81,16 @@ function SheetBody({ application, onOpenChange }: { application: ApplicationOut;
         </ol>
       </div>
       <div className="flex items-center justify-between px-4 pb-4">
-        {application.package_id ? (
-          <Link href={`/jobs/${application.job.id}/packages/${application.package_id}`} className="inline-flex min-h-11 items-center text-sm text-accent underline">
-            Open the resume used
+        <div className="flex flex-wrap gap-4">
+          <Link href={`/jobs/${application.job.id}`} className="inline-flex min-h-11 items-center text-sm text-primary underline">
+            View the job
           </Link>
-        ) : (
-          <span />
-        )}
+          {application.package_id ? (
+            <Link href={`/jobs/${application.job.id}/packages/${application.package_id}`} className="inline-flex min-h-11 items-center text-sm text-primary underline">
+              Open the resume used
+            </Link>
+          ) : null}
+        </div>
         <AlertDialog>
           <AlertDialogTrigger render={<Button variant="ghost" size="sm" className="text-destructive max-md:min-h-11" />}>Delete</AlertDialogTrigger>
           <AlertDialogContent>

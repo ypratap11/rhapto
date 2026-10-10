@@ -75,6 +75,13 @@ describe("SavedSearchesSection", () => {
     expect(row).toHaveTextContent(/remote only/i);
   });
 
+  it("opens a search's results from its name and shows its N new count", () => {
+    render(<SavedSearchesSection />);
+    expect(screen.getByRole("link", { name: "Staff engineer" })).toHaveAttribute("href", "/jobs?search_id=s1");
+    expect(screen.getByText("2 new")).toBeInTheDocument();
+    expect(screen.queryByText("0 new")).toBeNull();
+  });
+
   it("badges a search derived from a track, and not one the user created directly", () => {
     render(<SavedSearchesSection />);
     const derived = screen.getByText("From backend track").closest("li");

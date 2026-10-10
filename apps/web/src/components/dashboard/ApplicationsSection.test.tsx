@@ -41,6 +41,37 @@ const chipNames = () =>
     .getAllByRole("button")
     .map((b) => b.textContent);
 
+describe("ApplicationsSection chip row", () => {
+  it("is one non-wrapping, horizontally scrollable row with a hidden scrollbar", () => {
+    render(<ApplicationsSection rows={all} dueIds={new Set(["2"])} />);
+    const group = screen.getByRole("group", { name: "Filter applications" });
+    expect(group.className).toMatch(/flex-nowrap/);
+    expect(group.className).toMatch(/overflow-x-auto/);
+    expect(group.className).toMatch(/scrollbar-width:none/);
+    for (const b of within(group).getAllByRole("button")) expect(b.className).toMatch(/shrink-0/);
+  });
+
+  it("brings the active chip into view with the row's scrollLeft, never scrollIntoView", async () => {
+    const intoView = vi.fn();
+    Element.prototype.scrollIntoView = intoView;
+    const offsetLeft = vi.spyOn(HTMLElement.prototype, "offsetLeft", "get").mockReturnValue(300);
+    const offsetWidth = vi.spyOn(HTMLElement.prototype, "offsetWidth", "get").mockReturnValue(40);
+    const clientWidth = vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(100);
+    try {
+      const user = userEvent.setup({ delay: null });
+      render(<ApplicationsSection rows={all} />);
+      const group = screen.getByRole("group", { name: "Filter applications" });
+      await user.click(within(group).getByRole("button", { name: /^Closed/ }));
+      expect(group.scrollLeft).toBe(270);
+      expect(intoView).not.toHaveBeenCalled();
+    } finally {
+      offsetLeft.mockRestore();
+      offsetWidth.mockRestore();
+      clientWidth.mockRestore();
+    }
+  });
+});
+
 describe("ApplicationsSection", () => {
   it("lists the chips in order with counts", () => {
     render(<ApplicationsSection rows={all} />);
@@ -102,25 +133,42 @@ describe("ApplicationsSection", () => {
     it("says how many are due and filters to them on click", async () => {
       const user = userEvent.setup({ delay: null });
       render(<ApplicationsSection rows={all} dueIds={due} />);
-      await user.click(screen.getByRole("button", { name: "2 follow-ups due today" }));
+      await user.click(screen.getByRole("button", { name: "2 follow-ups due" }));
       const items = within(screen.getByRole("list")).getAllByRole("listitem");
       expect(items.map((li) => li.textContent)).toEqual([expect.stringContaining("Co 2"), expect.stringContaining("Co x1")]);
     });
 
     it("uses the singular for one", () => {
       render(<ApplicationsSection rows={all} dueIds={new Set(["3"])} />);
-      expect(screen.getByRole("button", { name: "1 follow-up due today" })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "1 follow-up due" })).toBeInTheDocument();
+    });
+
+    it("sits last in the chip row, shows as a pressed chip, and un-presses the status chips", async () => {
+      const user = userEvent.setup({ delay: null });
+      render(<ApplicationsSection rows={all} dueIds={due} />);
+      const group = screen.getByRole("group", { name: "Filter applications" });
+      const buttons = within(group).getAllByRole("button");
+      const toggle = buttons[buttons.length - 1]!;
+      expect(toggle).toHaveTextContent("2 follow-ups due");
+      expect(toggle.className).not.toMatch(/underline/);
+      expect(within(group).getByRole("button", { name: /^All/ })).toHaveAttribute("aria-pressed", "true");
+      await user.click(toggle);
+      expect(toggle).toHaveAttribute("aria-pressed", "true");
+      expect(toggle.className).toMatch(/border-primary/);
+      expect(toggle.className).toMatch(/bg-primary\/10/);
+      expect(within(group).getByRole("button", { name: /^All/ })).toHaveAttribute("aria-pressed", "false");
+      expect(within(group).getByRole("button", { name: /^All/ }).className).not.toMatch(/border-primary/);
     });
 
     it("is hidden when nothing is due", () => {
       render(<ApplicationsSection rows={all} dueIds={new Set()} />);
-      expect(screen.queryByText(/due today/)).toBeNull();
+      expect(screen.queryByText(/follow-ups? due/)).toBeNull();
       expect(screen.queryByText("Follow up")).toBeNull();
     });
 
     it("ignores due ids that match no row", () => {
       render(<ApplicationsSection rows={seven} dueIds={new Set(["gone"])} />);
-      expect(screen.queryByText(/due today/)).toBeNull();
+      expect(screen.queryByText(/follow-ups? due/)).toBeNull();
     });
   });
 });

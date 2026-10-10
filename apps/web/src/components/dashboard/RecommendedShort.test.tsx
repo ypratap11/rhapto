@@ -83,6 +83,22 @@ describe("RecommendedShort", () => {
     expect(screen.getByRole("link", { name: "Paste a job instead" })).toHaveAttribute("href", "/start");
   });
 
+  it("shows no empty box and no second banner when the API is down and nothing is cached", () => {
+    recommended = { data: [], isLoading: false, error: new Error("down"), isPaused: false };
+    render(<RecommendedShort />);
+    expect(screen.queryByRole("list")).toBeNull();
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(screen.queryByText(/finding jobs that fit you/)).toBeNull();
+  });
+
+  it("shows a real ellipsis while starting", async () => {
+    mutateAsync.mockReturnValue(new Promise(() => {}));
+    const user = userEvent.setup({ delay: null });
+    render(<RecommendedShort />);
+    await user.click(screen.getAllByRole("button", { name: "Tailor" })[0]!);
+    expect(screen.getByRole("button", { name: "Starting…" })).toBeInTheDocument();
+  });
+
   it("links to all matching jobs", () => {
     render(<RecommendedShort />);
     expect(screen.getByRole("link", { name: "See all matching jobs →" })).toHaveAttribute("href", "/jobs");

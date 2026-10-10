@@ -26,6 +26,8 @@ words. Select a row to open its sheet, where you change the status, add notes, s
 open the resume you used, or delete the application. See "Tracking your applications" for the
 details.
 
+A row with a follow-up due today or overdue carries a "Follow up" badge, and a chip at the end of the filter row ("N follow-ups due") shows only those rows.
+
 The first time, before you have any applications, this area says your applications will show here
 once you tailor a resume and mark it as applied.
 

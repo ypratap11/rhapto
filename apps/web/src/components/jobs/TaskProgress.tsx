@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
@@ -23,6 +24,12 @@ export function TaskProgress({
   const [state, setState] = useState<ProgressState>(initialProgress);
   const finished = useRef(false);
   const queryClient = useQueryClient();
+  const router = useRouter();
+  // Read through a ref so a new router object never restarts the event stream.
+  const routerRef = useRef(router);
+  useEffect(() => {
+    routerRef.current = router;
+  }, [router]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -73,7 +80,7 @@ export function TaskProgress({
             current = { ...current, packageStatus };
             setState(current);
           }
-          const action = { label: "Review", onClick: () => window.location.assign(`/jobs/${jobId}/packages/${current.packageId}`) };
+          const action = { label: "Review", onClick: () => routerRef.current.push(`/jobs/${jobId}/packages/${current.packageId}`) };
           if (packageStatus === "blocked") {
             toast.success("Package blocked by guardrails", { action });
           } else if (packageStatus) {
@@ -85,7 +92,7 @@ export function TaskProgress({
           }
         } else if (current.status === "failed") {
           if (current.error && isSettingsSentence(current.error)) {
-            toast.error(current.error, { action: { label: "Open Settings", onClick: () => window.location.assign("/settings") } });
+            toast.error(current.error, { action: { label: "Open Settings", onClick: () => routerRef.current.push("/settings") } });
           } else {
             toast.error(current.error ?? "Tailoring failed");
           }
@@ -122,7 +129,7 @@ export function TaskProgress({
           {state.error && isSettingsSentence(state.error) ? (
             <>
               {" "}
-              <Link href="/settings" className="underline">Open Settings</Link>
+              <Link href="/settings" className="inline-flex underline max-md:min-h-11 max-md:items-center">Open Settings</Link>
             </>
           ) : null}
         </p>

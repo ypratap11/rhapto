@@ -42,9 +42,9 @@ says why:
 
 ## Follow-up
 
-Any application can carry a follow-up date. A follow-up due today (or earlier) puts a "Follow up"
-badge on its row in the Dashboard's **Your applications** list, and a line above the list ("N
-follow-ups due today") filters to those rows, so it doesn't silently sit unnoticed.
+Any application can carry a follow-up date. A follow-up due today or overdue puts a "Follow up"
+badge on its row in the Dashboard's **Your applications** list, and the last chip in the filter row ("N
+follow-ups due") filters to those rows, so it doesn't silently sit unnoticed.
 
 ![The job page](../user-guide/images/job-light.png)
 

@@ -102,7 +102,7 @@ export function MatchesStep({
   }
 
   const pasteLink = (label: string) => (
-    <button type="button" className="text-primary underline underline-offset-4" onClick={onPaste}>
+    <button type="button" className="inline-flex text-primary underline underline-offset-4 max-md:min-h-11 max-md:items-center" onClick={onPaste}>
       {label}
     </button>
   );

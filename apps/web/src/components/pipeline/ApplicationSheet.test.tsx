@@ -96,6 +96,20 @@ describe("ApplicationSheet", () => {
     expect(screen.queryByRole("link", { name: "Open the resume used" })).toBeNull();
   });
 
+  it("always links to the job, even with no resume; links are visible and 44px", () => {
+    const { unmount } = render(<ApplicationSheet application={application} open onOpenChange={vi.fn()} />);
+    const view = screen.getByRole("link", { name: "View the job" });
+    expect(view).toHaveAttribute("href", "/jobs/j1");
+    for (const l of [view, screen.getByRole("link", { name: "Open the resume used" })]) {
+      expect(l.className).not.toMatch(/text-accent/);
+      expect(l.className).toMatch(/text-primary/);
+      expect(l.className).toMatch(/min-h-11/);
+    }
+    unmount();
+    open({ ...application, package_id: null } as ApplicationOut);
+    expect(screen.getByRole("link", { name: "View the job" })).toHaveAttribute("href", "/jobs/j1");
+  });
+
   it("removes the application after confirming, and closes", async () => {
     const user = userEvent.setup({ delay: null });
     const onOpenChange = open();

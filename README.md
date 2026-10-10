@@ -116,7 +116,7 @@ On first visit the app shows `/`, an explainer of what Rhapto does — the dashb
 update any bookmark. From there, "Get started" leads to the API URL (`http://localhost:8000`) and bearer
 token form from your `.env` (`RHAPTO_API_TOKEN`). The portal has five screens:
 
-1. **Dashboard** (`/dashboard`) — where you land once connected: new fits, resumes waiting for review, a short finish-setup line, and **Your applications**: every application you've sent, with filters, a
+1. **Dashboard** (`/dashboard`) — where you land once connected: jobs recommended for you, resumes waiting for review, a short finish-setup line, and **Your applications**: every application you've sent, with filters, a
    follow-up badge, and a sheet for status and notes.
 2. **Jobs** (`/jobs`) — search the whole market and browse everything Rhapto has found; Tailor kicks off a
    package, with progress streaming live.

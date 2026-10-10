@@ -2,9 +2,8 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   output: "standalone",
-  // The packages list is now Resumes (spec §3.4). /pipeline and /pipeline/board are real routes
-  // and are deliberately NOT redirected. 307 keeps the query, so /packages?filter=review still
-  // lands on the Resumes page with its tab query intact.
+  // /packages -> /resumes is temporary (307 keeps the query, so /packages?filter=review keeps its
+  // tab); /about and /pipeline* moved for good (308).
   async redirects() {
     return [
       { source: "/packages", destination: "/resumes", permanent: false },

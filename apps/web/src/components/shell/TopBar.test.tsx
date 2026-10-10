@@ -340,6 +340,32 @@ describe("signed-in header", () => {
     expect(trigger).toHaveFocus();
   });
 
+  it("tabbing out of the panel closes it", async () => {
+    pathname.mockReturnValue("/dashboard");
+    sameOrigin.value = true;
+    renderBar();
+    const user = userEvent.setup({ delay: null });
+    const trigger = await screen.findByRole("button", { name: "Account" });
+    await user.click(trigger);
+    expect(trigger).toHaveAttribute("aria-expanded", "true");
+    await screen.findByRole("button", { name: "Send feedback" });
+    for (let i = 0; i < 12 && trigger.getAttribute("aria-expanded") === "true"; i++) await user.tab();
+    expect(trigger).toHaveAttribute("aria-expanded", "false");
+  });
+
+  it("returns focus to Account when the feedback dialog closes", async () => {
+    pathname.mockReturnValue("/dashboard");
+    renderBar();
+    const user = userEvent.setup({ delay: null });
+    const trigger = await screen.findByRole("button", { name: "Account" });
+    await user.click(trigger);
+    await user.click(await screen.findByRole("button", { name: "Send feedback" }));
+    await screen.findByRole("dialog");
+    await user.keyboard("{Escape}");
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    await waitFor(() => expect(trigger).toHaveFocus());
+  });
+
   it("Send feedback closes the menu and opens the dialog, which stays open", async () => {
     pathname.mockReturnValue("/dashboard");
     renderBar();

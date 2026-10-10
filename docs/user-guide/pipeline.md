@@ -35,7 +35,7 @@ closed application always says why:
 ## Follow-ups
 
 The sheet has a date field for a follow-up. Setting one and pressing **Save follow-up** saves the
-date with the application.
+date with the application. Once that date is today or has passed, the row in the Dashboard's **Your applications** list carries a "Follow up" badge, and the "N follow-ups due" chip filters the list to those rows.
 
 ## Notes and history
 

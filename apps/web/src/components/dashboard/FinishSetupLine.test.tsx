@@ -22,7 +22,17 @@ describe("FinishSetupLine", () => {
 
   it("says one thing is left and links to the profile", () => {
     render(<FinishSetupLine checklist={checklist({ tracks: false })} />);
-    expect(screen.getByRole("link", { name: "1 thing to finish in your profile ›" })).toHaveAttribute("href", "/profile");
+    expect(screen.getByRole("link", { name: "1 thing to finish in your profile ›" })).toHaveAttribute("href", "/profile?card=tracks");
+  });
+
+  it("links to the other card when only the template is missing", () => {
+    render(<FinishSetupLine checklist={checklist({ resume_template: false })} />);
+    expect(screen.getByRole("link")).toHaveAttribute("href", "/profile?card=resume-template");
+  });
+
+  it("links to the profile when two things are missing", () => {
+    render(<FinishSetupLine checklist={checklist({ tracks: false, resume_template: false })} />);
+    expect(screen.getByRole("link")).toHaveAttribute("href", "/profile");
   });
 
   it("counts two", () => {

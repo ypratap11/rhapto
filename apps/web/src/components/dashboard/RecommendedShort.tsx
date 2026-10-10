@@ -15,6 +15,7 @@ import { describeCoachError, type CoachError } from "@/lib/coach/errors";
 import { fireCoachEvent } from "@/lib/coach/events";
 import { matchLabel } from "@/lib/coach/labels";
 import { PICKER_MIN_FIT } from "@/lib/taxonomy";
+import { cn } from "cn";
 
 const SHOWN = 5;
 
@@ -51,7 +52,7 @@ export function RecommendedShort() {
       <h2 id="recommended-heading" className="font-sans text-base font-semibold">
         Recommended for you
       </h2>
-      {hasIssue ? <ApiErrorBanner error={query.error ?? "Can't reach Rhapto's API."} /> : null}
+      {hasIssue && jobs.length > 0 ? <ApiErrorBanner error={query.error ?? "Can't reach Rhapto's API."} /> : null}
       <CoachErrorNote error={error} />
       {query.isLoading ? (
         <Skeleton className="h-40 w-full rounded-card" />
@@ -59,11 +60,11 @@ export function RecommendedShort() {
         <div className="flex flex-col items-center gap-3 rounded-card border border-dashed border-border px-6 py-8 text-center">
           <Sparkles className="size-6 text-muted-foreground" aria-hidden />
           <p className="text-sm text-muted-foreground">We&apos;re finding jobs that fit you. New jobs arrive through the day.</p>
-          <Link href="/start" className={buttonVariants({ variant: "outline", size: "sm" })}>
+          <Link href="/start" className={cn(buttonVariants({ variant: "outline", size: "sm" }), "max-md:min-h-11")}>
             Paste a job instead
           </Link>
         </div>
-      ) : (
+      ) : jobs.length > 0 ? (
         <ul className="divide-y divide-border rounded-card border border-border bg-surface">
           {jobs.map((job) => (
             <li key={job.id} className="flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center">
@@ -78,14 +79,14 @@ export function RecommendedShort() {
               </div>
               <div className="flex shrink-0 items-center gap-2">
                 <Button type="button" variant="outline" className="max-md:min-h-11" disabled={pickedId !== null} onClick={() => void startTailor(job)}>
-                  {pickedId === job.id ? "Starting..." : "Tailor"}
+                  {pickedId === job.id ? "Starting…" : "Tailor"}
                 </Button>
                 <NotInterestedButton job={job} size="sm" className="max-md:min-h-11" />
               </div>
             </li>
           ))}
         </ul>
-      )}
+      ) : null}
       <p className="text-sm">
         <Link href="/jobs" className="inline-flex min-h-11 items-center text-muted-foreground underline underline-offset-4 hover:text-foreground">
           See all matching jobs →

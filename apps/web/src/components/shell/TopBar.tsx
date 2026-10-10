@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useId, useRef, useState } from "react";
+import { type RefObject, useEffect, useId, useRef, useState } from "react";
 import { Menu, Plus, User } from "lucide-react";
 import { accessRequestLink } from "@/components/landing/access";
 import { primaryCta } from "@/components/landing/cta";
@@ -48,10 +48,19 @@ const MENU_LINK =
 
 /** A disclosure, not `role=menu` (that promises arrow-key roving nobody builds). The caller keys it by
  * pathname so navigating remounts it closed. */
-function AccountMenu({ initial, canFeedback, onFeedback }: { initial: string | null; canFeedback: boolean; onFeedback: () => void }) {
+function AccountMenu({
+  initial,
+  canFeedback,
+  onFeedback,
+  trigger,
+}: {
+  initial: string | null;
+  canFeedback: boolean;
+  onFeedback: () => void;
+  trigger: RefObject<HTMLButtonElement | null>;
+}) {
   const [open, setOpen] = useState(false);
   const root = useRef<HTMLDivElement>(null);
-  const trigger = useRef<HTMLButtonElement>(null);
   const panelId = useId();
 
   useEffect(() => {
@@ -71,10 +80,17 @@ function AccountMenu({ initial, canFeedback, onFeedback }: { initial: string | n
       document.removeEventListener("mousedown", onDown);
       document.removeEventListener("keydown", onKey);
     };
-  }, [open]);
+  }, [open, trigger]);
 
   return (
-    <div ref={root} className="relative hidden md:block">
+    <div
+      ref={root}
+      className="relative hidden md:block"
+      onBlur={(e) => {
+        // Tabbing out of the panel closes it; focus moving within it does not.
+        if (open && !root.current?.contains(e.relatedTarget as Node | null)) setOpen(false);
+      }}
+    >
       <button
         ref={trigger}
         type="button"
@@ -157,11 +173,13 @@ function MobileMenu({
   visitor,
   canFeedback,
   onFeedback,
+  trigger,
 }: {
   pathname: string;
   visitor: boolean;
   canFeedback: boolean;
   onFeedback: () => void;
+  trigger?: RefObject<HTMLButtonElement | null>;
 }) {
   const [open, setOpen] = useState(false);
   const close = () => setOpen(false);
@@ -170,7 +188,7 @@ function MobileMenu({
   const showEntry = SAME_ORIGIN_DEPLOYMENT || pathname !== primaryCta(false).href;
   return (
     <Sheet open={open} onOpenChange={setOpen}>
-      <SheetTrigger render={<Button variant="ghost" size="icon-sm" aria-label="Menu" aria-expanded={open} className="size-11 md:hidden" />}>
+      <SheetTrigger render={<Button ref={trigger} variant="ghost" size="icon-sm" aria-label="Menu" aria-expanded={open} className="size-11 md:hidden" />}>
         <Menu aria-hidden />
       </SheetTrigger>
       <SheetContent side="right">
@@ -259,6 +277,8 @@ export function TopBar() {
   const pathname = usePathname();
   const visitor = useVisitorHeader();
   const [feedback, setFeedback] = useState<FeedbackTarget | null>(null);
+  const accountRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLButtonElement>(null);
   // Signed in AND /me succeeded. Someone who passes Cloudflare but is not on the allowlist gets a 403
   // from /me and must not be offered a feedback form whose POST is refused.
   const signedIn = useSignedIn();
@@ -307,14 +327,23 @@ export function TopBar() {
               <Link href="/start" aria-label="Tailor a resume" className={cn(buttonVariants({ size: "icon" }), "size-11 md:hidden")}>
                 <Plus aria-hidden />
               </Link>
-              <AccountMenu key={`account-${pathname}`} initial={initial} canFeedback={canFeedback} onFeedback={openFeedback} />
-              <MobileMenu key={`menu-${pathname}`} pathname={pathname} visitor={false} canFeedback={canFeedback} onFeedback={openFeedback} />
+              <AccountMenu key={`account-${pathname}`} initial={initial} canFeedback={canFeedback} onFeedback={openFeedback} trigger={accountRef} />
+              <MobileMenu key={`menu-${pathname}`} pathname={pathname} visitor={false} canFeedback={canFeedback} onFeedback={openFeedback} trigger={menuRef} />
             </div>
           </>
         )}
       </div>
       {/* Once, outside both menus: a dialog rendered inside either would unmount the moment the menu closed. */}
-      {feedback ? <QuickFeedbackDialog open onOpenChange={(next) => !next && setFeedback(null)} target={feedback} /> : null}
+      {feedback ? <QuickFeedbackDialog open onOpenChange={(next) => {
+            if (next) return;
+            setFeedback(null);
+            // The item that opened the dialog went with its menu, so hand focus to whichever trigger is on screen.
+            requestAnimationFrame(() => {
+              // Focusing a display:none trigger is a no-op, so whichever one is on screen takes it.
+              accountRef.current?.focus();
+              if (document.activeElement !== accountRef.current) menuRef.current?.focus();
+            });
+          }} target={feedback} /> : null}
     </header>
   );
 }

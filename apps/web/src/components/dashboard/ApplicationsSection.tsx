@@ -1,7 +1,7 @@
 "use client";
 
 import { ChevronRight } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ApplicationSheet } from "@/components/pipeline/ApplicationSheet";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/ui/StatusBadge";
@@ -24,46 +24,67 @@ export function ApplicationsSection({ rows, dueIds }: { rows: ApplicationOut[]; 
   const visible = useMemo(() => (dueOnly && dueRows.length > 0 ? dueRows : rowsForChip(rows, chip)), [rows, chip, dueOnly, dueRows]);
   const shown = showAll ? visible : visible.slice(0, PAGE);
   const selected = rows.find((r) => r.id === selectedId) ?? null;
+  const rowRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const row = rowRef.current;
+    const active = row?.querySelector<HTMLElement>('[aria-pressed="true"]');
+    if (!row || !active) return;
+    row.scrollLeft = Math.max(0, active.offsetLeft - (row.clientWidth - active.offsetWidth) / 2);
+  }, [chip, dueOnly]);
 
   return (
     <section aria-labelledby="applications-heading" className="space-y-3">
-      {dueRows.length > 0 ? (
-        <button
-          type="button"
-          aria-pressed={dueOnly}
-          onClick={() => {
-            setDueOnly((v) => !v);
-            setShowAll(false);
-          }}
-          className="inline-flex min-h-11 items-center text-sm font-medium text-primary underline underline-offset-4 md:min-h-9"
-        >
-          {dueRows.length} follow-up{dueRows.length === 1 ? "" : "s"} due today
-        </button>
-      ) : null}
       <h2 id="applications-heading" className="font-sans text-base font-semibold">
         Your applications
       </h2>
-      <div role="group" aria-label="Filter applications" className="flex flex-wrap gap-2">
-        {CHIP_IDS.map((id) => (
+      {/* One horizontally scrollable row, never wrapped. The active chip is brought into view by moving
+          this row's scrollLeft only: scrollIntoView would also scroll the page. */}
+      <div
+        ref={rowRef}
+        role="group"
+        aria-label="Filter applications"
+        className="relative -mx-4 flex flex-nowrap gap-2 overflow-x-auto px-4 [scrollbar-width:none] md:mx-0 md:px-0 [&::-webkit-scrollbar]:hidden"
+      >
+        {CHIP_IDS.map((id) => {
+          const pressed = !dueOnly && chip === id;
+          return (
+            <button
+              key={id}
+              type="button"
+              aria-pressed={pressed}
+              onClick={() => {
+                setChip(id);
+                setDueOnly(false);
+                setShowAll(false);
+              }}
+              className={cn(
+                "inline-flex min-h-11 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border px-3 text-sm md:min-h-9",
+                pressed ? "border-primary bg-primary/10 text-foreground" : "border-border bg-surface hover:bg-muted",
+                counts[id] === 0 && !pressed ? "text-muted-foreground" : "",
+              )}
+            >
+              {CHIP_LABEL[id]}
+              <span className="tabular-nums text-muted-foreground">{counts[id]}</span>
+            </button>
+          );
+        })}
+        {dueRows.length > 0 ? (
           <button
-            key={id}
             type="button"
-            aria-pressed={chip === id}
+            aria-pressed={dueOnly}
             onClick={() => {
-              setChip(id);
-              setDueOnly(false);
+              setDueOnly((v) => !v);
               setShowAll(false);
             }}
             className={cn(
-              "inline-flex min-h-11 items-center gap-1.5 rounded-full border px-3 text-sm md:min-h-9",
-              chip === id ? "border-primary bg-primary/10 text-foreground" : "border-border bg-surface hover:bg-muted",
-              counts[id] === 0 && chip !== id ? "text-muted-foreground" : "",
+              "inline-flex min-h-11 shrink-0 items-center whitespace-nowrap rounded-full border px-3 text-sm md:min-h-9",
+              dueOnly ? "border-primary bg-primary/10 text-foreground" : "border-border bg-surface hover:bg-muted",
             )}
           >
-            {CHIP_LABEL[id]}
-            <span className="tabular-nums text-muted-foreground">{counts[id]}</span>
+            {dueRows.length} follow-up{dueRows.length === 1 ? "" : "s"} due
           </button>
-        ))}
+        ) : null}
       </div>
       {shown.length === 0 ? (
         <p className="rounded-card border border-dashed border-border px-4 py-6 text-center text-sm text-muted-foreground">Nothing here yet.</p>

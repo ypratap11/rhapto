@@ -2,7 +2,7 @@
 
 Profile (`/profile`) holds everything Rhapto needs to know about you, as eight summary cards in two
 columns. Each card's **Edit** opens a sheet with the full editor; a card can be linked to directly
-with `?card=<id>` (for example `/profile?card=tracks`) — the same links the Dashboard checklist
+with `?card=<id>` (for example `/profile?card=tracks`) — the same links the Dashboard's finish-setup line
 uses. Opening a sheet this way adds a step to your browser history, so the back button closes an
 open sheet rather than leaving the page; pressing Back again afterward leaves the page as normal.
 
