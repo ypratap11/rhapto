@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act } from "react";
 import { hydrateRoot } from "react-dom/client";
 import { renderToString } from "react-dom/server";
-import { TokenGate, useSignedIn } from "./TokenGate";
+import { isVisitorHeader, TokenGate, useSignedIn } from "./TokenGate";
 import { ACCESS_REQUEST_MAILTO, ACCESS_REQUEST_URL } from "@/components/landing/access";
 import { Landing } from "@/components/landing/Landing";
 import { ApiError, setSettings } from "@/lib/api/client";
@@ -403,5 +403,23 @@ describe("useSignedIn", () => {
     expect(renderHook(() => useSignedIn()).result.current).toBe(false);
     setSettings({ token: "tok", apiUrl: "http://localhost:8000" });
     expect(renderHook(() => useSignedIn()).result.current).toBe(true);
+  });
+});
+
+describe("isVisitorHeader", () => {
+  it.each([
+    ["/", true, null, true],
+    ["/", false, true, true], // / is the front door even with a token
+    ["/settings", true, null, false], // hosted: an in-app screen behind Cloudflare
+    ["/settings", true, true, false],
+    ["/settings", false, null, true], // token mode, token not read yet / absent
+    ["/settings", false, false, true],
+    ["/settings", false, true, false], // self-hoster with a token keeps the app header
+    ["/start", true, null, false],
+    ["/start", false, false, false],
+    ["/resumes", true, null, false],
+    ["/about", true, null, false], // gone
+  ])("%s hosted=%s token=%s -> %s", (path, hosted, token, expected) => {
+    expect(isVisitorHeader(path, hosted, token)).toBe(expected);
   });
 });

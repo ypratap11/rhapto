@@ -28,7 +28,7 @@ export function FeedbackButton() {
         size="sm"
         aria-label="Feedback on this page"
         title="Feedback on this page"
-        className="text-muted-foreground hover:text-foreground"
+        className="text-muted-foreground hover:text-foreground max-md:min-h-11 max-md:min-w-11"
         onClick={() => {
           // Area and context are fixed at open time, so navigating while the dialog is open cannot retag it.
           setTarget({ area: areaForPath(pathname), ...contextForPath(pathname) });

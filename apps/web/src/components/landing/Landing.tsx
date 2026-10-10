@@ -37,7 +37,7 @@ export function Landing() {
           </p>
           {/* Plain styled links, not the Base UI `Button` primitive: both navigate. */}
           <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-3">
-            <Link href={cta.href} className={cn(buttonVariants({ size: "lg" }), "shadow-cta")}>
+            <Link href={cta.href} prefetch={false} className={cn(buttonVariants({ size: "lg" }), "shadow-cta")}>
               {cta.label} <span aria-hidden="true">→</span>
             </Link>
             <a href="#tour" className="text-sm text-link-on-band underline underline-offset-4">

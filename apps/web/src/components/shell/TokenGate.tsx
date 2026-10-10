@@ -74,6 +74,14 @@ function getServerSnapshot(): boolean | null {
   return null;
 }
 
+/** TopBar and Footer both call this, so the header, the footer's Feedback link and the gate's notion of a
+ * public page cannot drift. */
+export function useVisitorHeader(): boolean {
+  const pathname = usePathname();
+  const tokenPresent = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
+  return isVisitorHeader(pathname, SAME_ORIGIN_DEPLOYMENT, tokenPresent);
+}
+
 // Reachable without being signed in, in *either* mode. /settings is where a token-mode user
 // enters credentials, and it is also the one screen an access-mode user needs if this build ever
 // ends up pointed at a token-mode API -- without this bypass applying there too, they would have
@@ -93,6 +101,16 @@ function getServerSnapshot(): boolean | null {
 // scripts/check-access-boundary.sh asserts /settings stays protected); adding a route here grants
 // it no edge exposure at all, only a client-side pass-through once a request already arrived.
 const PUBLIC_ROUTES = new Set(["/", "/settings"]);
+
+/** Which header a route gets. `PUBLIC_ROUTES` says "renders without a session"; the header says less.
+ * On / the visitor may be anyone, so show only the way in. /settings is a visitor page only in token
+ * mode and only until a token is stored: hosted /settings is a signed-in screen behind Cloudflare, and a
+ * self-hoster with a token needs the app header to get back into the app. `tokenPresent` is the store
+ * snapshot (null on the server and until read), so the server renders the visitor variant and the client
+ * swaps through the store, which React treats as an update, not a hydration mismatch. */
+export function isVisitorHeader(pathname: string, hosted: boolean, tokenPresent: boolean | null): boolean {
+  return pathname === "/" || (pathname === "/settings" && !hosted && tokenPresent !== true);
+}
 
 // The one definition of "this visitor is (or may be) signed in, so /me is worth asking": not on a
 // public route, and either an access-mode deployment (the edge already authenticated the request) or
