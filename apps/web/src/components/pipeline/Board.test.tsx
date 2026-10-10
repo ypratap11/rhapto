@@ -86,7 +86,7 @@ describe("Board", () => {
 
     const dialogAfter = screen.getByRole("dialog");
     expect(within(dialogAfter).getAllByRole("listitem")).toHaveLength(2);
-    expect(within(dialogAfter).getByText("Applied")).toBeInTheDocument();
+    expect(within(within(dialogAfter).getByRole("list")).getByText("Applied")).toBeInTheDocument();
   });
 
   it("closes the sheet when the open application disappears (e.g. after delete)", async () => {

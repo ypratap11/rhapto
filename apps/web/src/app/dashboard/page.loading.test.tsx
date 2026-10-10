@@ -1,144 +1,47 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import { ApiError } from "@/lib/api/client";
 import DashboardPage from "./page";
 
-vi.mock("next/navigation", () => ({
-  useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
-}));
+// Intent kept from the old file: while a query is still in flight the page must not claim the person
+// has nothing (no "Start with your resume", no empty-applications line) and must not show an error.
+// The real child components stay mounted where they need no data of their own.
+vi.mock("@/components/dashboard/RecommendedShort", () => ({ RecommendedShort: () => <div>recommended</div> }));
 
-// RecommendedRoles and ActiveApplications are unrelated to the loading-vs-empty distinction this
-// file exists to catch, and pull in their own hooks (useRecommendedJobs, useApplications,
-// usePackageList) — stubbed out so DashboardHero, ProfileChecklist and SavedSearchesRail can stay
-// real. `page.test.tsx` mocks those three too, which is exactly why it couldn't have caught this
-// class of bug: their text never rendered, so a page that fed them a loading result indistinguishable
-// from a real empty one would still pass.
-vi.mock("@/components/dashboard/RecommendedRoles", () => ({ RecommendedRoles: () => <div>Recommended roles</div> }));
-vi.mock("@/components/dashboard/ActiveApplications", () => ({ ActiveApplications: () => <div>Active applications</div> }));
-
-let dashboardResult: { data: unknown; error: unknown; isLoading: boolean; isPaused?: boolean };
+type Q = { data: unknown; error: unknown; isLoading: boolean; isPaused: boolean };
+let applications: Q;
+let resume: Q;
 vi.mock("@/lib/api/queries", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/api/queries")>()),
-  useDashboard: () => dashboardResult,
-  useTracks: () => ({ data: [] }),
-  useTaxonomy: () => ({ data: { fields: [] } }),
-  usePollNow: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useApplications: () => applications,
+  useResumeDocument: () => resume,
+  useDashboard: () => ({ data: undefined, error: null, isLoading: true, isPaused: false }),
 }));
 
-const fullChecklist = {
-  resume_template: true,
-  contact_answers: true,
-  tracks: true,
-  blocks_verified: true,
-  guardrails: true,
-  location_preferences: true,
-  verified_blocks: 1,
-  total_blocks: 1,
-};
-
-const populatedDashboard = {
-  new_fit_count: 3,
-  needs_review_count: 2,
-  checklist: fullChecklist,
-  due_followups: [],
-  saved_searches: [{ id: "s1", name: "PM roles", new_count: 4 }],
-};
-
-describe("DashboardPage loading state (real DashboardHero, ProfileChecklist, SavedSearchesRail)", () => {
-  it("shows a loading skeleton on every dashboard-fed panel, not the false empty-state copy, while the call is in flight", () => {
-    dashboardResult = { data: undefined, error: null, isLoading: true, isPaused: false };
+describe("DashboardPage loading state", () => {
+  it("shows a skeleton, no empty-state copy and no error, while applications load", () => {
+    applications = { data: undefined, error: null, isLoading: true, isPaused: false };
+    resume = { data: undefined, error: null, isLoading: false, isPaused: false };
     render(<DashboardPage />);
-
-    expect(screen.queryByText(/nothing new yet/i)).not.toBeInTheDocument();
-    expect(screen.queryByText(/save a search from the jobs page/i)).not.toBeInTheDocument();
-    expect(screen.getByTestId("dashboard-hero-skeleton")).toBeInTheDocument();
-    expect(screen.getByTestId("checklist-skeleton")).toBeInTheDocument();
-    expect(screen.getByTestId("saved-searches-skeleton")).toBeInTheDocument();
+    expect(screen.queryByText("Start with your resume")).toBeNull();
+    expect(screen.queryByText(/your applications will show here/i)).toBeNull();
+    expect(screen.queryByText("recommended")).toBeNull();
+    expect(screen.queryByRole("alert")).toBeNull();
   });
 
-  it("shows the real empty-state copy once the call settles with genuinely nothing to report", () => {
-    dashboardResult = {
-      data: { new_fit_count: 0, needs_review_count: 0, checklist: fullChecklist, due_followups: [], saved_searches: [] },
-      error: null,
-      isLoading: false,
-      isPaused: false,
-    };
+  it("shows no empty-state copy while the resume loads", () => {
+    applications = { data: { columns: {} }, error: null, isLoading: false, isPaused: false };
+    resume = { data: undefined, error: null, isLoading: true, isPaused: false };
     render(<DashboardPage />);
-
-    expect(screen.getByText(/nothing new yet/i)).toBeInTheDocument();
-    expect(screen.getByText(/save a search from the jobs page/i)).toBeInTheDocument();
-    expect(screen.queryByTestId("dashboard-hero-skeleton")).not.toBeInTheDocument();
-    expect(screen.queryByTestId("checklist-skeleton")).not.toBeInTheDocument();
-    expect(screen.queryByTestId("saved-searches-skeleton")).not.toBeInTheDocument();
+    expect(screen.queryByText("Start with your resume")).toBeNull();
+    expect(screen.queryByText(/your applications will show here/i)).toBeNull();
+    expect(screen.queryByRole("alert")).toBeNull();
   });
 
-  it("says the dashboard failed to load on every dashboard-fed panel, not the false empty-state copy, once the call settles into an error", () => {
-    // TanStack Query v5: isLoading is isPending && isFetching, so once a failed request settles,
-    // isLoading goes back to false with data still undefined — the exact state that, before this
-    // fix, fell through to newFitCount ?? 0 / saved_searches ?? [] / checklist ?? null and rendered
-    // the same "you have nothing" copy as a real empty dashboard.
-    dashboardResult = { data: undefined, error: new ApiError(500, null, "Server error"), isLoading: false, isPaused: false };
+  it("does not say the person has nothing when the call settled into an error", () => {
+    applications = { data: undefined, error: new Error("boom"), isLoading: false, isPaused: false };
+    resume = { data: null, error: null, isLoading: false, isPaused: false };
     render(<DashboardPage />);
-
-    expect(screen.queryByText(/nothing new yet/i)).not.toBeInTheDocument();
-    expect(screen.queryByText(/save a search from the jobs page/i)).not.toBeInTheDocument();
-    expect(screen.getByTestId("dashboard-hero-error")).toBeInTheDocument();
-    expect(screen.getByTestId("checklist-error")).toBeInTheDocument();
-    expect(screen.getByTestId("saved-searches-error")).toBeInTheDocument();
-  });
-
-  it("says the dashboard failed to load — not the false empty-state copy — when the call can't reach the network at all", () => {
-    // TanStack Query v5's default networkMode "online": a request that can't reach the network
-    // (offline, DNS failure, connection refused) never settles into `status: "error"` — it parks in
-    // `fetchStatus: "paused"` instead, with `status` still "pending". That means `isLoading`
-    // (`isPending && isFetching`) is false AND `error` is null AND `data` is undefined — the exact
-    // shape a genuinely-empty, successfully-loaded dashboard has. A page that only checked
-    // `dashboard.error` (as this one did before this round) would render the same false "Nothing
-    // new yet" / "Save a search..." copy this fix has twice already removed for the settled-error
-    // case. From the user's seat, "can't reach the API at all" is exactly as much an error as "the
-    // API answered with a 500" — both get the one error treatment.
-    dashboardResult = { data: undefined, error: null, isLoading: false, isPaused: true };
-    render(<DashboardPage />);
-
-    expect(screen.queryByText(/nothing new yet/i)).not.toBeInTheDocument();
-    expect(screen.queryByText(/save a search from the jobs page/i)).not.toBeInTheDocument();
-    expect(screen.getByTestId("dashboard-hero-error")).toBeInTheDocument();
-    expect(screen.getByTestId("checklist-error")).toBeInTheDocument();
-    expect(screen.getByTestId("saved-searches-error")).toBeInTheDocument();
-  });
-
-  it("keeps showing cached dashboard content, with the error banner above it, when a background refetch settles into an error", () => {
-    // Round 3's `unavailable` boolean checked only `error`/`isPaused`, with no check on `data`.
-    // TanStack's query reducer never clears `data` on an `error` transition — `providers.tsx`
-    // doesn't disable refetchOnWindowFocus or reconnect refetches either — so a background refetch
-    // that fails after a prior successful load leaves `dashboard.data` populated and valid at the
-    // exact moment `dashboard.error` also becomes truthy. The panels must keep rendering that real,
-    // still-good data (stale but visible) rather than discarding it for their error branches — the
-    // banner is what makes the staleness honest, not a wall of "Couldn't load" badges over numbers
-    // that were just on screen a second ago.
-    dashboardResult = { data: populatedDashboard, error: new ApiError(500, null, "Server error"), isLoading: false, isPaused: false };
-    render(<DashboardPage />);
-
-    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("3 new roles fit you this week · 2 resumes waiting for review");
-    expect(screen.getByText("1 of 1 verified")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /pm roles/i })).toBeInTheDocument();
-    expect(screen.queryByTestId("dashboard-hero-error")).not.toBeInTheDocument();
-    expect(screen.queryByTestId("checklist-error")).not.toBeInTheDocument();
-    expect(screen.queryByTestId("saved-searches-error")).not.toBeInTheDocument();
+    expect(screen.queryByText("Start with your resume")).toBeNull();
     expect(screen.getByRole("alert")).toBeInTheDocument();
-  });
-
-  it("keeps showing cached dashboard content, with the error banner above it, when a background refetch pauses instead of settling", () => {
-    // Same gap, the paused variant: a background refetch can pause (offline, unreachable) rather
-    // than settle into `error`, and `data` is just as untouched by that transition.
-    dashboardResult = { data: populatedDashboard, error: null, isLoading: false, isPaused: true };
-    render(<DashboardPage />);
-
-    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("3 new roles fit you this week · 2 resumes waiting for review");
-    expect(screen.getByRole("link", { name: /pm roles/i })).toBeInTheDocument();
-    expect(screen.queryByTestId("dashboard-hero-error")).not.toBeInTheDocument();
-    expect(screen.queryByTestId("checklist-error")).not.toBeInTheDocument();
-    expect(screen.queryByTestId("saved-searches-error")).not.toBeInTheDocument();
-    expect(screen.getByRole("alert")).toHaveTextContent(/can.t reach rhapto.s api/i);
   });
 });

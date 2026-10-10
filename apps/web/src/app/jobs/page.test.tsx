@@ -8,6 +8,12 @@ vi.mock("@/components/jobs/NotInterestedButton", () => ({ NotInterestedButton: (
 // Needs a QueryClient of its own, and what it does (POST /searches/{id}/viewed) is not what any test
 // here is about. It has its own test file.
 vi.mock("@/components/jobs/MarkSearchViewed", () => ({ MarkSearchViewed: () => null }));
+// Poll now lives in the Browse jobs header (Release A). Its own test covers polling; here it only has to be present.
+vi.mock("@/components/jobs/PollNowButton", () => ({ PollNowButton: () => <button>Poll now</button> }));
+vi.mock("@tanstack/react-query", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@tanstack/react-query")>()),
+  useQueryClient: () => ({}),
+}));
 
 const run = vi.fn();
 const saveSearch = vi.fn().mockResolvedValue({ id: "s1", name: "pm" });
@@ -115,6 +121,11 @@ describe("Jobs page", () => {
   });
 
   describe("asking why the grid is empty", () => {
+    it("offers Poll now in the Browse jobs header", () => {
+      render(<JobsPage />);
+      expect(screen.getByRole("button", { name: "Poll now" })).toBeInTheDocument();
+    });
+
     it("asks for a diagnosis when the grid really is empty", () => {
       render(<JobsPage />);
       expect(lastDiagnosisOptions().enabled).toBe(true);

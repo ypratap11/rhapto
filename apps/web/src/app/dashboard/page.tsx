@@ -1,110 +1,64 @@
 "use client";
 
-import { useRouter } from "next/navigation";
-import { useMemo, useState } from "react";
-import { ActiveApplications } from "@/components/dashboard/ActiveApplications";
-import { DashboardHero } from "@/components/dashboard/DashboardHero";
-import { ProfileChecklist } from "@/components/dashboard/ProfileChecklist";
-import { RecommendedRoles } from "@/components/dashboard/RecommendedRoles";
-import { SavedSearchesRail } from "@/components/dashboard/SavedSearchesRail";
-import type { TrackInfo } from "@/components/jobs/JobCard";
-import { SearchForm } from "@/components/jobs/SearchForm";
+import Link from "next/link";
+import { useMemo } from "react";
+import { ApplicationsSection } from "@/components/dashboard/ApplicationsSection";
+import { FinishSetupLine } from "@/components/dashboard/FinishSetupLine";
+import { RecommendedShort } from "@/components/dashboard/RecommendedShort";
+import { WaitingBanner } from "@/components/dashboard/WaitingBanner";
 import { ApiErrorBanner } from "@/components/shell/ApiErrorBanner";
-import { HeroBand } from "@/components/shell/HeroBand";
-import { useDashboard, useTaxonomy, useTracks } from "@/lib/api/queries";
-import { fieldsWithTracks } from "@/lib/fields";
-import { DEFAULT_SEARCH_STATE, encodeSearchState, type SearchState } from "@/lib/search-state";
+import { buttonVariants } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
+import { useApplications, useDashboard, useResumeDocument } from "@/lib/api/queries";
+import { isApplication } from "@/lib/applications-view";
 
-// Layout: hero band, then a two-column body — 2fr of work, 1fr of context (spec §3.1). No
-// Breadcrumbs here: the route is now /dashboard, not the root, but it is still the app's home
-// surface for a signed-in person -- the TopBar logo and its first tab both point here -- so a
-// breadcrumb reading just "Dashboard" with nothing above it to click back to would add clutter,
-// not orientation.
+/** The signed-in home: where my applications stand, and what to apply to next. One centred column. */
 export default function DashboardPage() {
-  const router = useRouter();
-  const [state, setState] = useState<SearchState>(DEFAULT_SEARCH_STATE);
+  const applications = useApplications();
+  const resume = useResumeDocument();
   const dashboard = useDashboard();
-  const tracksQuery = useTracks();
-  // Only a settled, empty answer is a verdict: while the tracks load (or fail) there is nothing to say.
-  const noTracks = Array.isArray(tracksQuery.data) && tracksQuery.data.length === 0;
-  const taxonomy = useTaxonomy();
 
-  const tracks = useMemo(() => {
-    const map: Record<string, TrackInfo> = {};
-    for (const t of tracksQuery.data ?? []) map[t.id] = { name: t.name, min_fit: t.min_fit };
-    return map;
-  }, [tracksQuery.data]);
-
-  // Only fields the user has a track in: the rest can only ever return an empty list.
-  const fields = useMemo(
-    () =>
-      fieldsWithTracks(
-        (taxonomy.data?.fields ?? []).map((f) => ({ id: f.id, name: f.name })),
-        tracksQuery.data,
-      ),
-    [taxonomy.data, tracksQuery.data],
+  const rows = useMemo(
+    () => Object.values(applications.data?.columns ?? {}).flat().filter(isApplication),
+    [applications.data],
   );
 
-  // A settled error (`dashboard.error`) isn't the only way this call never produces data: with no
-  // network reachable, TanStack Query v5's default `networkMode: "online"` parks the query in
-  // `fetchStatus: "paused"` instead — `status` stays "pending", so `isLoading` (`isPending &&
-  // isFetching`) is false and `error` is null, the same shape a genuinely-empty dashboard has. From
-  // the user's seat both are "something is wrong right now."
-  //
-  // But that's a different question from "do we have anything to show." A settled error or a pause
-  // can happen on a *background refetch* — `providers.tsx` doesn't disable refetchOnWindowFocus or
-  // reconnect refetches — after a prior fetch already populated `dashboard.data`. TanStack's query
-  // reducer never clears `data` on an `error` or `pause` transition, so it's still sitting there,
-  // valid, the moment this renders. Discarding it in favor of the panels' error branches would throw
-  // away real numbers the user is already looking at just because the *next* refresh stumbled.
-  //
-  // So two separate questions, two separate booleans: `hasIssue` says something is wrong right now
-  // (always shows the banner, additive context above the content) and `nothingToShow` says we have
-  // no data to fall back on (gates the panels into their error branches — only when there's truly
-  // nothing else to render). A background hiccup with cached data keeps showing that cached data,
-  // stale but visible, with the banner making the staleness honest instead of silent.
-  const hasIssue = Boolean(dashboard.error) || dashboard.isPaused;
-  const nothingToShow = !dashboard.data && hasIssue;
+  // A paused query (no network) is not "empty": same two-boolean shape the old page used.
+  const hasIssue = Boolean(applications.error) || applications.isPaused;
+  const loading = applications.isLoading || resume.isLoading;
+  const noResume = resume.data === null && rows.length === 0 && !hasIssue;
 
   return (
-    <>
-      <HeroBand tone="peach" height="tall">
-        <DashboardHero
-          newFitCount={dashboard.data?.new_fit_count ?? 0}
-          needsReviewCount={dashboard.data?.needs_review_count ?? 0}
-          loading={dashboard.isLoading}
-          error={nothingToShow}
-        />
-      </HeroBand>
-      {hasIssue ? (
-        <div className="mb-6">
-          <ApiErrorBanner error={dashboard.error ?? "Can't reach Rhapto's API."} />
-        </div>
-      ) : null}
-      <div className="grid gap-8 lg:grid-cols-[2fr_1fr]">
-        <div className="space-y-8">
-          <section aria-labelledby="search-heading" className="space-y-3 rounded-card border border-border bg-surface p-4 shadow-card">
-            <h2 id="search-heading" className="font-sans text-base font-semibold">
-              Find your next role
-            </h2>
-            {/* The Dashboard's search card does not run a live search: it hands the state to /jobs,
-                which owns the result grid (spec §3.1). */}
-            <SearchForm
-              value={state}
-              onChange={setState}
-              onSubmit={() => router.push(`/jobs?${encodeSearchState(state).toString()}`)}
-              fields={fields}
-              pending={false}
-            />
-          </section>
-          <RecommendedRoles tracks={tracks} noTracks={noTracks} />
-          <ActiveApplications />
-        </div>
-        <aside className="space-y-8">
-          <ProfileChecklist checklist={dashboard.data?.checklist ?? null} loading={dashboard.isLoading} error={nothingToShow} />
-          <SavedSearchesRail searches={dashboard.data?.saved_searches ?? []} loading={dashboard.isLoading} error={nothingToShow} />
-        </aside>
-      </div>
-    </>
+    <div className="mx-auto max-w-3xl space-y-8">
+      <h1 className="font-serif text-2xl font-medium">Dashboard</h1>
+      {hasIssue ? <ApiErrorBanner error={applications.error ?? "Can't reach Rhapto's API."} /> : null}
+      {loading ? (
+        <Skeleton className="h-48 w-full rounded-card" />
+      ) : noResume ? (
+        <section className="mx-auto flex max-w-md flex-col items-center gap-3 rounded-card border border-border bg-surface p-8 text-center shadow-card">
+          <h2 className="font-heading text-xl font-medium">Start with your resume</h2>
+          <p className="text-sm text-muted-foreground">Upload a Word (.docx) file. Rhapto only ever uses what&apos;s in it.</p>
+          <Link href="/start" className={buttonVariants({ size: "lg" })}>
+            Upload resume
+          </Link>
+        </section>
+      ) : (
+        <>
+          <WaitingBanner count={dashboard.data?.needs_review_count ?? 0} />
+          <FinishSetupLine checklist={dashboard.data?.checklist} />
+          {rows.length > 0 ? (
+            <ApplicationsSection rows={rows} />
+          ) : hasIssue ? null : (
+            <section aria-labelledby="applications-heading" className="space-y-2">
+              <h2 id="applications-heading" className="font-sans text-base font-semibold">Your applications</h2>
+              <p className="text-sm text-muted-foreground">
+                Your applications will show here. After you tailor a resume and send it, mark it as applied and track replies here.
+              </p>
+            </section>
+          )}
+          <RecommendedShort />
+        </>
+      )}
+    </div>
   );
 }

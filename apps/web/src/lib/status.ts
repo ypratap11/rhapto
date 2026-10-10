@@ -5,8 +5,8 @@ export const STATUS_LABEL: Record<ApplicationStatus, string> = {
   discovered: "Discovered",
   queued: "Queued",
   applied: "Applied",
-  screen: "Screen",
-  interview: "Interview",
+  screen: "Screening",
+  interview: "Interviewing",
   offer: "Offer",
   closed: "Closed",
 };
@@ -40,7 +40,7 @@ export const CLOSED_REASON_LABEL: Record<ClosedReason, string> = {
   rejected: "Rejected",
   withdrew: "Withdrew",
   no_response: "No response",
-  filled: "Filled",
+  filled: "Position filled",
 };
 
 /** The five tabs the Pipeline groups by; `discovered`/`queued` never reach this page. */

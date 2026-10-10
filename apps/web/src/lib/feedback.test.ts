@@ -96,7 +96,6 @@ describe("area coverage (a new page without an area fails here)", () => {
   it("maps every page.tsx route under app/, including nested and dynamic ones", () => {
     const routes = pageRoutes().filter((r) => !hidden.has(r));
     // Prove the walk really reaches nested and dynamic pages, or the loop below is decoration.
-    expect(routes).toContain("/pipeline/board");
     expect(routes).toContain(`/jobs/${JOB}/packages/${JOB}`);
     const other = routes.filter((r) => areaForPath(r) === "other");
     expect(other, `pages with no feedback area: ${other.join(", ")}`).toEqual([]);

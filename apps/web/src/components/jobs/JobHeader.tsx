@@ -51,8 +51,8 @@ export function JobHeader({ job, track }: { job: JobOut; track: TrackInfo | null
       return (
         <div className="flex items-center gap-2">
           <StatusBadge tone={statusTone(application.status)}>{STATUS_LABEL[application.status as ApplicationStatus] ?? application.status}</StatusBadge>
-          <Link href="/pipeline" className={buttonVariants({ variant: "outline", size: "sm" })}>
-            Pipeline
+          <Link href="/dashboard" className={buttonVariants({ variant: "outline", size: "sm" })}>
+            Dashboard
           </Link>
         </div>
       );

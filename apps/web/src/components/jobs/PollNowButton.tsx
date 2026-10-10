@@ -30,7 +30,7 @@ export function PollNowButton({ onFinished }: { onFinished: () => void }) {
 
   return (
     <div>
-      <Button variant="outline" onClick={start} disabled={poll.isPending || taskId !== null}>
+      <Button variant="outline" className="max-md:min-h-11" onClick={start} disabled={poll.isPending || taskId !== null}>
         Poll now
       </Button>
       {taskId ? <TaskProgress taskId={taskId} jobId="" onFinished={finished} kind="poll" /> : null}

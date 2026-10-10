@@ -1,99 +1,112 @@
-import { render, screen, within } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { render, screen } from "@testing-library/react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "@/lib/api/client";
 import DashboardPage from "./page";
 
-vi.mock("next/navigation", () => ({
-  useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
+vi.mock("@/components/dashboard/WaitingBanner", () => ({ WaitingBanner: ({ count }: { count: number }) => <div>waiting:{count}</div> }));
+vi.mock("@/components/dashboard/ApplicationsSection", () => ({
+  ApplicationsSection: ({ rows }: { rows: unknown[] }) => <div>applications:{rows.length}</div>,
 }));
+vi.mock("@/components/dashboard/RecommendedShort", () => ({ RecommendedShort: () => <div>recommended</div> }));
+vi.mock("@/components/dashboard/FinishSetupLine", () => ({ FinishSetupLine: () => <div>finish-setup</div> }));
 
-vi.mock("@/components/dashboard/DashboardHero", () => ({
-  DashboardHero: ({ newFitCount, needsReviewCount }: { newFitCount: number; needsReviewCount: number }) => (
-    <h1>
-      hero:{newFitCount}:{needsReviewCount}
-    </h1>
-  ),
-}));
-vi.mock("@/components/dashboard/RecommendedRoles", () => ({ RecommendedRoles: ({ noTracks }: { noTracks?: boolean }) => <div>Recommended roles{noTracks ? " (no tracks)" : ""}</div> }));
-vi.mock("@/components/dashboard/ActiveApplications", () => ({ ActiveApplications: () => <div>Active applications</div> }));
-vi.mock("@/components/dashboard/ProfileChecklist", () => ({ ProfileChecklist: () => <div>Profile checklist</div> }));
-vi.mock("@/components/dashboard/SavedSearchesRail", () => ({ SavedSearchesRail: () => <div>Saved searches rail</div> }));
-
-let tracksResult: { data: unknown } = { data: [{ id: "t1", name: "Data PM", min_fit: 60 }] };
-let dashboardResult: { data: unknown; error: unknown; isLoading: boolean } = { data: undefined, error: null, isLoading: true };
+type Q = { data: unknown; error: unknown; isLoading: boolean; isPaused: boolean };
+let applications: Q;
+let resume: Q;
+let dashboard: Q;
 vi.mock("@/lib/api/queries", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/api/queries")>()),
-  useDashboard: () => dashboardResult,
-  useTracks: () => tracksResult,
-  useTaxonomy: () => ({ data: { fields: [{ id: "engineering", name: "Engineering", roles: [] }] } }),
+  useApplications: () => applications,
+  useResumeDocument: () => resume,
+  useDashboard: () => dashboard,
 }));
 
-const checklist = {
-  resume_template: true,
-  contact_answers: true,
-  tracks: true,
-  blocks_verified: true,
-  guardrails: true,
-  location_preferences: true,
-  verified_blocks: 1,
-  total_blocks: 1,
-};
+const settled = (data: unknown): Q => ({ data, error: null, isLoading: false, isPaused: false });
+const columns = (rows: { id: string; status: string }[]) => ({ columns: { all: rows } });
+const app = (id: string, status: string) => ({ id, status });
+
+beforeEach(() => {
+  applications = settled(columns([]));
+  resume = settled({ filename: "cv.docx" });
+  dashboard = settled({ needs_review_count: 0, checklist: {} });
+});
 
 describe("DashboardPage", () => {
-  afterEach(() => {
-    tracksResult = { data: [{ id: "t1", name: "Data PM", min_fit: 60 }] };
-  });
-
-  it("puts the hero in a peach, tall band", () => {
-    dashboardResult = { data: undefined, error: null, isLoading: true };
+  it("shows no sections while loading", () => {
+    applications = { data: undefined, error: null, isLoading: true, isPaused: false };
     render(<DashboardPage />);
-    const band = screen.getByTestId("hero-band");
-    expect(band.className).toContain("bg-band-peach");
-    expect(band.className).toContain("min-h-band-tall");
+    expect(screen.getByRole("heading", { level: 1, name: "Dashboard" })).toBeInTheDocument();
+    expect(screen.queryByText(/^applications:/)).toBeNull();
+    expect(screen.queryByText("recommended")).toBeNull();
+    expect(screen.queryByText("Start with your resume")).toBeNull();
   });
 
-  it("puts the search card, Recommended roles and Active applications in the left column, and the checklist and saved-search rail in the right rail", () => {
-    dashboardResult = {
-      data: { new_fit_count: 3, needs_review_count: 2, checklist, due_followups: [], saved_searches: [] },
-      error: null,
-      isLoading: false,
-    };
+  it("asks a brand-new person to upload a resume", () => {
+    resume = settled(null);
     render(<DashboardPage />);
-
-    const aside = screen.getByRole("complementary");
-    expect(within(aside).getByText("Profile checklist")).toBeInTheDocument();
-    expect(within(aside).getByText("Saved searches rail")).toBeInTheDocument();
-    expect(within(aside).queryByText(/recommended roles/i)).not.toBeInTheDocument();
-
-    const main = aside.previousElementSibling as HTMLElement;
-    expect(main).not.toBeNull();
-    expect(within(main).getByRole("heading", { name: /find your next role/i })).toBeInTheDocument();
-    expect(within(main).getByText("Recommended roles")).toBeInTheDocument();
-    expect(within(main).getByText("Active applications")).toBeInTheDocument();
-    expect(within(main).queryByText("Profile checklist")).not.toBeInTheDocument();
+    expect(screen.getByText("Start with your resume")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Upload resume" })).toHaveAttribute("href", "/start");
+    expect(screen.queryByText("recommended")).toBeNull();
+    expect(screen.queryByText(/^waiting:/)).toBeNull();
   });
 
-  it("shows an ApiErrorBanner instead of a blank page when the dashboard call fails", () => {
-    dashboardResult = { data: undefined, error: new ApiError(500, null, "Server error"), isLoading: false };
+  it("says what will show here when there is a resume but no applications", () => {
+    render(<DashboardPage />);
+    expect(
+      screen.getByText("Your applications will show here. After you tailor a resume and send it, mark it as applied and track replies here."),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/^applications:/)).toBeNull();
+    expect(screen.getByText("recommended")).toBeInTheDocument();
+  });
+
+  it("does not count discovered or queued jobs as applications", () => {
+    applications = settled(columns([app("1", "discovered"), app("2", "queued")]));
+    render(<DashboardPage />);
+    expect(screen.queryByText(/^applications:/)).toBeNull();
+  });
+
+  it("passes only real applications to the section", () => {
+    applications = settled(columns([app("1", "discovered"), app("2", "applied"), app("3", "closed")]));
+    render(<DashboardPage />);
+    expect(screen.getByText("applications:2")).toBeInTheDocument();
+  });
+
+  it("still shows applications from the older flow when there is no resume", () => {
+    resume = settled(null);
+    applications = settled(columns([app("1", "applied")]));
+    render(<DashboardPage />);
+    expect(screen.getByText("applications:1")).toBeInTheDocument();
+    expect(screen.queryByText("Start with your resume")).toBeNull();
+  });
+
+  it("passes the waiting count to the banner", () => {
+    dashboard = settled({ needs_review_count: 2, checklist: {} });
+    const { unmount } = render(<DashboardPage />);
+    expect(screen.getByText("waiting:2")).toBeInTheDocument();
+    unmount();
+    dashboard = settled({ needs_review_count: 0, checklist: {} });
+    render(<DashboardPage />);
+    expect(screen.getByText("waiting:0")).toBeInTheDocument();
+  });
+
+  it("shows the one finish-setup line", () => {
+    render(<DashboardPage />);
+    expect(screen.getByText("finish-setup")).toBeInTheDocument();
+  });
+
+  it("shows the error banner and keeps the sections when a query fails", () => {
+    applications = { data: columns([app("1", "applied")]), error: new ApiError(500, null, "Server error"), isLoading: false, isPaused: false };
     render(<DashboardPage />);
     expect(screen.getByRole("alert")).toBeInTheDocument();
-    // Not a blank page: the rest of the Dashboard still renders around the banner.
-    expect(screen.getByRole("heading", { name: /find your next role/i })).toBeInTheDocument();
-    expect(screen.getByText("Recommended roles")).toBeInTheDocument();
+    expect(screen.getByText("applications:1")).toBeInTheDocument();
+    expect(screen.getByText("recommended")).toBeInTheDocument();
   });
 
-  it("tells Recommended roles when the user has no tracks, and only when that is settled", () => {
-    dashboardResult = {
-      data: { new_fit_count: 0, needs_review_count: 0, checklist, due_followups: [], saved_searches: [] },
-      error: null,
-      isLoading: false,
-    };
-    tracksResult = { data: [] };
-    const { unmount } = render(<DashboardPage />);
-    expect(screen.getByText("Recommended roles (no tracks)")).toBeInTheDocument();
-    unmount();
-    tracksResult = { data: undefined }; // still loading: no verdict
+  it("does not call a paused query an empty one", () => {
+    resume = settled(null);
+    applications = { data: undefined, error: null, isLoading: false, isPaused: true };
     render(<DashboardPage />);
-    expect(screen.getByText("Recommended roles")).toBeInTheDocument();
+    expect(screen.queryByText("Start with your resume")).toBeNull();
+    expect(screen.getByRole("alert")).toHaveTextContent(/can.t reach rhapto.s api/i);
   });
 });

@@ -155,7 +155,6 @@ const PAGES = [
   { name: "dashboard", path: "/dashboard" },
   { name: "jobs", path: "/jobs" },
   { name: "resumes", path: "/resumes" },
-  { name: "pipeline", path: "/pipeline" },
   { name: "profile", path: "/profile" },
   { name: "settings", path: "/settings" },
 ];

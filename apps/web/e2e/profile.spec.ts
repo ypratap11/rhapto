@@ -1,12 +1,7 @@
 import { resolve } from "node:path";
-import type { Page } from "@playwright/test";
 import { expect, test } from "./fixtures";
 
 const FIXTURE_DOCX = resolve(__dirname, "fixtures/resume-template.docx");
-
-function checklistRow(page: Page, label: string) {
-  return page.getByRole("region", { name: /profile checklist/i }).getByRole("listitem").filter({ hasText: label });
-}
 
 test("the field picker creates a track, and its resume-suggestion chips only appear once a template is uploaded", async ({ page }) => {
   await page.goto("/profile?card=tracks");
@@ -23,8 +18,9 @@ test("the field picker creates a track, and its resume-suggestion chips only app
   // with the same words ("No tracks yet. Pick a field and a role.") and is visible at the same time.
   await expect(page.getByText("No tracks yet. Import your profile or add a track.")).toBeVisible();
 
-  await page.goto("/dashboard");
-  await expect(checklistRow(page, "Tracks")).toHaveAttribute("data-done", "false");
+  // The dashboard's checklist is now a single "finish setup" line; the Profile card is the record.
+  await page.goto("/profile");
+  await expect(page.getByText(/No tracks yet\. Pick a field and a role\./)).toBeVisible();
 
   // Remove the resume document (uploaded by an earlier setup step / prior run of this suite —
   // see global-setup.ts) so the "suggested from your resume" chips have nothing to suggest from.
@@ -65,6 +61,6 @@ test("the field picker creates a track, and its resume-suggestion chips only app
   await chips.first().click();
   await expect(page.getByText(/^Added the .* track$/)).toBeVisible();
 
-  await page.goto("/dashboard");
-  await expect(checklistRow(page, "Tracks")).toHaveAttribute("data-done", "true");
+  await page.goto("/profile");
+  await expect(page.getByText(/No tracks yet/)).toHaveCount(0);
 });

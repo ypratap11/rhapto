@@ -6,7 +6,6 @@
   "protectedAtEdge": [
     "/dashboard",
     "/jobs",
-    "/pipeline",
     "/profile",
     "/resumes",
     "/settings",

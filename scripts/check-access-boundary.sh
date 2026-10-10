@@ -37,7 +37,6 @@ read -r -a PROTECTED_PATHS <<< "$(node -e 'const v=require(process.argv[1]);proc
 PROTECTED_PATHS+=(
   "/jobs/11111111-1111-1111-1111-111111111111"
   "/jobs/11111111-1111-1111-1111-111111111111/packages/22222222-2222-2222-2222-222222222222"
-  "/pipeline/board"
   "/api/v1/me"
   "/api/v1/dashboard"
   "/api/v1/profile/answers"

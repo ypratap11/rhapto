@@ -18,7 +18,7 @@ async function pickApplyableJob(): Promise<JobSummary> {
   return withUrl;
 }
 
-test("Tailor, Review, Mark ready and Apply reach the pipeline without submitting anything", async ({ page, context }) => {
+test("Tailor, Review, Mark ready and Apply reach the dashboard without submitting anything", async ({ page, context }) => {
   const job = await pickApplyableJob();
 
   await page.goto(`/jobs/${job.id}`);
@@ -65,12 +65,12 @@ test("Tailor, Review, Mark ready and Apply reach the pipeline without submitting
   await expect(page.getByRole("heading", { name: "Did you apply?" })).toBeVisible();
   await page.getByRole("button", { name: "Yes" }).click();
   // markApplied is fire-and-forget from the click handler's point of view — wait for its success
-  // toast so the application actually exists before navigating to /pipeline below.
-  await expect(page.getByText("Added to your pipeline")).toBeVisible();
+  // toast so the application actually exists before navigating to /dashboard below.
+  await expect(page.getByText("Added to your applications")).toBeVisible();
 
   // Multiple applications can share a company (this dev stack already has more than one Scale AI
-  // application), so the title disambiguates which pipeline card is this run's.
-  await page.goto("/pipeline");
-  const pipelineCard = page.getByRole("button", { name: job.company ?? "" }).filter({ hasText: job.title ?? "" });
-  await expect(pipelineCard).toBeVisible();
+  // application), so the title disambiguates which row is this run's.
+  await page.goto("/dashboard");
+  const applicationRow = page.getByRole("region", { name: "Your applications" }).getByRole("button", { name: job.company ?? "" }).filter({ hasText: job.title ?? "" });
+  await expect(applicationRow).toBeVisible();
 });

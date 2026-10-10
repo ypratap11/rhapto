@@ -10,6 +10,9 @@ const nextConfig: NextConfig = {
       { source: "/packages", destination: "/resumes", permanent: false },
       // The old pitch page is gone; its facts live on / . 308 so clients and search engines move to /.
       { source: "/about", destination: "/", permanent: true },
+      // The Pipeline page and its board folded into the Dashboard (Release A). 308: the move is final.
+      { source: "/pipeline", destination: "/dashboard", permanent: true },
+      { source: "/pipeline/board", destination: "/dashboard", permanent: true },
     ];
   },
 };

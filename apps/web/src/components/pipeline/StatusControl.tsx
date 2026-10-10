@@ -54,8 +54,8 @@ export function StatusControl({ application }: { application: ApplicationOut }) 
       <div className="space-y-1">
         <Label htmlFor="status-select">Status</Label>
         <Select value={application.status} onValueChange={(value: string | null) => value && saveStatus(value)}>
-          <SelectTrigger id="status-select" aria-label="Status">
-            <SelectValue />
+          <SelectTrigger id="status-select" aria-label="Status" className="max-md:min-h-11">
+            <SelectValue>{(v: string | null) => (v ? (STATUS_LABEL[v as ApplicationStatus] ?? v) : "")}</SelectValue>
           </SelectTrigger>
           <SelectContent>
             {PIPELINE_STATUSES.map((s) => (
@@ -74,8 +74,10 @@ export function StatusControl({ application }: { application: ApplicationOut }) 
               its whole lifetime — Base UI warns if a Select flips from uncontrolled to controlled,
               which happens the moment a reason is first saved if this starts as `undefined`. */}
           <Select value={application.closed_reason ?? ""} onValueChange={(value: string | null) => value && saveClosedReason(value)}>
-            <SelectTrigger id="closed-reason-select" aria-label="Closed reason">
-              <SelectValue placeholder="Why?" />
+            <SelectTrigger id="closed-reason-select" aria-label="Closed reason" className="max-md:min-h-11">
+              <SelectValue placeholder="Why?">
+                {(v: string | null) => (v ? (CLOSED_REASON_LABEL[v as ClosedReason] ?? v) : "Why?")}
+              </SelectValue>
             </SelectTrigger>
             <SelectContent>
               {CLOSED_REASONS.map((r) => (
@@ -95,7 +97,7 @@ export function StatusControl({ application }: { application: ApplicationOut }) 
               a successful save (or any other external change to follow_up_at) must remount the
               input — via key, not an effect — rather than warn Base UI about a moving default. */}
           <Input key={followUpValue || "none"} id="follow-up-date" type="date" defaultValue={followUpValue} ref={followUpRef} />
-          <Button type="button" size="sm" onClick={saveFollowUp} disabled={patch.isPending}>
+          <Button type="button" size="sm" className="max-md:min-h-11" onClick={saveFollowUp} disabled={patch.isPending}>
             Save follow-up
           </Button>
         </div>

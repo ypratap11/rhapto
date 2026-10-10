@@ -242,7 +242,7 @@ describe("JobPage", () => {
     render(<JobPage />);
     expect(screen.getByText("Applied")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Apply" })).not.toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Pipeline" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Dashboard" })).toBeInTheDocument();
   });
 
   it("shows the Reposted notice with a link to reuse the original's newest resume", () => {

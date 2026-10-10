@@ -11,4 +11,10 @@ describe("next.config redirects", () => {
     const rules = await nextConfig.redirects!();
     expect(rules).toContainEqual({ source: "/packages", destination: "/resumes", permanent: false });
   });
+
+  it("folds /pipeline and /pipeline/board into /dashboard permanently (308)", async () => {
+    const rules = await nextConfig.redirects!();
+    expect(rules).toContainEqual({ source: "/pipeline", destination: "/dashboard", permanent: true });
+    expect(rules).toContainEqual({ source: "/pipeline/board", destination: "/dashboard", permanent: true });
+  });
 });

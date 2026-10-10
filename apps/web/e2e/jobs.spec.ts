@@ -2,7 +2,7 @@ import { expect, test } from "./fixtures";
 
 const QUERY = "engineer";
 
-test("Search fills the grid with scored jobs, and Save this search surfaces on the dashboard rail", async ({ page }) => {
+test("Search fills the grid with scored jobs, and Poll now on this page finishes", async ({ page }) => {
   await page.goto("/jobs");
   await page.getByRole("textbox", { name: "Title" }).fill(QUERY);
   await page.getByRole("button", { name: "Search", exact: true }).click();
@@ -27,40 +27,11 @@ test("Search fills the grid with scored jobs, and Save this search surfaces on t
   // save actually landed.
   await expect(saveButton).toHaveCount(0);
 
-  await page.goto("/dashboard");
+  // Poll now lives in this page's Browse jobs header (Release A). It re-runs every saved search's own
+  // criteria. TaskProgress only toasts "Poll finished..." on a genuine "done" event, so this is a real
+  // success assertion, not just "the button came back".
   const pollButton = page.getByRole("button", { name: "Poll now" });
   await expect(pollButton).toBeVisible();
   await pollButton.click();
-  // Poll now (worker/tasks.py poll_now) re-runs every saved search's own criteria and, unlike the
-  // ad hoc live search above, tags newly-discovered postings with this search's id — that
-  // attribution is what makes "N new" possible at all. TaskProgress only toasts "Poll finished…"
-  // on a genuine "done" event, so this is a real success assertion, not just "the button came
-  // back" (which a `poll_now` that failed after doing its work — see worker/tasks.py's
-  // `poll_now` and its JSON-safe "done" publish — would also produce).
   await expect(page.getByText(/poll finished/i)).toBeVisible({ timeout: 90_000 });
-
-  // SavedSearchesRail is not invalidated when a poll finishes (only tailoring is — see
-  // TaskProgress.tsx), so a fresh load is the only way to see its updated count.
-  await page.reload();
-  const rail = page.getByRole("region", { name: "Saved searches" });
-  const savedLink = rail.getByRole("link", { name: QUERY, exact: true });
-  await expect(savedLink).toBeVisible();
-
-  // A count only appears once the poll actually discovers postings this search hadn't tagged yet
-  // (jobs already known from a previous run of this same query are not re-tagged — see
-  // db/repositories/searches.py's new_counts). Rather than assert a specific number that depends
-  // on the live state of external job boards, this asks the API for the ground truth and checks
-  // the rail agrees with it exactly, in either direction.
-  const apiUrl = process.env.RHAPTO_PUBLIC_API_URL ?? "http://localhost:8000";
-  const token = process.env.RHAPTO_API_TOKEN ?? "";
-  const searchesRes = await fetch(`${apiUrl}/api/v1/searches`, { headers: { Authorization: `Bearer ${token}` } });
-  expect(searchesRes.ok).toBe(true);
-  const searches = (await searchesRes.json()) as { name: string; new_count: number }[];
-  const saved = searches.find((s) => s.name === QUERY);
-  expect(saved, `no saved search named ${JSON.stringify(QUERY)} on the API`).toBeTruthy();
-  if (saved && saved.new_count > 0) {
-    await expect(savedLink).toContainText(`${saved.new_count} new`);
-  } else {
-    await expect(savedLink).not.toContainText("new");
-  }
 });

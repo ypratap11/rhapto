@@ -53,7 +53,7 @@ const applications: ApplicationOut[] = [
 describe("ApplicationList", () => {
   it("shows the five pipeline tabs", () => {
     render(<ApplicationList applications={applications} selectedId={null} onSelect={vi.fn()} />);
-    for (const label of ["Applied", "Screen", "Interview", "Offer", "Closed"]) {
+    for (const label of ["Applied", "Screening", "Interviewing", "Offer", "Closed"]) {
       expect(screen.getByRole("tab", { name: label })).toBeInTheDocument();
     }
   });
@@ -69,7 +69,7 @@ describe("ApplicationList", () => {
   it("switches tabs to show that status's applications only", async () => {
     const user = userEvent.setup({ delay: null });
     render(<ApplicationList applications={applications} selectedId={null} onSelect={vi.fn()} />);
-    await user.click(screen.getByRole("tab", { name: "Interview" }));
+    await user.click(screen.getByRole("tab", { name: "Interviewing" }));
     expect(screen.getByText("Director")).toBeInTheDocument();
     expect(screen.queryByText("Zeta Corp")).not.toBeInTheDocument();
   });

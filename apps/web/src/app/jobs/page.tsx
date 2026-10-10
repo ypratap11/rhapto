@@ -1,5 +1,6 @@
 "use client";
 
+import { useQueryClient } from "@tanstack/react-query";
 import { Search } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useMemo, useState } from "react";
@@ -9,6 +10,7 @@ import type { TrackInfo } from "@/components/jobs/JobCard";
 import { JobGrid } from "@/components/jobs/JobGrid";
 import { MarkSearchViewed } from "@/components/jobs/MarkSearchViewed";
 import { NoTrackPrompt } from "@/components/jobs/NoTrackPrompt";
+import { PollNowButton } from "@/components/jobs/PollNowButton";
 import { SaveSearchButton } from "@/components/jobs/SaveSearchButton";
 import { SearchForm } from "@/components/jobs/SearchForm";
 import { SourceReport } from "@/components/jobs/SourceReport";
@@ -18,7 +20,7 @@ import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { useJobsEmptyReason, useJobsQuery, useLiveSearch, useSavedSearches, useSourceSettings, useTaxonomy, useTracks } from "@/lib/api/queries";
+import { invalidateJobs, useJobsEmptyReason, useJobsQuery, useLiveSearch, useSavedSearches, useSourceSettings, useTaxonomy, useTracks } from "@/lib/api/queries";
 import { fieldsWithTracks } from "@/lib/fields";
 import { decodeSearchState, encodeSearchState, passesFit, type SearchState } from "@/lib/search-state";
 
@@ -57,6 +59,7 @@ function resultsChanged(a: SearchState, b: SearchState): boolean {
 
 function JobsPageInner() {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const searchParams = useSearchParams();
   const [state, setState] = useState<SearchState>(() => decodeSearchState(searchParams));
   const searchId = searchParams.get("search_id");
@@ -168,6 +171,7 @@ function JobsPageInner() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 className="font-sans text-lg font-semibold">Browse jobs</h2>
         <div className="flex flex-wrap items-center gap-4">
+          <PollNowButton onFinished={() => invalidateJobs(queryClient)} />
           <Select value={state.sort} onValueChange={(v) => v && updateState({ ...state, sort: v as SearchState["sort"] })}>
             <SelectTrigger aria-label="Sort" size="sm">
               <SelectValue>{(v: string | null) => SORT_LABEL[(v as SearchState["sort"]) ?? "relevance"]}</SelectValue>
