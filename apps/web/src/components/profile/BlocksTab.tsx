@@ -213,23 +213,20 @@ export function BlocksTab() {
           }
         }}
         columns={[
-          { key: "type", header: "Type", className: "hidden md:table-cell", render: (b) => b.type },
           {
             key: "org",
             header: "Employer / role",
-            className: "max-w-0 min-w-40 whitespace-normal",
             render: (b) => (
               <div className="space-y-0.5">
                 <div className="break-words font-medium">{[b.org, b.role].filter(Boolean).join(" · ") || b.type}</div>
                 {b.content.trim() ? <div className="line-clamp-2 break-words text-xs text-muted-foreground">{b.content}</div> : null}
-                {b.period?.trim() ? <div className="text-xs text-muted-foreground md:hidden">{b.period}</div> : null}
               </div>
             ),
           },
+          { key: "type", header: "Type", render: (b) => b.type },
           {
             key: "period",
             header: "Period",
-            className: "hidden md:table-cell",
             render: (b) =>
               editingPeriodId === b.id ? (
                 <Input
@@ -275,7 +272,6 @@ export function BlocksTab() {
           {
             key: "verified",
             header: "Confirmed",
-            className: "whitespace-normal",
             render: (b) => (
               <Button
                 type="button"
