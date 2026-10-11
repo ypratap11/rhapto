@@ -69,7 +69,7 @@ export function RegenerateDialog({ job, pkg, open, onOpenChange }: { job: JobOut
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Regenerate this package</DialogTitle>
+          <DialogTitle>Make a new version</DialogTitle>
         </DialogHeader>
         <div className="space-y-3">
           <div className="space-y-1">
@@ -78,10 +78,12 @@ export function RegenerateDialog({ job, pkg, open, onOpenChange }: { job: JobOut
           </div>
           {(tracks.data ?? []).length > 0 ? (
             <div className="space-y-1">
-              <Label>Track</Label>
+              <Label>Role</Label>
               <Select value={trackId} onValueChange={(v) => setTrackId(v ?? pkg.track_id)}>
-                <SelectTrigger aria-label="Track">
-                  <SelectValue placeholder="Let Rhapto pick" />
+                <SelectTrigger aria-label="Role">
+                  <SelectValue placeholder="Let Rhapto pick">
+                    {(value: string | null) => (tracks.data ?? []).find((t) => t.id === value)?.name ?? "Let Rhapto pick"}
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   {(tracks.data ?? []).map((t) => (

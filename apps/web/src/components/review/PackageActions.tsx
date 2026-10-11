@@ -50,7 +50,7 @@ function Menu({ label, variant, className, icon, children }: { label: string; va
         {label === "More" ? null : <ChevronDown className="size-4" aria-hidden />}
       </Button>
       {open ? (
-        <div className="absolute right-0 top-full z-20 mt-1 min-w-48 max-sm:left-0 max-sm:min-w-0 rounded-card border border-border bg-surface p-1 shadow-card">{children(() => setOpen(false))}</div>
+        <div className="absolute left-0 top-full z-20 mt-1 w-max min-w-full max-sm:right-0 rounded-card border border-border bg-surface p-1 shadow-card">{children(() => setOpen(false))}</div>
       ) : null}
     </div>
   );

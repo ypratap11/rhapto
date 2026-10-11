@@ -32,7 +32,7 @@ export function JobCard({ job, track }: { job: JobOut; track: TrackInfo | null }
           </span>
           <div className="min-w-0">
             <h3 className="font-sans text-base font-semibold leading-tight">
-              <Link href={`/jobs/${job.id}`} className="underline-offset-4 hover:underline">
+              <Link href={`/jobs/${job.id}`} className="underline-offset-4 hover:underline max-md:inline-block max-md:py-3">
                 {job.title ?? "Untitled role"}
               </Link>
             </h3>
