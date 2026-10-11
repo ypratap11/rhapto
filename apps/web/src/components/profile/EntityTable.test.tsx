@@ -48,4 +48,13 @@ describe("EntityTable layout", () => {
     }
     expect(screen.getAllByText("State")).toHaveLength(2);
   });
+
+  it("lets a label and its value wrap onto two lines instead of squeezing the label", () => {
+    renderTable();
+    // A wide value (the "not confirmed yet" button) once squeezed its label to "Confir" at 375px.
+    for (const label of screen.getAllByText("State")) {
+      expect(label.className).toContain("shrink-0");
+      expect(label.parentElement!.className).toContain("flex-wrap");
+    }
+  });
 });

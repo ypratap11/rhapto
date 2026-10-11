@@ -42,7 +42,7 @@ export function EntityTable<T>({
                 {rest.length > 0 ? (
                   <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
                     {rest.map((c) => (
-                      <div key={c.key} className="flex min-w-0 max-w-full items-center gap-1.5">
+                      <div key={c.key} className="flex min-w-0 max-w-full flex-wrap items-center gap-x-1.5 gap-y-1">
                         <span className="shrink-0 text-muted-foreground">{c.header}</span>
                         <div className="min-w-0 break-words text-sm">{c.render(row)}</div>
                       </div>
