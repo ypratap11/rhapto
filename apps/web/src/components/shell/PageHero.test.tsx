@@ -5,7 +5,7 @@ import { PageHero } from "./PageHero";
 describe("PageHero", () => {
   it("has the page's one h1, the summary, the aside and the children", () => {
     render(
-      <PageHero title="Good morning, Maya" subtitle="3 strong matches are waiting." aside={<p>card</p>}>
+      <PageHero title="Good morning, Maya" subtitle={<p>3 strong matches are waiting.</p>} aside={<p>card</p>}>
         <p>tiles</p>
       </PageHero>,
     );

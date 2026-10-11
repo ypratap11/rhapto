@@ -13,7 +13,9 @@ let recommended: { data: JobOut[]; isLoading: boolean; error: unknown; isPaused:
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push }) }));
 vi.mock("@/lib/coach/events", () => ({ fireCoachEvent: (step: string) => fire(step) }));
 vi.mock("@/components/jobs/NotInterestedButton", () => ({
-  NotInterestedButton: ({ job }: { job: JobOut }) => <button>Not interested in {job.id}</button>,
+  NotInterestedButton: ({ job, iconOnly }: { job: JobOut; iconOnly?: boolean }) => (
+    <button data-icon-only={iconOnly ? "yes" : "no"}>Not interested in {job.id}</button>
+  ),
 }));
 vi.mock("@/lib/api/queries", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/api/queries")>()),
@@ -23,7 +25,17 @@ vi.mock("@/lib/api/queries", async (importOriginal) => ({
 }));
 
 const job = (id: string, fit: number) =>
-  ({ id, title: `Role ${id}`, company: "ExampleCo", location: "Remote", salary_text: "$150k", best_fit: fit, best_track_id: "t1" }) as unknown as JobOut;
+  ({
+    id,
+    title: `Role ${id}`,
+    company: "ExampleCo",
+    location: "Remote",
+    salary_text: "$150k",
+    source: "adzuna",
+    best_fit: fit,
+    best_track_id: "t1",
+    discovered_at: new Date(Date.now() - 3 * 86_400_000).toISOString(),
+  }) as unknown as JobOut;
 
 beforeEach(() => {
   push.mockReset();
@@ -39,14 +51,29 @@ describe("RecommendedShort", () => {
     expect(within(screen.getByRole("list")).getAllByRole("listitem")).toHaveLength(5);
   });
 
-  it("says Strong or Good match, never a score, and shows location and salary", () => {
+  it("shows each job's fit as a ring, with company, location and a salary pill", () => {
     recommended = { ...recommended, data: [job("a", 90), job("b", 65)] };
     render(<RecommendedShort />);
-    expect(screen.getByText("Strong match")).toBeInTheDocument();
-    expect(screen.getByText("Good match")).toBeInTheDocument();
-    expect(screen.queryByText(/\b(90|65)\b/)).toBeNull();
-    expect(screen.getAllByText(/Remote/)).not.toHaveLength(0);
-    expect(screen.getAllByText(/\$150k/)).not.toHaveLength(0);
+    expect(screen.getByRole("img", { name: "Fit 90" })).toBeInTheDocument();
+    expect(screen.getByRole("img", { name: "Fit 65" })).toBeInTheDocument();
+    expect(screen.getAllByText("ExampleCo")).toHaveLength(2);
+    expect(screen.getAllByText("Remote")).toHaveLength(2);
+    expect(screen.getAllByText("$150k")).toHaveLength(2);
+  });
+
+  it("marks only jobs found in the last 24 hours as New today", () => {
+    const hoursAgo = (h: number) => new Date(Date.now() - h * 3_600_000).toISOString();
+    recommended = { ...recommended, data: [{ ...job("fresh", 80), discovered_at: hoursAgo(23) }, { ...job("stale", 80), discovered_at: hoursAgo(25) }] };
+    render(<RecommendedShort />);
+    const [fresh, stale] = screen.getAllByRole("listitem");
+    expect(within(fresh!).getByText("New today")).toBeInTheDocument();
+    expect(within(stale!).queryByText("New today")).toBeNull();
+  });
+
+  it("uses plain words in the heading, and Tailor stays inside its own row", () => {
+    render(<RecommendedShort />);
+    expect(screen.getByRole("heading", { name: "Recommended for you" })).toBeInTheDocument();
+    for (const li of screen.getAllByRole("listitem")) expect(within(li).getAllByRole("button", { name: "Tailor" })).toHaveLength(1);
   });
 
   it("starts one tune task per tap and goes to the coach", async () => {
@@ -75,7 +102,7 @@ describe("RecommendedShort", () => {
   it("hides a job through the shared Not interested button", () => {
     recommended = { ...recommended, data: [job("a", 80)] };
     render(<RecommendedShort />);
-    expect(screen.getByRole("button", { name: "Not interested in a" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Not interested in a" })).toHaveAttribute("data-icon-only", "yes");
   });
 
   it("says jobs are coming when the list is empty", () => {
@@ -115,5 +142,30 @@ describe("RecommendedShort", () => {
   it("links to all matching jobs", () => {
     render(<RecommendedShort />);
     expect(screen.getByRole("link", { name: "See all matching jobs →" })).toHaveAttribute("href", "/jobs");
+  });
+
+  it("uses the page's shared starter when given one, so one lock covers the card and the rows", async () => {
+    const user = userEvent.setup({ delay: null });
+    const start = vi.fn().mockResolvedValue(undefined);
+    recommended = { ...recommended, data: [job("a", 80)] };
+    render(<RecommendedShort starter={{ start, pickedId: null, error: null, failedJobId: null }} />);
+    await user.click(screen.getByRole("button", { name: "Tailor" }));
+    expect(start).toHaveBeenCalledWith(expect.objectContaining({ id: "a" }));
+    expect(mutateAsync).not.toHaveBeenCalled();
+  });
+
+  it("disables every Tailor while the shared starter is busy", () => {
+    recommended = { ...recommended, data: [job("a", 80), job("b", 80)] };
+    render(<RecommendedShort starter={{ start: vi.fn(), pickedId: "zzz", error: null, failedJobId: null }} />);
+    for (const b of screen.getAllByRole("button", { name: "Tailor" })) expect(b).toBeDisabled();
+  });
+
+  it("does not repeat an error that the next-step card already shows", () => {
+    const error = { message: "Could not start", next: "retry" } as never;
+    recommended = { ...recommended, data: [job("a", 80)] };
+    const { rerender } = render(<RecommendedShort starter={{ start: vi.fn(), pickedId: null, error, failedJobId: "a" }} hideErrorFor="a" />);
+    expect(screen.queryByRole("alert")).toBeNull();
+    rerender(<RecommendedShort starter={{ start: vi.fn(), pickedId: null, error, failedJobId: "a" }} />);
+    expect(screen.getByRole("alert")).toHaveTextContent("Could not start");
   });
 });

@@ -230,11 +230,12 @@ export const PACKAGE_LIST_PARAMS: Record<PackageListFilter | "any", { status?: "
   any: { archived: false },
 };
 
-export function usePackageList(filter: PackageListFilter) {
+export function usePackageList(filter: PackageListFilter, enabled = true) {
   return useQuery({
     queryKey: packageListKeys.list(filter),
     queryFn: () => unwrap(apiClient().GET("/api/v1/packages", { params: { query: PACKAGE_LIST_PARAMS[filter] } })),
     staleTime: 10_000,
+    enabled,
   });
 }
 

@@ -35,7 +35,7 @@ export function PageHero({
       <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-4">
         <div className="min-w-0">
           <h1 className="font-serif text-[clamp(1.75rem,4vw,2.5rem)] leading-[1.15] font-semibold text-balance">{title}</h1>
-          {subtitle ? <p className="mt-1.5 text-muted-foreground">{subtitle}</p> : null}
+          {subtitle ? <div className="mt-1.5 text-muted-foreground">{subtitle}</div> : null}
         </div>
         {aside ? <div className="w-full md:w-auto md:max-w-lg">{aside}</div> : null}
       </div>

@@ -34,4 +34,19 @@ describe("NotInterestedButton", () => {
     await toast.success.mock.calls[0]![1].action.onClick();
     expect(unhide).toHaveBeenCalledWith("j1");
   });
+
+  it("keeps the visible words by default", () => {
+    render(<NotInterestedButton job={job} />);
+    expect(screen.getByRole("button", { name: "Not interested" })).toHaveTextContent("Not interested");
+  });
+
+  it("can be icon-only, named for the role, and still 44px on a phone", async () => {
+    const user = userEvent.setup({ delay: null });
+    render(<NotInterestedButton job={job} iconOnly />);
+    const button = screen.getByRole("button", { name: "Not interested in TPM" });
+    expect(button).toHaveTextContent("");
+    expect(button.className).toContain("max-md:min-h-11");
+    await user.click(button);
+    expect(hide).toHaveBeenCalledWith("j1");
+  });
 });
