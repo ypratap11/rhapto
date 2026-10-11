@@ -43,8 +43,8 @@ export function formatSalary(raw: string | null | undefined, source: string): st
   if (raw == null) return null;
   const text = raw.trim();
   if (text === "") return null;
-  if (!/^\d+(-\d+)?$/.test(text)) return text;
-  const values = text.split("-").map(Number);
+  if (!/^[1-9]\d*(-[1-9]\d*)?$/.test(text)) return text;
+  const values = text.split("-").map(Number).sort((a, b) => a - b);
   if (values.some((v) => !Number.isSafeInteger(v) || v < 1000 || v >= 1_000_000)) return text;
   const unique = values[0] === values[1] ? values.slice(0, 1) : values;
   const useK = unique.every((v) => v % 1000 === 0);

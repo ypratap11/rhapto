@@ -30,8 +30,9 @@ describe("formatSalary", () => {
   const cases: [string | null | undefined, string, string | null][] = [
     ["187835-187835", "adzuna", "$187,835"], ["150000-190000", "adzuna", "$150k–$190k"], ["187835", "adzuna", "$187,835"],
     ["150500-190000", "adzuna", "$150,500–$190,000"], ["187835", "jsearch", "187,835"], ["150000-190000", "jsearch", "150k–190k"],
-    ["$120k - $160k", "adzuna", "$120k - $160k"], ["�50,000", "adzuna", "�50,000"], ["Competitive", "jooble", "Competitive"],
+    ["$120k - $160k", "adzuna", "$120k - $160k"], ["£50,000", "adzuna", "£50,000"], ["Competitive", "jooble", "Competitive"],
     ["-", "adzuna", "-"], ["abc-def", "adzuna", "abc-def"], ["0", "adzuna", "0"], ["999-1000", "adzuna", "999-1000"],
+    ["190000-150000", "adzuna", "$150k–$190k"], ["0150000", "adzuna", "0150000"],
     ["1000000", "adzuna", "1000000"], ["", "adzuna", null], [null, "adzuna", null], [undefined, "adzuna", null], ["  ", "adzuna", null],
   ];
   it.each(cases)("formatSalary(%s,%s)", (raw, src, want) => expect(formatSalary(raw, src)).toBe(want));
