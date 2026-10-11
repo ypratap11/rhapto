@@ -8,8 +8,8 @@ vi.mock("@/components/jobs/NotInterestedButton", () => ({ NotInterestedButton: (
 // Needs a QueryClient of its own, and what it does (POST /searches/{id}/viewed) is not what any test
 // here is about. It has its own test file.
 vi.mock("@/components/jobs/MarkSearchViewed", () => ({ MarkSearchViewed: () => null }));
-// Poll now lives in the Browse jobs header (Release A). Its own test covers polling; here it only has to be present.
-vi.mock("@/components/jobs/PollNowButton", () => ({ PollNowButton: () => <button>Poll now</button> }));
+// Check for new jobs lives in the All matching jobs header (Release A). Its own test covers polling; here it only has to be present.
+vi.mock("@/components/jobs/PollNowButton", () => ({ PollNowButton: () => <button>Check for new jobs</button> }));
 vi.mock("@tanstack/react-query", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@tanstack/react-query")>()),
   useQueryClient: () => ({}),
@@ -96,6 +96,19 @@ function lastDiagnosisOptions(): { enabled: boolean; searchId?: string | null } 
 }
 
 describe("Jobs page", () => {
+  it("renders on its own, with the plain labels, with no Dashboard navigation", () => {
+    jobsQuery.mockReturnValue({ data: [job("a")], isLoading: false, error: null });
+    render(<JobsPage />);
+    expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);
+    expect(screen.getByRole("heading", { level: 1, name: "Find your next role" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 2, name: "All matching jobs" })).toBeInTheDocument();
+    expect(screen.getByLabelText("Title")).toBeInTheDocument();
+    expect(screen.getByRole("group", { name: "Fit" })).toBeInTheDocument();
+    expect(screen.getByText("Role a")).toBeInTheDocument();
+    expect(routerPush).not.toHaveBeenCalled();
+    expect(routerReplace).not.toHaveBeenCalled();
+  });
+
   it("puts the search form in a mint band and runs a live search", async () => {
     const user = userEvent.setup({ delay: null });
     render(<JobsPage />);
@@ -105,11 +118,11 @@ describe("Jobs page", () => {
     expect(run).toHaveBeenCalledWith(expect.objectContaining({ query: "pm" }));
   });
 
-  it("offers sort, Show hidden and Save this search", async () => {
+  it("offers sort, Show jobs I hid and Save this search", async () => {
     const user = userEvent.setup({ delay: null });
     render(<JobsPage />);
     expect(screen.getByLabelText("Sort")).toBeInTheDocument();
-    expect(screen.getByRole("switch", { name: /show hidden/i })).toBeInTheDocument();
+    expect(screen.getByRole("switch", { name: /show jobs i hid/i })).toBeInTheDocument();
     await user.type(screen.getByLabelText("Title"), "pm");
     await user.click(screen.getByRole("button", { name: /save this search/i }));
     expect(saveSearch).toHaveBeenCalledWith(expect.objectContaining({ query: "pm" }));
@@ -121,9 +134,9 @@ describe("Jobs page", () => {
   });
 
   describe("asking why the grid is empty", () => {
-    it("offers Poll now in the Browse jobs header", () => {
+    it("offers Check for new jobs in the All matching jobs header", () => {
       render(<JobsPage />);
-      expect(screen.getByRole("button", { name: "Poll now" })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Check for new jobs" })).toBeInTheDocument();
     });
 
     it("asks for a diagnosis when the grid really is empty", () => {
@@ -246,7 +259,7 @@ describe("Jobs page", () => {
       await user.click(screen.getByRole("button", { name: "Next" }));
       expect(screen.getByText("Page 2 of 2")).toBeInTheDocument();
 
-      await user.click(screen.getByRole("switch", { name: /show hidden/i }));
+      await user.click(screen.getByRole("switch", { name: /show jobs i hid/i }));
 
       expect(screen.getByText("Page 1 of 2")).toBeInTheDocument();
       expect(screen.getAllByRole("article")).toHaveLength(BROWSE_PAGE_SIZE);
@@ -260,10 +273,10 @@ describe("Jobs page", () => {
       expect(screen.getByText("Page 2 of 2")).toBeInTheDocument();
 
       // "Newest" is the default sort now, so picking it again would be a no-op change (and
-      // wouldn't exercise the reset-to-page-1 behaviour this test is about). "Fit" is a genuine
+      // wouldn't exercise the reset-to-page-1 behaviour this test is about). "Highest fit" is a genuine
       // change from the default.
       await user.click(screen.getByLabelText("Sort"));
-      await user.click(await screen.findByRole("option", { name: "Fit" }));
+      await user.click(await screen.findByRole("option", { name: "Highest fit" }));
 
       expect(screen.getByText("Page 1 of 2")).toBeInTheDocument();
       expect(screen.getAllByRole("article")).toHaveLength(BROWSE_PAGE_SIZE);
@@ -298,7 +311,7 @@ describe("Jobs page", () => {
       const user = userEvent.setup({ delay: null });
       render(<JobsPage />);
 
-      await user.click(screen.getByRole("switch", { name: /show hidden/i }));
+      await user.click(screen.getByRole("switch", { name: /show jobs i hid/i }));
 
       expect(routerReplace).toHaveBeenCalledWith(expect.stringContaining("hidden=true"));
       expect(routerPush).not.toHaveBeenCalled();

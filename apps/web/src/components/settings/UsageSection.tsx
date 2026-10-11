@@ -66,7 +66,10 @@ function RecentRow({ row }: { row: UsageRecentOut }) {
   );
 }
 
-/** Settings' "Usage" card: all-time and last-30-day call/token/spend totals, and the 20 most
+/** Matches RECENT_LIMIT in apps/api services/usage.py. */
+const RECENT_LIMIT = 20;
+
+/** Settings' "Your usage" card: all-time and last-30-day call/token/spend totals, and the 20 most
  * recent tailoring runs. Mounted directly below `LlmProviderSection` per the Settings layout. */
 export function UsageSection() {
   const usage = useUsageSummary();
@@ -75,7 +78,7 @@ export function UsageSection() {
     return (
       <Card>
         <CardHeader>
-          <CardTitle>Usage</CardTitle>
+          <CardTitle>Your usage</CardTitle>
         </CardHeader>
         <CardContent>
           <div data-testid="usage-section-skeleton" aria-hidden="true" className="space-y-2">
@@ -91,7 +94,7 @@ export function UsageSection() {
     return (
       <Card>
         <CardHeader>
-          <CardTitle>Usage</CardTitle>
+          <CardTitle>Your usage</CardTitle>
         </CardHeader>
         <CardContent>
           <ApiErrorBanner error={usage.error ?? new Error("Could not load usage")} />
@@ -102,40 +105,57 @@ export function UsageSection() {
 
   const { totals, last_30_days: last30, recent } = usage.data;
 
+  // The usage endpoint has no count of resumes, only of AI requests, so the headline counts the
+  // recent list it does return. That list is capped at RECENT_LIMIT on the server, hence "20+".
+  const made = recent.length >= RECENT_LIMIT ? `${RECENT_LIMIT}+` : String(recent.length);
+  const cost = totals.cost_usd != null ? `Estimated cost ${formatCostUsd(totals.cost_usd)}` : "Estimated cost not available";
+
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Usage</CardTitle>
+        <CardTitle>Your usage</CardTitle>
       </CardHeader>
-      <CardContent className="space-y-6">
-        <div className="grid gap-4 sm:grid-cols-2">
-          <SummaryGrid title="All time" summary={totals} />
-          <SummaryGrid title="Last 30 days" summary={last30} />
-        </div>
-        <div className="space-y-2">
-          <h3 className="text-sm font-medium text-foreground">Recent runs</h3>
-          {recent.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No tailoring runs yet.</p>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Job</TableHead>
-                  <TableHead>Model</TableHead>
-                  <TableHead>Calls</TableHead>
-                  <TableHead>Tokens</TableHead>
-                  <TableHead>Cost</TableHead>
-                  <TableHead>Created</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {recent.map((row) => (
-                  <RecentRow key={row.package_id} row={row} />
-                ))}
-              </TableBody>
-            </Table>
-          )}
-        </div>
+      <CardContent className="space-y-4">
+        {recent.length === 0 && totals.calls === 0 ? (
+          <p className="text-sm text-muted-foreground">No resumes made yet.</p>
+        ) : (
+          <p className="text-sm text-foreground">
+            Resumes made: {made} &middot; {cost}
+          </p>
+        )}
+        <details className="rounded-md border border-border">
+          <summary className="cursor-pointer select-none rounded-md px-3 py-2 max-md:py-3 text-sm font-medium">Details</summary>
+          <div className="space-y-6 border-t border-border p-3">
+            <div className="grid gap-4 sm:grid-cols-2">
+              <SummaryGrid title="All time" summary={totals} />
+              <SummaryGrid title="Last 30 days" summary={last30} />
+            </div>
+            <div className="space-y-2">
+              <h3 className="text-sm font-medium text-foreground">Recent resumes</h3>
+              {recent.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No recent resumes.</p>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Job</TableHead>
+                      <TableHead>Model</TableHead>
+                      <TableHead>Calls</TableHead>
+                      <TableHead>Tokens</TableHead>
+                      <TableHead>Cost</TableHead>
+                      <TableHead>Created</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {recent.map((row) => (
+                      <RecentRow key={row.package_id} row={row} />
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
+            </div>
+          </div>
+        </details>
       </CardContent>
     </Card>
   );

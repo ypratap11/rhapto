@@ -22,20 +22,22 @@ described next.
 
 ## Connect the browser
 
-On first visit, or any time you change the token, open **Settings → API connection**, paste the
-API URL (`http://localhost:8000`) and the bearer token from your `.env`, then **Test connection**
+On first visit, or any time you change the token, open **Settings → Connection**, paste the
+API URL (`http://localhost:8000`) and the access key (bearer token) from your `.env`, then **Test connection**
 and **Save**. The token is stored only in this browser.
 
 ## Upload your resume
 
-Open **Profile → Resume template → Edit** and upload a `.docx`. Uploading a resume document
-switches Rhapto to tune mode by default: instead of composing a new resume from a block library,
-tailoring edits your own document's wording in place.
+Open **Profile → Your resume file → Edit** and upload a `.docx`. With a resume file on record,
+Rhapto defaults to **Light touch**: it rewords a few lines of your own document and checks every
+number against that file. **Full rewrite** instead rebuilds the resume from the items in Your
+experience, with each line citing where it came from and only numbers you confirmed. You choose
+per job under **Options** next to Tailor.
 
-## Pick a track
+## Pick the roles you want
 
-Open **Profile → Tracks → Pick a field and role**. Choose one of the twelve fields, then a role
-within it — that creates a track with the role's curated keywords and a fit threshold of 60. If
+Open **Profile → Roles you want → Pick a field and role**. Choose one of the twelve fields, then a role
+within it — that creates a role with the role's curated keywords and a fit threshold of 60. If
 you've already uploaded a resume, its parsed section titles are matched against role names and
 offered as one-tap suggestion chips above the field/role grid.
 
@@ -48,12 +50,12 @@ immediately; jobs that haven't been scored yet show a dashed fit ring while the 
 ## Tailor and review
 
 From a job card, press **Tailor**. Once tailoring finishes, the job page's primary button becomes
-**Review** — open it to see the generated resume, then go back to the **Resumes** page and press
-**Mark ready** on that row once you're happy with it.
+**Review resume** - open it to see the generated resume, and press **Mark ready to send** on that
+page once you are happy with it. (My resumes, the third tab in the header, lists every resume.)
 
 ## Apply
 
-Once a package is ready, the job page's primary button becomes **Apply**. Pressing it opens the
+Once a package is ready, the job page's primary button becomes **Download and open the posting**. Pressing it opens the
 employer's own posting in a new tab and downloads the resume — Rhapto never fills out or submits
 the employer's form. When you come back to the tab, a "Did you apply?" prompt asks you to confirm.
 

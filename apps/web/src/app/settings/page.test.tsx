@@ -26,11 +26,11 @@ vi.mock("@/lib/api/client", async (importOriginal) => {
   };
 });
 
-// The AI provider, Job sources and Saved searches sections each have their own Save/Test/Edit
+// The AI key, job sources and Saved searches sections each have their own Save/Test/Edit
 // buttons. Holding every one of their queries in the loading state keeps those button names
 // unambiguous for most tests here (and keeps this suite off the network); each section has its own
 // test file. `llmState` is mutable (reset in beforeEach) rather than a fixed loading shape, because
-// LlmProviderSection renders nothing but a bare Skeleton while loading — no "AI provider" title —
+// LlmProviderSection renders nothing but a bare Skeleton while loading — no "AI key" title —
 // so the section-order test below needs it resolved to see that title at all.
 let llmState: { data: unknown; isLoading: boolean; error: unknown } = { data: undefined, isLoading: true, error: null };
 vi.mock("@/lib/api/queries", async (importOriginal) => ({
@@ -80,7 +80,7 @@ describe("SettingsPage", () => {
     // `usePathname` is mocked to "/jobs" here (a route with no PUBLIC_ROUTES bypass), so this is
     // what "the gate is back" looks like: the short Connect card, not the landing pitch.
     expect(screen.getByText("Connect to your Rhapto API")).toBeInTheDocument();
-    expect(screen.getByLabelText(/bearer token/i)).toHaveValue("");
+    expect(screen.getByLabelText(/access key/i)).toHaveValue("");
     expect(toast.success).toHaveBeenCalledWith("Disconnected");
   });
 
@@ -109,34 +109,30 @@ describe("SettingsPage", () => {
     setItemSpy.mockRestore();
   });
 
-  it("shows every section, in order, with the Help section addressable as #help", () => {
-    // Resolved (not loading), so LlmProviderSection renders its Card and "AI provider" title
+  it("shows every section in order, with Connection last", () => {
+    // Resolved (not loading), so LlmProviderSection renders its Card and "AI key" title
     // instead of the bare loading Skeleton the other tests above rely on for button-name safety.
     llmState = { data: { kind: "ok", settings: { provider: null, model: null, key_set: false, key_hint: null, source: "none", providers: [] } }, isLoading: false, error: null };
     // A token, so TokenGate's own "Connect to your Rhapto API" card isn't in the tree competing
     // with the sections' card titles.
     setSettings({ token: "tok", apiUrl: "http://localhost:8000" });
     const { container } = renderPage();
-    // Card titles only — the Help section's doc list legitimately repeats names like "Job sources"
-    // and "Saved searches" in its body text, so a plain getByText(title) would be ambiguous.
     const cardTitles = Array.from(container.querySelectorAll('[data-slot="card-title"]')).map((el) => el.textContent);
-    expect(cardTitles).toEqual(["AI provider", "Usage", "Job sources", "Saved searches", "Import and export", "API connection", "Help"]);
-
-    const help = container.querySelector("#help");
-    expect(help).not.toBeNull();
-    expect(help).toHaveTextContent("Help");
+    expect(cardTitles).toEqual(["AI key", "Where Rhapto looks for jobs", "Saved searches", "Your usage", "Your data", "Connection"]);
+    // Help moved to the public /help page; Settings no longer carries its own copy.
+    expect(container.querySelector("#help")).toBeNull();
   });
 
   // Fix-round finding N1: in access mode there is no bearer token to enter, and saving that card
   // there would point this browser at another origin and silently disable the same-origin proxy.
-  it("shows the API-connection card in token mode and hides it in access mode", () => {
+  it("shows the Connection card in token mode and hides it in access mode", () => {
     setSettings({ token: "tok", apiUrl: "http://localhost:8000" });
     const { unmount } = renderPage();
-    expect(screen.getByText("API connection")).toBeInTheDocument();
+    expect(screen.getByText("Connection")).toBeInTheDocument();
     unmount();
 
     sameOriginFlag.value = true;
     renderPage();
-    expect(screen.queryByText("API connection")).not.toBeInTheDocument();
+    expect(screen.queryByText("Connection")).not.toBeInTheDocument();
   });
 });

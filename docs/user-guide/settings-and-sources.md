@@ -33,12 +33,12 @@ confirmation).
 ## Import and export
 
 Your profile lives in the database, not in files on disk, once Rhapto is running — but you can
-still work with it as YAML. **Import** uploads one or more of the five profile files (`blocks.yaml`,
+still work with it as YAML. **Replace from a file** (under **Your data**) uploads one or more of the five profile files (`blocks.yaml`,
 `tracks.yaml`, `guardrails.yaml`, `answers.yaml`, `watchlist.yaml`) and replaces the matching part
-of your stored profile. **Export YAML** downloads the same files as a zip, matching what
+of your stored profile. **Download my data** downloads the same files as a zip, matching what
 `rhapto profile export` writes from the command line.
 
-## API connection
+## Connection
 
 The API URL and bearer token the browser uses to talk to Rhapto's API — stored only in this
 browser, nowhere else. **Test connection** confirms the token works; **Disconnect** clears it and
@@ -46,5 +46,7 @@ the local cache.
 
 ## Help
 
-The Help section at the bottom of Settings links every page of this user guide and the product
-docs by name, so you can always find your way back here from inside the app.
+Help is its own page, `/help`, reached from the account menu (the round button at the top right)
+and open to anyone, signed in or not. It answers the common questions in plain words: how
+tailoring works, how numbers are checked, what is stored, and how to send feedback. It is no
+longer a section of Settings.

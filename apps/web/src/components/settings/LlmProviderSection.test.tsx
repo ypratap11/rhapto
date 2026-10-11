@@ -44,17 +44,17 @@ describe("LlmProviderSection", () => {
   it("renders the status line for a stored provider, the environment, and nothing configured", () => {
     state = ok({ provider: "openai", model: "gpt-5", key_set: true, key_hint: "…1234", source: "settings" });
     const stored = render(<LlmProviderSection />);
-    expect(screen.getByText("Using OpenAI · gpt-5 · key set")).toBeInTheDocument();
+    expect(screen.getByText("Using your own OpenAI key")).toBeInTheDocument();
     stored.unmount();
 
     state = ok({ provider: "anthropic", model: "claude-sonnet-5", key_set: true, key_hint: "…1234", source: "env" });
     const fromEnv = render(<LlmProviderSection />);
-    expect(screen.getByText("Using Anthropic from .env")).toBeInTheDocument();
+    expect(screen.getByText("Using the server's AI key")).toBeInTheDocument();
     fromEnv.unmount();
 
     state = { kind: "ok", settings: none };
     render(<LlmProviderSection />);
-    expect(screen.getByText("No AI provider configured")).toBeInTheDocument();
+    expect(screen.getByText("No AI key set yet")).toBeInTheDocument();
   });
 
   it("offers the three providers as radios and only expands the selected one", async () => {
@@ -175,14 +175,14 @@ describe("LlmProviderSection", () => {
     render(<LlmProviderSection />);
     const user = userEvent.setup({ delay: null });
 
-    await user.click(screen.getByRole("button", { name: "Remove the stored AI provider" }));
-    expect(await screen.findByText("Remove the stored AI provider?")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Remove your AI key" }));
+    expect(await screen.findByText("Remove your AI key?")).toBeInTheDocument();
     // Opening the dialog must not be the destructive act.
     expect(remove).not.toHaveBeenCalled();
 
     await user.click(screen.getByRole("button", { name: "Remove" }));
     expect(remove).toHaveBeenCalled();
-    await waitFor(() => expect(screen.queryByText("Remove the stored AI provider?")).not.toBeInTheDocument());
+    await waitFor(() => expect(screen.queryByText("Remove your AI key?")).not.toBeInTheDocument());
   });
 
   it("leaves the stored provider alone when the remove dialog is cancelled", async () => {
@@ -190,10 +190,10 @@ describe("LlmProviderSection", () => {
     render(<LlmProviderSection />);
     const user = userEvent.setup({ delay: null });
 
-    await user.click(screen.getByRole("button", { name: "Remove the stored AI provider" }));
+    await user.click(screen.getByRole("button", { name: "Remove your AI key" }));
     await user.click(await screen.findByRole("button", { name: "Cancel" }));
 
-    await waitFor(() => expect(screen.queryByText("Remove the stored AI provider?")).not.toBeInTheDocument());
+    await waitFor(() => expect(screen.queryByText("Remove your AI key?")).not.toBeInTheDocument());
     expect(remove).not.toHaveBeenCalled();
   });
 
@@ -209,7 +209,7 @@ describe("LlmProviderSection", () => {
     render(<LlmProviderSection />);
     const user = userEvent.setup({ delay: null });
 
-    await user.click(screen.getByRole("button", { name: "Remove the stored AI provider" }));
+    await user.click(screen.getByRole("button", { name: "Remove your AI key" }));
     await user.click(await screen.findByRole("button", { name: "Remove" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent("could not reach the API");

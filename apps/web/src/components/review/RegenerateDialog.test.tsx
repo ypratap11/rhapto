@@ -47,7 +47,7 @@ describe("RegenerateDialog", () => {
     mutateAsync.mockResolvedValueOnce({ id: "t2", status: "running" });
     render(<RegenerateDialog job={job} pkg={pkg} open onOpenChange={() => undefined} />);
     const user = userEvent.setup({ delay: null });
-    expect(screen.getByRole("combobox", { name: "Mode" })).toHaveTextContent("Tune my resume");
+    expect(screen.getByRole("combobox", { name: "Mode" })).toHaveTextContent("Light touch");
     await user.type(screen.getByLabelText(/feedback/i), "Lean harder on the migration work.");
     await user.click(screen.getByRole("button", { name: /regenerate/i }));
     expect(mutateAsync).toHaveBeenCalledWith({ jobId: "j1", body: { feedback: "Lean harder on the migration work.", parent_package_id: "p1", track_id: "data-pm", mode: "tune" } });
@@ -62,7 +62,7 @@ describe("RegenerateDialog", () => {
     tracksData = [];
     mutateAsync.mockResolvedValueOnce({ id: "t3", status: "running" });
     const first = render(<RegenerateDialog job={job} pkg={emptyTrackPkg} open onOpenChange={() => undefined} />);
-    expect(screen.queryByLabelText("Track")).toBeNull();
+    expect(screen.queryByLabelText("Role")).toBeNull();
     await user.type(screen.getByLabelText(/feedback/i), "Lean harder on the migration work.");
     await user.click(screen.getByRole("button", { name: /regenerate/i }));
     expect(mutateAsync).toHaveBeenLastCalledWith({
@@ -75,7 +75,9 @@ describe("RegenerateDialog", () => {
     tracksData = [{ id: "data-pm", name: "Data PM", resume_base: "data-pm", keywords: [], min_fit: 60, description: null }];
     mutateAsync.mockResolvedValueOnce({ id: "t4", status: "running" });
     render(<RegenerateDialog job={job} pkg={emptyTrackPkg} open onOpenChange={() => undefined} />);
-    expect(screen.getByLabelText("Track")).toBeInTheDocument();
+    expect(screen.getByLabelText("Role")).toBeInTheDocument();
+    expect(screen.getByRole("dialog")).toHaveTextContent("Make a new version");
+    expect(screen.getByLabelText("Role")).not.toHaveTextContent("data-pm");
     await user.type(screen.getByLabelText(/feedback/i), "Lean harder on the migration work.");
     await user.click(screen.getByRole("button", { name: /regenerate/i }));
     expect(mutateAsync).toHaveBeenLastCalledWith({

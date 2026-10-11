@@ -26,7 +26,7 @@ function Chip({ pressed, onClick, children }: { pressed: boolean; onClick: () =>
       aria-pressed={pressed}
       onClick={onClick}
       className={cn(
-        "rounded-chip border px-2.5 py-1 text-sm font-medium transition-colors",
+        "rounded-chip border px-2.5 py-1 max-md:min-h-11 text-sm font-medium transition-colors",
         pressed ? "border-primary bg-primary text-primary-foreground" : "border-border bg-surface text-foreground hover:bg-surface-muted",
       )}
     >

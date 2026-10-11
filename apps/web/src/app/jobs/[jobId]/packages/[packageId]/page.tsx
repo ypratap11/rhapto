@@ -18,10 +18,9 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { ApiError } from "@/lib/api/client";
 import { useApplications, useBlocks, useJob, usePackage, usePackageList, usePackages, usePatchPackage, usePatchPackageEdits, type Block, type EditPatch, type ResumeDocument } from "@/lib/api/queries";
-import { formatCostUsd, formatDate, formatTokens } from "@/lib/format";
-import { nextReviewPackage } from "@/lib/flow";
+import { APPLIED_STATUSES, nextReviewPackage } from "@/lib/flow";
 import { parsePath } from "@/lib/resume-paths";
-import { PACKAGE_STATUS_TONE } from "@/lib/status";
+import { PACKAGE_STATUS_LABEL, PACKAGE_STATUS_TONE } from "@/lib/status";
 
 const TUNE_VIOLATION_PATH = /^edits\[(\d+)\]$/;
 
@@ -93,38 +92,40 @@ function PackageReviewPageInner() {
   const guardrailPanel = (
     <GuardrailPanel
       report={pkg.data.guardrail_report}
+      checks={pkg.data.guardrail_checks}
       remedies={pkg.data.guardrail_remedies}
       onSelect={tune ? scrollToChange : setSelectedPath}
     />
   );
 
   function saveNewVersion(created: { id: string; status: string; version: number }): void {
-    toast.success(created.status === "blocked" ? "Saved as v" + created.version + ", but guardrails blocked it" : "Saved as v" + created.version);
+    toast.success(created.status === "blocked" ? "Saved as version " + created.version + ", but it did not pass the truth check" : "Saved as version " + created.version);
     router.push(`/jobs/${jobId}/packages/${created.id}`);
   }
 
-  const crumbLabel = `${job.data.company ?? "Unknown company"} · ${job.data.title ?? "Untitled role"}`;
+  // The footer's closing line: in light-touch mode the number of rewrites the reader just went
+  // through (the same count the Changes pane shows); a full rewrite has no such list.
+  const changeCount = pkg.data.edits.length;
+  const doneLine = tune && changeCount === 0 ? "No lines were changed for this job." : tune ? `You have reviewed all ${changeCount} ${changeCount === 1 ? "change" : "changes"}.` : "You're all caught up.";
+  const crumbLabel = `${job.data.company ?? "Unknown company"} – ${job.data.title ?? "Untitled role"}`;
+  const applied = application !== null && (APPLIED_STATUSES as readonly string[]).includes(application.status);
+  const statusKey = pkg.data.status === "blocked" ? "blocked" : applied ? "applied" : pkg.data.status;
+  const statusLabel = (PACKAGE_STATUS_LABEL as Record<string, string>)[statusKey] ?? statusKey;
 
   return (
     <div className="space-y-6">
-      <Breadcrumbs items={[{ label: "Resumes", href: "/resumes" }, { label: crumbLabel, href: `/jobs/${jobId}` }, { label: `v${pkg.data.version}` }]} />
-      <div className="sticky top-0 z-10 -mx-6 border-b border-border bg-background/95 px-6 py-3 backdrop-blur">
+      <Breadcrumbs items={[{ label: "My resumes", href: "/resumes" }, { label: crumbLabel, href: `/jobs/${jobId}` }]} />
+      <div data-testid="resume-header" className="sticky top-0 z-10 -mx-6 border-b border-border bg-background/95 px-6 py-3 backdrop-blur">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <p className="text-sm text-muted-foreground">{job.data.company}</p>
-            <h1 className="text-2xl">{job.data.title ?? "Package review"}</h1>
-            <p className="mt-1 flex items-center gap-2 text-sm text-muted-foreground">
-              <StatusBadge tone={PACKAGE_STATUS_TONE[pkg.data.status] ?? "neutral"}>{`v${pkg.data.version} · ${pkg.data.status}`}</StatusBadge>
-              created {formatDate(pkg.data.created_at)} · {pkg.data.llm_calls} LLM calls{pkg.data.track_id ? ` · track ${pkg.data.track_id}` : ""}
-            </p>
-            <p className="mt-0.5 text-xs text-muted-foreground">
-              {pkg.data.llm_calls} call{pkg.data.llm_calls === 1 ? "" : "s"} · {formatTokens(pkg.data.input_tokens ?? 0)} in /{" "}
-              {formatTokens(pkg.data.output_tokens ?? 0)} out
-              {pkg.data.cost_usd != null ? ` · ~${formatCostUsd(pkg.data.cost_usd)}` : ""}
+            <h1 className="text-2xl">{job.data.title ?? "Tailored resume"}</h1>
+            <p className="mt-1">
+              <StatusBadge tone={PACKAGE_STATUS_TONE[statusKey] ?? "neutral"}>{statusLabel}</StatusBadge>
             </p>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
-            {packages.data ? <VersionSwitcher jobId={jobId} packages={packages.data} currentId={packageId} /> : null}
+          <div className="flex flex-wrap items-center gap-2 max-sm:w-full">
+            {packages.data && packages.data.length > 1 ? <VersionSwitcher jobId={jobId} packages={packages.data} currentId={packageId} /> : null}
             <PackageActions job={job.data} pkg={pkg.data} application={application} onRegenerate={() => setRegenOpen(true)} />
           </div>
         </div>
@@ -177,18 +178,16 @@ function PackageReviewPageInner() {
               Cover note
             </h3>
             <p className="whitespace-pre-wrap">{pkg.data.cover_note}</p>
-            <h3 className="mb-1 mt-4 font-sans text-xs font-semibold uppercase tracking-wide text-muted-foreground">Change log</h3>
-            <p className="whitespace-pre-wrap text-muted-foreground">{pkg.data.change_log}</p>
           </section>
         </div>
       </div>
       <div className="flex justify-end border-t border-border pt-4">
         {nextPackage ? (
-          <Link href={`/jobs/${nextPackage.job_id}/packages/${nextPackage.id}`} className="text-sm font-medium text-primary underline-offset-4 hover:underline">
-            Next tailored job →
+          <Link href={`/jobs/${nextPackage.job_id}/packages/${nextPackage.id}`} className="inline-flex min-h-11 items-center text-sm font-medium text-primary underline-offset-4 hover:underline">
+            Next resume to review {"→"}
           </Link>
         ) : (
-          <p className="text-sm text-muted-foreground">All reviewed</p>
+          <p className="text-sm text-muted-foreground">{doneLine}</p>
         )}
       </div>
     </div>

@@ -9,12 +9,11 @@ there to everyone, including you when you are signed in. Bookmark `/dashboard`.)
 ## A resume waiting for you
 
 When Rhapto has tailored a resume that you have not reviewed yet, a line appears at the top: "1
-resume is waiting for your review", or "3 resumes are waiting for your review", with a link to the
-review tab on Resumes. When nothing is waiting, the line is not shown.
+resume is waiting for your review", or "3 resumes are waiting for your review", with a **Review it** (or **Review them**) link to the **To review** tab on My resumes. When nothing is waiting, the line is not shown.
 
 ## Finishing setup
 
-If your resume template or your career track is still missing, one line says "N things to finish in
+If your resume file or the roles you want are still missing, one line says "N things to finish in
 your profile" and links to Profile. You can dismiss it with the X, and it stays dismissed on that
 browser.
 
@@ -37,7 +36,7 @@ The five best-fitting jobs that have no resume and no application yet and are no
 the role, the company, the location and pay when known, and a plain "Strong match" or "Good match".
 **Tailor** starts a tailored resume for that job and takes you to the guided flow to follow it;
 **Not interested** hides the job, with an Undo for a few seconds. **See all matching jobs** opens
-the full list on Jobs, where Poll now also lives.
+the full list on Jobs, where **Check for new jobs** also lives.
 
 If there is nothing to recommend yet, the section says Rhapto is finding jobs and offers **Paste a
 job instead**.

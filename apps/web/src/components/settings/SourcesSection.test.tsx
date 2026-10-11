@@ -73,19 +73,19 @@ describe("SourcesSection", () => {
 
     const adzuna = screen.getByRole("group", { name: "Adzuna" });
     expect(within(adzuna).getByText(/needs a key/i)).toBeInTheDocument();
-    expect(within(adzuna).getByLabelText("app_id")).toHaveAttribute("type", "password");
-    expect(within(adzuna).getByLabelText("app_key")).toHaveAttribute("type", "password");
+    expect(within(adzuna).getByLabelText("Adzuna app ID")).toHaveAttribute("type", "password");
+    expect(within(adzuna).getByLabelText("Adzuna app key")).toHaveAttribute("type", "password");
 
     const jsearch = screen.getByRole("group", { name: "JSearch" });
     expect(within(jsearch).getByText(/key saved/i)).toBeInTheDocument();
 
     const themuse = screen.getByRole("group", { name: "The Muse" });
-    expect(within(themuse).getByText(/zero setup/i)).toBeInTheDocument();
+    expect(within(themuse).getByText(/no setup needed/i)).toBeInTheDocument();
   });
 
   it("never echoes a stored key back into the form", () => {
     render(<SourcesSection />);
-    expect(within(screen.getByRole("group", { name: "JSearch" })).getByLabelText("api_key")).toHaveValue("");
+    expect(within(screen.getByRole("group", { name: "JSearch" })).getByLabelText("API key")).toHaveValue("");
   });
 
   it("saves an enable toggle without sending any credentials", async () => {
@@ -99,7 +99,7 @@ describe("SourcesSection", () => {
     const user = userEvent.setup({ delay: null });
     render(<SourcesSection />);
     const adzuna = screen.getByRole("group", { name: "Adzuna" });
-    const appId = within(adzuna).getByLabelText("app_id");
+    const appId = within(adzuna).getByLabelText("Adzuna app ID");
     await user.type(appId, "my-app-id");
     await user.click(within(adzuna).getByRole("button", { name: /^save$/i }));
 
@@ -129,7 +129,7 @@ describe("SourcesSection", () => {
   it("shows a real empty state, distinct from a failure, when the source registry is genuinely empty", () => {
     data = [];
     render(<SourcesSection />);
-    expect(screen.getByText(/no job sources configured/i)).toBeInTheDocument();
+    expect(screen.getByText(/no job sources set up/i)).toBeInTheDocument();
     expect(screen.queryByRole("group")).not.toBeInTheDocument();
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
@@ -178,13 +178,13 @@ describe("SourcesSection, what a source last did and whether it can run", () => 
     render(<SourcesSection />);
     const muse = screen.getByRole("group", { name: "The Muse" });
     expect(within(muse).getByRole("switch", { name: "The Muse" })).toBeChecked();
-    expect(within(muse).getByText(/not saved for this account yet, so polls skip it/i)).toBeInTheDocument();
+    expect(within(muse).getByText(/not saved yet, so rhapto skips it/i)).toBeInTheDocument();
   });
 
   it("tells a keyed source with no key what is missing", () => {
     render(<SourcesSection />);
     const adzuna = screen.getByRole("group", { name: "Adzuna" });
-    expect(within(adzuna).getByText(/add a key and this source will run/i)).toBeInTheDocument();
+    expect(within(adzuna).getByText(/add a key and rhapto will check this source next time/i)).toBeInTheDocument();
   });
 
   it("says a configured but paused source is paused, not running and not unset", () => {
@@ -193,8 +193,8 @@ describe("SourcesSection, what a source last did and whether it can run", () => 
     const jsearch = screen.getByRole("group", { name: "JSearch" });
     // Configured but paused: it must say paused, not "will run" and not "not set up".
     expect(within(jsearch).getByText(/paused after repeated failures/i)).toBeInTheDocument();
-    expect(within(jsearch).queryByText(/will run on the next poll/i)).not.toBeInTheDocument();
-    expect(within(jsearch).queryByText(/not saved for this account/i)).not.toBeInTheDocument();
+    expect(within(jsearch).queryByText(/will check next time/i)).not.toBeInTheDocument();
+    expect(within(jsearch).queryByText(/not saved yet/i)).not.toBeInTheDocument();
   });
 
   it("shows a Paused badge and a Resume button only for the paused source", async () => {
@@ -236,7 +236,7 @@ describe("SourcesSection, what a source last did and whether it can run", () => 
       },
     ];
     render(<SourcesSection />);
-    expect(screen.getByText(/last run returned 0 for San Francisco Bay Area \(Bay Area PM\)/i)).toBeInTheDocument();
+    expect(screen.getByText(/last checked .*: found 0 for San Francisco Bay Area \(Bay Area PM\), 0 new/i)).toBeInTheDocument();
     // C7: the fact, and no suggested alternative. There is no gazetteer to produce one from.
     expect(screen.queryByText(/try ['"]/i)).not.toBeInTheDocument();
   });
@@ -260,13 +260,13 @@ describe("SourcesSection, what a source last did and whether it can run", () => 
       },
     ];
     render(<SourcesSection />);
-    expect(screen.getByText(/last run found 12 postings, 3 new/i)).toBeInTheDocument();
+    expect(screen.getByText(/last checked .*: found 12, 3 new/i)).toBeInTheDocument();
   });
 
   it("says nothing about a last run for a source that has never run", () => {
     data = [{ ...rows[0]!, last_run: null }];
     render(<SourcesSection />);
-    expect(screen.queryByText(/last run/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/last checked/i)).not.toBeInTheDocument();
   });
 });
 
@@ -285,14 +285,14 @@ describe("SourcesSection, reading runnable rather than re-deriving it", () => {
     // would call this source running, which is exactly the drift the field was added to prevent.
     data = [{ ...rows[0]!, configured: true, paused: false, runnable: false }];
     render(<SourcesSection />);
-    expect(screen.getByText(/the next poll will skip it/i)).toBeInTheDocument();
-    expect(screen.queryByText(/will run on the next poll/i)).not.toBeInTheDocument();
+    expect(screen.getByText(/rhapto will skip it/i)).toBeInTheDocument();
+    expect(screen.queryByText(/will check next time/i)).not.toBeInTheDocument();
   });
 
   it("says a configured, unpaused, runnable source will run", () => {
     // The contrasting fixture, differing only in `runnable`.
     data = [{ ...rows[0]!, configured: true, paused: false, runnable: true }];
     render(<SourcesSection />);
-    expect(screen.getByText(/will run on the next poll/i)).toBeInTheDocument();
+    expect(screen.getByText(/will check next time/i)).toBeInTheDocument();
   });
 });

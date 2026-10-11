@@ -84,7 +84,7 @@ export function ConfirmMetrics({
         </Button>
       </div>
       <p className="text-xs text-muted-foreground">
-        Unconfirmed numbers are removed from generated resumes — the claim stays, the figure goes.
+        A number you do not confirm is left out when Rhapto builds a resume from Your experience. The sentence stays, the number goes.
       </p>
     </div>
   );

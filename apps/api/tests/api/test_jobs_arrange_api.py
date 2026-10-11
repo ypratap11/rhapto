@@ -63,13 +63,27 @@ async def test_ids_request_is_never_arranged(
     assert all(r["also_ids"] == [] for r in rows)
 
 
-async def test_other_sorts_are_untouched(
+async def test_every_sort_collapses_duplicates_but_only_relevance_spreads(
     client: httpx.AsyncClient, session_factory: async_sessionmaker[AsyncSession], user_id: uuid.UUID
 ) -> None:
     await _seed_six_copies(session_factory, user_id)
     for sort in ("newest", "fit"):
         rows = (await client.get("/api/v1/jobs", params={"sort": sort})).json()
-        assert len(rows) == 7 and all(r["also_ids"] == [] for r in rows), sort
+        assert len(rows) == 2, sort
+        acme = next(r for r in rows if r["company"] == "Acme")
+        assert len(acme["also_ids"]) == 5, sort
+
+
+async def test_newest_collapses_same_company_and_title_in_newest_order(
+    client: httpx.AsyncClient, session_factory: async_sessionmaker[AsyncSession], user_id: uuid.UUID
+) -> None:
+    a = await _add(session_factory, user_id, company="Acme", title="Engineer", fit=70)
+    b = await _add(session_factory, user_id, company="Acme", title="Engineer", fit=70)
+    rows = (await client.get("/api/v1/jobs", params={"sort": "newest"})).json()
+    assert len(rows) == 1 and len(rows[0]["also_ids"]) == 1
+    assert rows[0]["id"] == b and rows[0]["also_ids"] == [a]  # b was created last: newest first
+    both = (await client.get("/api/v1/jobs", params={"ids": f"{a},{b}"})).json()
+    assert sorted(r["id"] for r in both) == sorted([a, b])
 
 
 async def test_a_third_row_of_a_company_sorts_after_the_others_first_two(

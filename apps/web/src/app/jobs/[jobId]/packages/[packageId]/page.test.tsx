@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import type { PackageOut } from "@/lib/api/queries";
@@ -46,14 +46,19 @@ const tunePackage = {
 } as unknown as PackageOut;
 
 const pkg = { current: tunePackage };
+const one = [{ id: "pkg-1", version: 1, status: "blocked", created_at: "2026-09-11T00:00:00Z" }];
+const blockList: unknown[] = [];
+const state = { versions: one as unknown[], queue: [] as unknown[], jobTitle: "Staff Engineer" as string | null };
+vi.mock("@/components/review/useArchiveAndHide", () => ({ useArchiveAndHide: () => ({ archiveAndHide: vi.fn(), isPending: false }) }));
 
 vi.mock("@/lib/api/queries", () => ({
-  useJob: () => ({ data: { id: "j1", company: "Northwind", title: "Staff Engineer", jd_text: "jd", url: null }, error: null }),
+  useJob: () => ({ data: { id: "j1", company: "Northwind", title: state.jobTitle, jd_text: "jd", url: null }, error: null }),
   usePackage: () => ({ data: pkg.current, error: null }),
-  usePackages: () => ({ data: [{ id: "pkg-1", version: 1, status: "blocked", created_at: "2026-09-11T00:00:00Z" }], error: null }),
-  useBlocks: () => ({ data: [], error: null }),
+  usePackages: () => ({ data: state.versions, error: null }),
+  useBlocks: () => ({ data: blockList, error: null }),
   useApplications: () => ({ data: { columns: {} }, error: null }),
-  usePackageList: () => ({ data: [], error: null }),
+  usePackageList: () => ({ data: state.queue, error: null }),
+  useMarkPackageReady: () => ({ mutateAsync: vi.fn(), isPending: false }),
   usePatchPackage: () => ({ mutateAsync: vi.fn() }),
   usePatchPackageEdits: () => ({ mutateAsync: vi.fn() }),
   useAnswers: () => ({ data: { name: "Maya Chen" } }),
@@ -72,34 +77,83 @@ describe("PackageReviewPage", () => {
 
     expect(screen.getByRole("heading", { name: "Changes" })).toBeInTheDocument();
     expect(screen.getByLabelText("After")).toHaveValue("Led the payments rewrite across four services.");
-    expect(screen.queryByText(/select a bullet to see the block/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/select a line to see which part of your resume it came from/i)).not.toBeInTheDocument();
   });
 
-  it("prints the track only when the package has one", () => {
-    const usageLine = (container: HTMLElement) => Array.from(container.querySelectorAll("p")).find((p) => p.textContent?.includes("LLM calls"))?.textContent ?? "";
+  it("shows nothing about calls, tokens, cost, the track or the version, in the header, actions or Truth check", () => {
+    const usage = { ...tunePackage, status: "draft", llm_calls: 3, input_tokens: 1200, output_tokens: 340, cost_usd: 0.58, track_id: "3f2b8c1e-9a4d-4e6f-8b7a-1c2d3e4f5a6b" } as unknown as PackageOut;
+    pkg.current = usage;
+    const { container } = render(<PackageReviewPage />);
+    const header = container.querySelector("[data-testid=resume-header]")!.cloneNode(true) as HTMLElement;
+    const truth = document.getElementById("guardrails-heading")!.closest("section")!.cloneNode(true) as HTMLElement;
+    truth.querySelectorAll("details").forEach((d) => d.remove());
+    for (const region of [header, truth]) {
+      const text = region.textContent ?? "";
+      expect(text).not.toMatch(/LLM|tokens|track |\$|[0-9a-f]{8}-[0-9a-f]{4}/i);
+      expect(text).not.toMatch(/package/i);
+    }
+    expect(document.body.textContent).not.toContain("Change log");
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("Staff Engineer");
+  });
+
+  it("reads My resumes then Company - Role in the breadcrumb, with no version crumb", () => {
+    pkg.current = tunePackage;
+    render(<PackageReviewPage />);
+    const crumbs = within(screen.getByRole("navigation", { name: "Breadcrumb" })).getAllByRole("listitem");
+    expect(crumbs.map((c) => c.textContent?.replace("›", "").trim())).toEqual(["My resumes", "Northwind – Staff Engineer"]);
+  });
+
+  it("falls back to 'Tailored resume' when the job has no title", () => {
+    pkg.current = tunePackage;
+    state.jobTitle = null;
+    render(<PackageReviewPage />);
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("Tailored resume");
+    state.jobTitle = "Staff Engineer";
+  });
+
+  it("shows the version switcher only when there is more than one version", () => {
     pkg.current = tunePackage;
     const first = render(<PackageReviewPage />);
-    expect(usageLine(first.container)).toContain("track platform");
+    expect(screen.queryByRole("combobox", { name: "Resume version" })).not.toBeInTheDocument();
     first.unmount();
-    pkg.current = { ...tunePackage, track_id: "" } as unknown as PackageOut;
-    const second = render(<PackageReviewPage />);
-    expect(usageLine(second.container)).toContain("1 LLM calls");
-    expect(usageLine(second.container)).not.toMatch(/\btrack\b/i);
+    state.versions = [...one, { id: "pkg-2", version: 2, status: "draft", created_at: "2026-09-12T00:00:00Z" }];
+    render(<PackageReviewPage />);
+    expect(screen.getByRole("combobox", { name: "Resume version" })).toBeInTheDocument();
+    state.versions = one;
   });
 
-  it("shows a muted usage line with calls, tokens and estimated cost", () => {
+  it("puts a plain status in the header", () => {
+    pkg.current = { ...tunePackage, status: "draft" } as unknown as PackageOut;
+    render(<PackageReviewPage />);
+    expect(screen.getByTestId("resume-header")).toHaveTextContent("Draft");
+    expect(screen.getByRole("button", { name: "Mark ready to send" })).toBeInTheDocument();
+  });
+
+  it("ends with the next resume to review when there is one", () => {
     pkg.current = tunePackage;
+    state.queue = [{ id: "pkg-1", job_id: "j1" }, { id: "pkg-9", job_id: "j9" }];
     render(<PackageReviewPage />);
-
-    expect(screen.getByText(/1 call · 1,200 in \/ 340 out · ~\$0\.58/)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Next resume to review →" })).toHaveAttribute("href", "/jobs/j9/packages/pkg-9");
+    state.queue = [];
   });
 
-  it("omits the cost segment of the usage line when cost_usd is null", () => {
-    pkg.current = { ...tunePackage, cost_usd: null };
+  it("ends by counting the changes reviewed in light-touch mode, and says all caught up otherwise", () => {
+    pkg.current = tunePackage;
+    const first = render(<PackageReviewPage />);
+    expect(screen.getByText("You have reviewed all 1 change.")).toBeInTheDocument();
+    first.unmount();
+    pkg.current = { ...tunePackage, edits: [tunePackage.edits[0], tunePackage.edits[0]] } as unknown as PackageOut;
+    const second = render(<PackageReviewPage />);
+    expect(screen.getByText("You have reviewed all 2 changes.")).toBeInTheDocument();
+    second.unmount();
+    pkg.current = { ...tunePackage, edits: [] } as unknown as PackageOut;
+    const third = render(<PackageReviewPage />);
+    expect(screen.getByText("No lines were changed for this job.")).toBeInTheDocument();
+    expect(document.body.textContent).not.toContain("all 0");
+    third.unmount();
+    pkg.current = { ...tunePackage, mode: "blocks", edits: [], source_document: null, guardrail_report: { passed: true, rules_run: [], violations: [] } } as unknown as PackageOut;
     render(<PackageReviewPage />);
-
-    expect(screen.getByText(/1 call · 1,200 in \/ 340 out/)).toBeInTheDocument();
-    expect(screen.queryByText(/\$/)).not.toBeInTheDocument();
+    expect(screen.getByText("You're all caught up.")).toBeInTheDocument();
   });
 
   it("scrolls the matching change card into view when a tune violation is selected", async () => {
@@ -154,6 +208,37 @@ describe("PackageReviewPage", () => {
 
     expect(screen.queryByRole("heading", { name: "Changes" })).not.toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Maya Chen" })).toBeInTheDocument();
-    expect(screen.getByText(/select a bullet to see the block/i)).toBeInTheDocument();
+    expect(screen.getByText(/select a line to see which part of your resume it came from/i)).toBeInTheDocument();
+  });
+
+  it("keeps jargon and raw ids out of the visible resume page, and shows them only inside Details", async () => {
+    blockList.splice(0, blockList.length, {
+      id: "acme-migration",
+      type: "bullet",
+      org: "Acme",
+      role: "Platform Engineer",
+      period: "2020-2023",
+      content: "Moved billing to a new platform.",
+      metric: null,
+      verified: true,
+      tags: [],
+    });
+    const resume = {
+      header: { name: "Maya Chen", links: [] },
+      summary: [],
+      sections: [{ heading: "Experience", entries: [{ heading: "Acme", bullets: [{ text: "Moved billing to a new platform.", source_block_id: "acme-migration" }] }] }],
+    };
+    pkg.current = { ...tunePackage, status: "draft", mode: "blocks", edits: [], source_document: null, resume, guardrail_report: { passed: true, rules_run: [], violations: [] } } as unknown as PackageOut;
+    const { container } = render(<PackageReviewPage />);
+    await userEvent.click(screen.getByRole("button", { name: /Moved billing/ }));
+    const clone = container.cloneNode(true) as HTMLElement;
+    clone.querySelectorAll("details").forEach((d) => d.querySelectorAll("*:not(summary)").forEach((n) => n.remove()));
+    const outside = (clone.textContent ?? "").toLowerCase();
+    for (const word of ["block", "verified", "tune mode", "acme-migration", "unknown"]) {
+      expect(outside, `"${word}" visible`).not.toContain(word);
+    }
+    expect(outside).toContain("confirmed");
+    expect(container.textContent).toContain("acme-migration");
+    blockList.splice(0, blockList.length);
   });
 });

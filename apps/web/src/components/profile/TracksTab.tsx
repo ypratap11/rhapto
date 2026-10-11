@@ -40,7 +40,7 @@ function validateTrackForm(form: TrackForm): Record<string, string> {
   const errors: Record<string, string> = {};
   if (!ID_RE.test(form.id.trim())) errors.id = "Use lowercase letters, digits, and hyphens, starting with a letter or digit.";
   if (!form.name.trim()) errors.name = "Name is required.";
-  if (!form.resume_base.trim()) errors.resume_base = "Pick a resume base.";
+  if (!form.resume_base.trim()) errors.resume_base = "Pick a starting resume.";
   const minFit = Number(form.min_fit);
   if (!Number.isFinite(minFit) || minFit < 0 || minFit > 100) errors.min_fit = "Enter a number between 0 and 100.";
   return errors;
@@ -72,7 +72,7 @@ export function TracksTab() {
       toast.success(`Saved ${form.id}`);
       setForm(null);
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "Could not save the track");
+      toast.error(e instanceof ApiError ? e.message : "Could not save the role");
     }
   }
 
@@ -87,38 +87,38 @@ export function TracksTab() {
         <Button variant="outline" onClick={() => setPickerOpen(true)}>
           Pick a field and role
         </Button>
-        <Button onClick={() => open(null)}>Add track</Button>
+        <Button onClick={() => open(null)}>Add a role</Button>
       </div>
       <EntityTable<Track>
         rows={tracks.data ?? []}
         getKey={(t) => t.id}
-        getLabel={(t) => t.id}
-        emptyText="No tracks yet. Import your profile or add a track."
+        getLabel={(t) => t.name}
+        emptyText="No roles chosen yet. Pick a field and a role."
         onEdit={open}
         onDelete={async (t) => {
           try {
             await remove.mutateAsync(t.id);
             toast.success(`Deleted ${t.id}`);
           } catch (e) {
-            toast.error(e instanceof ApiError ? e.message : "Could not delete the track");
+            toast.error(e instanceof ApiError ? e.message : "Could not delete the role");
           }
         }}
         columns={[
-          { key: "id", header: "Id", render: (t) => <span className="font-mono text-xs">{t.id}</span> },
+          { key: "id", header: "Short ID", render: (t) => <span className="font-mono text-xs">{t.id}</span> },
           { key: "name", header: "Name", render: (t) => t.name },
-          { key: "resume_base", header: "Base", render: (t) => t.resume_base },
-          { key: "min_fit", header: "Min fit", render: (t) => t.min_fit },
+          { key: "resume_base", header: "Starting resume", render: (t) => t.resume_base },
+          { key: "min_fit", header: "Minimum match", render: (t) => t.min_fit },
         ]}
       />
       <Dialog open={form !== null} onOpenChange={(o) => !o && setForm(null)}>
         <DialogContent className="flex max-h-[85vh] flex-col overflow-hidden sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>{isNew ? "New track" : `Edit ${form?.id}`}</DialogTitle>
+            <DialogTitle>{isNew ? "New role you want" : `Edit ${form?.name || form?.id}`}</DialogTitle>
           </DialogHeader>
           {form ? (
             <div className="min-h-0 flex-1 space-y-3 overflow-y-auto pr-1">
               <div className="space-y-1">
-                <Label htmlFor="track-id">Id</Label>
+                <Label htmlFor="track-id">Short ID</Label>
                 <Input id="track-id" value={form.id} onChange={(e) => set({ id: e.target.value })} disabled={!isNew} />
                 {errors.id ? <p className="text-xs text-destructive">{errors.id}</p> : null}
               </div>
@@ -136,15 +136,15 @@ export function TracksTab() {
                 <Input id="track-keywords" value={form.keywords} onChange={(e) => set({ keywords: e.target.value })} />
               </div>
               <div className="space-y-1">
-                <Label>Resume base</Label>
+                <Label>Starting resume</Label>
                 {bases.isLoading ? (
                   <Skeleton className="h-8 w-full" />
                 ) : bases.error ? (
                   <ApiErrorBanner error={bases.error} />
                 ) : availableBases.length > 0 ? (
                   <Select value={form.resume_base || undefined} onValueChange={(v) => v && set({ resume_base: v })}>
-                    <SelectTrigger aria-label="Resume base">
-                      <SelectValue placeholder="Choose a base" />
+                    <SelectTrigger aria-label="Starting resume">
+                      <SelectValue placeholder="Choose a starting resume" />
                     </SelectTrigger>
                     <SelectContent>
                       {availableBases.map((b) => (
@@ -155,12 +155,12 @@ export function TracksTab() {
                     </SelectContent>
                   </Select>
                 ) : (
-                  <Input aria-label="Resume base" value={form.resume_base} onChange={(e) => set({ resume_base: e.target.value })} placeholder="base id" />
+                  <Input aria-label="Starting resume" value={form.resume_base} onChange={(e) => set({ resume_base: e.target.value })} placeholder="Starting resume ID" />
                 )}
                 {errors.resume_base ? <p className="text-xs text-destructive">{errors.resume_base}</p> : null}
               </div>
               <div className="space-y-1">
-                <Label htmlFor="track-min-fit">Min fit (0-100)</Label>
+                <Label htmlFor="track-min-fit">Minimum match (0-100)</Label>
                 <Input id="track-min-fit" type="number" min={0} max={100} value={form.min_fit} onChange={(e) => set({ min_fit: e.target.value })} />
                 {errors.min_fit ? <p className="text-xs text-destructive">{errors.min_fit}</p> : null}
               </div>

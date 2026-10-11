@@ -25,6 +25,9 @@ import { formatRelative } from "@/lib/format";
 // else (name, contact, headings, org/title lines, credentials) is structural and protected.
 const EDITABLE_ROLES = new Set(["summary", "competency", "skill", "bullet"]);
 
+/** Plain names for the line kinds Rhapto finds in an uploaded resume; anything unlisted shows as-is. */
+const ROLE_LABELS: Record<string, string> = { org: "employer", title: "job title", competency: "strength" };
+
 export function ResumeDocumentTab() {
   const resumeDocument = useResumeDocument();
   const upload = useUploadResumeDocument();
@@ -40,7 +43,7 @@ export function ResumeDocumentTab() {
       await upload.mutateAsync(file);
       toast.success(`Uploaded ${file.name}`);
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "Could not upload the resume document");
+      toast.error(err instanceof ApiError ? err.message : "Could not upload your resume file");
     } finally {
       if (inputRef.current) inputRef.current.value = "";
     }
@@ -49,9 +52,9 @@ export function ResumeDocumentTab() {
   async function handleDelete() {
     try {
       await remove.mutateAsync();
-      toast.success("Deleted the resume document");
+      toast.success("Deleted your resume file");
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "Could not delete the resume document");
+      toast.error(err instanceof ApiError ? err.message : "Could not delete your resume file");
     } finally {
       setConfirmDelete(false);
     }
@@ -67,7 +70,7 @@ export function ResumeDocumentTab() {
       id={inputId}
       type="file"
       accept=".docx"
-      aria-label="Resume document"
+      aria-label="Resume file"
       className={doc ? "sr-only" : "block text-sm"}
       onChange={handleFile}
     />
@@ -77,8 +80,8 @@ export function ResumeDocumentTab() {
     return (
       <Card className="space-y-3 p-4">
         <div>
-          <h2 className="font-heading text-base font-medium">Resume document</h2>
-          <p className="text-sm text-muted-foreground">Upload your resume (.docx) to tailor it directly. Tune mode switches on automatically.</p>
+          <h2 className="font-heading text-base font-medium">Your resume file</h2>
+          <p className="text-sm text-muted-foreground">Upload your resume (.docx). Light touch rewords a few lines of this file for each job and leaves the rest as it is.</p>
         </div>
         <div className="space-y-1">
           <Label htmlFor={inputId}>Resume file</Label>
@@ -108,7 +111,8 @@ export function ResumeDocumentTab() {
       </div>
       {fileInput}
       <div className="space-y-3">
-        <h3 className="text-sm font-medium">Parsed as</h3>
+        <h3 className="text-sm font-medium">How Rhapto reads it</h3>
+        <p className="text-xs text-muted-foreground">Lines with a green label can be reworded. Everything else stays exactly as written.</p>
         {doc.document.sections.map((section) => (
           <div key={section.heading} className="space-y-1.5">
             <p className="text-sm font-medium">{section.heading}</p>
@@ -118,7 +122,7 @@ export function ResumeDocumentTab() {
                 if (!paragraph) return null;
                 return (
                   <li key={id} className="flex items-start gap-2 text-sm">
-                    <StatusBadge tone={EDITABLE_ROLES.has(paragraph.role) ? "high" : "muted"}>{paragraph.role}</StatusBadge>
+                    <StatusBadge tone={EDITABLE_ROLES.has(paragraph.role) ? "high" : "muted"}>{ROLE_LABELS[paragraph.role] ?? paragraph.role}</StatusBadge>
                     <span className="text-muted-foreground">{paragraph.text}</span>
                   </li>
                 );

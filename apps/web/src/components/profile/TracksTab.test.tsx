@@ -25,7 +25,7 @@ describe("TracksTab", () => {
   it("opens the track editor as a centred dialog, not a sheet, with Save reachable", async () => {
     render(<TracksTab />);
     const user = userEvent.setup({ delay: null });
-    await user.click(screen.getByRole("button", { name: /edit backend-track/i }));
+    await user.click(screen.getByRole("button", { name: /edit backend/i }));
 
     const dialog = screen.getByRole("dialog");
     expect(dialog).toBeInTheDocument();

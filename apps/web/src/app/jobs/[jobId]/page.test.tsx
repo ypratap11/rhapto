@@ -175,25 +175,25 @@ describe("JobPage", () => {
     expect(screen.getByRole("button", { name: "Tailor" })).toBeInTheDocument();
   });
 
-  it("offers Review when the latest package needs review", () => {
+  it("offers Review resume when the latest package needs review", () => {
     jobResult = { data: job({ latest_package: pkg({ id: "p1", version: 1, status: "draft" }) }), error: null, isLoading: false };
     render(<JobPage />);
-    expect(screen.getByRole("link", { name: "Review" })).toHaveAttribute("href", "/jobs/j1/packages/p1");
+    expect(screen.getByRole("link", { name: "Review resume" })).toHaveAttribute("href", "/jobs/j1/packages/p1");
     // A draft package isn't blocked, so the page must not enable the guardrail-panel fetch for it.
     expect(usePackageSpy).toHaveBeenCalledWith("p1", false);
-    expect(screen.queryByText("Guardrails")).not.toBeInTheDocument();
+    expect(screen.queryByText("Truth check")).not.toBeInTheDocument();
   });
 
-  it("offers Fix guardrails and renders the guardrail panel when the latest package is blocked", () => {
+  it("offers Fix and review and renders the guardrail panel when the latest package is blocked", () => {
     jobResult = { data: job({ latest_package: pkg({ id: "p1", version: 1, status: "blocked" }) }), error: null, isLoading: false };
     packageResult = { data: pkgOut({ id: "p1", status: "blocked" }), error: null, isLoading: false };
     render(<JobPage />);
-    expect(screen.getByRole("link", { name: "Fix guardrails" })).toHaveAttribute("href", "/jobs/j1/packages/p1");
+    expect(screen.getByRole("link", { name: "Fix and review" })).toHaveAttribute("href", "/jobs/j1/packages/p1");
     expect(usePackageSpy).toHaveBeenCalledWith("p1", true);
-    expect(screen.getByText("Guardrails")).toBeInTheDocument();
-    expect(screen.getByText(/invented a company name/i)).toBeInTheDocument();
+    expect(screen.getByText("Truth check")).toBeInTheDocument();
+    expect(screen.getAllByText(/invented a company name/i).length).toBeGreaterThan(0);
     expect(screen.queryByRole("button", { name: "Apply" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("link", { name: "Review" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Review resume" })).not.toBeInTheDocument();
   });
 
   it("deep-links to the specific violation clicked in the guardrail panel, not just the package", async () => {
@@ -201,7 +201,7 @@ describe("JobPage", () => {
     packageResult = { data: pkgOut({ id: "p1", status: "blocked" }), error: null, isLoading: false };
     render(<JobPage />);
     const user = userEvent.setup({ delay: null });
-    await user.click(screen.getByText(/invented a company name/i));
+    await user.click(screen.getByRole("button", { name: /^Fix: .*invented a company name/i }));
     // "summary[0]" is pkgOut()'s violation path above -- on a blocked package the job page's whole
     // purpose is "here is what to fix", so the specific violation clicked must carry through to
     // the review page, not just the package as a whole.
@@ -229,11 +229,30 @@ describe("JobPage", () => {
     expect(screen.getByRole("link", { name: /does not appear in Experience/i })).toHaveAttribute("href", "/jobs/j1/packages/p1");
   });
 
-  it("offers Apply, and mounts the Did-you-apply prompt, when the latest package is ready", () => {
+  it("offers the download button, and mounts the Did-you-apply prompt, when the latest package is ready", () => {
     jobResult = { data: job({ latest_package: pkg({ id: "p2", version: 2, status: "ready" }) }), error: null, isLoading: false };
     render(<JobPage />);
-    expect(screen.getByRole("button", { name: "Apply" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Download and open the posting" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "View resume" })).toHaveAttribute("href", "/jobs/j1/packages/p2");
+    expect(screen.getByText(/your resume for this job: ready to send/i)).toBeInTheDocument();
     expect(screen.getByTestId("did-you-apply-prompt")).toBeInTheDocument();
+  });
+
+  it("shows no resume card for a draft or blocked resume, since the header offers it", () => {
+    jobResult = { data: job({ latest_package: pkg({ status: "draft" }) }), error: null, isLoading: false };
+    render(<JobPage />);
+    expect(screen.queryByText(/your resume for this job/i)).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "View resume" })).not.toBeInTheDocument();
+  });
+
+  it("links the original posting only when the url is safe", () => {
+    jobResult = { data: job(), error: null, isLoading: false };
+    const { unmount } = render(<JobPage />);
+    expect(screen.getByRole("link", { name: "Open the original posting" })).toHaveAttribute("href", "https://boards.example.com/j1");
+    unmount();
+    jobResult = { data: job({ url: "javascript:alert(1)" }), error: null, isLoading: false };
+    render(<JobPage />);
+    expect(screen.queryByRole("link", { name: "Open the original posting" })).not.toBeInTheDocument();
   });
 
   it("shows an Applied status pill instead of an action once an application exists", () => {

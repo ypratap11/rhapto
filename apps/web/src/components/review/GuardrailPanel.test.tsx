@@ -1,178 +1,133 @@
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
+import type { GuardrailReport } from "@/lib/api/queries";
+import blocked from "./__fixtures__/blocked-report.json";
+import passedBlocks from "./__fixtures__/passed-blocks-report.json";
+import passedTune from "./__fixtures__/passed-tune-report.json";
 import { GuardrailPanel } from "./GuardrailPanel";
 
-describe("GuardrailPanel", () => {
-  it("shows passed state", () => {
-    render(<GuardrailPanel report={{ passed: true, rules_run: ["provenance", "no-unverified-metrics"], violations: [] }} onSelect={vi.fn()} />);
-    expect(screen.getByText(/all guardrails passed/i)).toBeInTheDocument();
-    expect(screen.getByText("no-unverified-metrics")).toBeInTheDocument();
+type Fixture = { report: unknown; checks: Record<string, string>; remedies: Record<string, string> };
+
+function panel(f: Fixture, extra: { nodelessHref?: string; onSelect?: (p: string) => void } = {}) {
+  return (
+    <GuardrailPanel
+      report={f.report as GuardrailReport}
+      checks={f.checks}
+      remedies={f.remedies}
+      onSelect={extra.onSelect ?? vi.fn()}
+      nodelessHref={extra.nodelessHref}
+    />
+  );
+}
+
+/** Everything the panel shows with the Details disclosure taken out. */
+function textOutsideDetails(container: HTMLElement): string {
+  const clone = container.cloneNode(true) as HTMLElement;
+  clone.querySelectorAll("details").forEach((d) => d.remove());
+  return clone.textContent ?? "";
+}
+
+describe("GuardrailPanel, a passed report", () => {
+  it("tune: one line per rule that ran, in order, straight from the API, and nothing about numbers or sources", () => {
+    const { container } = render(panel(passedTune));
+    expect(screen.getByRole("heading", { name: "Truth check" })).toBeInTheDocument();
+    expect(screen.getByText("Passed")).toBeInTheDocument();
+    const lines = within(screen.getByRole("list", { name: "What was checked" })).getAllByRole("listitem");
+    expect(lines.map((l) => l.textContent)).toEqual(Object.values(passedTune.checks));
+    expect(container.textContent).not.toContain("Every line comes from");
   });
-  it("lists violations and selects their path on click", async () => {
+
+  it("blocks mode: the source and number sentences are there", () => {
+    render(panel(passedBlocks));
+    const lines = within(screen.getByRole("list", { name: "What was checked" })).getAllByRole("listitem");
+    expect(lines.map((l) => l.textContent)).toEqual(passedBlocks.report.rules_run.map((id) => (passedBlocks.checks as Record<string, string>)[id]));
+    expect(screen.getByText(passedBlocks.checks.provenance)).toBeInTheDocument();
+    expect(screen.getByText(passedBlocks.checks["no-unverified-metrics"])).toBeInTheDocument();
+  });
+
+  it("names a rule it has no sentence for instead of dropping it", () => {
+    const f = { ...passedTune, report: { ...passedTune.report, rules_run: [...passedTune.report.rules_run, "some-future-rule"] } };
+    render(panel(f));
+    expect(screen.getByText("Checked: some future rule")).toBeInTheDocument();
+  });
+
+  it("lists a warning as 'Heads up' even though the report passed", () => {
+    render(panel(passedBlocks));
+    expect(screen.getByText("Passed")).toBeInTheDocument();
+    expect(screen.getByText("Heads up")).toBeInTheDocument();
+    expect(screen.getByText(passedBlocks.remedies.completeness)).toBeInTheDocument();
+  });
+});
+
+describe("GuardrailPanel, a report that did not pass", () => {
+  it("says it was held back, and shows the remedy as the visible line", () => {
+    const { container } = render(panel(blocked));
+    expect(screen.getByText("Needs attention")).toBeInTheDocument();
+    expect(screen.getByText("Rhapto held this resume back because some lines did not pass the truth check.")).toBeInTheDocument();
+    expect(screen.getByText(blocked.remedies["no-unverified-metrics"])).toBeInTheDocument();
+    // The engine's own message is for Details only.
+    expect(textOutsideDetails(container)).not.toContain(blocked.report.violations[0]!.message);
+  });
+
+  it("falls back to the message when there is no remedy for the rule", () => {
+    const f = { ...blocked, remedies: {} };
+    const { container } = render(panel(f));
+    expect(textOutsideDetails(container)).toContain(blocked.report.violations[0]!.message);
+  });
+
+  it("gives an error on a node a Fix button that selects its path", async () => {
     const onSelect = vi.fn();
-    render(
-      <GuardrailPanel
-        report={{
-          passed: false,
-          rules_run: ["provenance"],
-          violations: [{ rule: "no-unverified-metrics", severity: "error", message: "metric(s) not found: 25%", path: "sections[0].entries[0].bullets[1]", block_id: "acme-migration" }],
-        }}
-        onSelect={onSelect}
-      />,
-    );
-    expect(screen.getByText(/blocked/i)).toBeInTheDocument();
-    await userEvent.setup().click(screen.getByRole("button", { name: /metric\(s\) not found/i }));
+    render(panel(blocked, { onSelect }));
+    await userEvent.setup().click(screen.getByRole("button", { name: /^Fix/ }));
     expect(onSelect).toHaveBeenCalledWith("sections[0].entries[0].bullets[1]");
   });
-});
 
-const ERROR_VIOLATION = {
-  rule: "no-unverified-metrics",
-  severity: "error" as const,
-  message: "metric(s) not found: 25%",
-  path: "sections[0].entries[0].bullets[1]",
-  block_id: "acme-migration",
-};
-
-const REMEDY = "Mark the block holding that figure as verified, or regenerate so the bullet stops asserting it.";
-
-describe("GuardrailPanel, what to do about it", () => {
-  it("shows the severity, the block it came from, and the remedy for the rule", () => {
-    render(
-      <GuardrailPanel
-        report={{ passed: false, rules_run: ["provenance"], violations: [ERROR_VIOLATION] }}
-        remedies={{ "no-unverified-metrics": REMEDY }}
-        onSelect={vi.fn()}
-      />,
-    );
-    expect(screen.getByText("error")).toBeInTheDocument();
-    // The path says where the bullet is in the document; `block_id` says what to go and edit.
-    expect(screen.getByText("acme-migration")).toBeInTheDocument();
-    expect(screen.getByText(REMEDY)).toBeInTheDocument();
+  it("gives a node-less violation a Fix link only when it is given somewhere to go", () => {
+    const { unmount } = render(panel(blocked));
+    expect(screen.queryByRole("link", { name: /^Fix/ })).not.toBeInTheDocument();
+    unmount();
+    render(panel(blocked, { nodelessHref: "/jobs/j1/packages/p1" }));
+    expect(screen.getByRole("link", { name: /^Fix/ })).toHaveAttribute("href", "/jobs/j1/packages/p1");
+    expect(screen.queryAllByRole("button", { name: /^Fix/ })).toHaveLength(1);
   });
 
-  it("keeps a rule it has no remedy for fully readable", () => {
-    // THE case a bare `remedies[v.rule]` rendered into the row would blank out: a rule added
-    // server-side before this map knew it, or a historical report naming a rule this build dropped.
-    // The row must still carry the rule id, the message and the bullet.
-    render(
-      <GuardrailPanel
-        report={{
-          passed: false,
-          rules_run: ["some-future-rule"],
-          violations: [{ ...ERROR_VIOLATION, rule: "some-future-rule" }],
-        }}
-        remedies={{ "no-unverified-metrics": REMEDY }}
-        onSelect={vi.fn()}
-      />,
-    );
-    const row = screen.getByRole("button", { name: /metric\(s\) not found/i });
-    expect(row).toHaveTextContent("some-future-rule");
-    expect(row).toHaveTextContent("metric(s) not found: 25%");
-    expect(row).toHaveTextContent("sections[0].entries[0].bullets[1]");
-    // And no remedy from some other rule leaks in.
-    expect(screen.queryByText(REMEDY)).not.toBeInTheDocument();
-  });
-
-  it("distinguishes a warning from the error that blocked the package", () => {
-    // Two violations of different severities in one report, so the assertion cannot pass on a
-    // constant: a warning did not block anything and must not be dressed as though it had.
-    render(
-      <GuardrailPanel
-        report={{
-          passed: false,
-          rules_run: ["provenance", "visibility-context"],
-          violations: [
-            ERROR_VIOLATION,
-            { ...ERROR_VIOLATION, rule: "visibility-context", severity: "warning", message: "scope missing", path: "sections[1]" },
-          ],
-        }}
-        remedies={{ "no-unverified-metrics": REMEDY }}
-        onSelect={vi.fn()}
-      />,
-    );
-    expect(screen.getByRole("button", { name: /metric\(s\) not found/i })).toHaveTextContent("error");
-    expect(screen.getByRole("button", { name: /scope missing/i })).toHaveTextContent("warning");
-  });
-
-  it("renders without a remedies prop at all", () => {
-    // An older API, or any caller that has not been updated: the panel must not crash or drop rows.
-    render(
-      <GuardrailPanel
-        report={{ passed: false, rules_run: ["provenance"], violations: [ERROR_VIOLATION] }}
-        onSelect={vi.fn()}
-      />,
-    );
-    expect(screen.getByRole("button", { name: /metric\(s\) not found/i })).toHaveTextContent("no-unverified-metrics");
+  it("shows a warning as 'Heads up', not as the reason it was held back", () => {
+    render(panel(blocked));
+    const heads = screen.getByText("Heads up").closest("div")!;
+    expect(within(heads).getByText(blocked.remedies.completeness)).toBeInTheDocument();
   });
 });
 
-
-describe("GuardrailPanel, a violation that names something absent from the document", () => {
-  const COMPLETENESS = {
-    rule: "completeness",
-    severity: "error" as const,
-    message: "role block 'role-e' (Vertex Robotics — Founder, 2023-Present) was selected but does not appear in Experience",
-    path: "selection.block_ids['role-e']",
-    block_id: "role-e",
-  };
-  const COMPLETENESS_REMEDY = "Every selected role, project and credential must keep an entry.";
-
-  it("renders a plain row, not a dead button, and keeps the block id and remedy", () => {
-    render(
-      <GuardrailPanel
-        report={{ passed: false, rules_run: ["provenance", "completeness"], violations: [COMPLETENESS] }}
-        remedies={{ completeness: COMPLETENESS_REMEDY }}
-        onSelect={vi.fn()}
-      />,
-    );
-    expect(screen.getByText(/does not appear in Experience/i)).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /does not appear in Experience/i })).not.toBeInTheDocument();
-    // The row itself, not just "no button with that name": nothing in it is interactive.
-    const item = screen.getByText(/does not appear in Experience/i).closest("li");
-    expect(item).not.toBeNull();
-    const row = item!.firstElementChild as HTMLElement;
-    expect(row.tagName).toBe("DIV");
-    expect(row).not.toHaveAttribute("role");
-    expect(within(item!).queryByRole("button")).not.toBeInTheDocument();
-    expect(within(item!).queryByRole("link")).not.toBeInTheDocument();
-    expect(screen.getByText("role-e")).toBeInTheDocument();
-    expect(screen.getByText(COMPLETENESS_REMEDY)).toBeInTheDocument();
+describe("GuardrailPanel, Details", () => {
+  it("is closed, has a tall summary, and holds the ids, severities, block and path", () => {
+    const { container } = render(panel(blocked));
+    const details = container.querySelector("details") as HTMLDetailsElement;
+    expect(details.open).toBe(false);
+    const summary = details.querySelector("summary")!;
+    expect(summary).toHaveTextContent("Details");
+    expect(summary.className).toContain("min-h-11");
+    const inside = within(details);
+    expect(inside.getAllByText("no-unverified-metrics").length).toBeGreaterThan(0);
+    expect(inside.getByText("sections[0].entries[0].bullets[1]")).toBeInTheDocument();
+    expect(inside.getByText("acme-migration")).toBeInTheDocument();
+    expect(inside.getByText("error")).toBeInTheDocument();
+    expect(inside.getByText(blocked.report.violations[0]!.message)).toBeInTheDocument();
+    const outside = textOutsideDetails(container);
+    for (const needle of ["no-unverified-metrics", "sections[0]", "acme-migration", "selection.block_ids"]) {
+      expect(outside).not.toContain(needle);
+    }
   });
 
-  it("links a node-less row to the package when given somewhere to go, still not as a button", () => {
-    // The job page: its rows navigate to the package page, and a completeness row must too.
-    render(
-      <GuardrailPanel
-        report={{ passed: false, rules_run: ["completeness"], violations: [ERROR_VIOLATION, COMPLETENESS] }}
-        onSelect={vi.fn()}
-        nodelessHref="/jobs/j1/packages/p1"
-      />,
-    );
-    expect(screen.getByRole("link", { name: /does not appear in Experience/i })).toHaveAttribute("href", "/jobs/j1/packages/p1");
-    expect(screen.queryByRole("button", { name: /does not appear in Experience/i })).not.toBeInTheDocument();
-    // A row that addresses a node keeps its button.
-    expect(screen.getByRole("button", { name: /metric\(s\) not found/i })).toBeInTheDocument();
-  });
-
-  it("does not take the button away from the paths that do address something", async () => {
-    // The regression a blanket `startsWith("sections[")` rule would have caused: tune-mode
-    // violations are `edits[i]`, and both pages route them through onSelect.
-    const onSelect = vi.fn();
-    const at = (path: string) => ({ ...ERROR_VIOLATION, message: `problem at ${path}`, path });
-    render(
-      <GuardrailPanel
-        report={{
-          passed: false,
-          rules_run: ["tune-scope"],
-          violations: [at("edits[0]"), at("summary[0]"), at("cover_note"), COMPLETENESS],
-        }}
-        onSelect={onSelect}
-      />,
-    );
-    expect(screen.getAllByRole("button")).toHaveLength(3);
-    await userEvent.setup().click(screen.getByRole("button", { name: /problem at edits\[0\]/ }));
-    expect(onSelect).toHaveBeenCalledWith("edits[0]");
+  it("keeps jargon out of everything visible, on every real report", () => {
+    for (const f of [blocked, passedBlocks, passedTune]) {
+      const { container, unmount } = render(panel(f, { nodelessHref: "/jobs/j1/packages/p1" }));
+      const outside = textOutsideDetails(container).toLowerCase();
+      for (const word of ["block", "verified", "library", "guardrail", "provenance"]) {
+        expect(outside, `"${word}" visible`).not.toContain(word);
+      }
+      expect(outside).not.toContain("rules run");
+      unmount();
+    }
   });
 });

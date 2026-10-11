@@ -17,7 +17,7 @@ from rhapto.db.repositories import packages as repo
 from rhapto.db.repositories import profile as profile_repo
 from rhapto.engine.compose import build_header
 from rhapto.engine.document import apply_edits, to_resume_document
-from rhapto.engine.guardrails.registry import remedies_for, run_guardrails
+from rhapto.engine.guardrails.registry import checks_for, remedies_for, run_guardrails
 from rhapto.engine.guardrails.tune import run_tune_guardrails
 from rhapto.engine.providers.llm import TokenUsage
 from rhapto.engine.render.docx import OrphanBulletError, render_docx
@@ -73,6 +73,7 @@ def package_to_out(row: Package) -> PackageOut:
         answers=dict(row.answers_json),
         guardrail_report=report,
         guardrail_remedies=remedies_for(v.rule for v in report.violations),
+        guardrail_checks=checks_for(report.rules_run),
         jd_extract=JDExtract.model_validate(row.jd_extract_json),
         llm_calls=row.llm_calls,
         input_tokens=row.input_tokens,

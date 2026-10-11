@@ -100,7 +100,8 @@ export function useVisitorHeader(): boolean {
 // runbook's bypass only ever adds /, /_next/* and /favicon.ico, and
 // scripts/check-access-boundary.sh asserts /settings stays protected); adding a route here grants
 // it no edge exposure at all, only a client-side pass-through once a request already arrived.
-const PUBLIC_ROUTES = new Set(["/", "/settings"]);
+// /help is a static page: no session needed, and public at the edge too (edge-visibility.json).
+const PUBLIC_ROUTES = new Set(["/", "/settings", "/help"]);
 
 /** Which header a route gets. `PUBLIC_ROUTES` says "renders without a session"; the header says less.
  * On / the visitor may be anyone, so show only the way in. /settings is a visitor page only in token
@@ -109,7 +110,7 @@ const PUBLIC_ROUTES = new Set(["/", "/settings"]);
  * snapshot (null on the server and until read), so the server renders the visitor variant and the client
  * swaps through the store, which React treats as an update, not a hydration mismatch. */
 export function isVisitorHeader(pathname: string, hosted: boolean, tokenPresent: boolean | null): boolean {
-  return pathname === "/" || (pathname === "/settings" && !hosted && tokenPresent !== true);
+  return pathname === "/" || pathname === "/help" || (pathname === "/settings" && !hosted && tokenPresent !== true);
 }
 
 // The one definition of "this visitor is (or may be) signed in, so /me is worth asking": not on a

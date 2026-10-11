@@ -82,13 +82,13 @@ describe("SavedSearchesSection", () => {
     expect(screen.queryByText("0 new")).toBeNull();
   });
 
-  it("badges a search derived from a track, and not one the user created directly", () => {
+  it("badges a search that came from a role you want, and not one the user created directly", () => {
     render(<SavedSearchesSection />);
     const derived = screen.getByText("From backend track").closest("li");
     const direct = screen.getByText("Staff engineer").closest("li");
     expect(derived).not.toBeNull();
-    expect(within(derived as HTMLElement).getByText("from a track")).toBeInTheDocument();
-    expect(within(direct as HTMLElement).queryByText("from a track")).not.toBeInTheDocument();
+    expect(within(derived as HTMLElement).getByText("from a role you want")).toBeInTheDocument();
+    expect(within(direct as HTMLElement).queryByText("from a role you want")).not.toBeInTheDocument();
   });
 
   it("pauses a search by writing active: false", async () => {
@@ -185,23 +185,23 @@ describe("SavedSearchesSection, a search that has never matched", () => {
     const never = screen.getByText("From backend track").closest("li")!;
     const found = screen.getByText("Staff engineer").closest("li")!;
     expect(within(never).getByText("Never matched")).toBeInTheDocument();
-    expect(within(never).getByText(/has run 3 times and never returned a job/i)).toBeInTheDocument();
+    expect(within(never).getByText(/checked 3 times\. nothing found yet/i)).toBeInTheDocument();
     expect(within(found).queryByText("Never matched")).not.toBeInTheDocument();
-    expect(within(found).getByText(/has found jobs before/i)).toBeInTheDocument();
+    expect(within(found).getByText(/^checked 12 times$/i)).toBeInTheDocument();
   });
 
   it("says a search has not run yet rather than that it found nothing", () => {
     data = [{ ...searches[0]!, runs: 0, ever_found: false, last_run_at: null }];
     render(<SavedSearchesSection />);
-    expect(screen.getByText(/has not run yet/i)).toBeInTheDocument();
-    expect(screen.queryByText(/never returned a job/i)).not.toBeInTheDocument();
+    expect(screen.getByText(/not checked yet/i)).toBeInTheDocument();
+    expect(screen.queryByText(/nothing found yet/i)).not.toBeInTheDocument();
     expect(screen.queryByText("Never matched")).not.toBeInTheDocument();
   });
 
   it("says once, not 1 times", () => {
     data = [{ ...searches[0]!, runs: 1, ever_found: false }];
     render(<SavedSearchesSection />);
-    expect(screen.getByText(/has run once and never returned a job/i)).toBeInTheDocument();
+    expect(screen.getByText(/checked once\. nothing found yet/i)).toBeInTheDocument();
   });
 
   it("asserts no cause for the zero and suggests no other location", () => {

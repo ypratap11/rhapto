@@ -69,7 +69,7 @@ export function RegenerateDialog({ job, pkg, open, onOpenChange }: { job: JobOut
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Regenerate this package</DialogTitle>
+          <DialogTitle>Make a new version</DialogTitle>
         </DialogHeader>
         <div className="space-y-3">
           <div className="space-y-1">
@@ -78,10 +78,12 @@ export function RegenerateDialog({ job, pkg, open, onOpenChange }: { job: JobOut
           </div>
           {(tracks.data ?? []).length > 0 ? (
             <div className="space-y-1">
-              <Label>Track</Label>
+              <Label>Role</Label>
               <Select value={trackId} onValueChange={(v) => setTrackId(v ?? pkg.track_id)}>
-                <SelectTrigger aria-label="Track">
-                  <SelectValue placeholder="Let Rhapto pick" />
+                <SelectTrigger aria-label="Role">
+                  <SelectValue placeholder="Let Rhapto pick">
+                    {(value: string | null) => (tracks.data ?? []).find((t) => t.id === value)?.name ?? "Let Rhapto pick"}
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   {(tracks.data ?? []).map((t) => (
@@ -97,13 +99,13 @@ export function RegenerateDialog({ job, pkg, open, onOpenChange }: { job: JobOut
             <Label>Mode</Label>
             <Select value={selectedMode} onValueChange={(value: string | null) => value && setMode(value as "blocks" | "tune")}>
               <SelectTrigger aria-label="Mode">
-                <SelectValue>{(value: string | null) => (value === "tune" ? "Tune my resume" : "Build from blocks")}</SelectValue>
+                <SelectValue>{(value: string | null) => (value === "tune" ? "Light touch" : "Full rewrite")}</SelectValue>
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="tune" disabled={!hasResumeDocument}>
-                  Tune my resume
+                  Light touch
                 </SelectItem>
-                <SelectItem value="blocks">Build from blocks</SelectItem>
+                <SelectItem value="blocks">Full rewrite</SelectItem>
               </SelectContent>
             </Select>
           </div>

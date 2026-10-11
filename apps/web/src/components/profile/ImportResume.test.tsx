@@ -112,7 +112,7 @@ describe("ImportResume", () => {
     const onConfirm = vi.fn();
     const user = userEvent.setup({ delay: null });
     render(<ImportResume proposal={proposal} onConfirm={onConfirm} />);
-    await user.click(screen.getByRole("button", { name: /add .* to my profile/i }));
+    await user.click(screen.getByRole("button", { name: /add .* to your experience/i }));
     expect(onConfirm).toHaveBeenCalledWith(proposal);
   });
 
@@ -120,7 +120,7 @@ describe("ImportResume", () => {
     resetQueries();
     const user = userEvent.setup({ delay: null });
     render(<ImportResume proposal={proposal} onConfirm={vi.fn()} />);
-    await user.click(screen.getByRole("button", { name: /add .* to my profile/i }));
+    await user.click(screen.getByRole("button", { name: /add .* to your experience/i }));
     expect(putBlockMutate).toHaveBeenCalledTimes(2);
     expect(putBlockMutate).toHaveBeenCalledWith(roleBlock);
     expect(putBlockMutate).toHaveBeenCalledWith(metricBlock);
@@ -131,7 +131,7 @@ describe("ImportResume", () => {
     basesQuery = { data: [{ id: "general", name: "General", block_ids: [] }], isLoading: false, error: null };
     const user = userEvent.setup({ delay: null });
     render(<ImportResume proposal={proposal} onConfirm={vi.fn()} />);
-    await user.click(screen.getByRole("button", { name: /add .* to my profile/i }));
+    await user.click(screen.getByRole("button", { name: /add .* to your experience/i }));
     expect(putTrackMutate).toHaveBeenCalledWith(
       expect.objectContaining({
         id: "tpm",
@@ -148,7 +148,7 @@ describe("ImportResume", () => {
     answersQuery = { data: { notice_period: "2 weeks" }, isLoading: false, error: null };
     const user = userEvent.setup({ delay: null });
     render(<ImportResume proposal={proposal} onConfirm={vi.fn()} />);
-    await user.click(screen.getByRole("button", { name: /add .* to my profile/i }));
+    await user.click(screen.getByRole("button", { name: /add .* to your experience/i }));
     expect(putAnswersMutate).toHaveBeenCalledWith(
       expect.objectContaining({ notice_period: "2 weeks", location_home: "Dublin, CA", remote_ok: "yes" }),
     );
@@ -161,7 +161,7 @@ describe("ImportResume", () => {
     basesQuery = { data: [], isLoading: false, error: null }; // the fresh-install case
     const user = userEvent.setup({ delay: null });
     render(<ImportResume proposal={proposal} onConfirm={vi.fn()} />);
-    await user.click(screen.getByRole("button", { name: /add .* to my profile/i }));
+    await user.click(screen.getByRole("button", { name: /add .* to your experience/i }));
     expect(putTrackMutate).toHaveBeenCalledTimes(1);
     const written = putTrackMutate.mock.calls[0]![0] as { resume_base: string };
     expect(written.resume_base).not.toBe("");
@@ -173,7 +173,7 @@ describe("ImportResume", () => {
     basesQuery = { data: [{ id: "main", name: "Main", block_ids: [] }], isLoading: false, error: null };
     const user = userEvent.setup({ delay: null });
     render(<ImportResume proposal={proposal} onConfirm={vi.fn()} />);
-    await user.click(screen.getByRole("button", { name: /add .* to my profile/i }));
+    await user.click(screen.getByRole("button", { name: /add .* to your experience/i }));
     expect(putTrackMutate).toHaveBeenCalledWith(expect.objectContaining({ resume_base: "main" }));
   });
 
@@ -183,14 +183,14 @@ describe("ImportResume", () => {
     resetQueries();
     basesQuery = { data: undefined, isLoading: true, error: null };
     render(<ImportResume proposal={proposal} onConfirm={vi.fn()} />);
-    expect(screen.getByRole("button", { name: /add .* to my profile/i })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /add .* to your experience/i })).toBeDisabled();
   });
 
   it("disables Accept when the answers query has errored", () => {
     resetQueries();
     answersQuery = { data: undefined, isLoading: false, error: new Error("network") };
     render(<ImportResume proposal={proposal} onConfirm={vi.fn()} />);
-    expect(screen.getByRole("button", { name: /add .* to my profile/i })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /add .* to your experience/i })).toBeDisabled();
   });
 
   it("does not write blocks, tracks or answers if Accept is invoked while answers has not resolved", async () => {
@@ -200,7 +200,7 @@ describe("ImportResume", () => {
     render(<ImportResume proposal={proposal} onConfirm={onConfirm} />);
     // The button is disabled, but this asserts the guard inside handleAccept itself, not just the
     // disabled attribute — belt and suspenders per the finding.
-    const button = screen.getByRole("button", { name: /add .* to my profile/i }) as HTMLButtonElement;
+    const button = screen.getByRole("button", { name: /add .* to your experience/i }) as HTMLButtonElement;
     button.disabled = false;
     await userEvent.setup({ delay: null }).click(button);
     expect(putBlockMutate).not.toHaveBeenCalled();
@@ -215,9 +215,9 @@ describe("ImportResume", () => {
     putTrackMutate.mockReset().mockRejectedValue(new ApiError(422, null, "could not save track"));
     const user = userEvent.setup({ delay: null });
     render(<ImportResume proposal={proposal} onConfirm={vi.fn()} />);
-    await user.click(screen.getByRole("button", { name: /add .* to my profile/i }));
+    await user.click(screen.getByRole("button", { name: /add .* to your experience/i }));
     expect(putBlockMutate).toHaveBeenCalledTimes(2);
-    expect(toast.error).toHaveBeenCalledWith(expect.stringMatching(/saved 2 blocks.*safe to try again/i));
+    expect(toast.error).toHaveBeenCalledWith(expect.stringMatching(/saved 2 items.*safe to try again/i));
     // The blocks that did land must still show as saved (moving on to ConfirmMetrics, since one
     // carries a metric), not the pre-accept "nothing is saved yet" review screen.
     expect(screen.queryByText(/nothing is saved yet/i)).not.toBeInTheDocument();
@@ -229,9 +229,9 @@ describe("ImportResume", () => {
     putBlockMutate.mockReset().mockRejectedValue(new ApiError(422, null, "bad block"));
     const user = userEvent.setup({ delay: null });
     render(<ImportResume proposal={proposal} onConfirm={vi.fn()} />);
-    await user.click(screen.getByRole("button", { name: /add .* to my profile/i }));
+    await user.click(screen.getByRole("button", { name: /add .* to your experience/i }));
     expect(toast.error).toHaveBeenCalledWith("bad block");
-    expect(screen.queryByText(/added .* blocks to your profile/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/added .* items? to your experience/i)).not.toBeInTheDocument();
   });
 
   // --- Finding 7: verifyMetric (via ConfirmMetrics) is the only path that sets verified: true ---
@@ -240,7 +240,7 @@ describe("ImportResume", () => {
     resetQueries();
     const user = userEvent.setup({ delay: null });
     render(<ImportResume proposal={proposal} onConfirm={vi.fn()} />);
-    await user.click(screen.getByRole("button", { name: /add .* to my profile/i }));
+    await user.click(screen.getByRole("button", { name: /add .* to your experience/i }));
     // Only acme-win carries a metric, so ConfirmMetrics now shows exactly that one block.
     await screen.findByText(/cut costs 30%/i);
     putBlockMutate.mockClear();

@@ -97,7 +97,7 @@ export function BlocksTab() {
       toast.success(`Saved ${form.id}`);
       setForm(null);
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "Could not save the block");
+      toast.error(e instanceof ApiError ? e.message : "Could not save the item");
     }
   }
 
@@ -111,7 +111,7 @@ export function BlocksTab() {
     const previousVerified = current.verified;
     try {
       await patchBlock(id, { verified: target });
-      toast.success(`${target ? "Verified" : "Unverified"} ${id}`, {
+      toast.success(`${target ? "Confirmed" : "Marked not confirmed yet:"} ${id}`, {
         duration: 8000,
         action: {
           label: "Undo",
@@ -188,29 +188,29 @@ export function BlocksTab() {
         ) : (
           <span />
         )}
-        <Button onClick={() => open(null)}>Add block</Button>
+        <Button onClick={() => open(null)}>Add an item</Button>
       </div>
       {showOnlyMissingPeriod && missingPeriod.length === 0 ? (
-        <p className="text-sm text-muted-foreground">Every block has a period.</p>
+        <p className="text-sm text-muted-foreground">Every item has a period.</p>
       ) : null}
       <EntityTable<Block>
         rows={rows}
         getKey={(b) => b.id}
         getLabel={(b) => b.id}
-        emptyText="No blocks yet. Import your profile or add a block."
+        emptyText="Nothing here yet. Add an item, or add from a resume in Settings."
         onEdit={open}
         onDelete={async (b) => {
           try {
             await remove.mutateAsync(b.id);
             toast.success(`Deleted ${b.id}`);
           } catch (e) {
-            toast.error(e instanceof ApiError ? e.message : "Could not delete the block");
+            toast.error(e instanceof ApiError ? e.message : "Could not delete the item");
           }
         }}
         columns={[
-          { key: "id", header: "Id", render: (b) => <span className="font-mono text-xs">{b.id}</span> },
+          { key: "id", header: "Short ID", render: (b) => <span className="font-mono text-xs">{b.id}</span> },
           { key: "type", header: "Type", render: (b) => b.type },
-          { key: "org", header: "Org / role", render: (b) => [b.org, b.role].filter(Boolean).join(" · ") },
+          { key: "org", header: "Employer / role", render: (b) => [b.org, b.role].filter(Boolean).join(" · ") },
           {
             key: "period",
             header: "Period",
@@ -258,18 +258,18 @@ export function BlocksTab() {
           },
           {
             key: "verified",
-            header: "Verified",
+            header: "Confirmed",
             render: (b) => (
               <Button
                 type="button"
                 variant="ghost"
                 size="sm"
                 aria-pressed={b.verified}
-                aria-label={`Toggle verified for ${b.id}`}
+                aria-label={`Toggle confirmed for ${b.id}`}
                 onClick={() => void toggleVerified(b.id)}
                 disabled={pendingIds.has(b.id)}
               >
-                <StatusBadge tone={b.verified ? "high" : "muted"}>{b.verified ? "yes" : "no"}</StatusBadge>
+                <StatusBadge tone={b.verified ? "high" : "muted"}>{b.verified ? "confirmed" : "not confirmed yet"}</StatusBadge>
               </Button>
             ),
           },
@@ -278,7 +278,7 @@ export function BlocksTab() {
       <Dialog open={form !== null} onOpenChange={(o) => !o && setForm(null)}>
         <DialogContent className="flex max-h-[85vh] flex-col overflow-hidden sm:max-w-lg">
           <DialogHeader>
-            <DialogTitle>{isNew ? "New block" : `Edit ${form?.id}`}</DialogTitle>
+            <DialogTitle>{isNew ? "New item" : `Edit ${form?.id}`}</DialogTitle>
           </DialogHeader>
           {form ? (
             <div className="min-h-0 flex-1 space-y-4 overflow-y-auto pr-1">
@@ -288,14 +288,14 @@ export function BlocksTab() {
                 {errors.content ? <p className="text-xs text-destructive">{errors.content}</p> : null}
               </div>
               <div className="grid grid-cols-2 gap-3">
-                <CheckboxField name="block-verified" label="Verified" checked={form.verified} onCheckedChange={(v) => set({ verified: v })} />
+                <CheckboxField name="block-verified" label="Confirmed" checked={form.verified} onCheckedChange={(v) => set({ verified: v })} />
                 <div className="space-y-1">
-                  <Label htmlFor="block-metric">Metric (only used when verified)</Label>
+                  <Label htmlFor="block-metric">Number (only used once confirmed)</Label>
                   <Input id="block-metric" value={form.metric} onChange={(e) => set({ metric: e.target.value })} />
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-3">
-                {field("id", "Id")}
+                {field("id", "Short ID")}
                 <div className="space-y-1">
                   <Label>Type</Label>
                   <Select value={form.type} onValueChange={(type) => type && set({ type })}>
@@ -311,7 +311,7 @@ export function BlocksTab() {
                     </SelectContent>
                   </Select>
                 </div>
-                {field("org", "Organisation")}
+                {field("org", "Employer")}
                 {field("role", "Role")}
                 {field("period", "Period")}
               </div>

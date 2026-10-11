@@ -42,4 +42,4 @@ export function accessRequestLink(url: string = ACCESS_REQUEST_URL): AccessReque
 /** The "Request beta access" link style on the hero and the closing CTA: the app's existing link
  * convention (`underline underline-offset-4 hover:text-foreground`, as in CoachFrame), no invented effect.
  * The footer's request link deliberately uses the footer's own `LINK` class like its siblings (M-5). */
-export const REQUEST_LINK_CLASS = "text-link-on-band underline underline-offset-4 hover:text-foreground";
+export const REQUEST_LINK_CLASS = "text-link-on-band max-md:inline-block max-md:py-3 underline underline-offset-4 hover:text-foreground";

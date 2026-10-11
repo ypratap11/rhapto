@@ -26,7 +26,7 @@ import { decodeSearchState, encodeSearchState, passesFit, type SearchState } fro
 
 const SORT_LABEL: Record<SearchState["sort"], string> = {
   relevance: "Best match",
-  fit: "Fit",
+  fit: "Highest fit",
   newest: "Newest",
 };
 
@@ -169,7 +169,7 @@ function JobsPageInner() {
       </HeroBand>
       <FilterChips value={state} onChange={updateState} sources={sources} />
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2 className="font-sans text-lg font-semibold">Browse jobs</h2>
+        <h2 className="font-sans text-lg font-semibold">All matching jobs</h2>
         <div className="flex flex-wrap items-center gap-4">
           <PollNowButton onFinished={() => invalidateJobs(queryClient)} />
           <Select value={state.sort} onValueChange={(v) => v && updateState({ ...state, sort: v as SearchState["sort"] })}>
@@ -178,9 +178,9 @@ function JobsPageInner() {
             </SelectTrigger>
             <SelectContent>
               {/* Default: fit decayed by age, so a strong match posted today leads a stronger
-                  one from three months ago. "Fit" and "Newest" remain for either alone. */}
+                  one from three months ago. "Highest fit" and "Newest" remain for either alone. */}
               <SelectItem value="relevance">Best match</SelectItem>
-              <SelectItem value="fit">Fit</SelectItem>
+              <SelectItem value="fit">Highest fit</SelectItem>
               <SelectItem value="newest">Newest</SelectItem>
             </SelectContent>
           </Select>
@@ -191,7 +191,7 @@ function JobsPageInner() {
               className="cursor-pointer text-sm font-medium select-none"
               onClick={() => updateState({ ...state, hidden: !state.hidden })}
             >
-              Show hidden
+              Show jobs I hid
             </label>
           </div>
         </div>
@@ -221,7 +221,7 @@ function JobsPageInner() {
         }
       />
       {showPager ? (
-        <nav aria-label="Browse jobs pages" className="flex items-center justify-center gap-3">
+        <nav aria-label="All matching jobs pages" className="flex items-center justify-center gap-3">
           <Button variant="outline" size="sm" onClick={() => goToPage(currentPage - 1)} disabled={currentPage === 0}>
             Previous
           </Button>

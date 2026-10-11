@@ -12,7 +12,7 @@ import { useApplications, type JobOut } from "@/lib/api/queries";
 import { markApplyOpened } from "@/lib/apply-prompt";
 import { safeHttpUrl } from "@/lib/links";
 import { downloadPackage } from "@/lib/download";
-import { locationTierLabel, SOURCE_LABEL } from "@/lib/fit";
+import { locationTierLabel } from "@/lib/fit";
 import { STATUS_LABEL, statusTone, type ApplicationStatus } from "@/lib/status";
 import type { TrackInfo } from "./JobCard";
 import { NotInterestedButton } from "./NotInterestedButton";
@@ -32,6 +32,7 @@ export function JobHeader({ job, track }: { job: JobOut; track: TrackInfo | null
   const title = job.title ?? "Untitled role";
   const tier = locationTierLabel(job.location_tier);
   const latest = job.latest_package;
+  const caption = track && job.best_fit != null ? `${job.best_fit}% match for your ${track.name} goal` : null;
 
   // Same try/catch-then-toast shape as PackageActions.downloadFile: a failed download here is
   // worse than a failed download from the review page, since Apply has already sent the user off
@@ -48,12 +49,13 @@ export function JobHeader({ job, track }: { job: JobOut; track: TrackInfo | null
     }
   }
 
+  const primaryClass = buttonVariants({ className: "max-sm:w-full min-h-11" });
   const primary = (() => {
     if (application) {
       return (
         <div className="flex items-center gap-2">
           <StatusBadge tone={statusTone(application.status)}>{STATUS_LABEL[application.status as ApplicationStatus] ?? application.status}</StatusBadge>
-          <Link href="/dashboard" className={buttonVariants({ variant: "outline", size: "sm" })}>
+          <Link href="/dashboard" className={buttonVariants({ variant: "outline", className: "min-h-11" })}>
             Dashboard
           </Link>
         </div>
@@ -62,21 +64,21 @@ export function JobHeader({ job, track }: { job: JobOut; track: TrackInfo | null
     if (!latest) return <TailorButton job={job} />;
     if (latest.status === "blocked") {
       return (
-        <Link href={`/jobs/${job.id}/packages/${latest.id}`} className={buttonVariants({ size: "sm" })}>
-          Fix guardrails
+        <Link href={`/jobs/${job.id}/packages/${latest.id}`} className={primaryClass}>
+          Fix and review
         </Link>
       );
     }
     if (latest.status === "ready") {
       return (
-        <Button size="sm" onClick={() => void onApply()}>
-          Apply
+        <Button className="max-sm:w-full min-h-11" onClick={() => void onApply()}>
+          {safeHttpUrl(job.url) ? "Download and open the posting" : "Download resume"}
         </Button>
       );
     }
     return (
-      <Link href={`/jobs/${job.id}/packages/${latest.id}`} className={buttonVariants({ size: "sm" })}>
-        Review
+      <Link href={`/jobs/${job.id}/packages/${latest.id}`} className={primaryClass}>
+        Review resume
       </Link>
     );
   })();
@@ -86,7 +88,7 @@ export function JobHeader({ job, track }: { job: JobOut; track: TrackInfo | null
       <div className="flex min-w-0 items-start gap-4">
         <div className="flex shrink-0 flex-col items-center gap-1">
           <FitRing fit={job.best_fit ?? null} size={56} />
-          {track ? <p className="text-xs text-muted-foreground">against {track.name}</p> : null}
+          {caption ? <p className="text-center text-xs text-muted-foreground">{caption}</p> : null}
         </div>
         <div className="min-w-0 space-y-2">
           <div>
@@ -94,18 +96,15 @@ export function JobHeader({ job, track }: { job: JobOut; track: TrackInfo | null
             <p className="text-sm text-muted-foreground">{company}</p>
           </div>
           <div className="flex flex-wrap items-center gap-1.5">
-            {track ? <StatusBadge tone="primary">{track.name}</StatusBadge> : null}
-            <StatusBadge tone="muted">{SOURCE_LABEL[job.source] ?? job.source}</StatusBadge>
             {tier ? <StatusBadge tone="muted">{tier}</StatusBadge> : null}
             {job.repost_of ? <StatusBadge tone="mid">Reposted</StatusBadge> : null}
             {job.unlisted_at ? <StatusBadge tone="muted">No longer listed</StatusBadge> : null}
-            {job.search_name ? <StatusBadge tone="muted">{`via ${job.search_name}`}</StatusBadge> : null}
           </div>
         </div>
       </div>
-      <div className="flex shrink-0 items-center gap-2">
+      <div className="flex shrink-0 flex-col gap-2 sm:flex-row sm:items-center">
         {primary}
-        <NotInterestedButton job={job} size="sm" />
+        <NotInterestedButton job={job} className="min-h-11" />
       </div>
     </div>
   );

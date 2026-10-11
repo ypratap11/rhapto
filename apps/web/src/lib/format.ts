@@ -31,3 +31,23 @@ export function formatCostUsd(usd: number): string {
   if (usd > 0 && usd < 0.01) return "<$0.01";
   return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(usd);
 }
+
+/** Sources whose salary figures are known to be US dollars. Any other source shows a bare number:
+ * we never guess a currency. */
+export const USD_SOURCES = new Set(["adzuna"]);
+
+/** A job board's raw salary text made readable ("187835-187835" -> "$187,835"). Only plain digit
+ * values (or a digit range) in a sane yearly range are reformatted; anything else is returned
+ * exactly as it came, and it never throws. Empty or missing input gives null. */
+export function formatSalary(raw: string | null | undefined, source: string): string | null {
+  if (raw == null) return null;
+  const text = raw.trim();
+  if (text === "") return null;
+  if (!/^[1-9]\d*(-[1-9]\d*)?$/.test(text)) return text;
+  const values = text.split("-").map(Number).sort((a, b) => a - b);
+  if (values.some((v) => !Number.isSafeInteger(v) || v < 1000 || v >= 1_000_000)) return text;
+  const unique = values[0] === values[1] ? values.slice(0, 1) : values;
+  const useK = unique.every((v) => v % 1000 === 0);
+  const prefix = USD_SOURCES.has(source) ? "$" : "";
+  return unique.map((v) => prefix + (useK ? `${v / 1000}k` : v.toLocaleString("en-US"))).join("–");
+}

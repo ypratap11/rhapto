@@ -55,7 +55,7 @@ function ImportedBlockRow({ block }: { block: Block }) {
       <p className="text-sm">{block.content}</p>
       {block.metric ? (
         <p className="text-xs text-muted-foreground">
-          Claims <span className="font-medium text-foreground">{block.metric}</span> — unverified, so it is stripped from generated resumes until confirmed.
+          Claims <span className="font-medium text-foreground">{block.metric}</span> &mdash; not confirmed yet, so it is left out of resumes until you confirm it.
         </p>
       ) : null}
     </li>
@@ -170,10 +170,10 @@ export function ImportResume({
         // safe, rather than the old blanket "could not save" that read as a total failure.
         const reason = e instanceof ApiError ? e.message : "an unexpected error";
         toast.error(
-          `Saved ${written.length} block${written.length === 1 ? "" : "s"} to your profile, but could not finish the import (${reason}). It is safe to try again.`,
+          `Saved ${written.length} item${written.length === 1 ? "" : "s"} to Your experience, but could not finish the import (${reason}). It is safe to try again.`,
         );
       } else {
-        toast.error(e instanceof ApiError ? e.message : "Could not save the imported profile");
+        toast.error(e instanceof ApiError ? e.message : "Could not save what was found in your resume");
       }
     } finally {
       setSaving(false);
@@ -205,7 +205,7 @@ export function ImportResume({
     }
     return (
       <div className="space-y-3">
-        <p className="text-sm text-foreground">Added {savedBlocks.length} blocks to your profile.</p>
+        <p className="text-sm text-foreground">Added {savedBlocks.length} {savedBlocks.length === 1 ? "item" : "items"} to Your experience.</p>
         <div className="flex justify-end">
           <Button onClick={() => onDone?.()}>Done</Button>
         </div>
@@ -217,13 +217,13 @@ export function ImportResume({
     <div className="space-y-4">
       <p className="text-sm text-muted-foreground">Nothing is saved yet — review this first.</p>
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-        <ImportStatTile label="Blocks proposed" value={proposal.blocks.length} />
-        <ImportStatTile label="Dropped periods" value={proposal.dropped_periods} />
-        <ImportStatTile label="Metrics to confirm" value={proposal.metrics_to_confirm} />
+        <ImportStatTile label="Items found" value={proposal.blocks.length} />
+        <ImportStatTile label="Dates not found" value={proposal.dropped_periods} />
+        <ImportStatTile label="Numbers to confirm" value={proposal.metrics_to_confirm} />
       </div>
       {proposal.dropped_periods > 0 ? (
         <p className="text-sm text-muted-foreground">
-          {proposal.dropped_periods} block{proposal.dropped_periods === 1 ? "" : "s"} had no date Rhapto could read — add{" "}
+          {proposal.dropped_periods} {proposal.dropped_periods === 1 ? "item" : "items"} had no date Rhapto could read — add{" "}
           {proposal.dropped_periods === 1 ? "it" : "them"} later.
         </p>
       ) : null}
@@ -241,7 +241,7 @@ export function ImportResume({
       </div>
       {proposal.tracks.length > 0 ? (
         <div className="space-y-2">
-          <h3 className="text-sm font-medium text-foreground">Proposed tracks</h3>
+          <h3 className="text-sm font-medium text-foreground">Roles you want</h3>
           <ul className="flex flex-wrap gap-2">
             {proposal.tracks.map((t) => (
               <li key={t.id}>
@@ -260,7 +260,7 @@ export function ImportResume({
           Cancel
         </Button>
         <Button onClick={() => void handleAccept()} disabled={saving || notReady}>
-          Add {proposal.blocks.length} blocks to my profile
+          Add {proposal.blocks.length} {proposal.blocks.length === 1 ? "item" : "items"} to Your experience
         </Button>
       </div>
     </div>

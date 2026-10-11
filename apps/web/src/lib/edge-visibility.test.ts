@@ -83,4 +83,9 @@ describe("edge visibility", () => {
     expect(protectedAtEdge.has("/settings")).toBe(true);
     expect(publicAtEdge.has("/settings")).toBe(false);
   });
+
+  it("keeps /help public at the edge (a static page needs no session)", () => {
+    expect(publicAtEdge.has("/help")).toBe(true);
+    expect(protectedAtEdge.has("/help")).toBe(false);
+  });
 });

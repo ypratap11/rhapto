@@ -71,15 +71,12 @@ function message(e: unknown, fallback: string): string {
  * naming one would be a guess dressed as a diagnosis.
  */
 function historyLine(search: SearchOut): string {
-  if (search.runs === 0) return "Has not run yet";
-  if (!search.ever_found) {
-    const times = search.runs === 1 ? "once" : `${search.runs} times`;
-    return `Has run ${times} and never returned a job`;
-  }
-  return `Has found jobs before · ${search.runs} ${search.runs === 1 ? "run" : "runs"}`;
+  if (search.runs === 0) return "Not checked yet";
+  const times = search.runs === 1 ? "once" : `${search.runs} times`;
+  return search.ever_found ? `Checked ${times}` : `Checked ${times}. Nothing found yet`;
 }
 
-/** Every saved search as one row: name, its keywords/location/remote, a "from a track" badge when
+/** Every saved search as one row: name, its keywords/location/remote, a "from a role you want" badge when
  * `derived_from_track_id` is set, a Pause switch, and Edit (a Sheet) / Delete (an AlertDialog). */
 export function SavedSearchesSection() {
   const searches = useSavedSearches();
@@ -173,7 +170,7 @@ export function SavedSearchesSection() {
                       {search.name}
                     </Link>
                     {search.new_count > 0 ? <StatusBadge tone="primary">{`${search.new_count} new`}</StatusBadge> : null}
-                    {search.derived_from_track_id ? <StatusBadge tone="muted">from a track</StatusBadge> : null}
+                    {search.derived_from_track_id ? <StatusBadge tone="muted">from a role you want</StatusBadge> : null}
                     {/* A search that has polled and never matched is the silent zero this branch is
                         about. It gets a visible state, not an absence of one. */}
                     {search.runs > 0 && !search.ever_found ? <StatusBadge tone="danger">Never matched</StatusBadge> : null}
@@ -195,10 +192,10 @@ export function SavedSearchesSection() {
                       disabled={update.isPending}
                     />
                   </label>
-                  <Button size="sm" variant="outline" onClick={() => openEdit(search)}>
+                  <Button className="max-md:min-h-11" size="sm" variant="outline" onClick={() => openEdit(search)}>
                     Edit
                   </Button>
-                  <Button size="sm" variant="outline" onClick={() => setConfirmId(search.id)}>
+                  <Button className="max-md:min-h-11" size="sm" variant="outline" onClick={() => setConfirmId(search.id)}>
                     Delete
                   </Button>
                 </div>
@@ -248,10 +245,10 @@ export function SavedSearchesSection() {
                 </Select>
               </div>
               <div className="flex justify-end gap-2 px-4">
-                <Button variant="outline" onClick={closeEdit}>
+                <Button className="max-md:min-h-11" variant="outline" onClick={closeEdit}>
                   Cancel
                 </Button>
-                <Button onClick={() => void saveEdit()} disabled={update.isPending}>
+                <Button className="max-md:min-h-11" onClick={() => void saveEdit()} disabled={update.isPending}>
                   Save
                 </Button>
               </div>

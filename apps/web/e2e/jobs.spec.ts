@@ -2,7 +2,7 @@ import { expect, test } from "./fixtures";
 
 const QUERY = "engineer";
 
-test("Search fills the grid with scored jobs, and Poll now on this page finishes", async ({ page }) => {
+test("Search fills the grid with scored jobs, and Check for new jobs on this page finishes", async ({ page }) => {
   await page.goto("/jobs");
   await page.getByRole("textbox", { name: "Title" }).fill(QUERY);
   await page.getByRole("button", { name: "Search", exact: true }).click();
@@ -27,10 +27,10 @@ test("Search fills the grid with scored jobs, and Poll now on this page finishes
   // save actually landed.
   await expect(saveButton).toHaveCount(0);
 
-  // Poll now lives in this page's Browse jobs header (Release A). It re-runs every saved search's own
+  // Check for new jobs lives in this page's All matching jobs header (Release A). It re-runs every saved search's own
   // criteria. TaskProgress only toasts "Poll finished..." on a genuine "done" event, so this is a real
   // success assertion, not just "the button came back".
-  const pollButton = page.getByRole("button", { name: "Poll now" });
+  const pollButton = page.getByRole("button", { name: "Check for new jobs" });
   await expect(pollButton).toBeVisible();
   await pollButton.click();
   await expect(page.getByText(/poll finished/i)).toBeVisible({ timeout: 90_000 });

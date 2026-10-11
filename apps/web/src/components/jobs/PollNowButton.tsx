@@ -19,7 +19,7 @@ export function PollNowButton({ onFinished }: { onFinished: () => void }) {
       // for finished tasks, so this is the single path that surfaces the result.
       setTaskId(task.id);
     } catch (error) {
-      toast.error(error instanceof ApiError ? error.message : "Could not start polling");
+      toast.error(error instanceof ApiError ? error.message : "Couldn't check for new jobs. Try again in a minute.");
     }
   }
 
@@ -31,7 +31,7 @@ export function PollNowButton({ onFinished }: { onFinished: () => void }) {
   return (
     <div>
       <Button variant="outline" className="max-md:min-h-11" onClick={start} disabled={poll.isPending || taskId !== null}>
-        Poll now
+        Check for new jobs
       </Button>
       {taskId ? <TaskProgress taskId={taskId} jobId="" onFinished={finished} kind="poll" /> : null}
     </div>

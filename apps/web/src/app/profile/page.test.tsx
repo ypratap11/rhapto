@@ -94,14 +94,14 @@ describe("ProfilePage", () => {
     routerReplace.mockClear();
   });
 
-  it("shows the name, location and blocks-verified tally in the sand band", () => {
+  it("shows the name, location and items-confirmed tally in the sand band", () => {
     setSearchParams(new URLSearchParams());
     render(<ProfilePage />);
     const band = screen.getByTestId("hero-band");
     expect(band.className).toContain("bg-band-sand");
     expect(within(band).getByRole("heading", { level: 1, name: "Maya Chen" })).toBeInTheDocument();
     expect(within(band).getByText(/Denver, CO/)).toBeInTheDocument();
-    expect(within(band).getByText(/18 of 23 blocks verified/)).toBeInTheDocument();
+    expect(within(band).getByText(/18 of 23 items confirmed/)).toBeInTheDocument();
   });
 
   it("lays out the eight summary cards in the two documented columns", () => {
@@ -133,12 +133,12 @@ describe("ProfilePage", () => {
     expect(screen.queryByText("Guardrails content")).not.toBeInTheDocument();
   });
 
-  it("opens the Guardrails sheet when its Edit button is clicked", async () => {
+  it("opens the Writing rules sheet when its Edit button is clicked", async () => {
     setSearchParams(new URLSearchParams());
     const user = userEvent.setup({ delay: null });
     render(<ProfilePage />);
     expect(screen.queryByText("Guardrails content")).not.toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Edit Guardrails" }));
+    await user.click(screen.getByRole("button", { name: "Edit Writing rules" }));
     expect(screen.getByText("Guardrails content")).toBeInTheDocument();
   });
 
@@ -149,7 +149,7 @@ describe("ProfilePage", () => {
 
     // Opening pushes ?card=guardrails — a link to it is shareable, and it is a distinct history
     // entry a Back can undo (mirrors src/app/jobs/page.tsx's goToPage, which also pushes).
-    await user.click(screen.getByRole("button", { name: "Edit Guardrails" }));
+    await user.click(screen.getByRole("button", { name: "Edit Writing rules" }));
     expect(routerPush).toHaveBeenLastCalledWith("/profile?card=guardrails");
     expect(getSearchParams().get("card")).toBe("guardrails");
 
@@ -165,7 +165,7 @@ describe("ProfilePage", () => {
     const user = userEvent.setup({ delay: null });
     render(<ProfilePage />);
 
-    await user.click(screen.getByRole("button", { name: "Edit Guardrails" }));
+    await user.click(screen.getByRole("button", { name: "Edit Writing rules" }));
     expect(routerPush).toHaveBeenCalledWith("/profile?card=guardrails");
     expect(routerReplace).not.toHaveBeenCalled();
 

@@ -90,10 +90,10 @@ export function FieldPicker({ open, onOpenChange }: { open: boolean; onOpenChang
   async function pick(field: TaxonomyField, role: TaxonomyRole) {
     try {
       await putTrack.mutateAsync(trackFromRole(field, role, bases.data?.[0]?.id ?? "default"));
-      toast.success(`Added the ${role.name} track`);
+      toast.success(`Added the ${role.name} role`);
       onOpenChange(false);
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "Could not create the track");
+      toast.error(e instanceof ApiError ? e.message : "Could not add that role");
     }
   }
 
@@ -161,7 +161,7 @@ export function FieldPicker({ open, onOpenChange }: { open: boolean; onOpenChang
             )}
           </>
         )}
-        <p className="text-xs text-muted-foreground">Tracks stay editable — name, keywords and the fit threshold — in the Tracks card.</p>
+        <p className="text-xs text-muted-foreground">You can change the name, keywords and minimum match later in Roles you want.</p>
       </DialogContent>
     </Dialog>
   );

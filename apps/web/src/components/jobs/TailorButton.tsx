@@ -12,15 +12,13 @@ import { invalidateJobs, useMe, useResumeDocument, useTailor, useTracks, type Jo
 import { startTailoring, stopTailoring } from "@/lib/tailoring";
 import { TaskProgress } from "./TaskProgress";
 
-const MODE_LABEL: Record<"tune" | "blocks", string> = { tune: "Tune my resume", blocks: "Build from blocks" };
-
 /** The tailor endpoint's two "your LLM is not usable" conflicts, both fixed on the Settings page. */
 const LLM_SETUP_CODES = new Set(["llm_not_configured", "llm_key_unreadable"]);
 
 export function SetUpProviderLink() {
   return (
     <Link href="/settings" className="text-sm underline">
-      Set up your AI provider
+      Add an AI key in Settings
     </Link>
   );
 }
@@ -98,40 +96,53 @@ export function TailorButton({ job }: { job: JobOut }) {
   // offering the button. `undefined` (still loading) is not "not configured": leave the button.
   if (me.data?.llm_configured === false) return <SetUpProviderLink />;
 
+  const tuneHint = documentLoaded && !hasResumeDocument ? "To use Light touch, upload your resume file in Your profile." : null;
+  const trackList = tracks.data ?? [];
+
   return (
-    <div>
-      <div className="flex items-center gap-2">
-        <Select value={selectedTrackId} onValueChange={(value: string | null) => setTrackId(value ?? undefined)}>
-          <SelectTrigger className="w-44" aria-label="Track">
-            <SelectValue placeholder={tracks.data?.[0]?.name ?? "Track"} />
-          </SelectTrigger>
-          <SelectContent>
-            {(tracks.data ?? []).map((t) => (
-              <SelectItem key={t.id} value={t.id}>
-                {t.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <Select value={selectedMode} onValueChange={(value: string | null) => value && setMode(value as "blocks" | "tune")}>
-          <SelectTrigger className="w-44" aria-label="Mode">
-            <SelectValue placeholder="Mode">{(value: string | null) => (value ? (MODE_LABEL[value as "tune" | "blocks"] ?? value) : "Mode")}</SelectValue>
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem
-              value="tune"
-              disabled={!hasResumeDocument}
-              title={documentLoaded && !hasResumeDocument ? "Upload a resume document in the Profile tab to enable tune mode." : undefined}
-            >
-              Tune my resume
-            </SelectItem>
-            <SelectItem value="blocks">Build from blocks</SelectItem>
-          </SelectContent>
-        </Select>
-        <Button onClick={start} disabled={tailor.isPending || taskId !== null}>
-          {taskId ? "Tailoring…" : "Tailor"}
-        </Button>
-      </div>
+    <div className="space-y-2">
+      <Button className="max-sm:w-full min-h-11" onClick={start} disabled={tailor.isPending || taskId !== null}>
+        {taskId ? "Tailoring\u2026" : "Tailor my resume for this job"}
+      </Button>
+      <details className="text-sm">
+        <summary className="flex min-h-11 cursor-pointer items-center text-muted-foreground">Options</summary>
+        <div className="space-y-3 pb-2">
+          <fieldset className="space-y-1">
+            <legend className="sr-only">How to tailor</legend>
+            <label className="flex min-h-11 items-center gap-2">
+              <input
+                type="radio"
+                name={`tailor-mode-${job.id}`}
+                checked={selectedMode === "tune"}
+                disabled={!hasResumeDocument}
+                onChange={() => setMode("tune")}
+              />
+              Light touch (keep my wording, change little)
+            </label>
+            {tuneHint ? <p className="text-xs text-muted-foreground">{tuneHint}</p> : null}
+            <label className="flex min-h-11 items-center gap-2">
+              <input type="radio" name={`tailor-mode-${job.id}`} checked={selectedMode === "blocks"} onChange={() => setMode("blocks")} />
+              Full rewrite (rebuild from my experience)
+            </label>
+          </fieldset>
+          {trackList.length > 1 ? (
+            <Select value={selectedTrackId} onValueChange={(value: string | null) => setTrackId(value ?? undefined)}>
+              <SelectTrigger className="min-h-11 w-full sm:w-56" aria-label="Goal">
+                <SelectValue placeholder={trackList[0]?.name ?? "Goal"}>
+                  {(value: string | null) => trackList.find((t) => t.id === value)?.name ?? trackList[0]?.name ?? "Goal"}
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                {trackList.map((t) => (
+                  <SelectItem key={t.id} value={t.id}>
+                    {t.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          ) : null}
+        </div>
+      </details>
       {taskId ? <TaskProgress taskId={taskId} jobId={job.id} onFinished={onFinished} /> : null}
     </div>
   );

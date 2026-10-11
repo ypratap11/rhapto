@@ -1,0 +1,20 @@
+{
+  "report": {
+    "passed": true,
+    "rules_run": [
+      "tune-scope",
+      "no-new-numbers",
+      "no-invented-entities",
+      "date-consistency"
+    ],
+    "violations": []
+  },
+  "checks": {
+    "tune-scope": "Changes were limited to summary, skills and bullet lines, with at most six bullets changed.",
+    "no-new-numbers": "No number was added that is not already in your resume.",
+    "no-invented-entities": "Company names and job titles were checked against your experience or your resume.",
+    "date-consistency": "Dates were checked for consistency."
+  },
+  "remedies": {},
+  "mode": "tune"
+}

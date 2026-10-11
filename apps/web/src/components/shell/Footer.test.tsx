@@ -47,13 +47,29 @@ describe("Footer", () => {
     expect(names()).toEqual(["Open source"]);
   });
 
-  it("hosted in-app (/start and /settings): Feedback -> /feedback appears", () => {
+  it("hosted in-app (/start and /settings): Feedback appears, no Request beta access", () => {
     for (const path of ["/start", "/settings"]) {
       pathname.mockReturnValue(path);
       const { unmount } = render(<Footer />);
       expect(screen.getByRole("link", { name: "Feedback" })).toHaveAttribute("href", "/feedback");
+      expect(screen.queryByRole("link", { name: "Request beta access" })).toBeNull();
+      expect(names()).toEqual(["Open source", "Feedback"]);
       unmount();
     }
+  });
+
+  it("hosted /help (visitor header): request link, no Feedback", () => {
+    pathname.mockReturnValue("/help");
+    render(<Footer />);
+    expect(names()).toEqual(["Open source", "Request beta access"]);
+  });
+
+  it("token mode signed in (/start with a token): Feedback only", () => {
+    sameOrigin.value = false;
+    setSettings({ token: "tok", apiUrl: "http://localhost:8000" });
+    pathname.mockReturnValue("/start");
+    render(<Footer />);
+    expect(names()).toEqual(["Open source", "Feedback"]);
   });
 
   it("token-mode /settings: Feedback only once a token is stored (same predicate as the header)", () => {

@@ -1,8 +1,10 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
+import { toast } from "sonner";
 import { PollNowButton } from "./PollNowButton";
 
+vi.mock("sonner", () => ({ toast: { error: vi.fn() } }));
 const mutateAsync = vi.fn();
 let isPending = false;
 vi.mock("@/lib/api/queries", () => ({
@@ -30,22 +32,29 @@ describe("PollNowButton", () => {
 
     isPending = true;
     rerender(<PollNowButton onFinished={onFinished} />);
-    expect(screen.getByRole("button", { name: /poll now/i })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /check for new jobs/i })).toBeDisabled();
 
     isPending = false;
     mutateAsync.mockResolvedValueOnce({ id: "t1", status: "queued" });
     rerender(<PollNowButton onFinished={onFinished} />);
     const user = userEvent.setup({ delay: null });
-    await user.click(screen.getByRole("button", { name: /poll now/i }));
+    await user.click(screen.getByRole("button", { name: /check for new jobs/i }));
 
     expect(await screen.findByText("progress:t1")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /poll now/i })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /check for new jobs/i })).toBeDisabled();
     expect(onFinished).not.toHaveBeenCalled();
 
     await user.click(screen.getByRole("button", { name: "finish task" }));
 
     expect(onFinished).toHaveBeenCalledTimes(1);
     expect(screen.queryByText("progress:t1")).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /poll now/i })).toBeEnabled();
+    expect(screen.getByRole("button", { name: /check for new jobs/i })).toBeEnabled();
+  });
+
+  it("says so in plain words when the check cannot start", async () => {
+    mutateAsync.mockRejectedValueOnce(new Error("boom"));
+    render(<PollNowButton onFinished={vi.fn()} />);
+    await userEvent.setup({ delay: null }).click(screen.getByRole("button", { name: /check for new jobs/i }));
+    expect(toast.error).toHaveBeenCalledWith("Couldn't check for new jobs. Try again in a minute.");
   });
 });

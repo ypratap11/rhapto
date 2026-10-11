@@ -2243,6 +2243,14 @@
             "title": "Edits",
             "type": "array"
           },
+          "guardrail_checks": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "default": {},
+            "title": "Guardrail Checks",
+            "type": "object"
+          },
           "guardrail_remedies": {
             "additionalProperties": {
               "type": "string"

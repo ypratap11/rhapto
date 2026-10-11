@@ -60,7 +60,7 @@ export function applicableWiden(id: JobFilterId): ApplicableWiden | null {
 export const WIDEN: Record<JobFilterId, Widen> = {
   hidden: {
     // Both directions are real: the default view hides what the user said no to (so the widen is
-    // "show them"), and "Show hidden" shows only those (so the widen is "show the rest").
+    // "show them"), and "Show jobs I hid" shows only those (so the widen is "show the rest").
     label: (s) => (s.hidden ? "Show jobs you haven't hidden" : "Include hidden jobs"),
     apply: (s) => ({ ...s, hidden: !s.hidden }),
   },

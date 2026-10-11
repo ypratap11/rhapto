@@ -120,15 +120,15 @@ describe("TopBar", () => {
       pathname.mockReturnValue("/settings");
       sameOrigin.value = false;
       renderBar("token");
-      expect(within(screen.getByRole("navigation", { name: "Primary" })).getAllByRole("link").map((a) => a.textContent)).toEqual(["Dashboard", "My resumes"]);
+      expect(within(screen.getByRole("navigation", { name: "Primary" })).getAllByRole("link").map((a) => a.textContent)).toEqual(["Dashboard", "Jobs", "My resumes"]);
       expect(screen.queryByRole("button", { name: /advanced/i })).toBeNull();
     });
 
-    it("hosted /settings is an in-app screen: two tabs, no Advanced", () => {
+    it("hosted /settings is an in-app screen: three tabs, no Advanced", () => {
       pathname.mockReturnValue("/settings");
       sameOrigin.value = true;
       renderBar();
-      expect(within(screen.getByRole("navigation", { name: "Primary" })).getAllByRole("link").map((a) => a.textContent)).toEqual(["Dashboard", "My resumes"]);
+      expect(within(screen.getByRole("navigation", { name: "Primary" })).getAllByRole("link").map((a) => a.textContent)).toEqual(["Dashboard", "Jobs", "My resumes"]);
       expect(screen.queryByRole("button", { name: /advanced/i })).toBeNull();
     });
 
@@ -223,7 +223,7 @@ describe("TopBar", () => {
       sameOrigin.value = true;
       renderBar();
       const { user, dialog } = await open();
-      await user.click(within(dialog).getByRole("link", { name: "Help" }));
+      await user.click(within(dialog).getByRole("link", { name: "Settings" }));
       await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
     });
 
@@ -243,35 +243,38 @@ describe("TopBar", () => {
 });
 
 describe("signed-in header", () => {
-  it("has exactly two tabs, Dashboard then My resumes, and marks the current one", () => {
+  it("has exactly three tabs, Dashboard, Jobs, My resumes, and marks the current one", () => {
     pathname.mockReturnValue("/resumes");
     renderBar();
     const nav = screen.getByRole("navigation", { name: "Primary" });
     expect([...nav.querySelectorAll("a")].map((a) => [a.textContent, a.getAttribute("href")])).toEqual([
       ["Dashboard", "/dashboard"],
+      ["Jobs", "/jobs"],
       ["My resumes", "/resumes"],
     ]);
     expect(within(nav).getByRole("link", { name: "My resumes" })).toHaveAttribute("aria-current", "page");
     expect(within(nav).getByRole("link", { name: "Dashboard" })).not.toHaveAttribute("aria-current");
   });
 
-  it("maps pages to tabs", () => {
-    expect(activeTab("/dashboard")).toBe("/dashboard");
-    expect(activeTab("/jobs")).toBe("/dashboard");
-    expect(activeTab("/jobs/abc")).toBe("/dashboard");
-    expect(activeTab("/resumes")).toBe("/resumes");
-    expect(activeTab("/jobs/abc/packages/def")).toBe("/resumes");
-    expect(activeTab("/start")).toBeNull();
-    expect(activeTab("/profile")).toBeNull();
-    expect(activeTab("/settings")).toBeNull();
-  });
+  it.each([
+    ["/dashboard", "/dashboard"],
+    ["/jobs", "/jobs"],
+    ["/jobs/abc", "/jobs"],
+    ["/jobs/abc/packages/def", "/resumes"],
+    ["/resumes", "/resumes"],
+    ["/start", null],
+    ["/profile", null],
+    ["/settings", null],
+    ["/help", null],
+    ["/jobsx", null],
+  ])("activeTab(%s)", (p, want) => expect(activeTab(p)).toBe(want));
 
-  it("has no Advanced menu and no Feedback, Jobs, Pipeline, Profile or Tailor tab", () => {
+  it("has no Advanced menu and no Feedback, Pipeline, Profile or Tailor tab", () => {
     pathname.mockReturnValue("/dashboard");
     renderBar();
     expect(screen.queryByRole("button", { name: /advanced/i })).toBeNull();
     const nav = screen.getByRole("navigation", { name: "Primary" });
-    for (const old of ["Feedback", "Jobs", "Pipeline", "Profile", "Tailor a resume"]) {
+    for (const old of ["Feedback", "Pipeline", "Profile", "Tailor a resume"]) {
       expect(within(nav).queryByRole("link", { name: old })).toBeNull();
     }
   });
@@ -307,7 +310,7 @@ describe("signed-in header", () => {
     expect([...menu.querySelectorAll("a")].map((a) => [a.textContent, a.getAttribute("href")])).toEqual([
       ["Your profile", "/profile"],
       ["Settings", "/settings"],
-      ["Help", "/settings#help"],
+      ["Help", "/help"],
       ["Sign out", "/cdn-cgi/access/logout"],
     ]);
     expect(await within(menu).findByRole("button", { name: "Send feedback" })).toBeInTheDocument();
@@ -498,7 +501,7 @@ describe("signed-in header", () => {
   });
 
   describe("phone sheet", () => {
-    it("groups Dashboard, My resumes / Your profile, Settings, Help, Send feedback, Theme, Sign out", async () => {
+    it("groups Dashboard, Jobs, My resumes / Your profile, Settings, Help, Send feedback, Theme, Sign out", async () => {
       pathname.mockReturnValue("/dashboard");
       sameOrigin.value = true;
       renderBar();
@@ -507,10 +510,11 @@ describe("signed-in header", () => {
       const dialog = await screen.findByRole("dialog", { name: "Menu" });
       expect(within(dialog).getAllByRole("link").map((a) => [a.textContent, a.getAttribute("href")])).toEqual([
         ["Dashboard", "/dashboard"],
+        ["Jobs", "/jobs"],
         ["My resumes", "/resumes"],
         ["Your profile", "/profile"],
         ["Settings", "/settings"],
-        ["Help", "/settings#help"],
+        ["Help", "/help"],
         ["Sign out", "/cdn-cgi/access/logout"],
       ]);
       expect(within(dialog).getByText("Account")).toBeInTheDocument();

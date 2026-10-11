@@ -25,10 +25,26 @@ function guardrailToForm(rule: GuardrailRule): GuardrailForm {
 
 const emptyGuardrailForm: GuardrailForm = { rule: KNOWN_RULES[0], active: true, config: "" };
 
+/** The plain sentence each rule is shown as. Unlisted rules fall back to their stored name. */
+const RULE_LABELS: Record<string, string> = {
+  "no-unverified-metrics": "Numbers must come from your resume file or a confirmed item",
+  "no-invented-entities": "No invented companies, schools or tools",
+  "date-consistency": "Dates are consistent",
+  attribution: "Shared work stays marked as shared",
+  "visibility-context": "Items you marked to leave out stay out",
+};
+
+function ruleLabel(rule: string): string {
+  return RULE_LABELS[rule] ?? rule;
+}
+
+/** This rule always runs. It stays selectable so an existing saved setting can still be edited,
+ * but it is never offered as a switch. */
+const ALWAYS_ON = "no-unverified-metrics";
+
 /** Rules where turning the switch off has a real, easy-to-miss consequence for output quality. */
 const DEACTIVATION_WARNINGS: Record<string, string> = {
-  "no-unverified-metrics": "Turning this off allows numbers that no verified block supports.",
-  "no-invented-entities": "Turning this off allows employers, products, and tools that are not in your blocks.",
+  "no-invented-entities": "Turning this off allows companies, schools and tools that are not in Your experience.",
 };
 
 export function GuardrailsTab() {
@@ -65,10 +81,10 @@ export function GuardrailsTab() {
     setErrors({});
     try {
       await put.mutateAsync({ rule: form.rule, active: form.active, config: value });
-      toast.success(`Saved ${form.rule}`);
+      toast.success(`Saved: ${ruleLabel(form.rule)}`);
       setForm(null);
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "Could not save the guardrail");
+      toast.error(e instanceof ApiError ? e.message : "Could not save the rule");
     }
   }
 
@@ -79,32 +95,40 @@ export function GuardrailsTab() {
   return (
     <div className="space-y-3">
       <div className="flex justify-end">
-        <Button onClick={() => open(null)}>Add guardrail</Button>
+        <Button onClick={() => open(null)}>Add a check</Button>
       </div>
       <EntityTable<GuardrailRule>
         rows={guardrails.data ?? []}
         getKey={(r) => r.rule}
-        getLabel={(r) => r.rule}
-        emptyText="No guardrail overrides yet. Defaults apply until you add one."
+        getLabel={(r) => ruleLabel(r.rule)}
+        emptyText="No extra checks added. The standard rules apply."
         onEdit={open}
         onDelete={async (r) => {
           try {
             await remove.mutateAsync(r.rule);
-            toast.success(`Deleted ${r.rule}`);
+            toast.success(`Deleted: ${ruleLabel(r.rule)}`);
           } catch (e) {
-            toast.error(e instanceof ApiError ? e.message : "Could not delete the guardrail");
+            toast.error(e instanceof ApiError ? e.message : "Could not delete the rule");
           }
         }}
         columns={[
-          { key: "rule", header: "Rule", render: (r) => <span className="font-mono text-xs">{r.rule}</span> },
-          { key: "active", header: "Active", render: (r) => <StatusBadge tone={r.active ? "high" : "muted"}>{r.active ? "yes" : "no"}</StatusBadge> },
-          { key: "config", header: "Config", render: (r) => (Object.keys(r.config).length ? <span className="font-mono text-xs">{JSON.stringify(r.config)}</span> : <span className="text-muted-foreground">—</span>) },
+          { key: "rule", header: "Rule", render: (r) => ruleLabel(r.rule) },
+          {
+            key: "active",
+            header: "Status",
+            render: (r) =>
+              r.rule === ALWAYS_ON ? (
+                <span className="text-sm">Always on</span>
+              ) : (
+                <StatusBadge tone={r.active ? "high" : "muted"}>{r.active ? "on" : "off"}</StatusBadge>
+              ),
+          },
         ]}
       />
       <Dialog open={form !== null} onOpenChange={(o) => !o && setForm(null)}>
         <DialogContent className="flex max-h-[85vh] flex-col overflow-hidden sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>{isNew ? "New guardrail override" : `Edit ${form?.rule}`}</DialogTitle>
+            <DialogTitle>{isNew ? "New check" : `Edit: ${form ? ruleLabel(form.rule) : ""}`}</DialogTitle>
           </DialogHeader>
           {form ? (
             <div className="min-h-0 flex-1 space-y-3 overflow-y-auto pr-1">
@@ -118,24 +142,31 @@ export function GuardrailsTab() {
                     <SelectContent>
                       {KNOWN_RULES.map((r) => (
                         <SelectItem key={r} value={r}>
-                          {r}
+                          {ruleLabel(r)}
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
                 ) : (
-                  <p className="font-mono text-sm">{form.rule}</p>
+                  <p className="text-sm">{ruleLabel(form.rule)}</p>
                 )}
               </div>
               <div className="space-y-1">
-                <SwitchField name="guardrail-active" label="Active" checked={form.active} onCheckedChange={requestActiveChange} />
-                {DEACTIVATION_WARNINGS[form.rule] ? <p className="text-xs text-fit-mid">{DEACTIVATION_WARNINGS[form.rule]}</p> : null}
+                {form.rule === ALWAYS_ON ? (
+                  <p className="text-sm font-medium">Always on</p>
+                ) : (
+                  <SwitchField name="guardrail-active" label="Active" checked={form.active} onCheckedChange={requestActiveChange} />
+                )}
+                {form.rule !== ALWAYS_ON && DEACTIVATION_WARNINGS[form.rule] ? <p className="text-xs text-fit-mid">{DEACTIVATION_WARNINGS[form.rule]}</p> : null}
               </div>
-              <div className="space-y-1">
-                <Label htmlFor="guardrail-config">Config (JSON object)</Label>
-                <Textarea id="guardrail-config" rows={6} value={form.config} onChange={(e) => set({ config: e.target.value })} placeholder="{}" />
-                {errors.config ? <p className="text-xs text-destructive">{errors.config}</p> : null}
-              </div>
+              <details className="rounded-md border border-border" open={Boolean(errors.config) || form.config.trim().length > 0}>
+                <summary className="cursor-pointer select-none rounded-md px-3 py-2 text-sm font-medium">Advanced</summary>
+                <div className="space-y-1 border-t border-border p-3">
+                  <Label htmlFor="guardrail-config">Extra settings (JSON object)</Label>
+                  <Textarea id="guardrail-config" rows={6} value={form.config} onChange={(e) => set({ config: e.target.value })} placeholder="{}" />
+                  {errors.config ? <p className="text-xs text-destructive">{errors.config}</p> : null}
+                </div>
+              </details>
             </div>
           ) : null}
           <DialogFooter>
@@ -151,7 +182,7 @@ export function GuardrailsTab() {
       <AlertDialog open={confirmDeactivate} onOpenChange={(o) => !o && setConfirmDeactivate(false)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Turn off {form?.rule}?</AlertDialogTitle>
+            <AlertDialogTitle>Turn off: {form ? ruleLabel(form.rule) : ""}?</AlertDialogTitle>
             <AlertDialogDescription>{form ? DEACTIVATION_WARNINGS[form.rule] : ""}</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

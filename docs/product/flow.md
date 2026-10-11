@@ -5,30 +5,31 @@ stage is a dead end.
 
 | Stage | Forward | Out |
 |---|---|---|
-| Job (grid, recommendations, job page) | **Tailor** | **Not interested** hides the job (`jobs.hidden_at`); Undo toast for 8 s; "Show hidden" toggle on Jobs |
-| Resume | **Review** → **Mark ready** → **Apply** | **Skip** archives the package (`packages.archived_at`) and hides the job; **Regenerate** makes a new version; **Blocked** lists violations with a Fix link |
-| Apply | Opens the posting in a new tab and downloads the resume; on return the card asks "Did you apply?" **Yes / Not yet / Skip** | Yes creates or updates the application as Applied with today's date |
+| Job (grid, recommendations, job page) | **Tailor** | **Not interested** hides the job (`jobs.hidden_at`); Undo toast for 8 s; "Show jobs I hid" toggle on Jobs |
+| Resume | **Review resume** → **Mark ready to send** → **Download and open the posting** | **Archive** (in the resume page's **More** menu) archives the package (`packages.archived_at`) and hides the job; **Regenerate** makes a new version; **Needs attention** lists what the truth check held back, each with a Fix link |
+| Apply | Opens the posting in a new tab and downloads the resume; on return the card asks "Did you apply?" **Yes / Not yet / Skip** (Skip here archives the resume and hides the job) | Yes creates or updates the application as Applied with today's date |
 | Your applications (Dashboard) | **Screen → Interview → Offer**, each with date and optional note | **Closed** with reason `rejected \| withdrew \| no_response \| filled`; **Follow-up** date puts a reminder on the Dashboard |
 
 ## Not interested
 
 Not interested hides a job from the Jobs grid and the Dashboard's recommendations. It isn't a
-permanent delete — a toast offers **Undo** for 8 seconds, and after that the "Show hidden" toggle
+permanent delete — a toast offers **Undo** for 8 seconds, and after that the **Show jobs I hid** toggle
 on the Jobs page brings hidden jobs back into view (and lets you unhide one) at any time.
 
-## Skip
+## Archive
 
-Skip is the way out of a resume you don't want to pursue. It archives the package and hides the
-underlying job in one step, with the same 8-second Undo toast as Not interested. You'll find it as
-a row action on the Resumes table, and again inside the "Did you apply?" prompt if you decide not
-to after all.
+Archive is the way out of a resume you don't want to pursue. It archives the package and hides the
+underlying job in one step, with the same 8-second Undo toast as Not interested. You'll find it in
+the **More** menu on the resume's page, and as **Skip** inside the "Did you apply?" prompt if you
+decide not to after all.
 
-## Blocked
+## Needs attention
 
-When a guardrail rejects part of a generated resume, the package's status becomes **Blocked**
-instead of ready for review. The job page and the review page both show a guardrail panel listing
-every violation — which rule failed, what it says, and where — each with a link that jumps straight
-to the offending bullet, paragraph, or field so you can fix it and regenerate.
+When the truth check rejects part of a generated resume, the package is marked **Needs attention**
+(stored as `blocked`) instead of ready for review. No documents are offered until it is fixed. The
+job page's main button reads **Fix and review**, and the resume's page lists every line that did
+not pass - which rule failed, what to do about it, and where - each with a link that jumps straight
+to the offending line or field so you can fix it and regenerate.
 
 ## Closed
 
