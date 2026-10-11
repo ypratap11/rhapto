@@ -214,7 +214,7 @@ class JobOut(BaseModel):
     unlisted_at: datetime | None = None
     # The other copies of this posting that `GET /jobs` collapsed into this row (same company and
     # title after normalisation). Computed per request, never stored; the web opens them with
-    # `GET /jobs?ids=...`. Empty for `ids=` requests and for every sort that is not arranged.
+    # `GET /jobs?ids=...`. Empty for `ids=` requests, which are never collapsed.
     also_ids: list[uuid.UUID] = []
 
 
@@ -260,6 +260,9 @@ class PackageOut(BaseModel):
     #: there would leave every existing row without it. A rule with no remedy is simply absent, and
     #: the panel then shows the rule id, message and path alone rather than dropping the row.
     guardrail_remedies: dict[str, str] = {}
+    #: A plain-language sentence for every rule that RAN on this package (`report.rules_run`), so the
+    #: review panel can say what was checked, not just what failed. Response-time, never stored.
+    guardrail_checks: dict[str, str] = {}
 
 
 class EditPatch(BaseModel):

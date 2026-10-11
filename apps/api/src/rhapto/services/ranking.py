@@ -47,12 +47,48 @@ class Arranged:
     also_ids: tuple[uuid.UUID, ...]
 
 
+#: Legal-form words dropped from the END of a company name so "Acme, Inc." and "ACME LLC" meet.
+#: Only these: "Services", "Group", "Labs" and other real words are never stripped.
+LEGAL_SUFFIXES = frozenset(
+    {
+        "inc",
+        "incorporated",
+        "llc",
+        "l.l.c",
+        "ltd",
+        "limited",
+        "corp",
+        "corporation",
+        "co",
+        "gmbh",
+        "plc",
+        "ag",
+        "sa",
+        "s.a",
+        "bv",
+        "nv",
+        "pty",
+        "lp",
+        "llp",
+    }
+)
+
+
 def company_key(company: str | None) -> str | None:
-    """Lower-case, whitespace collapsed; None for a missing or blank company."""
+    """Lower-case, whitespace collapsed, trailing legal suffixes and a ".com" tail removed.
+
+    Never empty for a non-blank name ("Inc." stays "inc"); None for a missing or blank company.
+    """
     if not company:
         return None
-    key = _WS.sub(" ", company).strip().lower()
-    return key or None
+    tokens = [t.rstrip(",.") or t for t in _WS.sub(" ", company).strip().lower().split(" ") if t]
+    while len(tokens) > 1 and tokens[-1] in LEGAL_SUFFIXES:
+        tokens.pop()
+    if tokens:
+        last = tokens[-1]
+        if last.endswith(".com") and len(last) > len(".com"):
+            tokens[-1] = last[: -len(".com")]
+    return " ".join(tokens) or None
 
 
 def title_key(title: str | None) -> str | None:
@@ -73,6 +109,7 @@ def arrange(
     *,
     per_company: int = PER_COMPANY_TOP,
     cap: int = TITLE_MISS_CAP,
+    spread_companies: bool = True,
 ) -> list[Arranged]:
     """C1 then C2 over an already-ordered sequence.
 
@@ -83,7 +120,7 @@ def arrange(
     above-cap rows already occupied, so a deferred title match still precedes every row at or
     below the cap and every unscored row, and those rows keep their plain order exactly. Nothing is
     removed. A row with no company or no title is never collapsed, and a row with no company is
-    never capped.
+    never capped. With `spread_companies=False` only C1 runs.
     """
     first_of: dict[tuple[str, str], int] = {}
     order: list[int] = []
@@ -98,32 +135,39 @@ def arrange(
             first_of[(company, title)] = position
         order.append(position)
         also[position] = []
-    slots = [
-        slot
-        for slot, position in enumerate(order)
-        if (fit := items[position].best_fit) is not None and fit > cap
-    ]
-    seen: Counter[str] = Counter()
-    front: list[int] = []
-    back: list[int] = []
-    for slot in slots:
-        position = order[slot]
-        company = company_key(items[position].company)
-        if company is None:
-            front.append(position)
-            continue
-        seen[company] += 1
-        (front if seen[company] <= per_company else back).append(position)
-    for slot, position in zip(slots, [*front, *back], strict=True):
-        order[slot] = position
+    if spread_companies:
+        slots = [
+            slot
+            for slot, position in enumerate(order)
+            if (fit := items[position].best_fit) is not None and fit > cap
+        ]
+        seen: Counter[str] = Counter()
+        front: list[int] = []
+        back: list[int] = []
+        for slot in slots:
+            position = order[slot]
+            company = company_key(items[position].company)
+            if company is None:
+                front.append(position)
+                continue
+            seen[company] += 1
+            (front if seen[company] <= per_company else back).append(position)
+        for slot, position in zip(slots, [*front, *back], strict=True):
+            order[slot] = position
     return [Arranged(position, tuple(also[position])) for position in order]
 
 
-def wants_arrangement(*, ids_given: bool, sort: str, recommended: bool) -> bool:
-    """`GET /jobs` arranges for the Jobs page default (relevance) and the dashboard (recommended,
-    which sorts by fit), and NEVER for an `ids=` request: live search re-fetches its own results
-    that way and must get every row it asked for."""
-    return not ids_given and (sort == "relevance" or recommended)
+def wants_collapse(*, ids_given: bool) -> bool:
+    """`GET /jobs` collapses duplicate postings on every list, and NEVER for an `ids=` request:
+    live search re-fetches its own results that way and must get every row it asked for."""
+    return not ids_given
+
+
+def wants_company_spread(*, sort: str, recommended: bool) -> bool:
+    """The per-company cap (C2) applies to the Jobs page default (relevance) and the dashboard
+    (recommended, which sorts by fit) only; newest and plain fit keep their strict order. Callers
+    never reach this for an `ids=` request (see `wants_collapse`)."""
+    return sort == "relevance" or recommended
 
 
 _EPOCH = datetime(1970, 1, 1, tzinfo=UTC)

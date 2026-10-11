@@ -1,0 +1,44 @@
+{
+  "report": {
+    "passed": false,
+    "rules_run": [
+      "provenance",
+      "no-unverified-metrics",
+      "completeness",
+      "no-invented-entities",
+      "date-consistency",
+      "attribution",
+      "visibility-context"
+    ],
+    "violations": [
+      {
+        "rule": "no-unverified-metrics",
+        "severity": "error",
+        "message": "metric(s) not found in verified block 'acme-migration': 40%",
+        "path": "sections[0].entries[0].bullets[1]",
+        "block_id": "acme-migration"
+      },
+      {
+        "rule": "completeness",
+        "severity": "warning",
+        "message": "credential 'cred-draft' is selected but has no company, title or text, so it cannot be shown; fill it in or remove it",
+        "path": "selection.block_ids['cred-draft']",
+        "block_id": "cred-draft"
+      }
+    ]
+  },
+  "checks": {
+    "provenance": "Every entry and line is linked to an item in your experience.",
+    "no-unverified-metrics": "Every number appears in an item you confirmed.",
+    "completeness": "Every role, project and credential picked for this job is listed, except an item with no company, title or text.",
+    "no-invented-entities": "Company names and job titles were checked against your experience or your resume.",
+    "date-consistency": "Dates were checked for consistency.",
+    "attribution": "Where you noted that work was shared, that note is kept.",
+    "visibility-context": "Items you marked to leave out for a kind of job were left out when Rhapto recognised that kind of job in this posting."
+  },
+  "remedies": {
+    "no-unverified-metrics": "A number appeared that is not in a confirmed item this line is based on. Add the figure to that item in your experience and confirm it, or regenerate so the line stops stating it.",
+    "completeness": "Every selected role, project and credential must keep an entry. Shorten an entry to one line rather than deleting it, or regenerate. If an item has no company, title or text, fill it in or remove it in your experience."
+  },
+  "mode": "blocks"
+}

@@ -1887,6 +1887,13 @@ export interface components {
             /** Edits */
             edits: components["schemas"]["Edit"][];
             /**
+             * Guardrail Checks
+             * @default {}
+             */
+            guardrail_checks: {
+                [key: string]: string;
+            };
+            /**
              * Guardrail Remedies
              * @default {}
              */

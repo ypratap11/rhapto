@@ -5,21 +5,31 @@ import html as html_module
 import ipaddress
 import re
 import socket
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Iterable
 from urllib.parse import urljoin, urlparse
 
+import httpcore
 import httpx
 import trafilatura
 
 from rhapto.db.hashing import dedupe_hash
 
+SocketOption = (
+    tuple[int, int, int] | tuple[int, int, bytes | bytearray] | tuple[int, int, None, int]
+)
+
 __all__ = [
+    "BlockedAddressError",
     "FetchText",
     "JobTextError",
+    "PinnedNetworkBackend",
+    "PinnedTransport",
     "assert_public_host",
     "dedupe_hash",
     "fetch_job_text",
     "html_to_text",
+    "public_addresses",
+    "public_http_client",
     "resolve_host",
 ]
 
@@ -57,14 +67,14 @@ def _is_blocked(ip: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
     )
 
 
-async def assert_public_host(hostname: str) -> None:
-    """Reject hostnames that resolve to private, loopback, link-local, reserved,
+async def public_addresses(hostname: str) -> list[str]:
+    """Resolve a hostname and return its addresses, rejecting hostnames that resolve to private, loopback, link-local, reserved,
     multicast, or unspecified addresses, to prevent SSRF via job posting URLs.
 
     Also unwraps IPv4-mapped IPv6 addresses (::ffff:a.b.c.d) and NAT64-embedded
     IPv4 addresses (64:ff9b::/96) and applies the same checks to the embedded
     IPv4 address, since either could otherwise be used to smuggle a blocked
-    address past the IPv6 checks.
+    address past the IPv6 checks. Returns the validated addresses in resolver order.
     """
     try:
         addresses = await asyncio.to_thread(resolve_host, hostname)
@@ -83,6 +93,99 @@ async def assert_public_host(hostname: str) -> None:
                 embedded = ipaddress.ip_address(int(ip) & 0xFFFFFFFF)
                 if _is_blocked(embedded):
                     raise JobTextError("URL host is not allowed")
+    return addresses
+
+
+async def assert_public_host(hostname: str) -> None:
+    """Raise JobTextError unless every address the hostname resolves to is public."""
+    await public_addresses(hostname)
+
+
+class BlockedAddressError(JobTextError):
+    """A connection was refused because it would reach a non-public address."""
+
+
+class PinnedNetworkBackend(httpcore.AsyncNetworkBackend):
+    """Network backend that resolves, validates and connects to the validated IP itself.
+
+    httpcore passes the hostname to `connect_tcp` and then does TLS with the hostname as SNI,
+    so connecting to the IP keeps certificate verification on the hostname while closing the
+    gap between the SSRF check and the connection (DNS rebinding). Each sequential attempt
+    gets the full connect timeout; there is no happy-eyeballs.
+    """
+
+    def __init__(self, inner: httpcore.AsyncNetworkBackend | None = None) -> None:
+        self._inner = inner or httpcore.AnyIOBackend()
+
+    async def connect_tcp(
+        self,
+        host: str,
+        port: int,
+        timeout: float | None = None,
+        local_address: str | None = None,
+        socket_options: Iterable[SocketOption] | None = None,
+    ) -> httpcore.AsyncNetworkStream:
+        try:
+            addresses = await public_addresses(host)
+        except JobTextError as exc:
+            raise BlockedAddressError(str(exc)) from exc
+        last: Exception | None = None
+        for ip in list(dict.fromkeys(addresses)):
+            try:
+                return await self._inner.connect_tcp(
+                    ip,
+                    port,
+                    timeout=timeout,
+                    local_address=local_address,
+                    socket_options=socket_options,
+                )
+            except (httpcore.ConnectError, httpcore.ConnectTimeout) as exc:
+                last = exc
+        raise last or httpcore.ConnectError("no address")
+
+    async def connect_unix_socket(
+        self,
+        path: str,
+        timeout: float | None = None,
+        socket_options: Iterable[SocketOption] | None = None,
+    ) -> httpcore.AsyncNetworkStream:
+        raise BlockedAddressError("unix sockets are not allowed")
+
+    async def sleep(self, seconds: float) -> None:
+        await self._inner.sleep(seconds)
+
+
+class PinnedTransport(httpx.AsyncHTTPTransport):
+    """httpx transport whose connections go through `PinnedNetworkBackend`.
+
+    `trust_env=False`: proxy environment variables are ignored for these fetchers, so a
+    proxy cannot be used to reach a host this module has not validated.
+    """
+
+    def __init__(self, *, backend: httpcore.AsyncNetworkBackend | None = None) -> None:
+        super().__init__(trust_env=False)
+        # httpx 0.28 has no public network_backend parameter; replace the pool it built,
+        # keeping httpx's own limits (httpcore's defaults would queue concurrent fetches).
+        self._pool = httpcore.AsyncConnectionPool(
+            ssl_context=httpx.create_ssl_context(trust_env=False),
+            max_connections=100,
+            max_keepalive_connections=20,
+            keepalive_expiry=5.0,
+            http1=True,
+            http2=False,
+            network_backend=backend or PinnedNetworkBackend(),
+        )
+
+
+def public_http_client(
+    *, timeout: float, backend: httpcore.AsyncNetworkBackend | None = None
+) -> httpx.AsyncClient:
+    return httpx.AsyncClient(
+        transport=PinnedTransport(backend=backend),
+        timeout=timeout,
+        follow_redirects=False,
+        trust_env=False,
+    )
 
 
 async def _check_url(url: str) -> None:
@@ -146,7 +249,7 @@ async def _read_capped(response: httpx.Response) -> str:
 async def fetch_job_text(url: str, *, client: httpx.AsyncClient | None = None) -> str:
     await _check_url(url)
     own_client = client is None
-    client = client or httpx.AsyncClient(follow_redirects=False, timeout=TIMEOUT_SECONDS)
+    client = client or public_http_client(timeout=TIMEOUT_SECONDS)
     try:
         current_url = url
         redirects = 0
