@@ -65,17 +65,20 @@ REMEDIES: dict[str, str] = {
         "your experience first so the line has a source."
     ),
     METRICS: (
-        "A number appeared that no confirmed item contains. Either confirm the item that holds "
-        "that figure, or regenerate so the line stops stating it."
+        "A number appeared that is not in a confirmed item this line is based on. Add the "
+        "figure to that item in your experience and confirm it, or regenerate so the line "
+        "stops stating it."
     ),
     ENTITIES: (
-        "A company, job title or name appeared that does not match your own experience or resume. "
-        "Regenerate, or correct it in your experience first."
+        "A company, job title, date range or other name does not match your experience or "
+        "your resume. Regenerate, or correct it at the source first: the item in your "
+        "experience, or your resume file."
     ),
     DATES: (
-        "A date range is out of order, overlaps another role, or was changed. Fix the dates on "
-        "that item in your experience (mark a role as overlapping if it really was), then "
-        "regenerate."
+        "A date range can't be read, is out of order or overlaps another role, or a "
+        "reworded line added or changed a year. Fix the dates on that item in your "
+        "experience (if two roles really ran at the same time, mark one of them that "
+        "way), or regenerate."
     ),
     ATTRIBUTION: (
         "A note you asked to keep about shared work is missing. Regenerate, or put the wording "
@@ -86,16 +89,17 @@ REMEDIES: dict[str, str] = {
         "remove that mark on the item if it should be allowed."
     ),
     COMPLETENESS: (
-        "Every selected role, project and credential must keep an entry. Shorten an entry to one "
-        "line rather than deleting it, or regenerate."
+        "Every selected role, project and credential must keep an entry. Shorten an entry "
+        "to one line rather than deleting it, or regenerate. If an item has no company, "
+        "title or text, fill it in or remove it in your experience."
     ),
     TUNE_SCOPE_ID: (
-        "A change went beyond the summary, skills and bullet lines, or changed more than six "
-        "bullets. Regenerate to get lighter edits."
+        "A change touched a line other than the summary, skills or bullets, emptied a "
+        "line, or changed more than six bullets. Regenerate to get lighter edits."
     ),
     NO_NEW_NUMBERS_ID: (
-        "A number appeared that is not in your resume. Regenerate, or add the number to your "
-        "experience and confirm it first."
+        "A number appeared that is not in your uploaded resume. Regenerate, or if the "
+        "number is true, add it to your resume file and upload it again."
     ),
 }
 
@@ -105,13 +109,20 @@ REMEDIES: dict[str, str] = {
 CHECK_SENTENCES: dict[str, str] = {
     PROVENANCE: "Every entry and line is linked to an item in your experience.",
     METRICS: "Every number appears in an item you confirmed.",
-    COMPLETENESS: "Every role, project and credential picked for this job is still listed.",
-    ENTITIES: "Company and job-title names match your own resume or profile.",
+    COMPLETENESS: (
+        "Every role, project and credential picked for this job is listed, except an item "
+        "with no company, title or text."
+    ),
+    ENTITIES: ("Company names and job titles were checked against your experience or your resume."),
     DATES: "Dates were checked for consistency.",
     ATTRIBUTION: "Where you noted that work was shared, that note is kept.",
-    VISIBILITY: "Items you marked to leave out for this kind of job were left out.",
+    VISIBILITY: (
+        "Items you marked to leave out for a kind of job were left out when Rhapto "
+        "recognised that kind of job in this posting."
+    ),
     TUNE_SCOPE_ID: (
-        "Only summary, skills and bullet lines were reworded, with at most six bullets changed."
+        "Changes were limited to summary, skills and bullet lines, with at most six "
+        "bullets changed."
     ),
     NO_NEW_NUMBERS_ID: "No number was added that is not already in your resume.",
 }

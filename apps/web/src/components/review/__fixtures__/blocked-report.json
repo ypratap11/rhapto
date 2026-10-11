@@ -21,7 +21,7 @@
       {
         "rule": "completeness",
         "severity": "warning",
-        "message": "credential block 'cred-draft' is selected but carries no org, role or content and cannot be rendered; fix the block library",
+        "message": "credential 'cred-draft' is selected but has no company, title or text, so it cannot be shown; fill it in or remove it",
         "path": "selection.block_ids['cred-draft']",
         "block_id": "cred-draft"
       }
@@ -30,15 +30,15 @@
   "checks": {
     "provenance": "Every entry and line is linked to an item in your experience.",
     "no-unverified-metrics": "Every number appears in an item you confirmed.",
-    "completeness": "Every role, project and credential picked for this job is still listed.",
-    "no-invented-entities": "Company and job-title names match your own resume or profile.",
+    "completeness": "Every role, project and credential picked for this job is listed, except an item with no company, title or text.",
+    "no-invented-entities": "Company names and job titles were checked against your experience or your resume.",
     "date-consistency": "Dates were checked for consistency.",
     "attribution": "Where you noted that work was shared, that note is kept.",
-    "visibility-context": "Items you marked to leave out for this kind of job were left out."
+    "visibility-context": "Items you marked to leave out for a kind of job were left out when Rhapto recognised that kind of job in this posting."
   },
   "remedies": {
-    "no-unverified-metrics": "A number appeared that no confirmed item contains. Either confirm the item that holds that figure, or regenerate so the line stops stating it.",
-    "completeness": "Every selected role, project and credential must keep an entry. Shorten an entry to one line rather than deleting it, or regenerate."
+    "no-unverified-metrics": "A number appeared that is not in a confirmed item this line is based on. Add the figure to that item in your experience and confirm it, or regenerate so the line stops stating it.",
+    "completeness": "Every selected role, project and credential must keep an entry. Shorten an entry to one line rather than deleting it, or regenerate. If an item has no company, title or text, fill it in or remove it in your experience."
   },
   "mode": "blocks"
 }

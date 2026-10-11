@@ -10,9 +10,9 @@
     "violations": []
   },
   "checks": {
-    "tune-scope": "Only summary, skills and bullet lines were reworded, with at most six bullets changed.",
+    "tune-scope": "Changes were limited to summary, skills and bullet lines, with at most six bullets changed.",
     "no-new-numbers": "No number was added that is not already in your resume.",
-    "no-invented-entities": "Company and job-title names match your own resume or profile.",
+    "no-invented-entities": "Company names and job titles were checked against your experience or your resume.",
     "date-consistency": "Dates were checked for consistency."
   },
   "remedies": {},

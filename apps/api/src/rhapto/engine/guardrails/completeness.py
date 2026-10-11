@@ -219,8 +219,8 @@ def check_completeness(ctx: GuardrailContext) -> list[Violation]:
             out.append(
                 violation(
                     RULE_NAME,
-                    f"{block.type} block {block.id!r} is selected but carries no org, role or "
-                    "content and cannot be rendered; fix the block library",
+                    f"{block.type} {block.id!r} is selected but has no company, title or text, "
+                    "so it cannot be shown; fill it in or remove it",
                     f"selection.block_ids[{block.id!r}]",
                     block.id,
                     severity="warning",
