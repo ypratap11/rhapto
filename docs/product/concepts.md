@@ -3,12 +3,12 @@
 The words below mean something specific in Rhapto. This page defines each one once so the rest of
 the docs can use them without re-explaining.
 
-## Tracks
+## Roles you want (tracks)
 
-A track is a named target role that jobs are scored against — for example "Data Program
+A track, shown in the app as one of your **Roles you want**, is a named target role that jobs are scored against — for example "Data Program
 Management" or "AI Product/Program". Each track carries a name, a set of keywords, a resume base
 to build from, and a fit threshold (`min_fit`). You create one with the field/role picker on the
-Profile page (Profile → Tracks → **Pick a field and role**): choosing a role from the taxonomy
+Profile page (Profile → Roles you want → **Pick a field and role**): choosing a role from the taxonomy
 creates a track with that role's curated keywords and a fit threshold of 60. Tracks stay editable
 afterward — name, keywords, and threshold — in the same card.
 
@@ -20,38 +20,42 @@ US ×0.85, abroad ×0.60, unknown ×0.90 — so a great role on the wrong contin
 good one close to home. As a rule of thumb, 75 and above is a strong fit; 60 and above is worth a
 look. A job that hasn't been scored yet shows a dashed ring instead of a number.
 
-## Blocks
+## Your experience (blocks)
 
-A block is one fact about your career: a role, an achievement, a project, or a credential. The
-block library (Profile → Blocks) is the only material a generated resume is allowed to draw
-bullets from — every bullet in a tailored resume carries a `source_block_id` that must resolve to
-a real block, and the renderer rejects any bullet that doesn't.
+A block, shown in the app as an item in **Your experience**, is one fact about your career: a role,
+an achievement, a project, or a credential. In Full rewrite, Your experience (Profile → Your
+experience) is the only material a generated resume may draw lines from - every line carries a
+`source_block_id` that must resolve to a real item, and the renderer rejects any line that doesn't.
+Light touch works on your uploaded resume file instead.
 
 ## Verified metrics
 
-A block may carry a `metric` (a number, like "cut warehouse cost 18%"), but only if that block is
-also marked `verified: true`. The guardrail validator enforces this: a metric that doesn't trace
-back to a verified block is rejected before it can appear in a resume, so nothing in your output
-is a number you never actually confirmed.
+A block may carry a `metric` (a number, like "cut warehouse cost 18%"), and in Full rewrite it is
+used only if that block is also marked `verified: true` (confirmed by you in the app). In Light
+touch, a number must already appear in your uploaded resume file. Either way the check runs before
+a resume is shown, so nothing in your output is a number you never actually confirmed.
 
-## Guardrails
+## Writing rules (guardrails)
 
-Guardrails are the rules that check a generated resume before it's shown to you: no unverified
+Guardrails, shown in the app as **Writing rules** and as the truth check on a resume, are the rules
+that check a generated resume before it's shown to you: no unverified
 metrics, no invented entities (employers, products, tools not in your blocks), date consistency,
 correct attribution, and visibility context. When a rule fails, the resume's status becomes
-**Blocked** rather than being silently fixed — the Resumes page shows a Blocked tab, and the job
-and review pages show a guardrail panel listing every violation with a link to jump straight to
-it.
+**Needs attention** (stored as `blocked`) rather than being silently fixed - My resumes shows a
+Needs attention tab, and the job and resume pages list every line that did not pass with a link
+to jump straight to it. The provenance and no-unverified-metrics checks always run; they are not
+switches.
 
 ## Resumes / packages
 
 A "package" is one tailored version of a resume for one job. Packages are versioned — regenerating
 or editing a package creates a new version rather than overwriting the old one — and built in one
-of two modes: **blocks mode** composes a new resume from your block library; **tune mode** (used
-automatically once you've uploaded your own resume document) edits your own document's wording in
-place. A package moves through **needs review → ready → applied** as you work it: it starts
-needing your review, you mark it ready once you're happy with it, and it becomes applied once you
-confirm you sent it. A guardrail failure diverts it to **blocked** instead of ready.
+of two modes: **Full rewrite** (stored as blocks mode) rebuilds a resume from Your experience, with
+each line citing its source; **Light touch** (stored as tune mode, the default once you've uploaded
+your own resume file) rewords a few lines of your own document in place. A package moves through
+**To review → Ready to send → applied** as you work it: it starts needing your review, you press
+**Mark ready to send** once you're happy with it, and it becomes applied once you confirm you sent
+it. A truth-check failure diverts it to **Needs attention** instead of ready.
 
 ## Your applications
 

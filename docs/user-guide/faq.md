@@ -10,14 +10,15 @@ employer's form; see [`../product/overview.md`](../product/overview.md#the-human
 
 A newly discovered job shows a dashed ring instead of a number until the scorer catches up — the
 page refetches it every 3 seconds for up to a minute. If it's still dashed after that, give the
-page a refresh; if it stays blank, the job may not have been matched to any track yet.
+page a refresh; if it stays blank, the job may not have been matched to any of your roles yet.
 
-### Why did a resume get blocked?
+### Why does a resume say Needs attention?
 
-A guardrail rejected something in it — most often a metric that doesn't trace back to a block
-marked `verified: true`, or a name or detail the block library doesn't support. The guardrail
-panel on the job page or the resume's review page lists every violation with a link that jumps
-straight to it, so you can fix the source and regenerate.
+The truth check held something back - most often a number that is not in your uploaded resume
+file (Light touch) or not an item you confirmed in Your experience (Full rewrite), or a name or
+detail your experience doesn't support. The resume is listed under Needs attention on My resumes,
+and its page lists every line that did not pass with a link that jumps straight to it, so you can
+fix the source and regenerate.
 
 ### Why can I not filter by salary?
 
