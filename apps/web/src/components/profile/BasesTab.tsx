@@ -94,13 +94,12 @@ export function BasesTab() {
         onDelete={async (b) => {
           try {
             await remove.mutateAsync(b.id);
-            toast.success(`Deleted ${b.id}`);
+            toast.success(`Deleted ${b.name || b.id}`);
           } catch (e) {
             toast.error(e instanceof ApiError ? e.message : "Could not delete the starting resume");
           }
         }}
         columns={[
-          { key: "id", header: "Short ID", render: (b) => <span className="font-mono text-xs">{b.id}</span> },
           { key: "name", header: "Name", render: (b) => b.name },
           { key: "blocks", header: "Items", render: (b) => b.block_ids.length },
         ]}
@@ -113,8 +112,11 @@ export function BasesTab() {
           {form ? (
             <div className="min-h-0 flex-1 space-y-3 overflow-y-auto pr-1">
               <div className="space-y-1">
-                <Label htmlFor="base-id">Short ID</Label>
-                <Input id="base-id" value={form.id} onChange={(e) => set({ id: e.target.value })} disabled={!isNew} />
+                <Label htmlFor="base-id">Short name (used inside Rhapto)</Label>
+                <Input id="base-id" value={form.id} onChange={(e) => set({ id: e.target.value })} disabled={!isNew} aria-describedby="base-id-hint" />
+                <p id="base-id-hint" className="text-xs text-muted-foreground">
+                  Letters, numbers and dashes. You can't change it later.
+                </p>
                 {errors.id ? <p className="text-xs text-destructive">{errors.id}</p> : null}
               </div>
               <div className="space-y-1">

@@ -98,13 +98,12 @@ export function TracksTab() {
         onDelete={async (t) => {
           try {
             await remove.mutateAsync(t.id);
-            toast.success(`Deleted ${t.id}`);
+            toast.success(`Deleted ${t.name || t.id}`);
           } catch (e) {
             toast.error(e instanceof ApiError ? e.message : "Could not delete the role");
           }
         }}
         columns={[
-          { key: "id", header: "Short ID", render: (t) => <span className="font-mono text-xs">{t.id}</span> },
           { key: "name", header: "Name", render: (t) => t.name },
           { key: "resume_base", header: "Starting resume", render: (t) => t.resume_base },
           { key: "min_fit", header: "Minimum match", render: (t) => t.min_fit },
@@ -118,8 +117,11 @@ export function TracksTab() {
           {form ? (
             <div className="min-h-0 flex-1 space-y-3 overflow-y-auto pr-1">
               <div className="space-y-1">
-                <Label htmlFor="track-id">Short ID</Label>
-                <Input id="track-id" value={form.id} onChange={(e) => set({ id: e.target.value })} disabled={!isNew} />
+                <Label htmlFor="track-id">Short name (used inside Rhapto)</Label>
+                <Input id="track-id" value={form.id} onChange={(e) => set({ id: e.target.value })} disabled={!isNew} aria-describedby="track-id-hint" />
+                <p id="track-id-hint" className="text-xs text-muted-foreground">
+                  Letters, numbers and dashes. You can't change it later.
+                </p>
                 {errors.id ? <p className="text-xs text-destructive">{errors.id}</p> : null}
               </div>
               <div className="space-y-1">

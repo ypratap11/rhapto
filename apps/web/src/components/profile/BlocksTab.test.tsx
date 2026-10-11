@@ -71,17 +71,30 @@ describe("BlocksTab", () => {
   it("lists blocks and opens the editor prefilled", async () => {
     blocksData = [blockWithPeriod];
     renderTab();
-    expect(screen.getByText("acme-migration")).toBeInTheDocument();
-    await userEvent.setup().click(screen.getByRole("button", { name: /edit acme-migration/i }));
+    expect(screen.getByText("Owned it.")).toBeInTheDocument();
+    await userEvent.setup().click(screen.getByRole("button", { name: /edit acme analytics: owned it/i }));
     expect(screen.getByLabelText(/^content/i)).toHaveValue("Owned it.");
     expect(screen.getByLabelText(/^confirmed/i)).toBeChecked();
+  });
+
+  it("shows no Short ID column, never shows the internal name, and tells rows with the same employer apart", async () => {
+    const twin: Block = { ...blockWithPeriod, id: "acme-second", content: "Cut the report time in half." };
+    blocksData = [blockWithPeriod, twin];
+    renderTab();
+    expect(screen.queryByText(/short id/i)).not.toBeInTheDocument();
+    expect(screen.queryByText("acme-migration")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^edit acme analytics: owned it\.$/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^edit acme analytics: cut the report time in half\.$/i })).toBeInTheDocument();
+    await userEvent.setup().click(screen.getByRole("button", { name: /^edit acme analytics: owned it\.$/i }));
+    expect(screen.getByLabelText(/short name \(used inside rhapto\)/i)).toBeDisabled();
+    expect(screen.getByText("Letters, numbers and dashes. You can't change it later.")).toBeInTheDocument();
   });
 
   it("opens the editor as a centred dialog, not a sheet, with Save reachable", async () => {
     blocksData = [blockWithPeriod];
     renderTab();
     const user = userEvent.setup();
-    await user.click(screen.getByRole("button", { name: /edit acme-migration/i }));
+    await user.click(screen.getByRole("button", { name: /edit acme analytics: owned it/i }));
 
     const dialog = screen.getByRole("dialog");
     expect(dialog).toBeInTheDocument();
@@ -98,12 +111,12 @@ describe("BlocksTab", () => {
     deleteMutate.mockRejectedValueOnce(new Error("boom"));
     renderTab();
     const user = userEvent.setup();
-    await user.click(screen.getByRole("button", { name: /delete acme-migration/i }));
-    expect(screen.getByText(/delete acme-migration\?/i)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /delete acme analytics: owned it/i }));
+    expect(screen.getByText(/delete acme analytics: owned it\.\?/i)).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: /^delete$/i }));
     expect(deleteMutate).toHaveBeenCalledWith("acme-migration");
     expect(toast.error).toHaveBeenCalled();
-    expect(screen.queryByText(/delete acme-migration\?/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/delete acme analytics: owned it\.\?/i)).not.toBeInTheDocument();
   });
 
   it("toggles Confirmed with one click, PUTs the whole block with only that field flipped, and offers an Undo that reverts it", async () => {
@@ -112,13 +125,13 @@ describe("BlocksTab", () => {
     renderTab();
     const user = userEvent.setup();
 
-    await user.click(screen.getByRole("button", { name: /toggle confirmed for acme-migration/i }));
+    await user.click(screen.getByRole("button", { name: /toggle confirmed for acme analytics: owned it/i }));
 
     expect(putMutate).toHaveBeenCalledTimes(1);
     expect(putMutate).toHaveBeenCalledWith({ ...blockWithPeriod, verified: false });
 
     expect(toast.success).toHaveBeenCalledWith(
-      expect.stringMatching(/acme-migration/i),
+      expect.stringMatching(/acme analytics: owned it/i),
       expect.objectContaining({ duration: 8000, action: expect.objectContaining({ label: "Undo" }) }),
     );
 
@@ -134,12 +147,12 @@ describe("BlocksTab", () => {
     renderTab();
     const user = userEvent.setup();
 
-    await user.click(screen.getByRole("button", { name: /edit period for globex-role/i }));
-    const input = screen.getByRole("textbox", { name: /period globex-role/i });
+    await user.click(screen.getByRole("button", { name: /edit period for globex · engineer: did the thing/i }));
+    const input = screen.getByRole("textbox", { name: /period globex · engineer: did the thing/i });
     await user.type(input, "2024{Enter}");
 
     expect(putMutate).toHaveBeenCalledWith({ ...blockNoPeriod, period: "2024" });
-    expect(screen.queryByRole("textbox", { name: /period globex-role/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("textbox", { name: /period globex · engineer: did the thing/i })).not.toBeInTheDocument();
   });
 
   it("cancels an inline Period edit on Escape without saving", async () => {
@@ -148,13 +161,13 @@ describe("BlocksTab", () => {
     renderTab();
     const user = userEvent.setup();
 
-    await user.click(screen.getByRole("button", { name: /edit period for globex-role/i }));
-    const input = screen.getByRole("textbox", { name: /period globex-role/i });
+    await user.click(screen.getByRole("button", { name: /edit period for globex · engineer: did the thing/i }));
+    const input = screen.getByRole("textbox", { name: /period globex · engineer: did the thing/i });
     await user.type(input, "2024{Escape}");
 
     expect(putMutate).not.toHaveBeenCalled();
-    expect(screen.queryByRole("textbox", { name: /period globex-role/i })).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /edit period for globex-role/i })).toBeInTheDocument();
+    expect(screen.queryByRole("textbox", { name: /period globex · engineer: did the thing/i })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /edit period for globex · engineer: did the thing/i })).toBeInTheDocument();
   });
 
   it("shows a chip counting blocks with no period and filters the table to just those", async () => {
@@ -162,17 +175,17 @@ describe("BlocksTab", () => {
     renderTab();
     const user = userEvent.setup();
 
-    expect(screen.getByText("acme-migration")).toBeInTheDocument();
-    expect(screen.getByText("globex-role")).toBeInTheDocument();
+    expect(screen.getByText("Owned it.")).toBeInTheDocument();
+    expect(screen.getByText("Did the thing.")).toBeInTheDocument();
 
     const chip = screen.getByRole("button", { name: /1 needs a period/i });
     await user.click(chip);
 
-    expect(screen.queryByText("acme-migration")).not.toBeInTheDocument();
-    expect(screen.getByText("globex-role")).toBeInTheDocument();
+    expect(screen.queryByText("Owned it.")).not.toBeInTheDocument();
+    expect(screen.getByText("Did the thing.")).toBeInTheDocument();
 
     await user.click(chip);
-    expect(screen.getByText("acme-migration")).toBeInTheDocument();
+    expect(screen.getByText("Owned it.")).toBeInTheDocument();
   });
 
   it("does not show the chip when every block has a period", () => {
@@ -190,12 +203,12 @@ describe("BlocksTab", () => {
 
     // Toggle verified off. Undo, if implemented as "re-PUT the pre-toggle snapshot", would capture
     // { ...blockWithPeriod, verified: true } here — including the *original* period.
-    await user.click(screen.getByRole("button", { name: /toggle confirmed for acme-migration/i }));
+    await user.click(screen.getByRole("button", { name: /toggle confirmed for acme analytics: owned it/i }));
     expect(putMutate).toHaveBeenLastCalledWith({ ...blockWithPeriod, verified: false });
 
     // While that Undo toast is still up, edit Period on the *same* block.
-    await user.click(screen.getByRole("button", { name: /edit period for acme-migration/i }));
-    const input = screen.getByRole("textbox", { name: /period acme-migration/i });
+    await user.click(screen.getByRole("button", { name: /edit period for acme analytics: owned it/i }));
+    const input = screen.getByRole("textbox", { name: /period acme analytics: owned it/i });
     await user.clear(input);
     await user.type(input, "2030{Enter}");
     expect(putMutate).toHaveBeenLastCalledWith({ ...blockWithPeriod, verified: false, period: "2030" });

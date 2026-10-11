@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { datelessBlocks, isDateless } from "./blocks";
+import { blockLabel, datelessBlocks, isDateless } from "./blocks";
 
 /** The same three-block fixture the API test uses (`tests/api/test_checklist_setup_api.py`): two
  * with no period at all and one whose period is whitespace. Both sides must count 3, because the
@@ -39,5 +39,20 @@ describe("datelessBlocks", () => {
 
   it("returns nothing when every block has a period", () => {
     expect(datelessBlocks(blocks.filter((b) => !isDateless(b)))).toEqual([]);
+  });
+});
+
+describe("blockLabel", () => {
+  it("joins employer, role and the start of the text", () => {
+    expect(blockLabel({ id: "x-1", org: "Acme", role: "PM", content: "Ran the weekly planning meeting." })).toBe("Acme · PM: Ran the weekly planning meeting.");
+  });
+  it("cuts long text at 40 characters", () => {
+    const label = blockLabel({ id: "x-1", org: "Acme", role: null, content: "a".repeat(60) });
+    expect(label).toBe(`Acme: ${"a".repeat(40)}…`);
+  });
+  it("falls back to the text, then the employer/role, then the id", () => {
+    expect(blockLabel({ id: "x-1", content: "Just text" })).toBe("Just text");
+    expect(blockLabel({ id: "x-1", org: "Acme", content: "  " })).toBe("Acme");
+    expect(blockLabel({ id: "x-1", content: "" })).toBe("x-1");
   });
 });
