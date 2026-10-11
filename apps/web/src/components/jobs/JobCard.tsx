@@ -6,7 +6,7 @@ import { FitRing } from "@/components/ui/fit-ring";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import type { JobOut } from "@/lib/api/queries";
 import { locationTierLabel, SOURCE_LABEL } from "@/lib/fit";
-import { formatRelative, truncate } from "@/lib/format";
+import { formatRelative, formatSalary, truncate } from "@/lib/format";
 import { NotInterestedButton } from "./NotInterestedButton";
 import { SimilarPostings } from "./SimilarPostings";
 
@@ -19,6 +19,7 @@ export type TrackInfo = { name: string; min_fit: number };
 export function JobCard({ job, track }: { job: JobOut; track: TrackInfo | null }) {
   const company = job.company ?? "Unknown company";
   const tier = locationTierLabel(job.location_tier);
+  const salary = formatSalary(job.salary_text, job.source);
   const alsoIds = job.also_ids ?? []; // absent on a response from before the field existed
   return (
     <article className="hover-lift flex h-full flex-col gap-3 rounded-card border border-border bg-surface p-4 shadow-card">
@@ -47,7 +48,7 @@ export function JobCard({ job, track }: { job: JobOut; track: TrackInfo | null }
         {job.unlisted_at ? <StatusBadge tone="muted">No longer listed</StatusBadge> : null}
         {job.search_name ? <StatusBadge tone="muted">{`via ${job.search_name}`}</StatusBadge> : null}
       </div>
-      {job.salary_text ? <p className="text-sm font-medium">{job.salary_text}</p> : null}
+      {salary ? <p className="text-sm font-medium">{salary}</p> : null}
       <p className="line-clamp-2 text-sm text-muted-foreground">{truncate(job.jd_text, 160)}</p>
       {alsoIds.length > 0 ? <SimilarPostings ids={alsoIds} /> : null}
       <p className="mt-auto text-xs text-muted-foreground">Posted · {formatRelative(job.posted_at ?? job.discovered_at)}</p>

@@ -67,6 +67,12 @@ describe("JobCard", () => {
     expect(screen.getByText(/Posted ·/)).toBeInTheDocument();
   });
 
+  it("shows a raw adzuna salary range as readable dollars", () => {
+    render(<JobCard job={{ ...job, source: "adzuna", salary_text: "187835-187835" } as JobOut} track={track} />);
+    expect(screen.getByText("$187,835")).toBeInTheDocument();
+    expect(screen.queryByText("187835-187835")).not.toBeInTheDocument();
+  });
+
   it("marks a repost and a no-longer-listed job", () => {
     render(<JobCard job={{ ...job, repost_of: "j0", unlisted_at: "2026-09-14T00:00:00Z" } as JobOut} track={track} />);
     expect(screen.getByText("Reposted")).toBeInTheDocument();

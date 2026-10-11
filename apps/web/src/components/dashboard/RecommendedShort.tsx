@@ -14,6 +14,7 @@ import { useRecommendedJobs, useTailor, useTracks, type JobOut } from "@/lib/api
 import { describeCoachError, type CoachError } from "@/lib/coach/errors";
 import { fireCoachEvent } from "@/lib/coach/events";
 import { matchLabel } from "@/lib/coach/labels";
+import { formatSalary } from "@/lib/format";
 import { PICKER_MIN_FIT } from "@/lib/taxonomy";
 import { cn } from "cn";
 
@@ -78,7 +79,7 @@ export function RecommendedShort() {
               <div className="min-w-0 flex-1">
                 <p className="truncate text-sm font-medium">{job.title ?? "Untitled role"}</p>
                 <p className="truncate text-sm text-muted-foreground">
-                  {[job.company ?? "Unknown company", job.location, job.salary_text].filter(Boolean).join(" · ")}
+                  {[job.company ?? "Unknown company", job.location, formatSalary(job.salary_text, job.source)].filter(Boolean).join(" · ")}
                 </p>
                 <p className="mt-1">
                   <MatchChip label={matchLabel(job.best_fit, minFit(job))} />
