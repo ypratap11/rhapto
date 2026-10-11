@@ -47,7 +47,16 @@ class JobTextError(Exception):
     """The job posting could not be fetched or contained too little text."""
 
 
-NAT64_PREFIX = ipaddress.ip_network("64:ff9b::/96")
+# Named explicitly rather than inferred from ``is_private``/``is_reserved``: the stdlib's special-purpose
+# tables changed between 3.12 patch releases, and ``is_global`` is not reliable for NAT64 on every patch.
+# CGNAT (100.64/10) is carrier-internal. 6to4 and NAT64 (plain and the RFC 8215 local-use prefix) embed an
+# IPv4 address, so they are refused outright: a public job board has native v4/v6 records.
+_EXTRA_BLOCKED = (
+    ipaddress.ip_network("100.64.0.0/10"),
+    ipaddress.ip_network("2002::/16"),
+    ipaddress.ip_network("64:ff9b::/96"),
+    ipaddress.ip_network("64:ff9b:1::/48"),
+)
 
 
 def resolve_host(hostname: str) -> list[str]:
@@ -57,6 +66,10 @@ def resolve_host(hostname: str) -> list[str]:
 
 
 def _is_blocked(ip: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
+    if isinstance(ip, ipaddress.IPv6Address) and ip.ipv4_mapped is not None:
+        return _is_blocked(ip.ipv4_mapped)
+    if any(ip.version == net.version and ip in net for net in _EXTRA_BLOCKED):
+        return True
     return (
         ip.is_private
         or ip.is_loopback
@@ -68,13 +81,13 @@ def _is_blocked(ip: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
 
 
 async def public_addresses(hostname: str) -> list[str]:
-    """Resolve a hostname and return its addresses, rejecting hostnames that resolve to private, loopback, link-local, reserved,
-    multicast, or unspecified addresses, to prevent SSRF via job posting URLs.
+    """Resolve a hostname and return its addresses, rejecting any that are not public, to prevent SSRF via
+    job posting URLs.
 
-    Also unwraps IPv4-mapped IPv6 addresses (::ffff:a.b.c.d) and NAT64-embedded
-    IPv4 addresses (64:ff9b::/96) and applies the same checks to the embedded
-    IPv4 address, since either could otherwise be used to smuggle a blocked
-    address past the IPv6 checks. Returns the validated addresses in resolver order.
+    Refused: private, loopback, link-local, reserved, multicast and unspecified addresses; carrier-grade
+    NAT (100.64.0.0/10); 6to4 (2002::/16) and NAT64 (64:ff9b::/96, 64:ff9b:1::/48) in full. An IPv4-mapped
+    IPv6 address (::ffff:a.b.c.d) is judged by the IPv4 address it wraps. Every resolved address must
+    pass, so a host with one blocked record is rejected. Returns the validated addresses in resolver order.
     """
     try:
         addresses = await asyncio.to_thread(resolve_host, hostname)
@@ -83,16 +96,8 @@ async def public_addresses(hostname: str) -> list[str]:
     if not addresses:
         raise JobTextError("URL host could not be resolved")
     for address in addresses:
-        ip = ipaddress.ip_address(address)
-        if _is_blocked(ip):
+        if _is_blocked(ipaddress.ip_address(address)):
             raise JobTextError("URL host is not allowed")
-        if isinstance(ip, ipaddress.IPv6Address):
-            if ip.ipv4_mapped is not None and _is_blocked(ip.ipv4_mapped):
-                raise JobTextError("URL host is not allowed")
-            if ip in NAT64_PREFIX:
-                embedded = ipaddress.ip_address(int(ip) & 0xFFFFFFFF)
-                if _is_blocked(embedded):
-                    raise JobTextError("URL host is not allowed")
     return addresses
 
 
