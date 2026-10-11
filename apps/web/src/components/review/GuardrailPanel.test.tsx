@@ -92,6 +92,24 @@ describe("GuardrailPanel, a report that did not pass", () => {
     expect(screen.queryAllByRole("button", { name: /^Fix/ })).toHaveLength(1);
   });
 
+  it("numbers repeated Fix labels (n of m) but leaves unique ones and link-less rows alone", () => {
+    const v = (path: string, severity = "error") => ({ rule: "same-rule", severity, message: "engine message", path, block_id: null });
+    const f: Fixture = {
+      report: { passed: false, rules_run: ["same-rule"], violations: [v("summary[0]"), v("summary[1]"), v("selection.block_ids['a']"), v("sections[0]", "warning")] },
+      checks: {},
+      remedies: { "same-rule": "Reword this line" },
+    };
+    render(panel(f));
+    // Four rows share one label, but the node-less one has no control, so only three take numbers.
+    const names = screen.getAllByRole("button", { name: /^Fix/ }).map((b) => b.getAttribute("aria-label"));
+    expect(names).toEqual(["Fix: Reword this line (1 of 3)", "Fix: Reword this line (2 of 3)", "Fix: Reword this line (3 of 3)"]);
+  });
+
+  it("does not number a label that is already unique", () => {
+    render(panel(blocked));
+    for (const b of screen.getAllByRole("button", { name: /^Fix/ })) expect(b.getAttribute("aria-label")).not.toMatch(/\(\d+ of \d+\)/);
+  });
+
   it("shows a warning as 'Heads up', not as the reason it was held back", () => {
     render(panel(blocked));
     const heads = screen.getByText("Heads up").closest("div")!;

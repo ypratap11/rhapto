@@ -49,8 +49,26 @@ export function GuardrailPanel({
     return remedies[v.rule] ?? v.message;
   }
 
+  // A control is only drawn for a row with a node to go to (or a link target); only those take a
+  // number. Rows whose computed label repeats get "(n of m)" so each control is named uniquely.
+  const hasControl = (v: Violation) => !v.path.startsWith(NODELESS_PATH_PREFIX) || Boolean(nodelessHref);
+  const labelTotals = new Map<string, number>();
+  for (const v of [...(report.passed ? [] : errors), ...warnings]) {
+    if (hasControl(v)) labelTotals.set(`Fix: ${line(v)}`, (labelTotals.get(`Fix: ${line(v)}`) ?? 0) + 1);
+  }
+  const labelSeen = new Map<string, number>();
+  function fixLabel(v: Violation): string {
+    const base = `Fix: ${line(v)}`;
+    const total = labelTotals.get(base) ?? 1;
+    if (total < 2) return base;
+    const n = (labelSeen.get(base) ?? 0) + 1;
+    labelSeen.set(base, n);
+    return `${base} (${n} of ${total})`;
+  }
+
   function fixControl(v: Violation) {
-    const label = `Fix: ${line(v)}`;
+    if (!hasControl(v)) return null;
+    const label = fixLabel(v);
     if (!v.path.startsWith(NODELESS_PATH_PREFIX)) {
       return (
         <button type="button" aria-label={label} onClick={() => onSelect(v.path)} className={FIX_CLASS}>
