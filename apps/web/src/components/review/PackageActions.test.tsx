@@ -72,6 +72,7 @@ describe("PackageActions, one primary per state", () => {
     expect(screen.queryByText(/^Word$/)).not.toBeInTheDocument();
     expect(screen.queryByText(/^PDF$/)).not.toBeInTheDocument();
     for (const name of ["Regenerate", "Download everything", "Archive"]) expect(screen.getByRole("button", { name })).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Open the job posting" })).not.toBeInTheDocument();
     expect(
       screen.getByText("This resume was stopped by the truth check, so the documents are not available. Fix the lines above and regenerate; Download everything still holds the report."),
     ).toBeInTheDocument();
@@ -81,7 +82,8 @@ describe("PackageActions, one primary per state", () => {
     const application = { id: "a1", status: "applied" } as ApplicationOut;
     const { container } = view(withStatus("ready"), { application });
     expect(filled(container)).toHaveLength(0);
-    expect(screen.getByText("Applied")).toBeInTheDocument();
+    // The page header owns the status badge; the actions add none.
+    expect(screen.queryByText("Applied")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Download" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: APPLIED })).not.toBeInTheDocument();
   });
@@ -167,6 +169,18 @@ describe("PackageActions, the More menu", () => {
     await openMore(userEvent.setup());
     await userEvent.click(screen.getByRole("button", { name: "Archive" }));
     expect(push).not.toHaveBeenCalled();
+  });
+});
+
+describe("PackageActions, keyboard", () => {
+  it("Escape closes the More menu and puts focus back on its button", async () => {
+    view(withStatus("draft"));
+    const user = userEvent.setup();
+    await openMore(user);
+    screen.getByRole("button", { name: "Regenerate" }).focus();
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("button", { name: "Regenerate" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "More" })).toHaveFocus();
   });
 });
 

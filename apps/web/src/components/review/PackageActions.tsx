@@ -5,13 +5,11 @@ import { useRouter } from "next/navigation";
 import { ChevronDown, Download, MoreHorizontal } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { StatusBadge } from "@/components/ui/StatusBadge";
 import { ApiError } from "@/lib/api/client";
 import { useAnswers, useMarkApplied, useMarkPackageReady, type ApplicationOut, type JobOut, type PackageOut } from "@/lib/api/queries";
 import { downloadAuthenticated, resumeFilename } from "@/lib/download";
 import { APPLIED_STATUSES } from "@/lib/flow";
 import { safeHttpUrl } from "@/lib/links";
-import { STATUS_LABEL, statusTone, type ApplicationStatus } from "@/lib/status";
 import { useArchiveAndHide } from "./useArchiveAndHide";
 
 const ITEM = "flex min-h-11 w-full items-center rounded-control px-3 text-left text-sm hover:bg-muted disabled:pointer-events-none disabled:opacity-50";
@@ -23,6 +21,7 @@ const SECONDARY_CLASS = "min-h-11";
 function Menu({ label, variant, className, icon, children }: { label: string; variant: "default" | "outline"; className: string; icon?: ReactNode; children: (close: () => void) => ReactNode }) {
   const [open, setOpen] = useState(false);
   const root = useRef<HTMLDivElement>(null);
+  const trigger = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -30,7 +29,10 @@ function Menu({ label, variant, className, icon, children }: { label: string; va
       if (root.current && !root.current.contains(event.target as Node)) setOpen(false);
     };
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setOpen(false);
+      if (event.key === "Escape") {
+        setOpen(false);
+        trigger.current?.focus();
+      }
     };
     document.addEventListener("mousedown", onDown);
     document.addEventListener("keydown", onKey);
@@ -42,7 +44,7 @@ function Menu({ label, variant, className, icon, children }: { label: string; va
 
   return (
     <div ref={root} className="relative max-sm:w-full">
-      <Button variant={variant} className={className} aria-expanded={open} onClick={() => setOpen((v) => !v)}>
+      <Button ref={trigger} variant={variant} className={`${className} max-sm:w-full`} aria-expanded={open} onClick={() => setOpen((v) => !v)}>
         {icon}
         {label}
         {label === "More" ? null : <ChevronDown className="size-4" aria-hidden />}
@@ -141,9 +143,6 @@ export function PackageActions({
           I&apos;ve applied
         </Button>
       ) : null}
-      {state === "applied" && application ? (
-        <StatusBadge tone={statusTone(application.status)}>{STATUS_LABEL[application.status as ApplicationStatus] ?? application.status}</StatusBadge>
-      ) : null}
       <Menu label="More" variant="outline" className={SECONDARY_CLASS} icon={<MoreHorizontal className="size-4" aria-hidden />}>
         {(close) => (
           <>
@@ -153,7 +152,7 @@ export function PackageActions({
             <button type="button" className={ITEM} onClick={() => { close(); void downloadFile("zip"); }}>
               Download everything
             </button>
-            {postingUrl ? (
+            {postingUrl && !blocked ? (
               <a href={postingUrl} target="_blank" rel="noopener noreferrer" className={ITEM} onClick={close}>
                 Open the job posting
               </a>

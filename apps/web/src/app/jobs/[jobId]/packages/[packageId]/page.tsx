@@ -106,10 +106,10 @@ function PackageReviewPageInner() {
   // The footer's closing line: in light-touch mode the number of rewrites the reader just went
   // through (the same count the Changes pane shows); a full rewrite has no such list.
   const changeCount = pkg.data.edits.length;
-  const doneLine = tune ? `You have reviewed all ${changeCount} ${changeCount === 1 ? "change" : "changes"}.` : "You're all caught up.";
+  const doneLine = tune && changeCount === 0 ? "No lines were changed for this job." : tune ? `You have reviewed all ${changeCount} ${changeCount === 1 ? "change" : "changes"}.` : "You're all caught up.";
   const crumbLabel = `${job.data.company ?? "Unknown company"} – ${job.data.title ?? "Untitled role"}`;
   const applied = application !== null && (APPLIED_STATUSES as readonly string[]).includes(application.status);
-  const statusKey = applied ? "applied" : pkg.data.status;
+  const statusKey = pkg.data.status === "blocked" ? "blocked" : applied ? "applied" : pkg.data.status;
   const statusLabel = (PACKAGE_STATUS_LABEL as Record<string, string>)[statusKey] ?? statusKey;
 
   return (

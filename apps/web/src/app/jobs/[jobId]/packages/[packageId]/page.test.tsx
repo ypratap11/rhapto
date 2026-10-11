@@ -145,6 +145,11 @@ describe("PackageReviewPage", () => {
     const second = render(<PackageReviewPage />);
     expect(screen.getByText("You have reviewed all 2 changes.")).toBeInTheDocument();
     second.unmount();
+    pkg.current = { ...tunePackage, edits: [] } as unknown as PackageOut;
+    const third = render(<PackageReviewPage />);
+    expect(screen.getByText("No lines were changed for this job.")).toBeInTheDocument();
+    expect(document.body.textContent).not.toContain("all 0");
+    third.unmount();
     pkg.current = { ...tunePackage, mode: "blocks", edits: [], source_document: null, guardrail_report: { passed: true, rules_run: [], violations: [] } } as unknown as PackageOut;
     render(<PackageReviewPage />);
     expect(screen.getByText("You're all caught up.")).toBeInTheDocument();
