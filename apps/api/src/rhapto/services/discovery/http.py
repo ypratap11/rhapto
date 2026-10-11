@@ -8,7 +8,7 @@ from urllib.parse import urljoin, urlparse, urlunparse
 import httpx
 
 from rhapto.services.discovery.errors import SourceError
-from rhapto.services.jobtext import assert_public_host
+from rhapto.services.jobtext import JobTextError, assert_public_host, public_http_client
 
 DEFAULT_MAX_BYTES = 25 * 1024 * 1024
 MAX_REDIRECTS = 5
@@ -36,7 +36,12 @@ class DiscoveryHttp:
     ) -> None:
         self.user_agent = user_agent
         self.max_bytes = max_bytes
-        self._client = client or httpx.AsyncClient(timeout=timeout, follow_redirects=False)
+        if client is not None:
+            self._client = client
+        elif base_override:
+            self._client = httpx.AsyncClient(timeout=timeout, follow_redirects=False)
+        else:
+            self._client = public_http_client(timeout=timeout)
         self.base_override = base_override
         if base_override:
             logger.warning(
@@ -116,6 +121,8 @@ class DiscoveryHttp:
                         headers=out_headers,
                         request=response.request,
                     )
+            except JobTextError as exc:
+                raise SourceError(f"refusing to fetch {url}: {exc}") from exc
             except httpx.HTTPError as exc:
                 if attempt == 1:
                     await asyncio.sleep(0.5)
