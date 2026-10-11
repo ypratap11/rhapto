@@ -30,7 +30,7 @@ export function statusTone(status: string): Tone {
   }
 }
 
-export const PACKAGE_STATUS_TONE: Record<string, Tone> = { draft: "neutral", ready: "high", blocked: "mid" };
+export const PACKAGE_STATUS_TONE: Record<string, Tone> = { draft: "neutral", ready: "high", blocked: "mid", applied: "high" };
 /** Plain-words package status for lists and pills. Unknown statuses fall back to the raw string at call sites (`?? status`). */
 export const PACKAGE_STATUS_LABEL: Record<"draft" | "ready" | "blocked" | "applied", string> = {
   draft: "Draft",
