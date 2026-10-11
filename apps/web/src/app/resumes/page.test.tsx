@@ -97,7 +97,9 @@ describe("ResumesPage", () => {
     searchParams.current = new URLSearchParams("tab=blocked");
     listState.current = { data: [blockedRow], isLoading: false, error: null, isPaused: false };
     render(<ResumesPage />);
-    expect(screen.getByRole("link", { name: /^fix$/i })).toHaveAttribute("href", "/jobs/j3/packages/p3");
+    const link = screen.getByRole("link", { name: /BlockedCo.*Needs attention/ });
+    expect(link).toHaveAttribute("href", "/jobs/j3/packages/p3");
+    expect(link).toHaveTextContent("Fix");
   });
 
   // A paused background refetch (TanStack's networkMode: "online" when the API is unreachable)

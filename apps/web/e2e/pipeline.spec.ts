@@ -28,10 +28,9 @@ async function createApplication(page: Page, job: JobSummary): Promise<void> {
   // Below playwright.config.ts's 120_000 test-level timeout — see dashboard.spec.ts.
   await expect(reviewLink).toBeVisible({ timeout: 90_000 });
 
-  await page.goto("/resumes?tab=review");
-  const row = page.getByRole("row", { name: job.title ?? "" }).filter({ hasText: job.company ?? "" });
-  await row.getByRole("button", { name: "Mark ready" }).click();
-  await expect(row.getByRole("button", { name: "Mark ready" })).toHaveCount(0);
+  await reviewLink.click();
+  await page.getByRole("button", { name: "Mark ready to send" }).click();
+  await expect(page.getByRole("button", { name: "Mark ready to send" })).toHaveCount(0);
 
   await page.goto(`/jobs/${job.id}`);
   const popupPromise = page.waitForEvent("popup");

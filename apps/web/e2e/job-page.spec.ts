@@ -18,7 +18,7 @@ async function pickApplyableJob(): Promise<JobSummary> {
   return withUrl;
 }
 
-test("Tailor, Review, Mark ready and Apply reach the dashboard without submitting anything", async ({ page, context }) => {
+test("Tailor, Review, Mark ready to send and Apply reach the dashboard without submitting anything", async ({ page, context }) => {
   const job = await pickApplyableJob();
 
   await page.goto(`/jobs/${job.id}`);
@@ -35,13 +35,9 @@ test("Tailor, Review, Mark ready and Apply reach the dashboard without submittin
   await reviewLink.click();
   await expect(page).toHaveURL(/\/packages\/[^/]+$/);
 
-  // "Mark ready" only exists as a row action on the Resumes table (ResumeRowActions), not on the
-  // review page itself.
-  await page.goto("/resumes?tab=review");
-  const row = page.getByRole("row", { name: job.title ?? "" }).filter({ hasText: job.company ?? "" });
-  await expect(row).toBeVisible();
-  await row.getByRole("button", { name: "Mark ready" }).click();
-  await expect(row.getByRole("button", { name: "Mark ready" })).toHaveCount(0);
+  // "Mark ready to send" is the one filled button on a draft resume's page.
+  await page.getByRole("button", { name: "Mark ready to send" }).click();
+  await expect(page.getByRole("button", { name: "Mark ready to send" })).toHaveCount(0);
 
   await page.goto(`/jobs/${job.id}`);
   const applyButton = page.getByRole("button", { name: "Apply" });

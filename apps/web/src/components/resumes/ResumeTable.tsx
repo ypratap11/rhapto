@@ -1,90 +1,51 @@
-import { FileText } from "lucide-react";
-import type { TrackInfo } from "@/components/jobs/JobCard";
-import { EmptyState } from "@/components/ui/empty-state";
+import Link from "next/link";
 import { FitRing } from "@/components/ui/fit-ring";
 import { StatusBadge } from "@/components/ui/StatusBadge";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import type { PackageListFilter, PackageListItem } from "@/lib/api/queries";
-import { formatRelative } from "@/lib/format";
-import { PACKAGE_STATUS_TONE } from "@/lib/status";
-import { ResumeRowActions } from "./ResumeRowActions";
+import type { PackageListItem } from "@/lib/api/queries";
+import { PACKAGE_STATUS_LABEL, PACKAGE_STATUS_TONE } from "@/lib/status";
 
-const EMPTY_TEXT: Record<PackageListFilter, string> = {
-  review: "Nothing to review",
-  ready: "Nothing ready to apply",
-  blocked: "No blocked resumes",
-  applied: "Nothing applied yet",
-};
+const COLUMNS = "md:grid-cols-[minmax(0,1.2fr)_minmax(0,1.6fr)_3rem_10rem_4rem]";
 
-/** The Resumes table (spec §3.4): one row per tailored package, bounded and sticky-headed (Task
- * 2's `Table`), with row actions delegated to `ResumeRowActions`. */
-export function ResumeTable({
-  rows,
-  tracks,
-  filter,
-}: {
-  rows: PackageListItem[];
-  tracks: Record<string, TrackInfo>;
-  filter: PackageListFilter;
-}) {
-  if (rows.length === 0) {
-    return <EmptyState icon={FileText} title={EMPTY_TEXT[filter]} />;
-  }
-
+/** My resumes: one row per tailored resume. The whole row is the only link (one focus stop, one tap
+ * target); "Review", or "Fix" once the truth check has held a resume back, is plain text inside it.
+ * Emptiness is the page's job, so this always has at least one row to show. */
+export function ResumeTable({ rows }: { rows: PackageListItem[] }) {
   return (
-    <Table>
-      <TableHeader>
-        <TableRow>
-          <TableHead>Company</TableHead>
-          <TableHead>Role</TableHead>
-          <TableHead>Fit</TableHead>
-          <TableHead>Version · status</TableHead>
-          <TableHead>Mode</TableHead>
-          <TableHead>Created</TableHead>
-          <TableHead>
-            <span className="sr-only">Actions</span>
-          </TableHead>
-        </TableRow>
-      </TableHeader>
-      <TableBody>
+    <div>
+      <div aria-hidden className={`hidden gap-4 px-4 pb-2 text-xs font-medium text-muted-foreground md:grid ${COLUMNS}`}>
+        <span>Company</span>
+        <span>Role</span>
+        <span>Fit</span>
+        <span>Status</span>
+        <span />
+      </div>
+      <ul className="space-y-2">
         {rows.map((row) => {
-          const track = row.best_track_id ? tracks[row.best_track_id] : undefined;
           const company = row.company ?? "Unknown company";
+          const role = row.title ?? "Untitled role";
+          const statusLabel = (PACKAGE_STATUS_LABEL as Record<string, string>)[row.status] ?? row.status;
+          const action = row.status === "blocked" ? "Fix" : "Review";
           return (
-            <TableRow key={row.id}>
-              <TableCell className="font-medium">{company}</TableCell>
-              <TableCell>{row.title ?? "Untitled role"}</TableCell>
-              <TableCell>
-                <div className="flex flex-col items-start gap-0.5">
+            <li key={row.id}>
+              <Link
+                href={`/jobs/${row.job_id}/packages/${row.id}`}
+                aria-label={`${company}, ${role}, ${statusLabel}`}
+                className={`hover-lift flex min-h-11 flex-col gap-2 rounded-card border border-border bg-surface px-4 py-3 text-sm md:grid md:items-center md:gap-4 ${COLUMNS}`}
+              >
+                <span className="font-medium">{company}</span>
+                <span className="text-muted-foreground md:text-foreground">{role}</span>
+                <span>
                   <FitRing fit={row.best_fit} size={32} />
-                  {track ? <span className="text-xs text-muted-foreground">{track.name}</span> : null}
-                </div>
-              </TableCell>
-              <TableCell>
-                <div className="flex flex-col items-start gap-1">
-                  <StatusBadge tone={PACKAGE_STATUS_TONE[row.status] ?? "neutral"}>{`v${row.version} · ${row.status}`}</StatusBadge>
-                  {/* "blocked" on its own is the empty state this branch exists to remove: the row
-                      said the draft was refused and nothing about why or how much. The count is the
-                      smallest honest thing a list row can carry; the panel on the package itself
-                      names the rule, the bullet and what to do. */}
-                  {row.violations > 0 ? (
-                    <span className="text-xs text-muted-foreground">
-                      {row.violations === 1 ? "1 guardrail violation" : `${row.violations} guardrail violations`}
-                    </span>
-                  ) : null}
-                </div>
-              </TableCell>
-              <TableCell>
-                <StatusBadge tone="muted">{row.mode}</StatusBadge>
-              </TableCell>
-              <TableCell>{formatRelative(row.created_at)}</TableCell>
-              <TableCell>
-                <ResumeRowActions row={row} />
-              </TableCell>
-            </TableRow>
+                </span>
+                <span>
+                  <StatusBadge tone={PACKAGE_STATUS_TONE[row.status] ?? "neutral"}>{statusLabel}</StatusBadge>
+                </span>
+                <span className="font-medium text-primary md:text-right">{action}</span>
+              </Link>
+            </li>
           );
         })}
-      </TableBody>
-    </Table>
+      </ul>
+    </div>
   );
 }

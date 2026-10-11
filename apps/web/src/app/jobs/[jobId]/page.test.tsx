@@ -181,7 +181,7 @@ describe("JobPage", () => {
     expect(screen.getByRole("link", { name: "Review" })).toHaveAttribute("href", "/jobs/j1/packages/p1");
     // A draft package isn't blocked, so the page must not enable the guardrail-panel fetch for it.
     expect(usePackageSpy).toHaveBeenCalledWith("p1", false);
-    expect(screen.queryByText("Guardrails")).not.toBeInTheDocument();
+    expect(screen.queryByText("Truth check")).not.toBeInTheDocument();
   });
 
   it("offers Fix guardrails and renders the guardrail panel when the latest package is blocked", () => {
@@ -190,8 +190,8 @@ describe("JobPage", () => {
     render(<JobPage />);
     expect(screen.getByRole("link", { name: "Fix guardrails" })).toHaveAttribute("href", "/jobs/j1/packages/p1");
     expect(usePackageSpy).toHaveBeenCalledWith("p1", true);
-    expect(screen.getByText("Guardrails")).toBeInTheDocument();
-    expect(screen.getByText(/invented a company name/i)).toBeInTheDocument();
+    expect(screen.getByText("Truth check")).toBeInTheDocument();
+    expect(screen.getAllByText(/invented a company name/i).length).toBeGreaterThan(0);
     expect(screen.queryByRole("button", { name: "Apply" })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Review" })).not.toBeInTheDocument();
   });
@@ -201,7 +201,7 @@ describe("JobPage", () => {
     packageResult = { data: pkgOut({ id: "p1", status: "blocked" }), error: null, isLoading: false };
     render(<JobPage />);
     const user = userEvent.setup({ delay: null });
-    await user.click(screen.getByText(/invented a company name/i));
+    await user.click(screen.getByRole("button", { name: /^Fix: .*invented a company name/i }));
     // "summary[0]" is pkgOut()'s violation path above -- on a blocked package the job page's whole
     // purpose is "here is what to fix", so the specific violation clicked must carry through to
     // the review page, not just the package as a whole.

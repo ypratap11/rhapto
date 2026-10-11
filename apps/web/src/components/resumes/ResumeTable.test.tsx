@@ -47,7 +47,7 @@ describe("ResumeTable rows", () => {
     expect(links[1]).toHaveAttribute("href", "/jobs/j2/packages/p2");
     expect(links[0]).toHaveAccessibleName("ExampleCo, Technical Program Manager, Draft");
     expect(links[1]).toHaveAccessibleName("Globex, Technical Program Manager, Needs attention");
-    expect(links[0].className).toContain("min-h-11");
+    expect(links[0]!.className).toContain("min-h-11");
   });
 
   it("has no buttons and no row actions, and none of the old columns", () => {

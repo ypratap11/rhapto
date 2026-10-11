@@ -1,10 +1,9 @@
 "use client";
 
-import { Suspense, useMemo } from "react";
+import { Suspense } from "react";
 import Link from "next/link";
 import { FileText } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
-import type { TrackInfo } from "@/components/jobs/JobCard";
 import { ResumeTable } from "@/components/resumes/ResumeTable";
 import { ApiErrorBanner } from "@/components/shell/ApiErrorBanner";
 import { HeroBand } from "@/components/shell/HeroBand";
@@ -12,7 +11,7 @@ import { buttonVariants } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { TableSkeleton } from "@/components/ui/table-skeleton";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { usePackageList, usePackageListAny, useTracks } from "@/lib/api/queries";
+import { usePackageList, usePackageListAny } from "@/lib/api/queries";
 import { resolveTab, type ResumesTab } from "@/lib/resumes-tab";
 
 const FILTERS: { value: ResumesTab; label: string }[] = [
@@ -27,16 +26,9 @@ function ResumesPageInner() {
   const tab = resolveTab(searchParams);
 
   const list = usePackageList(tab);
-  const tracksQuery = useTracks();
   // Only asked once this tab has come back empty: tells "nothing in this tab" from "no resumes yet".
   const tabIsEmpty = list.data !== undefined && list.data.length === 0;
   const anyList = usePackageListAny(tabIsEmpty);
-
-  const tracks = useMemo(() => {
-    const map: Record<string, TrackInfo> = {};
-    for (const t of tracksQuery.data ?? []) map[t.id] = { name: t.name, min_fit: t.min_fit };
-    return map;
-  }, [tracksQuery.data]);
 
   // Same shape as the Dashboard (src/app/dashboard/page.tsx): a settled error and TanStack's paused
   // fetchStatus both mean "something is wrong right now", but neither should discard rows a prior
@@ -83,7 +75,7 @@ function ResumesPageInner() {
           <EmptyState icon={FileText} title="Nothing here right now." />
         )
       ) : (
-        <ResumeTable rows={list.data ?? []} tracks={tracks} filter={tab} />
+        <ResumeTable rows={list.data ?? []} />
       )}
     </>
   );

@@ -67,13 +67,13 @@ describe("GuardrailPanel, a report that did not pass", () => {
     expect(screen.getByText("Rhapto held this resume back because some lines did not pass the truth check.")).toBeInTheDocument();
     expect(screen.getByText(blocked.remedies["no-unverified-metrics"])).toBeInTheDocument();
     // The engine's own message is for Details only.
-    expect(textOutsideDetails(container)).not.toContain(blocked.report.violations[0].message);
+    expect(textOutsideDetails(container)).not.toContain(blocked.report.violations[0]!.message);
   });
 
   it("falls back to the message when there is no remedy for the rule", () => {
     const f = { ...blocked, remedies: {} };
     const { container } = render(panel(f));
-    expect(textOutsideDetails(container)).toContain(blocked.report.violations[0].message);
+    expect(textOutsideDetails(container)).toContain(blocked.report.violations[0]!.message);
   });
 
   it("gives an error on a node a Fix button that selects its path", async () => {
@@ -112,7 +112,7 @@ describe("GuardrailPanel, Details", () => {
     expect(inside.getByText("sections[0].entries[0].bullets[1]")).toBeInTheDocument();
     expect(inside.getByText("acme-migration")).toBeInTheDocument();
     expect(inside.getByText("error")).toBeInTheDocument();
-    expect(inside.getByText(blocked.report.violations[0].message)).toBeInTheDocument();
+    expect(inside.getByText(blocked.report.violations[0]!.message)).toBeInTheDocument();
     const outside = textOutsideDetails(container);
     for (const needle of ["no-unverified-metrics", "sections[0]", "acme-migration", "selection.block_ids"]) {
       expect(outside).not.toContain(needle);

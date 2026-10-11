@@ -98,8 +98,8 @@ describe("PackageActions, one primary per state", () => {
   it("makes the primary full width on a phone and tall enough to tap", () => {
     const { container } = view(withStatus("draft"));
     const [primary] = filled(container);
-    expect(primary.className).toContain("max-sm:w-full");
-    expect(primary.className).toContain("min-h-11");
+    expect(primary!.className).toContain("max-sm:w-full");
+    expect(primary!.className).toContain("min-h-11");
   });
 });
 
@@ -157,7 +157,7 @@ describe("PackageActions, the More menu", () => {
     view(withStatus("draft"));
     await openMore(userEvent.setup());
     await userEvent.click(screen.getByRole("button", { name: "Archive" }));
-    expect(archiveAndHide).toHaveBeenCalledWith({ packageId: "p1", jobId: "j1", label: "Northwind 00b7 Staff Engineer" });
+    expect(archiveAndHide).toHaveBeenCalledWith({ packageId: "p1", jobId: "j1", label: "Northwind · Staff Engineer" });
     expect(push).toHaveBeenCalledWith("/resumes");
   });
 
