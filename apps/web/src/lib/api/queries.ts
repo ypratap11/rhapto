@@ -225,7 +225,7 @@ export const PACKAGE_LIST_PARAMS: Record<PackageListFilter | "any", { status?: "
   ready: { applied: false, status: "ready", archived: false },
   blocked: { status: "blocked", archived: false },
   applied: { applied: true },
-  // Every live (not archived) resume, whatever its status — only used to tell "this tab is empty"
+  // Every live (not archived) resume, whatever its status - only used to tell "this tab is empty"
   // from "there are no resumes at all".
   any: { archived: false },
 };
