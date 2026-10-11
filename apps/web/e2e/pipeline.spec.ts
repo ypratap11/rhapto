@@ -83,8 +83,8 @@ test("an application moves to Interviewing in its sheet, takes a follow-up, then
   await expect(page.getByText("Follow-up saved")).toBeVisible();
   await page.keyboard.press("Escape");
 
-  // The Interviewing chip now holds it.
-  await page.getByRole("button", { name: /^Interviewing/ }).click();
+  // The Interviewing tile now counts it; its accessible name starts with the count.
+  await page.getByRole("button", { name: /^\d+\s*Interviewing/ }).click();
   sheet = await openApplication(page, job);
 
   await sheet.getByRole("combobox", { name: "Status" }).click();

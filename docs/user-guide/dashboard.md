@@ -1,3 +1,5 @@
+# Dashboard
+
 The Dashboard (`/dashboard`) is where you land once signed in. It answers two questions: where do
 my applications stand, and what should I apply to next. (`/` is the explainer, and it is shown
 there to everyone, including you when you are signed in. Bookmark `/dashboard`.)
