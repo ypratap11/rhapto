@@ -208,7 +208,7 @@ describe("JobPage", () => {
     expect(routerPush).toHaveBeenCalledWith("/jobs/j1/packages/p1?path=summary%5B0%5D");
   });
 
-  it("links a completeness row, which names no node, to the package page", () => {
+  it("offers one link to the resume, not a second one, for a row that names no node", () => {
     jobResult = { data: job({ latest_package: pkg({ id: "p1", version: 1, status: "blocked" }) }), error: null, isLoading: false };
     packageResult = {
       data: pkgOut({
@@ -226,7 +226,10 @@ describe("JobPage", () => {
       isLoading: false,
     };
     render(<JobPage />);
-    expect(screen.getByRole("link", { name: /does not appear in Experience/i })).toHaveAttribute("href", "/jobs/j1/packages/p1");
+    expect(screen.getAllByText(/does not appear in Experience/i).length).toBeGreaterThan(0);
+    expect(screen.queryByRole("link", { name: /does not appear in Experience/i })).not.toBeInTheDocument();
+    const toResume = screen.getAllByRole("link").filter((l) => l.getAttribute("href") === "/jobs/j1/packages/p1");
+    expect(toResume.map((l) => l.textContent)).toEqual(["Fix and review"]);
   });
 
   it("offers the download button, and mounts the Did-you-apply prompt, when the latest package is ready", () => {
