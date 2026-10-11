@@ -1,0 +1,36 @@
+{
+  "report": {
+    "passed": true,
+    "rules_run": [
+      "provenance",
+      "no-unverified-metrics",
+      "completeness",
+      "no-invented-entities",
+      "date-consistency",
+      "attribution",
+      "visibility-context"
+    ],
+    "violations": [
+      {
+        "rule": "completeness",
+        "severity": "warning",
+        "message": "credential block 'cred-draft' is selected but carries no org, role or content and cannot be rendered; fix the block library",
+        "path": "selection.block_ids['cred-draft']",
+        "block_id": "cred-draft"
+      }
+    ]
+  },
+  "checks": {
+    "provenance": "Every entry and line is linked to an item in your experience.",
+    "no-unverified-metrics": "Every number appears in an item you confirmed.",
+    "completeness": "Every role, project and credential picked for this job is still listed.",
+    "no-invented-entities": "Company and job-title names match your own resume or profile.",
+    "date-consistency": "Dates were checked for consistency.",
+    "attribution": "Where you noted that work was shared, that note is kept.",
+    "visibility-context": "Items you marked to leave out for this kind of job were left out."
+  },
+  "remedies": {
+    "completeness": "Every selected role, project and credential must keep an entry. Shorten an entry to one line rather than deleting it, or regenerate."
+  },
+  "mode": "blocks"
+}

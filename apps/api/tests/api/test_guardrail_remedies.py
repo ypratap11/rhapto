@@ -117,3 +117,9 @@ def test_no_user_facing_text_uses_internal_words() -> None:
     banned = ("block", "library", "verified", "guardrail", "track", "LLM", "token", "provenance")
     for text in [*CHECK_SENTENCES.values(), *REMEDIES.values()]:
         assert not any(w.lower() in text.lower() for w in banned), text
+
+
+def test_registry_literals_equal_the_tune_constants() -> None:
+    from rhapto.engine.guardrails.registry import NO_NEW_NUMBERS_ID, TUNE_SCOPE_ID
+
+    assert (TUNE_SCOPE_ID, NO_NEW_NUMBERS_ID) == (TUNE_SCOPE, NO_NEW_NUMBERS)

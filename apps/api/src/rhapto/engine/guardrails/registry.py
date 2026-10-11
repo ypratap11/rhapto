@@ -53,36 +53,73 @@ RULES: dict[str, Rule] = {
 #:
 #: `test_guardrail_remedies.py` asserts this covers every `RULE_NAME` in `engine/guardrails/`, so a
 #: seventh rule cannot ship with "blocked" and no next step.
+# Tune mode's two rules are keyed by their literal ids: `tune.py` imports `UnknownGuardrailError` from
+# this module, so importing its constants here is a certain cycle. `test_guardrail_remedies.py`
+# asserts these literals equal `tune.TUNE_SCOPE` / `tune.NO_NEW_NUMBERS`.
+TUNE_SCOPE_ID = "tune-scope"
+NO_NEW_NUMBERS_ID = "no-new-numbers"
+
 REMEDIES: dict[str, str] = {
     PROVENANCE: (
-        "Every bullet has to come from a block in your library. Regenerate, or add the claim as a "
-        "block first so the sentence has a source."
+        "Every line has to come from an item in your experience. Regenerate, or add the claim to "
+        "your experience first so the line has a source."
     ),
     METRICS: (
-        "A number appeared that no verified block contains. Either mark the block holding that "
-        "figure as verified, or regenerate so the bullet stops asserting it."
+        "A number appeared that no confirmed item contains. Either confirm the item that holds "
+        "that figure, or regenerate so the line stops stating it."
     ),
     ENTITIES: (
-        "A company, product or tool was named that is not in your profile or the job description. "
-        "Regenerate, or add it to the block it belongs to."
+        "A company, job title or name appeared that does not match your own experience or resume. "
+        "Regenerate, or correct it in your experience first."
     ),
     DATES: (
-        "The dates do not line up with the block's own period. Fix the period on that block, then "
+        "A date range is out of order, overlaps another role, or was changed. Fix the dates on "
+        "that item in your experience (mark a role as overlapping if it really was), then "
         "regenerate."
     ),
     ATTRIBUTION: (
-        "Work that was a team's is written as yours alone. Set the block's attribution, then "
-        "regenerate."
+        "A note you asked to keep about shared work is missing. Regenerate, or put the wording "
+        "you saved on that item back into the line."
     ),
     VISIBILITY: (
-        "A claim needs the context that makes it true -- scope, team size or scale. Add it to the "
-        "block, then regenerate."
+        "An item you marked to leave out for this kind of job was used anyway. Regenerate, or "
+        "remove that mark on the item if it should be allowed."
     ),
     COMPLETENESS: (
         "Every selected role, project and credential must keep an entry. Shorten an entry to one "
         "line rather than deleting it, or regenerate."
     ),
+    TUNE_SCOPE_ID: (
+        "A change went beyond the summary, skills and bullet lines, or changed more than six "
+        "bullets. Regenerate to get lighter edits."
+    ),
+    NO_NEW_NUMBERS_ID: (
+        "A number appeared that is not in your resume. Regenerate, or add the number to your "
+        "experience and confirm it first."
+    ),
 }
+
+#: What each rule actually checks, in plain words, one sentence each. Mode-free: the same sentence
+#: is true in blocks mode and tune mode, and `checks_for` is given only the rules that ran. Every
+#: sentence was written against the rule module, and must not claim more than that code checks.
+CHECK_SENTENCES: dict[str, str] = {
+    PROVENANCE: "Every entry and line is linked to an item in your experience.",
+    METRICS: "Every number appears in an item you confirmed.",
+    COMPLETENESS: "Every role, project and credential picked for this job is still listed.",
+    ENTITIES: "Company and job-title names match your own resume or profile.",
+    DATES: "Dates were checked for consistency.",
+    ATTRIBUTION: "Where you noted that work was shared, that note is kept.",
+    VISIBILITY: "Items you marked to leave out for this kind of job were left out.",
+    TUNE_SCOPE_ID: (
+        "Only summary, skills and bullet lines were reworded, with at most six bullets changed."
+    ),
+    NO_NEW_NUMBERS_ID: "No number was added that is not already in your resume.",
+}
+
+
+def checks_for(rules: Iterable[str]) -> dict[str, str]:
+    """The check sentences for exactly the rules named, deduplicated, skipping unknown ids."""
+    return {r: CHECK_SENTENCES[r] for r in dict.fromkeys(rules) if r in CHECK_SENTENCES}
 
 
 def remedies_for(rules: Iterable[str]) -> dict[str, str]:

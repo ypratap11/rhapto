@@ -117,6 +117,13 @@ async def test_a_rule_with_no_remedy_is_absent_rather_than_blank(
     assert body["guardrail_report"]["violations"][0]["rule"] == "some-future-rule"
 
 
+async def test_the_response_carries_a_check_sentence_for_every_rule_that_ran(
+    client: httpx.AsyncClient, tailored_package: dict[str, Any]
+) -> None:
+    body = (await client.get(f"/api/v1/packages/{tailored_package['id']}")).json()
+    assert set(body["guardrail_checks"]) == set(body["guardrail_report"]["rules_run"])
+
+
 async def test_a_passing_package_carries_no_remedies(
     client: httpx.AsyncClient, tailored_package: dict[str, Any]
 ) -> None:
