@@ -56,7 +56,7 @@ const QUESTIONS: ReadonlyArray<{ q: string; a: string[] }> = [
   },
   {
     q: "How do I contact you?",
-    a: ["Use Send feedback in the account menu once you are signed in. It reaches the people who run Rhapto."],
+    a: ["Use Send feedback in the account menu from any page after you sign in. It reaches the people who run Rhapto."],
   },
 ];
 

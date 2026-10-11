@@ -44,7 +44,7 @@ export default function DashboardPage() {
       ) : noResume ? (
         <section className="mx-auto flex max-w-md flex-col items-center gap-3 rounded-card border border-border bg-surface p-8 text-center shadow-card">
           <h2 className="font-heading text-xl font-medium">Start with your resume</h2>
-          <p className="text-sm text-muted-foreground">Upload a Word (.docx) file. Rhapto only ever uses what&apos;s in it.</p>
+          <p className="text-sm text-muted-foreground">Upload a Word (.docx) file. Your tailored resumes are built from what&apos;s in it.</p>
           <Link href="/start" className={cn(buttonVariants({ size: "lg" }), "max-md:min-h-11")}>
             Upload resume
           </Link>
