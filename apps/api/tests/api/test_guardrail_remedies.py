@@ -18,7 +18,8 @@ import importlib
 import pkgutil
 
 import rhapto.engine.guardrails as guardrails_package
-from rhapto.engine.guardrails.registry import REMEDIES, remedies_for
+from rhapto.engine.guardrails.registry import CHECK_SENTENCES, REMEDIES, checks_for, remedies_for
+from rhapto.engine.guardrails.tune import NO_NEW_NUMBERS, TUNE_SCOPE
 
 
 def declared_rule_names() -> set[str]:
@@ -37,7 +38,7 @@ def declared_rule_names() -> set[str]:
 
 
 def test_every_rule_has_a_remedy() -> None:
-    declared = declared_rule_names()
+    declared = declared_rule_names() | {TUNE_SCOPE, NO_NEW_NUMBERS}
     assert declared, "no RULE_NAME constants found -- the discovery walk is broken, not the rules"
     assert set(REMEDIES) == declared, (
         f"rules with no remedy: {sorted(declared - set(REMEDIES))}; "
@@ -99,3 +100,20 @@ def test_completeness_remedy_is_true_for_a_model_drop_and_a_human_deletion() -> 
     assert "Every selected role, project and credential must keep an entry" in remedy
     assert "Shorten an entry to one line rather than deleting it" in remedy
     assert "model" not in remedy.casefold()
+
+
+def test_every_rule_has_a_check_sentence() -> None:
+    expected = declared_rule_names() | {TUNE_SCOPE, NO_NEW_NUMBERS}
+    assert set(CHECK_SENTENCES) == expected
+
+
+def test_checks_for_restricts_dedupes_and_skips_unknown() -> None:
+    assert checks_for(["provenance", "provenance", "future-rule"]) == {
+        "provenance": CHECK_SENTENCES["provenance"]
+    }
+
+
+def test_no_user_facing_text_uses_internal_words() -> None:
+    banned = ("block", "library", "verified", "guardrail", "track", "LLM", "token", "provenance")
+    for text in [*CHECK_SENTENCES.values(), *REMEDIES.values()]:
+        assert not any(w.lower() in text.lower() for w in banned), text
