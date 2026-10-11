@@ -47,6 +47,7 @@ const tunePackage = {
 
 const pkg = { current: tunePackage };
 const one = [{ id: "pkg-1", version: 1, status: "blocked", created_at: "2026-09-11T00:00:00Z" }];
+const blockList: unknown[] = [];
 const state = { versions: one as unknown[], queue: [] as unknown[], jobTitle: "Staff Engineer" as string | null };
 vi.mock("@/components/review/useArchiveAndHide", () => ({ useArchiveAndHide: () => ({ archiveAndHide: vi.fn(), isPending: false }) }));
 
@@ -54,7 +55,7 @@ vi.mock("@/lib/api/queries", () => ({
   useJob: () => ({ data: { id: "j1", company: "Northwind", title: state.jobTitle, jd_text: "jd", url: null }, error: null }),
   usePackage: () => ({ data: pkg.current, error: null }),
   usePackages: () => ({ data: state.versions, error: null }),
-  useBlocks: () => ({ data: [], error: null }),
+  useBlocks: () => ({ data: blockList, error: null }),
   useApplications: () => ({ data: { columns: {} }, error: null }),
   usePackageList: () => ({ data: state.queue, error: null }),
   useMarkPackageReady: () => ({ mutateAsync: vi.fn(), isPending: false }),
@@ -76,7 +77,7 @@ describe("PackageReviewPage", () => {
 
     expect(screen.getByRole("heading", { name: "Changes" })).toBeInTheDocument();
     expect(screen.getByLabelText("After")).toHaveValue("Led the payments rewrite across four services.");
-    expect(screen.queryByText(/select a bullet to see the block/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/select a line to see which part of your resume it came from/i)).not.toBeInTheDocument();
   });
 
   it("shows nothing about calls, tokens, cost, the track or the version, in the header, actions or Truth check", () => {
@@ -207,6 +208,37 @@ describe("PackageReviewPage", () => {
 
     expect(screen.queryByRole("heading", { name: "Changes" })).not.toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Maya Chen" })).toBeInTheDocument();
-    expect(screen.getByText(/select a bullet to see the block/i)).toBeInTheDocument();
+    expect(screen.getByText(/select a line to see which part of your resume it came from/i)).toBeInTheDocument();
+  });
+
+  it("keeps jargon and raw ids out of the visible resume page, and shows them only inside Details", async () => {
+    blockList.splice(0, blockList.length, {
+      id: "acme-migration",
+      type: "bullet",
+      org: "Acme",
+      role: "Platform Engineer",
+      period: "2020-2023",
+      content: "Moved billing to a new platform.",
+      metric: null,
+      verified: true,
+      tags: [],
+    });
+    const resume = {
+      header: { name: "Maya Chen", links: [] },
+      summary: [],
+      sections: [{ heading: "Experience", entries: [{ heading: "Acme", bullets: [{ text: "Moved billing to a new platform.", source_block_id: "acme-migration" }] }] }],
+    };
+    pkg.current = { ...tunePackage, status: "draft", mode: "blocks", edits: [], source_document: null, resume, guardrail_report: { passed: true, rules_run: [], violations: [] } } as unknown as PackageOut;
+    const { container } = render(<PackageReviewPage />);
+    await userEvent.click(screen.getByRole("button", { name: /Moved billing/ }));
+    const clone = container.cloneNode(true) as HTMLElement;
+    clone.querySelectorAll("details").forEach((d) => d.querySelectorAll("*:not(summary)").forEach((n) => n.remove()));
+    const outside = (clone.textContent ?? "").toLowerCase();
+    for (const word of ["block", "verified", "tune mode", "acme-migration", "unknown"]) {
+      expect(outside, `"${word}" visible`).not.toContain(word);
+    }
+    expect(outside).toContain("confirmed");
+    expect(container.textContent).toContain("acme-migration");
+    blockList.splice(0, blockList.length);
   });
 });

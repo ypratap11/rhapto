@@ -49,11 +49,11 @@ export function EntityTable<T>({
                 </TableCell>
               ))}
               <TableCell className="text-right">
-                <Button variant="ghost" size="icon" aria-label={`Edit ${getLabel(row)}`} onClick={() => onEdit(row)}>
+                <Button variant="ghost" size="icon" className="max-md:min-h-11 max-md:min-w-11" aria-label={`Edit ${getLabel(row)}`} onClick={() => onEdit(row)}>
                   <Pencil className="size-4" aria-hidden />
                 </Button>
                 {onDelete ? (
-                  <Button variant="ghost" size="icon" aria-label={`Delete ${getLabel(row)}`} onClick={() => setPending(row)}>
+                  <Button variant="ghost" size="icon" className="max-md:min-h-11 max-md:min-w-11" aria-label={`Delete ${getLabel(row)}`} onClick={() => setPending(row)}>
                     <Trash2 className="size-4" aria-hidden />
                   </Button>
                 ) : null}

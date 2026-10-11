@@ -17,7 +17,7 @@ describe("/help", () => {
       expect(d.querySelector("summary")!.className).toContain("min-h-11");
     }
     const back = getByRole("link", { name: "Back to Rhapto" });
-    expect(back).toHaveAttribute("href", "/dashboard");
+    expect(back).toHaveAttribute("href", "/");
     expect(back.className).toContain("min-h-11");
   });
 

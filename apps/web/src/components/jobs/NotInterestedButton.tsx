@@ -1,6 +1,7 @@
 "use client";
 
 import { EyeOff } from "lucide-react";
+import { cn } from "cn";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { ApiError } from "@/lib/api/client";
@@ -36,7 +37,7 @@ export function NotInterestedButton({ job, size = "default", className }: { job:
   }
 
   return (
-    <Button variant="ghost" size={size} className={className} onClick={onHide} disabled={hide.isPending}>
+    <Button variant="ghost" size={size} className={cn("max-md:min-h-11", className)} onClick={onHide} disabled={hide.isPending}>
       <EyeOff className="size-4" aria-hidden /> Not interested
     </Button>
   );

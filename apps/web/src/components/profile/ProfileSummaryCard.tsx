@@ -35,7 +35,7 @@ export function ProfileSummaryCard({
     <div data-card-id={id} className="rounded-card border border-border bg-surface p-4 shadow-card">
       <div className="flex items-start justify-between gap-3">
         <h2 className="font-sans text-base font-semibold">{title}</h2>
-        <Button variant="outline" size="sm" onClick={() => onOpenChange(true)} aria-label={`Edit ${title}`}>
+        <Button variant="outline" size="sm" className="max-md:min-h-11 max-md:min-w-11" onClick={() => onOpenChange(true)} aria-label={`Edit ${title}`}>
           Edit
         </Button>
       </div>

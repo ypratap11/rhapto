@@ -178,7 +178,7 @@ export function SourcesSection() {
                 </div>
                 <div className="flex shrink-0 items-center gap-2">
                   {source.paused ? (
-                    <Button size="sm" variant="outline" onClick={() => void resumeSource(source)} disabled={resume.isPending}>
+                    <Button className="max-md:min-h-11" size="sm" variant="outline" onClick={() => void resumeSource(source)} disabled={resume.isPending}>
                       Resume
                     </Button>
                   ) : null}
@@ -206,16 +206,16 @@ export function SourcesSection() {
                     </div>
                   ))}
                   <div className="flex gap-2">
-                    <Button size="sm" onClick={() => void saveKeys(source)} disabled={save.isPending}>
+                    <Button className="max-md:min-h-11" size="sm" onClick={() => void saveKeys(source)} disabled={save.isPending}>
                       Save
                     </Button>
-                    <Button size="sm" variant="outline" onClick={() => void runTest(source)} disabled={test.isPending}>
+                    <Button className="max-md:min-h-11" size="sm" variant="outline" onClick={() => void runTest(source)} disabled={test.isPending}>
                       Test
                     </Button>
                   </div>
                 </div>
               ) : (
-                <Button size="sm" variant="outline" onClick={() => void runTest(source)} disabled={test.isPending}>
+                <Button className="max-md:min-h-11" size="sm" variant="outline" onClick={() => void runTest(source)} disabled={test.isPending}>
                   Test
                 </Button>
               )}

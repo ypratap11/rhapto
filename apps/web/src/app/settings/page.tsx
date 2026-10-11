@@ -130,18 +130,18 @@ export default function SettingsPage() {
               <Label htmlFor="token">Access key</Label>
               <div className="flex gap-2">
                 <Input id="token" ref={tokenRef} type={show ? "text" : "password"} defaultValue="" autoComplete="off" />
-                <Button type="button" variant="outline" onClick={() => setShow((v) => !v)} aria-pressed={show}>
+                <Button className="max-md:min-h-11" type="button" variant="outline" onClick={() => setShow((v) => !v)} aria-pressed={show}>
                   {show ? "Hide" : "Show"}
                 </Button>
               </div>
               <p className="text-xs text-muted-foreground">Stored only in this browser.</p>
             </div>
             <div className="flex gap-2">
-              <Button onClick={save}>Save</Button>
-              <Button variant="outline" onClick={test} disabled={testing}>
+              <Button className="max-md:min-h-11" onClick={save}>Save</Button>
+              <Button className="max-md:min-h-11" variant="outline" onClick={test} disabled={testing}>
                 {testing ? "Testing…" : "Test connection"}
               </Button>
-              <Button variant="outline" onClick={disconnect}>
+              <Button className="max-md:min-h-11" variant="outline" onClick={disconnect}>
                 Disconnect
               </Button>
             </div>

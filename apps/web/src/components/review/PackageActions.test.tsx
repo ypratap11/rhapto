@@ -74,7 +74,7 @@ describe("PackageActions, one primary per state", () => {
     for (const name of ["Regenerate", "Download everything", "Archive"]) expect(screen.getByRole("button", { name })).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Open the job posting" })).not.toBeInTheDocument();
     expect(
-      screen.getByText("This resume was stopped by the truth check, so the documents are not available. Fix the lines above and regenerate; Download everything still holds the report."),
+      screen.getByText("This resume was stopped by the truth check, so the documents are not available. Fix the problems in the Truth check and regenerate; Download everything has the full report."),
     ).toBeInTheDocument();
   });
 

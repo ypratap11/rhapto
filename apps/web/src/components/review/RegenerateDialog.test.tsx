@@ -47,7 +47,7 @@ describe("RegenerateDialog", () => {
     mutateAsync.mockResolvedValueOnce({ id: "t2", status: "running" });
     render(<RegenerateDialog job={job} pkg={pkg} open onOpenChange={() => undefined} />);
     const user = userEvent.setup({ delay: null });
-    expect(screen.getByRole("combobox", { name: "Mode" })).toHaveTextContent("Tune my resume");
+    expect(screen.getByRole("combobox", { name: "Mode" })).toHaveTextContent("Light touch");
     await user.type(screen.getByLabelText(/feedback/i), "Lean harder on the migration work.");
     await user.click(screen.getByRole("button", { name: /regenerate/i }));
     expect(mutateAsync).toHaveBeenCalledWith({ jobId: "j1", body: { feedback: "Lean harder on the migration work.", parent_package_id: "p1", track_id: "data-pm", mode: "tune" } });

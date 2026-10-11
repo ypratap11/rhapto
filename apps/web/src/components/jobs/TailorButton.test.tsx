@@ -105,8 +105,9 @@ describe("TailorButton", () => {
     ];
     renderButton({ best_track_id: "ai-pm" });
     expect(screen.getByRole("combobox", { name: "Goal", hidden: true })).toBeInTheDocument();
-    // Closed, the Select renders the raw selected value: the best-fit track, not the first one.
-    expect(screen.getByText("ai-pm")).toBeInTheDocument();
+    // Closed, the trigger shows the best-fit goal's name (never its id), not the first one.
+    expect(screen.getByRole("combobox", { name: "Goal", hidden: true })).toHaveTextContent("AI PM");
+    expect(screen.queryByText("ai-pm")).not.toBeInTheDocument();
   });
 
   it("renders TaskProgress even when the mutation returns an already-finished task", async () => {
@@ -248,7 +249,7 @@ describe("TailorButton", () => {
     renderButton();
     expect(fullRadio()).toBeChecked();
     expect(lightRadio()).toBeDisabled();
-    expect(screen.getByText("Upload a resume document in the Profile tab to enable tune mode.")).toBeInTheDocument();
+    expect(screen.getByText("To use Light touch, upload your resume file in Your profile.")).toBeInTheDocument();
 
     const user = userEvent.setup({ delay: null });
     await user.click(screen.getByRole("button", { name: /^tailor/i }));

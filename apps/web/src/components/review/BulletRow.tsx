@@ -5,11 +5,11 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import type { Block } from "@/lib/api/queries";
+import { sourceLabel } from "./SourceBlockCard";
 
 export function BulletRow({
   path,
   text,
-  sourceBlockId,
   block,
   selected,
   hasViolation,
@@ -20,7 +20,6 @@ export function BulletRow({
 }: {
   path: string;
   text: string;
-  sourceBlockId: string;
   block: Block | null;
   selected: boolean;
   hasViolation: boolean;
@@ -69,10 +68,10 @@ export function BulletRow({
           }}
         />
         <div className="flex justify-end gap-1">
-          <Button type="button" variant="ghost" size="icon-sm" aria-label="Cancel edit" onClick={cancel}>
+          <Button type="button" variant="ghost" size="icon-sm" className="max-md:min-h-11 max-md:min-w-11" aria-label="Cancel edit" onClick={cancel}>
             <X className="size-3.5" />
           </Button>
-          <Button type="button" variant="ghost" size="icon-sm" aria-label="Save bullet" onClick={save}>
+          <Button type="button" variant="ghost" size="icon-sm" className="max-md:min-h-11 max-md:min-w-11" aria-label="Save bullet" onClick={save}>
             <Check className="size-3.5" />
           </Button>
         </div>
@@ -87,17 +86,16 @@ export function BulletRow({
       >
         <button type="button" onClick={() => onSelect(path)} onDoubleClick={editable ? startEditing : undefined} aria-pressed={selected} className="flex-1 text-left">
           <span>{text}</span>
-          <span className="mt-1 block font-mono text-[11px] text-muted-foreground">
-            {sourceBlockId}
-            {block ? (block.verified ? " · verified" : " · unverified") : " · unknown block"}
+          <span className="mt-1 block text-[11px] text-muted-foreground">
+            {block ? `${sourceLabel(block)} · ${block.verified ? "confirmed" : "not confirmed"}` : "Source not found"}
           </span>
         </button>
         {editable ? (
           <div className="flex shrink-0 gap-1">
-            <Button type="button" variant="ghost" size="icon-sm" aria-label="Edit bullet" onClick={startEditing}>
+            <Button type="button" variant="ghost" size="icon-sm" className="max-md:min-h-11 max-md:min-w-11" aria-label="Edit bullet" onClick={startEditing}>
               <Pencil className="size-3.5" />
             </Button>
-            <Button type="button" variant="ghost" size="icon-sm" aria-label="Remove bullet" onClick={() => onRemove?.(path)}>
+            <Button type="button" variant="ghost" size="icon-sm" className="max-md:min-h-11 max-md:min-w-11" aria-label="Remove bullet" onClick={() => onRemove?.(path)}>
               <X className="size-3.5" />
             </Button>
           </div>

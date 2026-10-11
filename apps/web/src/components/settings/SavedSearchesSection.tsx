@@ -192,10 +192,10 @@ export function SavedSearchesSection() {
                       disabled={update.isPending}
                     />
                   </label>
-                  <Button size="sm" variant="outline" onClick={() => openEdit(search)}>
+                  <Button className="max-md:min-h-11" size="sm" variant="outline" onClick={() => openEdit(search)}>
                     Edit
                   </Button>
-                  <Button size="sm" variant="outline" onClick={() => setConfirmId(search.id)}>
+                  <Button className="max-md:min-h-11" size="sm" variant="outline" onClick={() => setConfirmId(search.id)}>
                     Delete
                   </Button>
                 </div>
@@ -245,10 +245,10 @@ export function SavedSearchesSection() {
                 </Select>
               </div>
               <div className="flex justify-end gap-2 px-4">
-                <Button variant="outline" onClick={closeEdit}>
+                <Button className="max-md:min-h-11" variant="outline" onClick={closeEdit}>
                   Cancel
                 </Button>
-                <Button onClick={() => void saveEdit()} disabled={update.isPending}>
+                <Button className="max-md:min-h-11" onClick={() => void saveEdit()} disabled={update.isPending}>
                   Save
                 </Button>
               </div>

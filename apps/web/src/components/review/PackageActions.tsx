@@ -50,7 +50,7 @@ function Menu({ label, variant, className, icon, children }: { label: string; va
         {label === "More" ? null : <ChevronDown className="size-4" aria-hidden />}
       </Button>
       {open ? (
-        <div className="absolute right-0 top-full z-20 mt-1 min-w-48 rounded-card border border-border bg-surface p-1 shadow-card">{children(() => setOpen(false))}</div>
+        <div className="absolute right-0 top-full z-20 mt-1 min-w-48 max-sm:left-0 max-sm:min-w-0 rounded-card border border-border bg-surface p-1 shadow-card">{children(() => setOpen(false))}</div>
       ) : null}
     </div>
   );
@@ -165,7 +165,7 @@ export function PackageActions({
       </Menu>
       {blocked ? (
         <p className="basis-full text-xs text-muted-foreground">
-          This resume was stopped by the truth check, so the documents are not available. Fix the lines above and regenerate; Download everything still holds the report.
+          This resume was stopped by the truth check, so the documents are not available. Fix the problems in the Truth check and regenerate; Download everything has the full report.
         </p>
       ) : null}
     </div>

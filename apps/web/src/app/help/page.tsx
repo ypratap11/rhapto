@@ -66,7 +66,7 @@ export default function HelpPage() {
       <div className="space-y-2">
         <h1 className="font-serif text-2xl font-medium">Help</h1>
         <p className="text-sm text-muted-foreground">Short answers to the questions people ask most.</p>
-        <Link href="/dashboard" prefetch={false} className="inline-flex min-h-11 items-center text-sm font-medium text-primary underline underline-offset-4">
+        <Link href="/" prefetch={false} className="inline-flex min-h-11 items-center text-sm font-medium text-primary underline underline-offset-4">
           Back to Rhapto
         </Link>
       </div>

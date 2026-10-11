@@ -97,13 +97,13 @@ export function RegenerateDialog({ job, pkg, open, onOpenChange }: { job: JobOut
             <Label>Mode</Label>
             <Select value={selectedMode} onValueChange={(value: string | null) => value && setMode(value as "blocks" | "tune")}>
               <SelectTrigger aria-label="Mode">
-                <SelectValue>{(value: string | null) => (value === "tune" ? "Tune my resume" : "Build from blocks")}</SelectValue>
+                <SelectValue>{(value: string | null) => (value === "tune" ? "Light touch" : "Full rewrite")}</SelectValue>
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="tune" disabled={!hasResumeDocument}>
-                  Tune my resume
+                  Light touch
                 </SelectItem>
-                <SelectItem value="blocks">Build from blocks</SelectItem>
+                <SelectItem value="blocks">Full rewrite</SelectItem>
               </SelectContent>
             </Select>
           </div>

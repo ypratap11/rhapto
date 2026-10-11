@@ -96,7 +96,7 @@ export function TailorButton({ job }: { job: JobOut }) {
   // offering the button. `undefined` (still loading) is not "not configured": leave the button.
   if (me.data?.llm_configured === false) return <SetUpProviderLink />;
 
-  const tuneHint = documentLoaded && !hasResumeDocument ? "Upload a resume document in the Profile tab to enable tune mode." : null;
+  const tuneHint = documentLoaded && !hasResumeDocument ? "To use Light touch, upload your resume file in Your profile." : null;
   const trackList = tracks.data ?? [];
 
   return (
@@ -128,7 +128,9 @@ export function TailorButton({ job }: { job: JobOut }) {
           {trackList.length > 1 ? (
             <Select value={selectedTrackId} onValueChange={(value: string | null) => setTrackId(value ?? undefined)}>
               <SelectTrigger className="min-h-11 w-full sm:w-56" aria-label="Goal">
-                <SelectValue placeholder={trackList[0]?.name ?? "Goal"} />
+                <SelectValue placeholder={trackList[0]?.name ?? "Goal"}>
+                  {(value: string | null) => trackList.find((t) => t.id === value)?.name ?? trackList[0]?.name ?? "Goal"}
+                </SelectValue>
               </SelectTrigger>
               <SelectContent>
                 {trackList.map((t) => (

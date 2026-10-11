@@ -231,10 +231,10 @@ export function LlmProviderSection() {
               </p>
             ) : null}
             <div className="flex flex-wrap gap-2">
-              <Button onClick={onSave} disabled={!changed || model.length === 0 || save.isPending}>
+              <Button className="max-md:min-h-11" onClick={onSave} disabled={!changed || model.length === 0 || save.isPending}>
                 Save
               </Button>
-              <Button variant="outline" onClick={runTest} disabled={model.length === 0 || probe.isPending}>
+              <Button className="max-md:min-h-11" variant="outline" onClick={runTest} disabled={model.length === 0 || probe.isPending}>
                 Test connection
               </Button>
               {settings?.source === "settings" ? (

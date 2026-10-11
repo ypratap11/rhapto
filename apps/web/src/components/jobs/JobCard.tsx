@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { cn } from "cn";
 import { buttonVariants } from "@/components/ui/button";
 import { FitRing } from "@/components/ui/fit-ring";
 import { StatusBadge } from "@/components/ui/StatusBadge";
@@ -57,7 +58,7 @@ export function JobCard({ job, track }: { job: JobOut; track: TrackInfo | null }
             `Button render={<Link/>}` forces a choice between misreporting this as role="button"
             (`nativeButton={false}`) or a dev-mode console error (`nativeButton` left at its `true`
             default on a non-<button> element). `buttonVariants` gets the same look without either. */}
-        <Link href={`/jobs/${job.id}`} className={buttonVariants({ size: "sm" })}>
+        <Link href={`/jobs/${job.id}`} className={cn(buttonVariants({ size: "sm" }), "max-md:min-h-11")}>
           Tailor
         </Link>
         <NotInterestedButton job={job} size="sm" />

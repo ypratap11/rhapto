@@ -44,9 +44,9 @@ function ResumesPageInner() {
       </HeroBand>
       <div className="mb-4">
         <Tabs value={tab} onValueChange={(value) => value && router.replace(`/resumes?tab=${value}`)}>
-          <TabsList aria-label="Resume status">
+          <TabsList aria-label="Resume status" className="max-md:h-auto max-md:w-full">
             {FILTERS.map((f) => (
-              <TabsTrigger key={f.value} value={f.value}>
+              <TabsTrigger key={f.value} value={f.value} className="max-md:min-h-11">
                 {f.label}
               </TabsTrigger>
             ))}

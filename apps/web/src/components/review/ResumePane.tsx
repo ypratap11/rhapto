@@ -63,7 +63,6 @@ export function ResumePane({
                 key={summaryPath(i)}
                 path={summaryPath(i)}
                 text={b.text}
-                sourceBlockId={b.source_block_id}
                 block={blocks.get(b.source_block_id) ?? null}
                 selected={selectedPath === summaryPath(i)}
                 hasViolation={violationsByPath.has(summaryPath(i))}
@@ -96,7 +95,6 @@ export function ResumePane({
                         key={bulletPath(s, e, i)}
                         path={bulletPath(s, e, i)}
                         text={b.text}
-                        sourceBlockId={b.source_block_id}
                         block={blocks.get(b.source_block_id) ?? null}
                         selected={selectedPath === bulletPath(s, e, i)}
                         hasViolation={violationsByPath.has(bulletPath(s, e, i))}
