@@ -115,7 +115,7 @@ export function BasesTab() {
                 <Label htmlFor="base-id">Short name (used inside Rhapto)</Label>
                 <Input id="base-id" value={form.id} onChange={(e) => set({ id: e.target.value })} disabled={!isNew} aria-describedby="base-id-hint" />
                 <p id="base-id-hint" className="text-xs text-muted-foreground">
-                  Letters, numbers and dashes. You can't change it later.
+                  Letters, numbers and dashes. You can&apos;t change it later.
                 </p>
                 {errors.id ? <p className="text-xs text-destructive">{errors.id}</p> : null}
               </div>

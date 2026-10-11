@@ -13,7 +13,7 @@ import { resolve } from "node:path";
 // "tune" mode) is a separate resource from blocks.yaml/tracks.yaml/etc. and is **not** touched by
 // the profile.example re-import below. On a long-lived dev stack it can still hold a real,
 // previously-uploaded resume (name, email, phone, employer). Every spec in this suite therefore
-// either (a) explicitly picks "Build from blocks" in the Tailor button's Mode select rather than
+// either (a) explicitly picks "Full rewrite" under Options on the job page rather than
 // letting a resume document default it to "tune", or (b) only ever tailors after
 // profile.spec.ts has replaced the document with e2e/fixtures/resume-template.docx (the fictional
 // "Maya Chen" fixture also used by apps/api's own tests, see apps/api/tests/helpers_docx.py). Never

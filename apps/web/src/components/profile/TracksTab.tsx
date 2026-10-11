@@ -120,7 +120,7 @@ export function TracksTab() {
                 <Label htmlFor="track-id">Short name (used inside Rhapto)</Label>
                 <Input id="track-id" value={form.id} onChange={(e) => set({ id: e.target.value })} disabled={!isNew} aria-describedby="track-id-hint" />
                 <p id="track-id-hint" className="text-xs text-muted-foreground">
-                  Letters, numbers and dashes. You can't change it later.
+                  Letters, numbers and dashes. You can&apos;t change it later.
                 </p>
                 {errors.id ? <p className="text-xs text-destructive">{errors.id}</p> : null}
               </div>
