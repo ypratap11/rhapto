@@ -30,7 +30,8 @@ test("the dashboard lists applications and recommendations, and a recommendation
   const company = job.company ?? "";
 
   await page.goto("/dashboard");
-  await expect(page.getByRole("heading", { level: 1, name: "Dashboard" })).toBeVisible();
+  // The h1 is now a greeting by the clock ("Good afternoon, Maya") or "Welcome back" when there is no name.
+  await expect(page.getByRole("heading", { level: 1, name: /^(Good (morning|afternoon|evening)(, .+)?|Welcome back)$/ })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Your applications" })).toBeVisible();
   const recommended = page.getByRole("region", { name: "Recommended for you" });
   await expect(recommended).toBeVisible();

@@ -49,6 +49,9 @@ async function createApplication(page: Page, job: JobSummary): Promise<void> {
  * company and role together: this dev stack already has several applications at the same company. */
 async function openApplication(page: Page, job: JobSummary) {
   const section = page.getByRole("region", { name: "Your applications" });
+  // The list shows six rows; an older application sits behind "Show all".
+  const more = section.getByRole("button", { name: /^Show all \d+$/ });
+  if (await more.isVisible()) await more.click();
   await section.getByRole("button", { name: job.company ?? "" }).filter({ hasText: job.title ?? "" }).click();
   return page.getByRole("dialog", { name: job.company ?? "" });
 }
