@@ -278,7 +278,7 @@ export function BlocksTab() {
                 variant="ghost"
                 size="sm"
                 // Wraps instead of forcing the badge's one-line width, so long text can never overflow.
-                className="h-auto min-w-0 max-w-full whitespace-normal [&_[data-slot=badge]]:h-auto [&_[data-slot=badge]]:shrink [&_[data-slot=badge]]:whitespace-normal"
+                className="h-auto max-w-full"
                 aria-pressed={b.verified}
                 aria-label={`Toggle confirmed for ${blockLabel(b)}`}
                 onClick={() => void toggleVerified(b.id)}

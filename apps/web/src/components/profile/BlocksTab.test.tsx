@@ -90,16 +90,16 @@ describe("BlocksTab", () => {
     expect(screen.getByText("Letters, numbers and dashes. You can't change it later.")).toBeInTheDocument();
   });
 
-  it("keeps the inline period button 44px tall on phones and lets the Confirmed button wrap", () => {
+  it("keeps the inline period button 44px tall on phones and never squeezes the Confirmed pill", () => {
     blocksData = [blockNoPeriod];
     renderTab();
     expect(screen.getByRole("button", { name: /edit period for/i }).className).toContain("max-md:min-h-11");
     const toggle = screen.getByRole("button", { name: /toggle confirmed for/i });
-    expect(toggle.className).toContain("whitespace-normal");
+    // The pill keeps its natural width (a squeezed pill clipped "confirmed" at 375px); the
+    // label/value pair wraps onto its own line instead, so the button only caps at the card width.
     expect(toggle.className).toContain("max-w-full");
-    expect(toggle.className).toContain("min-w-0");
-    // The override only works if the badge really carries the slot attribute it targets.
-    expect(toggle.querySelector("[data-slot=badge]")).not.toBeNull();
+    expect(toggle.className).toContain("shrink-0");
+    expect(toggle.className).not.toMatch(/whitespace-normal|min-w-0|data-slot=badge/);
   });
 
   it("opens the editor as a centred dialog, not a sheet, with Save reachable", async () => {
