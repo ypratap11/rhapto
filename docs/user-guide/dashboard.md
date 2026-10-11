@@ -6,8 +6,6 @@ there to everyone, including you when you are signed in. Bookmark `/dashboard`.)
 
 ![Dashboard](images/dashboard-light.png)
 
-*(This screenshot shows the previous layout and needs to be re-captured.)*
-
 The page spans the full width of the header and has a warm band at the top.
 
 ## The greeting
