@@ -153,7 +153,7 @@ class JobCreate(BaseModel):
         if value is None or value == "":
             return value
         parsed = urlsplit(value.strip())
-        if parsed.scheme.lower() not in ("http", "https") or not parsed.netloc:
+        if parsed.scheme.lower() not in ("http", "https") or not parsed.hostname:
             raise ValueError("url must be an absolute http or https address")
         return value.strip()
 

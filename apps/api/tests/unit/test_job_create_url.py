@@ -26,6 +26,8 @@ def test_http_urls_are_accepted(url: str) -> None:
         "/relative/path",
         "example.com/no-scheme",
         "https://",
+        "https://@",
+        "https://user@/p",
     ],
 )
 def test_other_schemes_and_relative_urls_are_rejected(url: str) -> None:
