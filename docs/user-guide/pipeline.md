@@ -6,10 +6,15 @@ are gone; `/pipeline` now takes you to the Dashboard.)
 
 ## The list
 
-Five filters sit above the list: **Applied · Interviewing · Offer · Closed · All**, each with a
-count. A job in Screening counts under Applied. Each row shows the company, the role, the date of
-its last status change, and a badge in plain words, such as "Applied", "Screening", "Interviewing",
-"Offer", "Rejected" or "Position filled". The newest change is first, and the list shows ten rows
+A coloured bar at the top of the card shows how your applications split between applied, interviewing,
+offer and closed, with the counts beneath it. The tiles at the top of the Dashboard (**Applied,
+Interviewing, Offers**) filter the list: press one to see only those applications, and press it again,
+or choose **Show all** next to "Showing: ...", to clear the filter. A job in Screening counts under
+Applied. Closed applications are in the bar's counts but have no tile.
+
+Each row shows the company, the role, when you applied and how long ago (or "Updated ..." when there
+is no applied date), and a badge in plain words, such as "Applied", "Screening", "Interviewing",
+"Offer", "Rejected" or "Position filled". The newest change is first, and the list shows six rows
 until you choose **Show all**.
 
 ## The application sheet
@@ -35,7 +40,8 @@ closed application always says why:
 ## Follow-ups
 
 The sheet has a date field for a follow-up. Setting one and pressing **Save follow-up** saves the
-date with the application. Once that date is today or has passed, the row in the Dashboard's **Your applications** list carries a "Follow up" badge, and the "N follow-ups due" chip filters the list to those rows.
+date with the application. Once that date is today or has passed, the row in the Dashboard's **Your applications** list carries a "Follow up" badge, and the Dashboard's "Next step" card offers **Update status** for the soonest one.
+If an application you sent a week or more ago has no reply and no follow-up date, a green tip under the list asks "Heard back from ...?" and opens its sheet.
 
 ## Notes and history
 
