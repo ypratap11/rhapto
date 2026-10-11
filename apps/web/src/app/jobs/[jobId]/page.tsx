@@ -17,6 +17,8 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ApiError } from "@/lib/api/client";
 import { useJob, usePackage, useTracks } from "@/lib/api/queries";
+import { safeHttpUrl } from "@/lib/links";
+import { PACKAGE_STATUS_LABEL } from "@/lib/status";
 
 function JobPageSkeleton({ label }: { label: string }) {
   return (
@@ -106,7 +108,7 @@ export default function JobPage() {
       {job.data.repost_of ? <RepostNotice job={job.data} /> : null}
       {latest && latest.status === "ready" ? <DidYouApplyPrompt job={job.data} pkg={latest} /> : null}
       <div className="grid gap-6 lg:grid-cols-[1.2fr_1fr]">
-        <JdPane job={job.data} />
+        <JdPane job={job.data} postingUrl={safeHttpUrl(job.data.url)} />
         <div className="space-y-4">
           {blocked ? (
             pkg.data ? (
@@ -126,12 +128,11 @@ export default function JobPage() {
               <Skeleton className="h-40 w-full rounded-card" />
             )
           ) : null}
-          {latest ? (
+          {latest && latest.status !== "draft" && latest.status !== "blocked" ? (
             <section className="space-y-1 rounded-card border border-border bg-surface p-4 shadow-card text-sm">
-              <p className="font-sans text-base font-semibold">Resume v{latest.version}</p>
-              <p className="text-muted-foreground capitalize">{latest.status}</p>
-              <Link href={`/jobs/${job.data.id}/packages/${latest.id}`} className="inline-block text-primary underline-offset-4 hover:underline">
-                Review →
+              <p>Your resume for this job: {(PACKAGE_STATUS_LABEL as Record<string, string>)[latest.status] ?? latest.status}</p>
+              <Link href={`/jobs/${job.data.id}/packages/${latest.id}`} className="inline-flex min-h-11 items-center text-primary underline-offset-4 hover:underline">
+                View resume
               </Link>
             </section>
           ) : null}

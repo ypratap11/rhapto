@@ -48,7 +48,7 @@ function job(over: Partial<JobOut> = {}): JobOut {
   } as JobOut;
 }
 
-const pkg = (status: "draft" | "ready" | "blocked") => ({ id: "p1", version: 1, status });
+const pkg = (status: "draft" | "ready" | "blocked") => ({ id: "p1", version: 1, status, mode: "tune" as const, created_at: "2026-09-10T00:00:00Z" });
 const track = { name: "Data", min_fit: 60 };
 
 function renderHeader(j: JobOut, t: { name: string; min_fit: number } | null = track) {

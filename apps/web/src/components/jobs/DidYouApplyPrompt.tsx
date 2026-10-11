@@ -73,7 +73,7 @@ export function DidYouApplyPrompt({ job, pkg }: { job: JobOut; pkg: PackageSumma
         <p className="text-sm text-muted-foreground">Rhapto never submits for you — tell it what happened so your dashboard stays honest.</p>
       </div>
       <div className="flex items-center gap-2">
-        <Button onClick={() => void onYes()} disabled={applying}>
+        <Button variant="outline" onClick={() => void onYes()} disabled={applying}>
           Yes
         </Button>
         <Button variant="outline" onClick={onNotYet}>

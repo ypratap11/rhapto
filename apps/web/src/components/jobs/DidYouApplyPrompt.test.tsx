@@ -50,6 +50,12 @@ describe("DidYouApplyPrompt", () => {
     expect(markApplied).toHaveBeenCalledWith({ id: "j1" }, "p1", null);
   });
 
+  it("keeps Yes as an outline button so the header owns the one filled button", async () => {
+    show();
+    await screen.findByText(/did you apply\?/i);
+    expect(screen.getByRole("button", { name: "Yes" })).not.toHaveClass("bg-primary");
+  });
+
   it("speaks of applications and the dashboard, not a pipeline", async () => {
     const user = userEvent.setup({ delay: null });
     show();

@@ -57,11 +57,11 @@ test.beforeAll(async () => {
 async function tailorInBlocksMode(page: Page, jobId: string): Promise<void> {
   await page.goto(`/jobs/${jobId}`);
   // Explicit "Build from blocks" — see dashboard.spec.ts for why the default must not be trusted.
-  await page.getByRole("combobox", { name: "Mode" }).click();
-  await page.getByRole("option", { name: "Build from blocks" }).click();
-  await page.getByRole("button", { name: "Tailor" }).click();
+  await page.getByText("Options", { exact: true }).click();
+  await page.getByRole("radio", { name: /Full rewrite/ }).check();
+  await page.getByRole("button", { name: "Tailor my resume for this job" }).click();
   // Below playwright.config.ts's 120_000 test-level timeout — see dashboard.spec.ts.
-  await expect(page.getByRole("link", { name: "Review", exact: true })).toBeVisible({ timeout: 90_000 });
+  await expect(page.getByRole("link", { name: "Review resume", exact: true })).toBeVisible({ timeout: 90_000 });
 }
 
 test("Archive from the resume page removes the resume and the job disappears from Jobs", async ({ page }) => {
@@ -69,7 +69,7 @@ test("Archive from the resume page removes the resume and the job disappears fro
   const title = job.title ?? "";
   await tailorInBlocksMode(page, job.id);
 
-  await page.getByRole("link", { name: "Review", exact: true }).click();
+  await page.getByRole("link", { name: "Review resume", exact: true }).click();
   await expect(page).toHaveURL(/\/packages\/[^/]+$/);
   await page.getByRole("button", { name: "More" }).click();
   await page.getByRole("button", { name: "Archive" }).click();
@@ -90,7 +90,7 @@ test("Archive from the resume page removes the resume and the job disappears fro
 test("a held-back resume shows its truth check on the resume page", async ({ page }) => {
   const job = await pickRecommendedJob(0);
   await tailorInBlocksMode(page, job.id);
-  await page.getByRole("link", { name: "Review", exact: true }).click();
+  await page.getByRole("link", { name: "Review resume", exact: true }).click();
   await expect(page).toHaveURL(/\/packages\/[^/]+$/);
 
   // Edit a bullet to add a number this block's own source text never had. The guardrail

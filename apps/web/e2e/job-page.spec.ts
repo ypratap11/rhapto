@@ -18,17 +18,17 @@ async function pickApplyableJob(): Promise<JobSummary> {
   return withUrl;
 }
 
-test("Tailor, Review, Mark ready to send and Apply reach the dashboard without submitting anything", async ({ page, context }) => {
+test("Tailor, Review, Mark ready to send and Download and open the posting reach the dashboard without submitting anything", async ({ page, context }) => {
   const job = await pickApplyableJob();
 
   await page.goto(`/jobs/${job.id}`);
-  await expect(page.getByRole("button", { name: "Tailor" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Tailor my resume for this job" })).toBeVisible();
 
-  // Explicit "Build from blocks" — see dashboard.spec.ts for why the default must not be trusted.
-  await page.getByRole("combobox", { name: "Mode" }).click();
-  await page.getByRole("option", { name: "Build from blocks" }).click();
-  await page.getByRole("button", { name: "Tailor" }).click();
-  const reviewLink = page.getByRole("link", { name: "Review", exact: true });
+  // Explicit "Full rewrite" - see dashboard.spec.ts for why the default must not be trusted.
+  await page.getByText("Options", { exact: true }).click();
+  await page.getByRole("radio", { name: /Full rewrite/ }).check();
+  await page.getByRole("button", { name: "Tailor my resume for this job" }).click();
+  const reviewLink = page.getByRole("link", { name: "Review resume", exact: true });
   // Below playwright.config.ts's 120_000 test-level timeout — see dashboard.spec.ts.
   await expect(reviewLink).toBeVisible({ timeout: 90_000 });
 
@@ -40,7 +40,7 @@ test("Tailor, Review, Mark ready to send and Apply reach the dashboard without s
   await expect(page.getByRole("button", { name: "Mark ready to send" })).toHaveCount(0);
 
   await page.goto(`/jobs/${job.id}`);
-  const applyButton = page.getByRole("button", { name: "Apply" });
+  const applyButton = page.getByRole("button", { name: "Download and open the posting" });
   await expect(applyButton).toBeVisible();
 
   const popupPromise = page.waitForEvent("popup");

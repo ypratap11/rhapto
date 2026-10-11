@@ -21,10 +21,10 @@ async function pickApplyableJob(): Promise<JobSummary> {
  * create itself (this dev stack already has real applications from before this suite existed). */
 async function createApplication(page: Page, job: JobSummary): Promise<void> {
   await page.goto(`/jobs/${job.id}`);
-  await page.getByRole("combobox", { name: "Mode" }).click();
-  await page.getByRole("option", { name: "Build from blocks" }).click();
-  await page.getByRole("button", { name: "Tailor" }).click();
-  const reviewLink = page.getByRole("link", { name: "Review", exact: true });
+  await page.getByText("Options", { exact: true }).click();
+  await page.getByRole("radio", { name: /Full rewrite/ }).check();
+  await page.getByRole("button", { name: "Tailor my resume for this job" }).click();
+  const reviewLink = page.getByRole("link", { name: "Review resume", exact: true });
   // Below playwright.config.ts's 120_000 test-level timeout — see dashboard.spec.ts.
   await expect(reviewLink).toBeVisible({ timeout: 90_000 });
 
@@ -34,7 +34,7 @@ async function createApplication(page: Page, job: JobSummary): Promise<void> {
 
   await page.goto(`/jobs/${job.id}`);
   const popupPromise = page.waitForEvent("popup");
-  await page.getByRole("button", { name: "Apply" }).click();
+  await page.getByRole("button", { name: "Download and open the posting" }).click();
   const popup = await popupPromise;
   await popup.close();
   await page.bringToFront();

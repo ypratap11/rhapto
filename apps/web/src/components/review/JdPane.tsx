@@ -1,7 +1,9 @@
 import type { JobOut } from "@/lib/api/queries";
 import { highlightTerms } from "@/lib/highlight";
+import { safeHttpUrl } from "@/lib/links";
 
-export function JdPane({ job }: { job: JobOut }) {
+export function JdPane({ job, postingUrl }: { job: JobOut; postingUrl?: string | null }) {
+  const safeUrl = safeHttpUrl(postingUrl);
   const extract = job.extracted;
   const terms = extract ? [...extract.must_have, ...extract.keywords] : [];
   const segments = highlightTerms(job.jd_text, terms);
@@ -27,6 +29,16 @@ export function JdPane({ job }: { job: JobOut }) {
       <p className="whitespace-pre-wrap text-sm leading-6">
         {segments.map((seg, i) => (seg.hit ? <mark key={i}>{seg.text}</mark> : <span key={i}>{seg.text}</span>))}
       </p>
+      {safeUrl ? (
+        <a
+          href={safeUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex min-h-11 items-center text-primary underline-offset-4 hover:underline"
+        >
+          Open the original posting
+        </a>
+      ) : null}
     </aside>
   );
 }
