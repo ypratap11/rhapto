@@ -27,7 +27,7 @@ from rhapto.engine.scoring import LocationTier
 from rhapto.models.jd_extract import JDExtract
 from rhapto.services.enqueue import Enqueuer
 from rhapto.services.jobtext import FetchText
-from rhapto.services.ranking import arrange, wants_arrangement
+from rhapto.services.ranking import arrange, wants_collapse, wants_company_spread
 from rhapto.services.storage import PackageStorage
 from rhapto.services.taxonomy import find_field
 
@@ -274,13 +274,17 @@ FiltersDep = Annotated[repo.JobFilterParams, Depends(job_filters)]
 async def list_jobs(user_id: UserDep, session: SessionDep, filters: FiltersDep) -> list[JobOut]:
     rows = await repo.list_jobs(session, filters)
     also: dict[uuid.UUID, tuple[uuid.UUID, ...]] = {}
-    if wants_arrangement(
-        ids_given=filters.ids is not None, sort=filters.sort, recommended=filters.recommended
-    ):
-        # C1 (collapse duplicates) and C2 (at most two per company at the top), over the full list:
-        # this endpoint has no pagination and both clients page on the client side.
+    if wants_collapse(ids_given=filters.ids is not None):
+        # C1 (collapse duplicates) on every list, and C2 (at most two per company at the top) on
+        # relevance/recommended only, over the full list: this endpoint has no pagination and
+        # both clients page on the client side.
         ordered = rows
-        arranged = arrange([job for job, _ in ordered])
+        arranged = arrange(
+            [job for job, _ in ordered],
+            spread_companies=wants_company_spread(
+                sort=filters.sort, recommended=filters.recommended
+            ),
+        )
         rows = [ordered[a.index] for a in arranged]
         also = {ordered[a.index][0].id: a.also_ids for a in arranged}
     return await _outs(session, user_id, rows, also)
