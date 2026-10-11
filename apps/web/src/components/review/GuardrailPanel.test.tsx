@@ -72,8 +72,8 @@ describe("GuardrailPanel, a report that did not pass", () => {
 
   it("falls back to the message when there is no remedy for the rule", () => {
     const f = { ...blocked, remedies: {} };
-    render(panel(f));
-    expect(screen.getByText(blocked.report.violations[0].message)).toBeInTheDocument();
+    const { container } = render(panel(f));
+    expect(textOutsideDetails(container)).toContain(blocked.report.violations[0].message);
   });
 
   it("gives an error on a node a Fix button that selects its path", async () => {

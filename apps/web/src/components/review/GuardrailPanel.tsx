@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { Check } from "lucide-react";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import type { GuardrailReport } from "@/lib/api/queries";
 
@@ -11,98 +12,131 @@ import type { GuardrailReport } from "@/lib/api/queries";
  * `sections[..]`, `summary[..]`, `cover_note`, and a tune-mode `edits[..]`, which the review
  * page's `scrollToChange` and the job page's `?path=` link both depend on.
  *
- * A node-less row is never a button. Where the panel sits away from the document (the job page),
- * the caller passes `nodelessHref` and the row becomes a plain link to the package page instead.
+ * A node-less row never gets a button. Where the panel sits away from the document (the job page),
+ * the caller passes `nodelessHref` and the row gets a plain link to the resume page instead.
  */
 const NODELESS_PATH_PREFIX = "selection.";
 
+const FIX_CLASS =
+  "inline-flex min-h-11 shrink-0 items-center rounded-full border border-border px-4 text-sm font-medium hover:bg-muted";
+
+type Violation = GuardrailReport["violations"][number];
+
 /**
- * `remedies` is keyed by rule id and comes from `PackageOut.guardrail_remedies`.
- *
- * It is optional, and a rule missing from it is rendered WITHOUT a remedy line rather than with a
- * blank one or not at all. That fallback is the point: a rule added server-side before this map knew
- * about it, or a historical report naming a rule this build dropped, must still show its id, its
- * message and its bullet. A bare `remedies[v.rule]` lookup rendered into the row would have blanked
- * exactly those cases out — the ones a user most needs to see.
+ * `checks` (what each rule that ran promises) and `remedies` (what to do about a failure) are keyed
+ * by rule id and come from the API; no sentence is written here. A rule missing from either map
+ * still renders: a check line falls back to "Checked: <rule id>", and a violation with no remedy
+ * shows the engine's message instead, so a historical report is never blanked out.
  */
 export function GuardrailPanel({
   report,
+  checks = {},
   remedies = {},
   onSelect,
   nodelessHref,
 }: {
   report: GuardrailReport;
+  checks?: Record<string, string>;
   remedies?: Record<string, string>;
   onSelect: (path: string) => void;
   nodelessHref?: string;
 }) {
+  const ruleIds = [...new Set(report.rules_run)];
+  const errors = report.violations.filter((v) => v.severity === "error");
+  const warnings = report.violations.filter((v) => v.severity !== "error");
+
+  function line(v: Violation): string {
+    return remedies[v.rule] ?? v.message;
+  }
+
+  function fixControl(v: Violation) {
+    const label = `Fix: ${line(v)}`;
+    if (!v.path.startsWith(NODELESS_PATH_PREFIX)) {
+      return (
+        <button type="button" aria-label={label} onClick={() => onSelect(v.path)} className={FIX_CLASS}>
+          Fix
+        </button>
+      );
+    }
+    if (nodelessHref) {
+      return (
+        <Link href={nodelessHref} aria-label={label} className={FIX_CLASS}>
+          Fix
+        </Link>
+      );
+    }
+    return null;
+  }
+
+  function violationList(items: Violation[], accent: string) {
+    return (
+      <ul className="space-y-2">
+        {items.map((v, i) => (
+          <li
+            key={`${v.path}-${i}`}
+            className={`flex flex-wrap items-center justify-between gap-3 rounded-control border border-border border-l-4 bg-surface px-3 py-2.5 text-sm ${accent}`}
+          >
+            <span className="min-w-0 flex-1">{line(v)}</span>
+            {fixControl(v)}
+          </li>
+        ))}
+      </ul>
+    );
+  }
+
   return (
     <section aria-labelledby="guardrails-heading" className="space-y-3 rounded-card border border-border bg-surface p-4 shadow-card">
       <div className="flex items-center justify-between">
         <h3 id="guardrails-heading" className="font-sans text-sm font-medium">
-          Guardrails
+          Truth check
         </h3>
-        <StatusBadge tone={report.passed ? "high" : "mid"}>{report.passed ? "passed" : "blocked"}</StatusBadge>
+        <StatusBadge tone={report.passed ? "high" : "mid"}>{report.passed ? "Passed" : "Needs attention"}</StatusBadge>
       </div>
-      {report.passed ? <p className="text-sm text-muted-foreground">All guardrails passed.</p> : null}
-      {report.violations.length > 0 ? (
-        <ul className="space-y-2">
-          {report.violations.map((v, i) => {
-            // A warning does not block the package, so it must not be dressed as the thing that did.
-            const isError = v.severity === "error";
-            const remedy = remedies[v.rule];
-            const hasNode = !v.path.startsWith(NODELESS_PATH_PREFIX);
-            const rowClass = `w-full rounded-control border border-border border-l-4 bg-surface px-3 py-2.5 text-left text-sm ${
-              isError ? "border-l-destructive" : "border-l-fit-mid"
-            }`;
-            const body = (
-              <>
-                <span className="flex flex-wrap items-center gap-1.5">
-                  <span
-                    className={`inline-flex items-center rounded-chip px-2 py-0.5 font-mono text-xs font-medium ${
-                      isError ? "bg-destructive/10 text-destructive" : "bg-fit-mid/10 text-fit-mid"
-                    }`}
-                  >
-                    {v.rule}
-                  </span>
-                  <span className="text-xs text-muted-foreground">{v.severity}</span>
-                  {/* Which block the bullet came from: the path says where it is in the document,
-                      `block_id` says what to go and edit in the library. */}
-                  {v.block_id ? <span className="font-mono text-xs text-muted-foreground">{v.block_id}</span> : null}
-                </span>
-                <span className="mt-1.5 block text-foreground">{v.message}</span>
-                <span className="mt-0.5 block font-mono text-xs text-muted-foreground">{v.path}</span>
-                {remedy ? <span className="mt-1.5 block text-xs text-muted-foreground">{remedy}</span> : null}
-              </>
-            );
-            let row;
-            if (hasNode) {
-              row = (
-                <button type="button" onClick={() => onSelect(v.path)} className={`hover-lift ${rowClass}`}>
-                  {body}
-                </button>
-              );
-            } else if (nodelessHref) {
-              row = (
-                <Link href={nodelessHref} className={`hover-lift block ${rowClass}`}>
-                  {body}
-                </Link>
-              );
-            } else {
-              row = <div className={rowClass}>{body}</div>;
-            }
-            return <li key={`${v.path}-${i}`}>{row}</li>;
-          })}
+      {report.passed ? (
+        <ul aria-label="What was checked" className="space-y-1.5">
+          {ruleIds.map((id) => (
+            <li key={id} className="flex items-start gap-2 text-sm text-muted-foreground">
+              <Check className="mt-0.5 size-4 shrink-0 text-fit-high" aria-hidden />
+              <span>{checks[id] ?? `Checked: ${id.replaceAll("-", " ")}`}</span>
+            </li>
+          ))}
         </ul>
+      ) : (
+        <>
+          <p className="text-sm">Rhapto held this resume back because some lines did not pass the truth check.</p>
+          {errors.length > 0 ? violationList(errors, "border-l-destructive") : null}
+        </>
+      )}
+      {warnings.length > 0 ? (
+        <div className="space-y-2">
+          <p className="text-xs font-medium text-muted-foreground">Heads up</p>
+          {violationList(warnings, "border-l-fit-mid")}
+        </div>
       ) : null}
-      <p className="text-xs text-muted-foreground">
-        Rules run:{" "}
-        {report.rules_run.map((r) => (
-          <span key={r} className="mr-2 font-mono">
-            {r}
-          </span>
-        ))}
-      </p>
+      <details className="text-xs text-muted-foreground">
+        <summary className="flex min-h-11 cursor-pointer items-center">Details</summary>
+        <div className="space-y-3 pb-2">
+          <p>
+            Checks that ran:{" "}
+            {ruleIds.map((r) => (
+              <span key={r} className="mr-2 font-mono">
+                {r}
+              </span>
+            ))}
+          </p>
+          {report.violations.map((v, i) => (
+            <div key={`${v.path}-${i}`} className="space-y-0.5">
+              <p className="flex flex-wrap items-center gap-1.5">
+                <span className="font-mono font-medium">{v.rule}</span>
+                <span>{v.severity}</span>
+                {v.block_id ? <span className="font-mono">{v.block_id}</span> : null}
+              </p>
+              <p className="text-foreground">{v.message}</p>
+              <p className="font-mono">{v.path}</p>
+            </div>
+          ))}
+        </div>
+      </details>
     </section>
   );
 }
