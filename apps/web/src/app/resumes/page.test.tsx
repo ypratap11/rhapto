@@ -13,8 +13,11 @@ vi.mock("next/navigation", () => ({
 type ListState = { data: PackageListItem[] | undefined; isLoading: boolean; error: unknown; isPaused: boolean };
 const listState = { current: { data: [], isLoading: false, error: null, isPaused: false } as ListState };
 
+const anyState = { current: { data: undefined as PackageListItem[] | undefined } };
+
 vi.mock("@/lib/api/queries", () => ({
   usePackageList: () => listState.current,
+  usePackageListAny: () => anyState.current,
   useTracks: () => ({ data: [] }),
   useMarkPackageReady: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useArchivePackage: () => ({ mutateAsync: vi.fn(), isPending: false }),
@@ -41,25 +44,45 @@ const blockedRow: PackageListItem = {
 };
 
 describe("ResumesPage", () => {
-  it("lists the four tabs in order", () => {
+  it("has one h1 'My resumes', no breadcrumb, and the three tabs in order with no Applied tab", () => {
     searchParams.current = new URLSearchParams();
     listState.current = { data: [], isLoading: false, error: null, isPaused: false };
     render(<ResumesPage />);
-    expect(screen.getAllByRole("tab").map((t) => t.textContent)).toEqual(["Needs review", "Ready", "Blocked", "Applied"]);
+    expect(screen.getAllByRole("heading", { level: 1 }).map((h) => h.textContent)).toEqual(["My resumes"]);
+    expect(screen.queryByRole("navigation", { name: /breadcrumb/i })).not.toBeInTheDocument();
+    expect(screen.getAllByRole("tab").map((t) => t.textContent)).toEqual(["To review", "Ready to send", "Needs attention"]);
   });
 
   it("selects the tab named in ?tab=", () => {
     searchParams.current = new URLSearchParams("tab=blocked");
     listState.current = { data: [], isLoading: false, error: null, isPaused: false };
     render(<ResumesPage />);
-    expect(screen.getByRole("tab", { name: /blocked/i })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("tab", { name: /needs attention/i })).toHaveAttribute("aria-selected", "true");
   });
 
   it("falls back to review for the legacy ?filter=all value", () => {
     searchParams.current = new URLSearchParams("filter=all");
     listState.current = { data: [], isLoading: false, error: null, isPaused: false };
     render(<ResumesPage />);
-    expect(screen.getByRole("tab", { name: /needs review/i })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("tab", { name: /to review/i })).toHaveAttribute("aria-selected", "true");
+  });
+
+  it("an empty tab, when other resumes exist, says 'Nothing here right now.'", () => {
+    searchParams.current = new URLSearchParams("tab=ready");
+    listState.current = { data: [], isLoading: false, error: null, isPaused: false };
+    anyState.current = { data: [blockedRow] };
+    render(<ResumesPage />);
+    expect(screen.getByText("Nothing here right now.")).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "+ Tailor a resume" })).not.toBeInTheDocument();
+  });
+
+  it("with no resumes at all it invites the first one and links to /start", () => {
+    searchParams.current = new URLSearchParams();
+    listState.current = { data: [], isLoading: false, error: null, isPaused: false };
+    anyState.current = { data: [] };
+    render(<ResumesPage />);
+    expect(screen.getByText("No resumes yet. Pick a job and Rhapto tailors your resume to it.")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "+ Tailor a resume" })).toHaveAttribute("href", "/start");
   });
 
   it("shows a table skeleton while the list is loading, not the empty state", () => {
@@ -67,7 +90,7 @@ describe("ResumesPage", () => {
     listState.current = { data: undefined, isLoading: true, error: null, isPaused: false };
     const { container } = render(<ResumesPage />);
     expect(container.querySelector('[data-slot="table-skeleton"]')).toBeInTheDocument();
-    expect(screen.queryByText(/nothing to review/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/nothing here right now/i)).not.toBeInTheDocument();
   });
 
   it("a blocked row links to the review page so its violations can be fixed", () => {
