@@ -82,8 +82,9 @@ function pageRoutes(dir = APP_DIR, prefix = ""): string[] {
 describe("area coverage (a new page without an area fails here)", () => {
   const hidden = FEEDBACK_HIDDEN_ROUTES;
 
-  it("hides the button on exactly / and /feedback", () => {
-    expect([...hidden].sort()).toEqual(["/", "/feedback"]);
+  it("hides the button on exactly /, /feedback and /help", () => {
+    expect([...hidden].sort()).toEqual(["/", "/feedback", "/help"]);
+    expect(hidden.has("/help")).toBe(true);
   });
 
   it("maps every edge-protected top-level route, except /api and the hidden ones, to a real area", () => {

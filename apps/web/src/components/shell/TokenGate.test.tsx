@@ -410,6 +410,8 @@ describe("isVisitorHeader", () => {
   it.each([
     ["/", true, null, true],
     ["/", false, true, true], // / is the front door even with a token
+    ["/help", true, null, true], // a static public page: visitor header in every mode
+    ["/help", false, true, true],
     ["/settings", true, null, false], // hosted: an in-app screen behind Cloudflare
     ["/settings", true, true, false],
     ["/settings", false, null, true], // token mode, token not read yet / absent
