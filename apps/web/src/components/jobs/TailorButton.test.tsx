@@ -59,6 +59,9 @@ function renderButton(overrides: Partial<JobOut> = {}) {
   );
 }
 
+const lightRadio = () => screen.getByRole("radio", { name: "Light touch (keep my wording, change little)", hidden: true });
+const fullRadio = () => screen.getByRole("radio", { name: "Full rewrite (rebuild from my experience)", hidden: true });
+
 const resumeDocument: ResumeDocumentOut = {
   filename: "resume.docx",
   uploaded_at: "2026-09-01T00:00:00Z",
@@ -76,18 +79,33 @@ describe("TailorButton", () => {
     vi.mocked(toast.error).mockReset();
   });
 
-  it("preselects the job's best-fit track", () => {
-    // The best track is deliberately NOT the first loaded track, so this fails if the
-    // first-track fallback wins over job.best_track_id.
+  it("shows no select or combobox by default and keeps Options closed", () => {
+    tracksData = [{ id: "ai-pm", name: "AI PM", min_fit: 60 }];
+    renderButton();
+    expect(screen.queryByRole("combobox")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Tailor my resume for this job" })).toBeInTheDocument();
+    const details = screen.getByText("Options").closest("details");
+    expect(details).not.toHaveAttribute("open");
+  });
+
+  it("offers the two modes as radios inside Options", () => {
+    renderButton();
+    expect(screen.getByRole("radio", { name: "Light touch (keep my wording, change little)", hidden: true })).toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: "Full rewrite (rebuild from my experience)", hidden: true })).toBeInTheDocument();
+  });
+
+  it("hides the Goal select with one track and shows it with two, preselecting the best fit", () => {
+    tracksData = [{ id: "ai-pm", name: "AI PM", min_fit: 60 }];
+    const { unmount } = renderButton();
+    expect(screen.queryByRole("combobox", { name: "Goal", hidden: true })).not.toBeInTheDocument();
+    unmount();
     tracksData = [
       { id: "other", name: "Other Track", min_fit: 50 },
       { id: "ai-pm", name: "AI PM", min_fit: 60 },
     ];
     renderButton({ best_track_id: "ai-pm" });
-    // The Select's popup (and its items, which resolve a value to its label) is
-    // portal-mounted only while open; closed, it renders the raw selected value.
-    // Asserting on the underlying value is still a faithful check that the job's
-    // best-fit track — not the first loaded track — is the one selected.
+    expect(screen.getByRole("combobox", { name: "Goal", hidden: true })).toBeInTheDocument();
+    // Closed, the Select renders the raw selected value: the best-fit track, not the first one.
     expect(screen.getByText("ai-pm")).toBeInTheDocument();
   });
 
@@ -104,7 +122,7 @@ describe("TailorButton", () => {
     });
     renderButton();
     const user = userEvent.setup();
-    await user.click(screen.getByRole("button", { name: /tailor/i }));
+    await user.click(screen.getByRole("button", { name: /^tailor/i }));
 
     expect(await screen.findByText("progress:t1")).toBeInTheDocument();
   });
@@ -125,7 +143,7 @@ describe("TailorButton", () => {
 
     renderButton();
     const user = userEvent.setup();
-    await user.click(screen.getByRole("button", { name: /tailor/i }));
+    await user.click(screen.getByRole("button", { name: /^tailor/i }));
     await screen.findByText("progress:t1");
     expect(count.result.current).toBe(1);
 
@@ -140,8 +158,8 @@ describe("TailorButton", () => {
 
     renderButton();
     const user = userEvent.setup();
-    await user.click(screen.getByRole("button", { name: /tailor/i }));
-    await screen.findByRole("button", { name: /tailor/i }); // still idle, no progress rendered
+    await user.click(screen.getByRole("button", { name: /^tailor/i }));
+    await screen.findByRole("button", { name: /^tailor/i }); // still idle, no progress rendered
 
     expect(count.result.current).toBe(0);
   });
@@ -161,7 +179,7 @@ describe("TailorButton", () => {
 
     const { unmount } = renderButton();
     const user = userEvent.setup();
-    await user.click(screen.getByRole("button", { name: /tailor/i }));
+    await user.click(screen.getByRole("button", { name: /^tailor/i }));
     await screen.findByText("progress:t1");
     expect(count.result.current).toBe(1);
 
@@ -182,12 +200,12 @@ describe("TailorButton", () => {
       type: "tailor",
     });
     renderButton();
-    expect(screen.getByRole("combobox", { name: /mode/i })).toHaveTextContent("Tune my resume");
+    expect(lightRadio()).toBeChecked();
 
     const user = userEvent.setup({ delay: null });
-    await user.click(screen.getByRole("button", { name: /tailor/i }));
+    await user.click(screen.getByRole("button", { name: /^tailor/i }));
 
-    expect(mutateAsync).toHaveBeenCalledWith(expect.objectContaining({ body: expect.objectContaining({ mode: "tune" }) }));
+    expect(mutateAsync).toHaveBeenCalledWith({ jobId: "j1", body: { track_id: null, mode: "tune" } });
   });
 
   it("sends no mode and resolves no default while the resume document query is in flight", async () => {
@@ -206,15 +224,13 @@ describe("TailorButton", () => {
       type: "tailor",
     });
     renderButton();
-    const modeSelect = screen.getByRole("combobox", { name: /mode/i });
-    expect(modeSelect).not.toHaveTextContent("Build from blocks");
-    expect(modeSelect).not.toHaveTextContent("Tune my resume");
-    expect(modeSelect).toHaveTextContent("Mode");
+    expect(lightRadio()).not.toBeChecked();
+    expect(fullRadio()).not.toBeChecked();
 
     const user = userEvent.setup({ delay: null });
-    await user.click(screen.getByRole("button", { name: /tailor/i }));
+    await user.click(screen.getByRole("button", { name: /^tailor/i }));
 
-    expect(mutateAsync).toHaveBeenCalledWith(expect.objectContaining({ body: expect.objectContaining({ mode: null }) }));
+    expect(mutateAsync).toHaveBeenCalledWith({ jobId: "j1", body: { track_id: null, mode: null } });
   });
 
   it("defaults to blocks mode and disables tune mode when there is no resume document", async () => {
@@ -230,24 +246,31 @@ describe("TailorButton", () => {
       type: "tailor",
     });
     renderButton();
-    const modeSelect = screen.getByRole("combobox", { name: /mode/i });
-    expect(modeSelect).toHaveTextContent("Build from blocks");
+    expect(fullRadio()).toBeChecked();
+    expect(lightRadio()).toBeDisabled();
+    expect(screen.getByText("Upload a resume document in the Profile tab to enable tune mode.")).toBeInTheDocument();
 
     const user = userEvent.setup({ delay: null });
-    await user.click(modeSelect);
-    await user.click(await screen.findByRole("option", { name: /tune my resume/i }));
-    // Selecting the disabled option must not change the selection.
-    expect(screen.getByRole("combobox", { name: /mode/i })).toHaveTextContent("Build from blocks");
+    await user.click(screen.getByRole("button", { name: /^tailor/i }));
+    expect(mutateAsync).toHaveBeenCalledWith({ jobId: "j1", body: { track_id: null, mode: "blocks" } });
+  });
 
-    await user.click(screen.getByRole("button", { name: /tailor/i }));
-    expect(mutateAsync).toHaveBeenCalledWith(expect.objectContaining({ body: expect.objectContaining({ mode: "blocks" }) }));
+  it("an explicit Full rewrite choice wins over the default", async () => {
+    resumeDocumentData = resumeDocument;
+    mutateAsync.mockResolvedValueOnce({ id: "t1", status: "running", result_ref: null, error: null, created_at: "x", finished_at: null, progress: {}, type: "tailor" });
+    renderButton();
+    const user = userEvent.setup({ delay: null });
+    await user.click(screen.getByText("Options"));
+    await user.click(fullRadio());
+    await user.click(screen.getByRole("button", { name: /^tailor/i }));
+    expect(mutateAsync).toHaveBeenCalledWith({ jobId: "j1", body: { track_id: null, mode: "blocks" } });
   });
   it("links to Settings instead of offering Tailor when /me reports no AI provider", async () => {
     meData = { user_id: "u1", email: "dev@example.com", llm_configured: false, auth_mode: "token" };
     renderButton();
 
-    expect(screen.getByRole("link", { name: "Set up your AI provider" })).toHaveAttribute("href", "/settings");
-    expect(screen.queryByRole("button", { name: /tailor/i })).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Add an AI key in Settings" })).toHaveAttribute("href", "/settings");
+    expect(screen.queryByRole("button", { name: /^tailor/i })).not.toBeInTheDocument();
     expect(mutateAsync).not.toHaveBeenCalled();
   });
 
@@ -257,7 +280,7 @@ describe("TailorButton", () => {
     );
     renderButton();
     const user = userEvent.setup({ delay: null });
-    await user.click(screen.getByRole("button", { name: /tailor/i }));
+    await user.click(screen.getByRole("button", { name: /^tailor/i }));
 
     expect(toast.error).toHaveBeenCalledWith("no AI provider is configured", {
       action: { label: "Open settings", onClick: expect.any(Function) },
@@ -273,7 +296,7 @@ describe("TailorButton", () => {
     );
     renderButton();
     const user = userEvent.setup({ delay: null });
-    await user.click(screen.getByRole("button", { name: /tailor/i }));
+    await user.click(screen.getByRole("button", { name: /^tailor/i }));
 
     expect(toast.error).toHaveBeenCalledWith("your stored key could not be read", {
       action: { label: "Open settings", onClick: expect.any(Function) },
