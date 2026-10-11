@@ -36,6 +36,7 @@ export const PAIRS = [
   text("fit-high", "surface", "fit high text on a card"),
   text("fit-mid", "fit-mid-bg", "fit mid chip"),
   text("fit-low", "fit-low-bg", "fit low chip"),
+  text("fit-low", "surface", "fit low ring on a card"),
   text("diff-add", "diff-add-bg", "diff added word"),
   text("diff-del", "diff-del-bg", "diff removed word"),
   ...BANDS.map((b) => text("foreground", b, `headline on ${b}`)),

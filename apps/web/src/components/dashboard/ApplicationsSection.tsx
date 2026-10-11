@@ -52,7 +52,11 @@ export function ApplicationsSection({
   const [expandedFor, setExpandedFor] = useState<ChipId | null>(null);
   const counts = useMemo(() => chipCounts(rows), [rows]);
   const segments = useMemo(() => barSegments(counts), [counts]);
-  const visible = useMemo(() => rowsForChip(rows, chip), [rows, chip]);
+  // Due follow-ups first (stable, so the rest keep their newest-first order): a due row is never behind "Show all".
+  const visible = useMemo(() => {
+    const list = rowsForChip(rows, chip);
+    return [...list.filter((r) => dueIds?.has(r.id)), ...list.filter((r) => !dueIds?.has(r.id))];
+  }, [rows, chip, dueIds]);
   const showAll = expandedFor === chip;
   const shown = showAll ? visible : visible.slice(0, PAGE);
   const now = new Date();

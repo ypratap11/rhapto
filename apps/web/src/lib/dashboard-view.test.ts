@@ -93,6 +93,9 @@ describe("isNewToday", () => {
     expect(isNewToday(ago(24), now)).toBe(false);
     expect(isNewToday(ago(25), now)).toBe(false);
   });
+  it("is false for a timestamp in the future", () => {
+    expect(isNewToday(ago(-1), now)).toBe(false);
+  });
   it("is false for an unreadable date", () => {
     expect(isNewToday("nope", now)).toBe(false);
   });

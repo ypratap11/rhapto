@@ -46,7 +46,7 @@ export function strongMatchCount(jobs: JobOut[], tracks: TrackFit[] | undefined)
 /** Found within the last 24 hours (23 h yes, 24 h no). */
 export function isNewToday(discoveredAt: string, now: Date = new Date()): boolean {
   const age = now.getTime() - new Date(discoveredAt).getTime();
-  return age < 24 * 3_600_000;
+  return age >= 0 && age < 24 * 3_600_000; // a timestamp in the future is not "new today"
 }
 
 const WEEK_MS = 7 * 86_400_000;

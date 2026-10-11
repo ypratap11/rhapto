@@ -16,7 +16,7 @@ export function JobRow({
   className,
 }: {
   fit: number | null;
-  title: string;
+  title: React.ReactNode;
   meta?: React.ReactNode;
   actions?: React.ReactNode;
   as?: "li" | "div";

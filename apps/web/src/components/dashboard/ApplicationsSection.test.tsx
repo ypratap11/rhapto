@@ -140,8 +140,16 @@ describe("ApplicationsSection", () => {
 
     it("badges only the rows whose follow-up is due", () => {
       render(<Harness rows={all} dueIds={due} initial="all" />);
-      expect(screen.queryAllByText("Follow up")).toHaveLength(1); // x1 is beyond the first six rows
-      expect(within(screen.getByText("Follow up").closest("li")!).getByText("Co 2")).toBeInTheDocument();
+      // Both due rows are on top, so both show even though x1 is old.
+      const badged = screen.getAllByText("Follow up").map((b) => b.closest("li")!.textContent);
+      expect(badged).toEqual([expect.stringContaining("Co 2"), expect.stringContaining("Co x1")]);
+    });
+
+    it("lists due rows first, so one is never hidden behind Show all", () => {
+      render(<Harness rows={all} dueIds={new Set(["x0"])} />); // x0 is the oldest, last in date order
+      const first = within(screen.getByRole("region", { name: "Your applications" })).getAllByRole("listitem")[0]!;
+      expect(within(first).getByText("Co x0")).toBeInTheDocument();
+      expect(within(first).getByText("Follow up")).toBeInTheDocument();
     });
 
     it("shows no badge when nothing is due", () => {

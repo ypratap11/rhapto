@@ -304,7 +304,6 @@
   background-image: linear-gradient(transparent 62%, color-mix(in srgb, var(--decor-amber) 55%, transparent) 62% 92%, transparent 92%);
 }
 
-/* The hover lift used by cards and rows: shadow plus a 1px rise, 150ms ease-out. */
 /* Signed-in page heroes (PageHero): a warm wash top-left and a mint one top-right, both fading into the
  * page background. Only existing glow and band tokens, so every text colour that already passes on them passes here. */
 @utility bg-page-hero {
@@ -313,6 +312,7 @@
     radial-gradient(ellipse 50% 90% at 90% 10%, color-mix(in srgb, var(--band-mint) 70%, var(--glow-to)), transparent 75%);
 }
 
+/* The hover lift used by cards and rows: shadow plus a 1px rise, 150ms ease-out. */
 @utility hover-lift {
   transition-property: box-shadow, transform, background-color, border-color, color;
   transition-timing-function: cubic-bezier(0, 0, 0.2, 1);
