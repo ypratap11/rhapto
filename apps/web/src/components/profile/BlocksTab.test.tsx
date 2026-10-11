@@ -74,7 +74,7 @@ describe("BlocksTab", () => {
     expect(screen.getByText("acme-migration")).toBeInTheDocument();
     await userEvent.setup().click(screen.getByRole("button", { name: /edit acme-migration/i }));
     expect(screen.getByLabelText(/^content/i)).toHaveValue("Owned it.");
-    expect(screen.getByLabelText(/^verified/i)).toBeChecked();
+    expect(screen.getByLabelText(/^confirmed/i)).toBeChecked();
   });
 
   it("opens the editor as a centred dialog, not a sheet, with Save reachable", async () => {
@@ -106,13 +106,13 @@ describe("BlocksTab", () => {
     expect(screen.queryByText(/delete acme-migration\?/i)).not.toBeInTheDocument();
   });
 
-  it("toggles Verified with one click, PUTs the whole block with only that field flipped, and offers an Undo that reverts it", async () => {
+  it("toggles Confirmed with one click, PUTs the whole block with only that field flipped, and offers an Undo that reverts it", async () => {
     blocksData = [blockWithPeriod];
     putMutate.mockClear();
     renderTab();
     const user = userEvent.setup();
 
-    await user.click(screen.getByRole("button", { name: /toggle verified for acme-migration/i }));
+    await user.click(screen.getByRole("button", { name: /toggle confirmed for acme-migration/i }));
 
     expect(putMutate).toHaveBeenCalledTimes(1);
     expect(putMutate).toHaveBeenCalledWith({ ...blockWithPeriod, verified: false });
@@ -181,7 +181,7 @@ describe("BlocksTab", () => {
     expect(screen.queryByText(/need.* a period/i)).not.toBeInTheDocument();
   });
 
-  it("Undo after a Verified toggle only reverts verified — an interleaved Period edit survives — CRITICAL", async () => {
+  it("Undo after a Confirmed toggle only reverts verified — an interleaved Period edit survives — CRITICAL", async () => {
     // blockWithPeriod starts verified: true, period: "2023".
     blocksData = [blockWithPeriod];
     putMutate.mockClear();
@@ -190,7 +190,7 @@ describe("BlocksTab", () => {
 
     // Toggle verified off. Undo, if implemented as "re-PUT the pre-toggle snapshot", would capture
     // { ...blockWithPeriod, verified: true } here — including the *original* period.
-    await user.click(screen.getByRole("button", { name: /toggle verified for acme-migration/i }));
+    await user.click(screen.getByRole("button", { name: /toggle confirmed for acme-migration/i }));
     expect(putMutate).toHaveBeenLastCalledWith({ ...blockWithPeriod, verified: false });
 
     // While that Undo toast is still up, edit Period on the *same* block.

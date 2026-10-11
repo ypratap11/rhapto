@@ -62,6 +62,6 @@ describe("ConfirmMetrics", () => {
 
   it("explains what confirming buys", () => {
     render(<ConfirmMetrics blocks={blocks} onConfirm={vi.fn()} onSkip={vi.fn()} onDone={vi.fn()} />);
-    expect(screen.getByText(/unconfirmed numbers are removed/i)).toBeInTheDocument();
+    expect(screen.getByText(/a number you do not confirm is left out/i)).toBeInTheDocument();
   });
 });

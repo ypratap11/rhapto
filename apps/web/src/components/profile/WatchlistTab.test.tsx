@@ -43,21 +43,21 @@ describe("WatchlistTab", () => {
     expect(putWatchlist).toHaveBeenCalledWith([expect.objectContaining({ company: "Acme", keywords: ["etl", "pm"] })]);
   });
 
-  it("swaps the board hint when the source becomes Workday", async () => {
+  it("swaps the careers page hint when the source becomes Workday", async () => {
     render(<WatchlistTab />);
     const user = userEvent.setup({ delay: null });
-    expect(screen.getByText("Board slug from the careers URL")).toBeInTheDocument();
-    await user.click(screen.getByRole("combobox", { name: "Source 1" }));
+    expect(screen.getByText("The ID in the company's careers page address")).toBeInTheDocument();
+    await user.click(screen.getByRole("combobox", { name: "Job site 1" }));
     await user.click(await screen.findByRole("option", { name: "Workday" }));
     expect(await screen.findByText(/nvidia\.wd5\/NVIDIAExternalCareerSite/)).toBeInTheDocument();
-    expect(screen.queryByText("Board slug from the careers URL")).not.toBeInTheDocument();
+    expect(screen.queryByText("The ID in the company's careers page address")).not.toBeInTheDocument();
   });
 
   it("lists no-adapter board sources with a suffix", async () => {
     render(<WatchlistTab />);
     const user = userEvent.setup({ delay: null });
-    await user.click(screen.getByRole("combobox", { name: "Source 1" }));
-    expect(await screen.findByText("smartrecruiters (no adapter yet)")).toBeInTheDocument();
-    expect(screen.getByText("workable (no adapter yet)")).toBeInTheDocument();
+    await user.click(screen.getByRole("combobox", { name: "Job site 1" }));
+    expect(await screen.findByText("smartrecruiters (not supported yet)")).toBeInTheDocument();
+    expect(screen.getByText("workable (not supported yet)")).toBeInTheDocument();
   });
 });

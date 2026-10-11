@@ -107,4 +107,30 @@ describe("UsageSection", () => {
     render(<UsageSection />);
     expect(screen.getByRole("alert")).toBeInTheDocument();
   });
+
+  it("leads with resumes made and the estimated cost in plain words, with the counts under Details", () => {
+    const { container } = render(<UsageSection />);
+    expect(screen.getByText(/resumes made: 1/i)).toHaveTextContent("Resumes made: 1 · Estimated cost $3.46");
+    const details = container.querySelector("details");
+    expect(details).not.toBeNull();
+    expect(details?.querySelector("summary")).toHaveTextContent("Details");
+    expect(details).toHaveTextContent("Input tokens");
+    // The technical counts live only inside the native <details>.
+    const outside = container.cloneNode(true) as HTMLElement;
+    outside.querySelectorAll("details").forEach((d) => d.remove());
+    expect(outside.textContent).not.toMatch(/tokens|LLM/i);
+  });
+
+  it("says no resumes have been made yet when there is no usage", () => {
+    data = { totals: { ...zeroSummary }, last_30_days: { ...zeroSummary }, recent: [] };
+    render(<UsageSection />);
+    expect(screen.getByText("No resumes made yet.")).toBeInTheDocument();
+  });
+
+  it("does not claim an exact count once the recent list is at its cap", () => {
+    const row = usage.recent[0]!;
+    data = { ...usage, recent: Array.from({ length: 20 }, (_, i) => ({ ...row, package_id: `p${i}` })) };
+    render(<UsageSection />);
+    expect(screen.getByText(/resumes made: 20\+/i)).toBeInTheDocument();
+  });
 });

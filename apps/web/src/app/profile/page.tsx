@@ -26,20 +26,25 @@ import {
 } from "@/lib/api/queries";
 import { formatRelative } from "@/lib/format";
 
-type Card = { id: ProfileCardId; title: string };
+type Card = { id: ProfileCardId; title: string; blurb: string };
 
 // Left column: building the resume. Right column: everything else Rhapto needs to know about you.
 const LEFT_COLUMN: Card[] = [
-  { id: "resume-template", title: "Resume template" },
-  { id: "tracks", title: "Tracks" },
-  { id: "blocks", title: "Blocks" },
-  { id: "bases", title: "Bases" },
+  { id: "resume-template", title: "Your resume file", blurb: "The resume you uploaded. Light touch rewords a few of its lines for each job." },
+  { id: "tracks", title: "Roles you want", blurb: "The kinds of job Rhapto looks for and writes resumes for." },
+  { id: "blocks", title: "Your experience", blurb: "The facts every resume line comes from." },
+  { id: "bases", title: "Starting resumes", blurb: "The starting point Rhapto uses for each kind of role." },
 ];
 const RIGHT_COLUMN: Card[] = [
-  { id: "answers", title: "Contact and answers" },
-  { id: "guardrails", title: "Guardrails" },
-  { id: "location", title: "Location preferences" },
-  { id: "watchlist", title: "Watchlist" },
+  { id: "answers", title: "Contact details and saved answers", blurb: "Your name, email and phone, plus answers to common application questions." },
+  {
+    id: "guardrails",
+    title: "Writing rules",
+    blurb:
+      "Rhapto checks every resume before you can download it: no number that is not already in your resume file or a confirmed item, and no line without a source. You can add extra checks here.",
+  },
+  { id: "location", title: "Where you want to work", blurb: "Your home town, the areas you would consider, and whether remote is fine." },
+  { id: "watchlist", title: "Companies you follow", blurb: "Companies Rhapto checks for new jobs." },
 ];
 
 const ALL_CARD_IDS: ProfileCardId[] = [...LEFT_COLUMN, ...RIGHT_COLUMN].map((c) => c.id);
@@ -136,19 +141,19 @@ function ProfilePageInner() {
     tracks: (
       <CardSummary
         query={tracks}
-        render={(rows) => (rows.length === 0 ? "No tracks yet. Pick a field and a role." : `${rows.length} track${rows.length === 1 ? "" : "s"}: ${rows.map((t) => t.name).join(", ")}`)}
+        render={(rows) => (rows.length === 0 ? "No roles chosen yet. Pick a field and a role." : `${rows.length} role${rows.length === 1 ? "" : "s"}: ${rows.map((t) => t.name).join(", ")}`)}
       />
     ),
     blocks: (
       <CardSummary
         query={dashboard}
-        render={(d) => `${d.checklist.verified_blocks} of ${d.checklist.total_blocks} blocks verified`}
+        render={(d) => `${d.checklist.verified_blocks} of ${d.checklist.total_blocks} items confirmed`}
       />
     ),
     bases: (
       <CardSummary
         query={bases}
-        render={(rows) => (rows.length === 0 ? "No resume bases yet." : `${rows.length} resume base${rows.length === 1 ? "" : "s"}`)}
+        render={(rows) => (rows.length === 0 ? "No starting resumes yet." : `${rows.length} starting resume${rows.length === 1 ? "" : "s"}`)}
       />
     ),
     answers: (
@@ -161,8 +166,8 @@ function ProfilePageInner() {
       <CardSummary
         query={guardrails}
         render={(rows) => {
-          const active = rows.filter((r) => r.active).length;
-          return rows.length === 0 ? "Using Rhapto's default guardrails." : `${active} of ${rows.length} rule${rows.length === 1 ? "" : "s"} active`;
+          const off = rows.filter((r) => !r.active).length;
+          return off === 0 ? "Standard rules are on." : `${off} rule${off === 1 ? "" : "s"} turned off.`;
         }}
       />
     ),
@@ -179,7 +184,7 @@ function ProfilePageInner() {
     watchlist: (
       <CardSummary
         query={watchlist}
-        render={(rows) => (rows.length === 0 ? "No companies on your watchlist yet." : `${rows.length} compan${rows.length === 1 ? "y" : "ies"} watched`)}
+        render={(rows) => (rows.length === 0 ? "You are not following any companies yet." : `${rows.length} compan${rows.length === 1 ? "y" : "ies"} followed`)}
       />
     ),
   };
@@ -190,7 +195,12 @@ function ProfilePageInner() {
         key={card.id}
         id={card.id}
         title={card.title}
-        summary={cardSummary[card.id]}
+        summary={
+          <>
+            <span className="block">{card.blurb}</span>
+            <span className="mt-1.5 block font-medium text-foreground">{cardSummary[card.id]}</span>
+          </>
+        }
         open={openCard === card.id}
         onOpenChange={(open) => setOpenCard(open, card.id)}
         // The watchlist editor is a six-column table (company, source, board, keywords,
@@ -220,7 +230,7 @@ function ProfilePageInner() {
           <>
             <h1 className="font-serif text-2xl font-medium">{answers.data?.name ?? "Your profile"}</h1>
             <p className="text-sm text-muted-foreground">
-              {answers.data?.location_home ?? "Location not set"} · {checklist?.verified_blocks ?? 0} of {checklist?.total_blocks ?? 0} blocks verified
+              {answers.data?.location_home ?? "Location not set"} · {checklist?.verified_blocks ?? 0} of {checklist?.total_blocks ?? 0} items confirmed
             </p>
           </>
         )}

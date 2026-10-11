@@ -67,7 +67,7 @@ export function BasesTab() {
       toast.success(`Saved ${form.id}`);
       setForm(null);
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "Could not save the base");
+      toast.error(e instanceof ApiError ? e.message : "Could not save the starting resume");
     }
   }
 
@@ -83,37 +83,37 @@ export function BasesTab() {
   return (
     <div className="space-y-3">
       <div className="flex justify-end">
-        <Button onClick={() => open(null)}>Add base</Button>
+        <Button onClick={() => open(null)}>Add a starting resume</Button>
       </div>
       <EntityTable<ResumeBase>
         rows={bases.data ?? []}
         getKey={(b) => b.id}
-        getLabel={(b) => b.id}
-        emptyText="No resume bases yet. Import your profile or add a base."
+        getLabel={(b) => b.name}
+        emptyText="No starting resumes yet. Add one to get started."
         onEdit={open}
         onDelete={async (b) => {
           try {
             await remove.mutateAsync(b.id);
             toast.success(`Deleted ${b.id}`);
           } catch (e) {
-            toast.error(e instanceof ApiError ? e.message : "Could not delete the base");
+            toast.error(e instanceof ApiError ? e.message : "Could not delete the starting resume");
           }
         }}
         columns={[
-          { key: "id", header: "Id", render: (b) => <span className="font-mono text-xs">{b.id}</span> },
+          { key: "id", header: "Short ID", render: (b) => <span className="font-mono text-xs">{b.id}</span> },
           { key: "name", header: "Name", render: (b) => b.name },
-          { key: "blocks", header: "Blocks", render: (b) => b.block_ids.length },
+          { key: "blocks", header: "Items", render: (b) => b.block_ids.length },
         ]}
       />
       <Dialog open={form !== null} onOpenChange={(o) => !o && setForm(null)}>
         <DialogContent className="flex max-h-[85vh] flex-col overflow-hidden sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>{isNew ? "New base" : `Edit ${form?.id}`}</DialogTitle>
+            <DialogTitle>{isNew ? "New starting resume" : `Edit ${form?.name || form?.id}`}</DialogTitle>
           </DialogHeader>
           {form ? (
             <div className="min-h-0 flex-1 space-y-3 overflow-y-auto pr-1">
               <div className="space-y-1">
-                <Label htmlFor="base-id">Id</Label>
+                <Label htmlFor="base-id">Short ID</Label>
                 <Input id="base-id" value={form.id} onChange={(e) => set({ id: e.target.value })} disabled={!isNew} />
                 {errors.id ? <p className="text-xs text-destructive">{errors.id}</p> : null}
               </div>
@@ -127,14 +127,14 @@ export function BasesTab() {
                 <Input id="base-section-order" value={form.section_order} onChange={(e) => set({ section_order: e.target.value })} />
               </div>
               <div className="space-y-1">
-                <Label>Blocks</Label>
+                <Label>Items from Your experience</Label>
                 {blocks.isLoading ? (
                   <Skeleton className="h-24 w-full" />
                 ) : blocks.error ? (
                   <ApiErrorBanner error={blocks.error} />
                 ) : (
                   <div className="max-h-64 space-y-1.5 overflow-y-auto rounded-md border p-2">
-                    {availableBlocks.length === 0 ? <p className="text-xs text-muted-foreground">No blocks yet.</p> : null}
+                    {availableBlocks.length === 0 ? <p className="text-xs text-muted-foreground">Nothing in Your experience yet.</p> : null}
                     {availableBlocks.map((b) => (
                       <CheckboxField key={b.id} name={`base-block-${b.id}`} label={b.id} checked={form.block_ids.includes(b.id)} onCheckedChange={(checked) => toggleBlock(b.id, checked)} />
                     ))}

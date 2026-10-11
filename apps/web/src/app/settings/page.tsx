@@ -4,7 +4,6 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { ImportExport } from "@/components/profile/ImportExport";
-import { HelpSection } from "@/components/settings/HelpSection";
 import { LlmProviderSection } from "@/components/settings/LlmProviderSection";
 import { SavedSearchesSection } from "@/components/settings/SavedSearchesSection";
 import { SourcesSection } from "@/components/settings/SourcesSection";
@@ -95,12 +94,12 @@ export default function SettingsPage() {
       <Breadcrumbs items={[{ label: "Settings" }]} />
       <h1 className="font-serif text-2xl font-medium">Settings</h1>
       <LlmProviderSection />
-      <UsageSection />
       <SourcesSection />
       <SavedSearchesSection />
+      <UsageSection />
       <Card>
         <CardHeader>
-          <CardTitle>Import and export</CardTitle>
+          <CardTitle>Your data</CardTitle>
         </CardHeader>
         <CardContent>
           <ImportExport />
@@ -115,7 +114,7 @@ export default function SettingsPage() {
       {!SAME_ORIGIN_DEPLOYMENT ? (
         <Card>
           <CardHeader>
-            <CardTitle>API connection</CardTitle>
+            <CardTitle>Connection</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-1">
@@ -128,14 +127,14 @@ export default function SettingsPage() {
               ) : null}
             </div>
             <div className="space-y-1">
-              <Label htmlFor="token">Bearer token</Label>
+              <Label htmlFor="token">Access key</Label>
               <div className="flex gap-2">
                 <Input id="token" ref={tokenRef} type={show ? "text" : "password"} defaultValue="" autoComplete="off" />
                 <Button type="button" variant="outline" onClick={() => setShow((v) => !v)} aria-pressed={show}>
                   {show ? "Hide" : "Show"}
                 </Button>
               </div>
-              <p className="text-xs text-muted-foreground">Stored only in this browser. It is the RHAPTO_API_TOKEN from your .env.</p>
+              <p className="text-xs text-muted-foreground">Stored only in this browser.</p>
             </div>
             <div className="flex gap-2">
               <Button onClick={save}>Save</Button>
@@ -149,7 +148,6 @@ export default function SettingsPage() {
           </CardContent>
         </Card>
       ) : null}
-      <HelpSection />
     </div>
   );
 }

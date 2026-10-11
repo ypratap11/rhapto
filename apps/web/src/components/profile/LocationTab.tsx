@@ -36,11 +36,11 @@ export function LocationTab() {
   const hasIssue = Boolean(answers.error) || answers.isPaused;
   if (answers.isLoading) return <Skeleton className="h-40 w-full" />;
   if (answers.data === undefined) {
-    return <ApiErrorBanner error={answers.error ?? "Can't reach Rhapto's API — location preferences aren't available right now."} />;
+    return <ApiErrorBanner error={answers.error ?? "Can't reach Rhapto's API — this isn't available right now."} />;
   }
   return (
     <div className="space-y-2">
-      {hasIssue ? <p className="text-xs text-fit-mid">Showing your last saved location preferences — the latest refresh failed.</p> : null}
+      {hasIssue ? <p className="text-xs text-fit-mid">Showing what you last saved. The latest refresh failed.</p> : null}
       {/* See AnswersTab: keyed by data identity so the editable copy is (re)initialized only when
           the server data actually changes (e.g. after a save), not on every render — avoids syncing
           props into state via an effect. */}
@@ -66,18 +66,16 @@ function LocationBody({ initial }: { initial: Record<string, string> }) {
     };
     try {
       await put.mutateAsync(next);
-      toast.success("Saved location preferences. The queue will re-score by location tier.");
+      toast.success("Saved. Your jobs will be re-scored for where you want to work.");
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "Could not save location preferences");
+      toast.error(e instanceof ApiError ? e.message : "Could not save where you want to work");
     }
   }
 
   return (
     <div className="space-y-4">
       <p className="text-sm text-muted-foreground">
-        These three answers set Rhapto&rsquo;s location priority and re-score the job queue when you save. They are
-        separate from the free-text <code className="font-mono text-xs">location</code> answer used on your resume
-        header &mdash; that one is unaffected by this editor, so update both if they should say the same thing.
+        These answers decide which jobs Rhapto ranks higher, and your jobs are re-scored when you save. The location on your resume header is separate, so update it too if it should say the same thing.
       </p>
       <div className="space-y-1">
         <Label htmlFor="location-home">Home location</Label>

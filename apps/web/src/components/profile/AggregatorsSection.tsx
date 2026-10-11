@@ -60,17 +60,17 @@ function AggregatorsBody({ saved, aggregatorSources }: { saved: AggregatorEntry[
     const entries = rows.map((row) => ({ ...row, keywords }));
     try {
       await put.mutateAsync(entries);
-      toast.success("Saved aggregators");
+      toast.success("Saved job search sites");
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "Could not save aggregators");
+      toast.error(e instanceof ApiError ? e.message : "Could not save job search sites");
     }
   }
 
   return (
     <div className="space-y-3">
-      <h3 className="text-sm font-medium">Aggregators</h3>
+      <h3 className="text-sm font-medium">Job search sites</h3>
       <p className="text-sm text-muted-foreground">
-        Aggregators search across companies instead of one board. Keywords apply to all of them; leave blank to fall back to your track keywords.
+        These sites search many companies at once. The keywords apply to all of them; leave blank to use the keywords from your roles.
       </p>
       <div className="flex flex-wrap gap-4">
         {aggregatorSources.map((src) => {
@@ -80,11 +80,11 @@ function AggregatorsBody({ saved, aggregatorSources }: { saved: AggregatorEntry[
       </div>
       <div className="max-w-sm space-y-1">
         <Label htmlFor="aggregator-keywords">Keywords</Label>
-        <Input id="aggregator-keywords" value={keywordsText} onChange={(e) => setKeywordsText(e.target.value)} placeholder="Defaults to your track keywords" />
+        <Input id="aggregator-keywords" value={keywordsText} onChange={(e) => setKeywordsText(e.target.value)} placeholder="Defaults to the keywords from your roles" />
       </div>
       <div className="flex justify-end">
         <Button onClick={save} disabled={put.isPending}>
-          Save aggregators
+          Save job search sites
         </Button>
       </div>
     </div>

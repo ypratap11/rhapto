@@ -124,6 +124,6 @@ describe("LocationTab", () => {
     render(<LocationTab />);
     expect(screen.getByLabelText(/home location/i)).toHaveValue("Austin, TX");
     expect(screen.getByRole("button", { name: "Save" })).toBeInTheDocument();
-    expect(screen.getByText(/last saved location preferences/i)).toBeInTheDocument();
+    expect(screen.getByText(/showing what you last saved/i)).toBeInTheDocument();
   });
 });

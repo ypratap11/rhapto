@@ -42,10 +42,10 @@ function draftFor(provider: string, model: string | null, providers: ProviderInf
 }
 
 function statusLine(settings: LlmSettingsOut, providers: ProviderInfoOut[]): string {
-  if (settings.source === "none" || settings.provider === null) return "No AI provider configured";
+  if (settings.source === "none" || settings.provider === null) return "No AI key set yet";
   const label = providers.find((p) => p.id === settings.provider)?.label ?? settings.provider;
-  if (settings.source === "env") return `Using ${label} from .env`;
-  return `Using ${label} · ${settings.model} · key set`;
+  if (settings.source === "env") return "Using the server's AI key";
+  return `Using your own ${label} key`;
 }
 
 function message(e: unknown, fallback: string): string {
@@ -124,9 +124,9 @@ export function LlmProviderSection() {
       // Drop the draft so the form re-derives from the refreshed settings (and forgets the key).
       setDraft(null);
       setResult(null);
-      toast.success("AI provider saved");
+      toast.success("AI key saved");
     } catch (e) {
-      setFailure(message(e, "Could not save the AI provider"));
+      setFailure(message(e, "Could not save the AI key"));
     }
   }
 
@@ -136,9 +136,9 @@ export function LlmProviderSection() {
       await remove.mutateAsync();
       setDraft(null);
       setResult(null);
-      toast.success("Removed the stored AI provider");
+      toast.success("Removed your AI key");
     } catch (e) {
-      setFailure(message(e, "Could not remove the AI provider"));
+      setFailure(message(e, "Could not remove the AI key"));
     } finally {
       // AlertDialogAction is a plain Button, so closing is ours to do — and it has to happen on
       // failure too, or the modal would cover the alert explaining what went wrong.
@@ -158,7 +158,7 @@ export function LlmProviderSection() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>AI provider</CardTitle>
+        <CardTitle>AI key</CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
         {settings ? <p className="text-sm text-muted-foreground">{statusLine(settings, providers)}</p> : null}
@@ -203,7 +203,7 @@ export function LlmProviderSection() {
                 onChange={(e) => update({ apiKey: e.target.value })}
               />
               <p className="text-xs text-muted-foreground">
-                Stored encrypted on the server. It is never sent back to the browser — only its last four characters.
+                Stored encrypted. Rhapto only shows its last four characters again.
               </p>
             </div>
             <fieldset className="space-y-2">
@@ -240,7 +240,7 @@ export function LlmProviderSection() {
               {settings?.source === "settings" ? (
                 <Button
                   variant="destructive"
-                  aria-label="Remove the stored AI provider"
+                  aria-label="Remove your AI key"
                   onClick={() => setConfirmRemove(true)}
                   disabled={remove.isPending}
                 >
@@ -251,7 +251,7 @@ export function LlmProviderSection() {
             <AlertDialog open={confirmRemove} onOpenChange={(open) => !open && setConfirmRemove(false)}>
               <AlertDialogContent>
                 <AlertDialogHeader>
-                  <AlertDialogTitle>Remove the stored AI provider?</AlertDialogTitle>
+                  <AlertDialogTitle>Remove your AI key?</AlertDialogTitle>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
                   <AlertDialogCancel>Cancel</AlertDialogCancel>

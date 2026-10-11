@@ -24,7 +24,7 @@ const NO_ADAPTER_SOURCES = ["smartrecruiters", "workable"] as const;
 const BOARD_HINTS: Record<string, string> = {
   workday: "Host prefix and site, e.g. nvidia.wd5/NVIDIAExternalCareerSite",
 };
-const DEFAULT_BOARD_HINT = "Board slug from the careers URL";
+const DEFAULT_BOARD_HINT = "The ID in the company's careers page address";
 
 function boardHint(source: string) {
   return BOARD_HINTS[source] ?? DEFAULT_BOARD_HINT;
@@ -48,7 +48,7 @@ export function WatchlistTab() {
   if (sources.error) return <ApiErrorBanner error={sources.error} />;
   const boardOptions = [
     ...(sources.data ?? []).filter((s) => s.kind === "board").map((s) => ({ value: s.name, label: s.label })),
-    ...NO_ADAPTER_SOURCES.map((name) => ({ value: name, label: `${name} (no adapter yet)` })),
+    ...NO_ADAPTER_SOURCES.map((name) => ({ value: name, label: `${name} (not supported yet)` })),
   ];
   // See AnswersTab: keyed by data identity so the editable copy resets only when the server data
   // changes, without syncing props into state through an effect.
@@ -79,21 +79,21 @@ function WatchlistBody({ initial, boardOptions }: { initial: WatchlistEntry[]; b
     const dropped = rows.length - entries.length;
     try {
       await put.mutateAsync(entries);
-      toast.success(dropped > 0 ? `Saved watchlist (${dropped} empty row${dropped === 1 ? "" : "s"} ignored)` : "Saved watchlist");
+      toast.success(dropped > 0 ? `Saved your companies (${dropped} empty row${dropped === 1 ? "" : "s"} ignored)` : "Saved your companies");
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "Could not save the watchlist");
+      toast.error(e instanceof ApiError ? e.message : "Could not save your companies");
     }
   }
 
   return (
     <div className="space-y-3">
-      <p className="text-sm text-muted-foreground">Rows here are the companies and boards the poller checks for new postings. Saving replaces the whole list.</p>
+      <p className="text-sm text-muted-foreground">Rhapto checks these companies for new jobs. Saving replaces the whole list.</p>
       <Table>
         <TableHeader>
           <TableRow>
             <TableHead>Company</TableHead>
-            <TableHead>Source</TableHead>
-            <TableHead>Board</TableHead>
+            <TableHead>Job site</TableHead>
+            <TableHead>Careers page ID</TableHead>
             <TableHead>Keywords</TableHead>
             <TableHead className="w-10" />
           </TableRow>
@@ -109,7 +109,7 @@ function WatchlistBody({ initial, boardOptions }: { initial: WatchlistEntry[]; b
               </TableCell>
               <TableCell>
                 <Select value={row.source} onValueChange={(v) => v && setRow(i, { source: v as WatchlistEntry["source"] })}>
-                  <SelectTrigger aria-label={`Source ${i + 1}`}>
+                  <SelectTrigger aria-label={`Job site ${i + 1}`}>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -123,13 +123,13 @@ function WatchlistBody({ initial, boardOptions }: { initial: WatchlistEntry[]; b
               </TableCell>
               <TableCell>
                 <Label htmlFor={`watch-board-${i}`} className="sr-only">
-                  Board {i + 1}
+                  Careers page ID {i + 1}
                 </Label>
                 <Input
                   id={`watch-board-${i}`}
                   value={row.board}
                   onChange={(e) => setRow(i, { board: e.target.value })}
-                  placeholder={row.source === "workday" ? "company.wd5/SiteName" : "board slug"}
+                  placeholder={row.source === "workday" ? "company.wd5/SiteName" : "careers page ID"}
                   aria-describedby={`watch-board-hint-${i}`}
                 />
                 <p id={`watch-board-hint-${i}`} className="mt-1 text-xs text-muted-foreground">
@@ -150,7 +150,7 @@ function WatchlistBody({ initial, boardOptions }: { initial: WatchlistEntry[]; b
       </Table>
       <div className="flex justify-between">
         <Button variant="outline" onClick={() => setRows((r) => [...r, { company: "", source: "greenhouse", board: "", keywords: "", discovered: false }])}>
-          Add row
+          Add a company
         </Button>
         <Button onClick={save} disabled={put.isPending}>
           Save

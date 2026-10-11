@@ -70,7 +70,7 @@ describe("Settings page vocabulary", () => {
     );
     const body = document.body.cloneNode(true) as HTMLElement;
     body.querySelectorAll("details").forEach((d) => d.remove());
-    expect(body.textContent ?? "").not.toMatch(BANNED);
+    expect((body.textContent ?? "").match(BANNED)?.[0] ?? null).toBeNull();
     const labels = Array.from(body.querySelectorAll("[aria-label]")).map((el) => el.getAttribute("aria-label") ?? "");
     for (const label of labels) expect(label).not.toMatch(BANNED);
     // Guard against a vacuous pass: the page really rendered its sections.

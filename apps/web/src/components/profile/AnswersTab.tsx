@@ -55,17 +55,23 @@ function AnswersBody({ initial }: { initial: Record<string, string> }) {
   return (
     <div className="space-y-3">
       <p className="text-sm text-muted-foreground">
-        <code className="font-mono text-xs">name</code>, <code className="font-mono text-xs">email</code>, <code className="font-mono text-xs">phone</code>, <code className="font-mono text-xs">location</code>, and{" "}
-        <code className="font-mono text-xs">links</code> feed the resume header.{" "}
-        <code className="font-mono text-xs">location_home</code>, <code className="font-mono text-xs">location_preferred</code> (comma-separated towns
-        and regions you want), and <code className="font-mono text-xs">remote_ok</code> set location priority and re-score the queue when you save. Other
-        keys answer application-form questions verbatim.
+        Your contact details go at the top of your resume. Other rows are answers Rhapto can reuse when an application form asks the same question.
       </p>
+      <details className="rounded-md border border-border">
+        <summary className="cursor-pointer select-none rounded-md px-3 py-2 text-sm font-medium">Which labels does Rhapto use?</summary>
+        <p className="border-t border-border p-3 text-sm text-muted-foreground">
+          <code className="font-mono text-xs">name</code>, <code className="font-mono text-xs">email</code>, <code className="font-mono text-xs">phone</code>,{" "}
+          <code className="font-mono text-xs">location</code> and <code className="font-mono text-xs">links</code> feed the resume header.{" "}
+          <code className="font-mono text-xs">location_home</code>, <code className="font-mono text-xs">location_preferred</code> (comma-separated towns and
+          regions you want) and <code className="font-mono text-xs">remote_ok</code> set location priority and re-score your jobs when you save. Any other
+          label answers an application-form question word for word.
+        </p>
+      </details>
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead>Key</TableHead>
-            <TableHead>Value</TableHead>
+            <TableHead>Label</TableHead>
+            <TableHead>Answer</TableHead>
             <TableHead className="w-10" />
           </TableRow>
         </TableHeader>
@@ -74,15 +80,15 @@ function AnswersBody({ initial }: { initial: Record<string, string> }) {
             <TableRow key={i}>
               <TableCell>
                 <Label htmlFor={`answer-key-${i}`} className="sr-only">
-                  Key {i + 1}
+                  Label {i + 1}
                 </Label>
-                <Input id={`answer-key-${i}`} value={row.key} onChange={(e) => setRow(i, { key: e.target.value })} placeholder="key" />
+                <Input id={`answer-key-${i}`} value={row.key} onChange={(e) => setRow(i, { key: e.target.value })} placeholder="label" />
               </TableCell>
               <TableCell>
                 <Label htmlFor={`answer-value-${i}`} className="sr-only">
-                  Value {i + 1}
+                  Answer {i + 1}
                 </Label>
-                <Input id={`answer-value-${i}`} value={row.value} onChange={(e) => setRow(i, { value: e.target.value })} placeholder="value" />
+                <Input id={`answer-value-${i}`} value={row.value} onChange={(e) => setRow(i, { value: e.target.value })} placeholder="answer" />
               </TableCell>
               <TableCell>
                 <Button variant="ghost" size="icon" aria-label={`Remove row ${i + 1}`} onClick={() => removeRow(i)}>

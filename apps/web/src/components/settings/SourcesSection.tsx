@@ -13,10 +13,11 @@ import { StatusBadge } from "@/components/ui/StatusBadge";
 import { Switch } from "@/components/ui/switch";
 import { TableSkeleton } from "@/components/ui/table-skeleton";
 import { ApiError } from "@/lib/api/client";
+import { formatDate } from "@/lib/format";
 import { useResumeSource, useSaveSourceSettings, useSourceSettings, useTestSource, type SourceSetting } from "@/lib/api/queries";
 
 function statusLine(s: SourceSetting): string {
-  if (!s.needs_key) return "Zero setup";
+  if (!s.needs_key) return "No setup needed";
   return s.key_set ? "Key saved" : "Needs a key";
 }
 
@@ -38,15 +39,15 @@ function statusLine(s: SourceSetting): string {
  */
 function statusDetail(s: SourceSetting): string | null {
   if (!s.configured) {
-    if (s.needs_key && !s.key_set) return "Add a key and this source will run on the next poll.";
-    if (!s.enabled) return "Switched off, so polls skip it.";
+    if (s.needs_key && !s.key_set) return "Add a key and Rhapto will check this source next time.";
+    if (!s.enabled) return "Switched off, so Rhapto skips it.";
     // Set up is the thing missing, and the switch is what saves it.
-    return "Not saved for this account yet, so polls skip it — flip the switch to save it.";
+    return "Not saved yet, so Rhapto skips it. Flip the switch to save it.";
   }
   // Set up but not runnable: pause is the only thing that can do that today, and if a future term is
   // added to `runnable` this branch follows it without being edited.
-  if (!s.runnable) return "Paused after repeated failures, so the next poll will skip it — Resume to retry.";
-  return "Will run on the next poll.";
+  if (!s.runnable) return "Paused after repeated failures, so Rhapto will skip it. Press Resume to try again.";
+  return "Will check next time";
 }
 
 /** What the last attempt actually did, in the source's own terms. */
@@ -56,10 +57,22 @@ function lastRunLine(s: SourceSetting): string | null {
   // The search's own location string, never one composed here: the whole point of the join.
   const asked = run.search_location ? ` for ${run.search_location}` : "";
   const named = run.search_name ? ` (${run.search_name})` : "";
-  if (run.error) return `Last run failed${named}: ${run.error}`;
-  if (run.found === 0) return `Last run returned 0${asked}${named}.`;
-  const found = run.found === 1 ? "1 posting" : `${run.found} postings`;
-  return `Last run found ${found}${asked}${named}, ${run.new} new.`;
+  const when = formatDate(run.started_at);
+  if (run.error) return `Last checked ${when}${named}, but it failed: ${run.error}`;
+  return `Last checked ${when}: found ${run.found}${asked}${named}, ${run.new} new`;
+}
+
+/** What each stored credential is called on screen. The raw field names are the API's, not words
+ * a person would recognise. */
+const FIELD_LABELS: Record<string, string> = {
+  app_id: "Adzuna app ID",
+  app_key: "Adzuna app key",
+  api_key: "API key",
+  rapidapi_key: "RapidAPI key",
+};
+
+function fieldLabel(field: string): string {
+  return FIELD_LABELS[field] ?? field.replace(/_/g, " ");
 }
 
 function message(e: unknown, fallback: string): string {
@@ -97,7 +110,7 @@ export function SourcesSection() {
   async function resumeSource(source: SourceSetting) {
     try {
       await resume.mutateAsync(source.id);
-      toast.success(`${source.label} will be retried on the next poll`);
+      toast.success(`${source.label} will be checked again next time`);
     } catch (e) {
       toast.error(message(e, `Could not resume ${source.label}`));
     }
@@ -137,7 +150,7 @@ export function SourcesSection() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Job sources</CardTitle>
+        <CardTitle>Where Rhapto looks for jobs</CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
         {hasIssue ? <ApiErrorBanner error={sources.error ?? "Can't reach Rhapto's API."} /> : null}
@@ -147,7 +160,7 @@ export function SourcesSection() {
           // Server-fixed today, but the registry could legitimately ship empty (a stripped-down
           // deployment, a filtered response) — an empty array is truthy, so this needs its own
           // branch rather than falling through to an empty `.map()` and a bare card body.
-          <EmptyState icon={Plug} title="No job sources configured" description="Ask whoever runs this Rhapto deployment to configure at least one job source." />
+          <EmptyState icon={Plug} title="No job sources set up" description="Ask whoever runs this copy of Rhapto to set up at least one." />
         ) : (
           sources.data.map((source) => (
             <fieldset key={source.id} role="group" aria-label={source.label} className="space-y-3 rounded-lg border border-border p-3">
@@ -174,15 +187,16 @@ export function SourcesSection() {
               </div>
               {source.fields.length > 0 ? (
                 <div className="space-y-2">
+                  <p className="text-xs text-muted-foreground">Optional. Finds more jobs.</p>
                   {source.fields.map((field) => (
                     <div key={field} className="space-y-1">
-                      <Label htmlFor={`${source.id}-${field}`}>{field}</Label>
+                      <Label htmlFor={`${source.id}-${field}`}>{fieldLabel(field)}</Label>
                       <Input
                         id={`${source.id}-${field}`}
                         type="password"
                         autoComplete="off"
                         defaultValue=""
-                        placeholder={source.key_set ? "Saved — enter a new value to replace it" : "Paste the key"}
+                        placeholder={source.key_set ? "Saved. Enter a new value to replace it" : "Paste the key"}
                         ref={(el) => {
                           const key = `${source.id}:${field}`;
                           if (el) fieldRefs.current.set(key, el);

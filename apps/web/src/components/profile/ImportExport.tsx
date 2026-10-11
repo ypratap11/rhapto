@@ -25,11 +25,11 @@ export function ImportExport() {
     if (files.length === 0) return;
     try {
       const result = await importProfile.mutateAsync(files);
-      toast.success(`Imported ${result.blocks} blocks, ${result.bases} bases, ${result.tracks} tracks, ${result.guardrails} guardrails`);
+      toast.success(`Replaced your saved data: ${result.blocks} experience items, ${result.bases} starting resumes, ${result.tracks} roles you want`);
       setFiles([]);
       if (inputRef.current) inputRef.current.value = "";
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "Could not import the profile YAML");
+      toast.error(e instanceof ApiError ? e.message : "Could not read that file");
     }
   }
 
@@ -38,7 +38,7 @@ export function ImportExport() {
     try {
       await downloadAuthenticated("/api/v1/profile/export", "profile.zip");
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : "Could not export the profile");
+      toast.error(e instanceof ApiError ? e.message : "Could not download your data");
     } finally {
       setExporting(false);
     }
@@ -59,11 +59,11 @@ export function ImportExport() {
   return (
     <div className="space-y-4">
       <p className="text-sm text-muted-foreground">
-        Your profile lives in the database now. Import YAML files to replace it, or export it back to YAML — <code className="font-mono text-xs">rhapto profile export</code> writes the same files locally.
+        Download a copy of everything you have saved. It comes as a zip of plain text files. To replace what is saved, unzip it and choose the files you want to put back. Replacing overwrites what is saved now.
       </p>
       <div className="flex flex-wrap items-end gap-3">
         <div className="space-y-1">
-          <Label htmlFor={fileInputId}>Profile YAML files</Label>
+          <Label htmlFor={fileInputId}>Files from your download</Label>
           <input
             ref={inputRef}
             id={fileInputId}
@@ -75,16 +75,16 @@ export function ImportExport() {
           />
         </div>
         <Button onClick={runImport} disabled={files.length === 0 || importProfile.isPending}>
-          Import
+          Replace from a file
         </Button>
         <Button variant="outline" onClick={runExport} disabled={exporting}>
-          Export YAML
+          Download my data
         </Button>
       </div>
       <div className="space-y-1 border-t border-border pt-3">
-        <Label htmlFor={resumeInputId}>Import from a resume (.docx)</Label>
+        <Label htmlFor={resumeInputId}>Add from a resume (.docx)</Label>
         <p className="text-xs text-muted-foreground">
-          Rhapto proposes blocks, tracks and location from your resume. Nothing is saved until you review and accept it.
+          Rhapto suggests experience items, roles you want and where you want to work from your resume. Nothing is saved until you review and accept it.
         </p>
         <div className="flex flex-wrap items-center gap-3">
           <input

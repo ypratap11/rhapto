@@ -52,8 +52,8 @@ describe("ResumeDocumentTab", () => {
 
   it("renders the upload zone when there is no document", () => {
     renderTab();
-    expect(screen.getByText(/upload your resume \(\.docx\) to tailor it directly\. tune mode switches on automatically\./i)).toBeInTheDocument();
-    expect(screen.getByLabelText("Resume document")).toBeInTheDocument();
+    expect(screen.getByText(/upload your resume \(\.docx\)\. light touch rewords a few lines/i)).toBeInTheDocument();
+    expect(screen.getByLabelText("Resume file")).toBeInTheDocument();
   });
 
   it("renders the filename, section headings, and role chips when a document exists", () => {
@@ -76,7 +76,7 @@ describe("ResumeDocumentTab", () => {
       type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     });
 
-    await user.upload(screen.getByLabelText("Resume document"), file);
+    await user.upload(screen.getByLabelText("Resume file"), file);
 
     expect(uploadMutateAsync).toHaveBeenCalledTimes(1);
     const sent = uploadMutateAsync.mock.calls[0]?.[0] as unknown;
