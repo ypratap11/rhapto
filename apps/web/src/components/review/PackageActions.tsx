@@ -10,6 +10,7 @@ import { ApiError } from "@/lib/api/client";
 import { useAnswers, useMarkApplied, type ApplicationOut, type JobOut, type PackageOut } from "@/lib/api/queries";
 import { downloadAuthenticated, resumeFilename } from "@/lib/download";
 import { APPLIED_STATUSES } from "@/lib/flow";
+import { safeHttpUrl } from "@/lib/links";
 import { STATUS_LABEL, statusTone, type ApplicationStatus } from "@/lib/status";
 
 export function PackageActions({
@@ -23,6 +24,7 @@ export function PackageActions({
   application: ApplicationOut | null;
   onRegenerate: () => void;
 }) {
+  const postingUrl = safeHttpUrl(job.url);
   const router = useRouter();
   const answers = useAnswers();
   const { markApplied, isPending } = useMarkApplied();
@@ -86,8 +88,8 @@ export function PackageActions({
           still holds the report.
         </p>
       ) : null}
-      {job.url ? (
-        <Button variant="outline" render={<a href={job.url} target="_blank" rel="noreferrer" />}>
+      {postingUrl ? (
+        <Button variant="outline" render={<a href={postingUrl} target="_blank" rel="noreferrer" />}>
           <ExternalLink className="size-4" aria-hidden /> Open posting
         </Button>
       ) : null}

@@ -26,6 +26,16 @@ const job = { id: "j1", url: "https://example.com/jobs/1" } as JobOut;
 const pkg = { id: "p1", version: 1, has_pdf: true, has_docx: true } as PackageOut;
 
 describe("PackageActions", () => {
+  it("links to an http(s) posting and never to a javascript: one", () => {
+    const { unmount } = render(<PackageActions job={job} pkg={pkg} application={null} onRegenerate={vi.fn()} />);
+    expect(screen.getByRole("link", { name: /open posting/i })).toHaveAttribute("href", "https://example.com/jobs/1");
+    unmount();
+    render(
+      <PackageActions job={{ ...job, url: "javascript:alert(1)" }} pkg={pkg} application={null} onRegenerate={vi.fn()} />,
+    );
+    expect(screen.queryByRole("link", { name: /open posting/i })).not.toBeInTheDocument();
+  });
+
   it("downloads a candidate-named PDF", async () => {
     downloadAuthenticated.mockResolvedValueOnce(undefined);
     render(<PackageActions job={job} pkg={pkg} application={null} onRegenerate={vi.fn()} />);
