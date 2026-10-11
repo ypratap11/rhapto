@@ -1,9 +1,7 @@
 import { render, screen, within } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import type { PackageListItem } from "@/lib/api/queries";
 import { ResumeTable } from "./ResumeTable";
-
-vi.mock("./ResumeRowActions", () => ({ ResumeRowActions: () => <button>Review</button> }));
 
 const row: PackageListItem = {
   id: "p1",
@@ -20,50 +18,53 @@ const row: PackageListItem = {
   violations: 0,
 };
 
-describe("ResumeTable", () => {
-  it("shows the fit ring, the version·status pill, the mode chip and when it was created", () => {
-    render(<ResumeTable rows={[row]} tracks={{ t1: { name: "Data PM", min_fit: 60 } }} filter="review" />);
-    const tr = screen.getByRole("row", { name: /ExampleCo/ });
-    expect(within(tr).getByRole("img", { name: "Fit 82" })).toBeInTheDocument();
-    expect(within(tr).getByText("v2 · draft")).toBeInTheDocument();
-    expect(within(tr).getByText("tune")).toBeInTheDocument();
+describe("ResumeTable rows", () => {
+  it("shows the company, the role, a plain status word and the fit", () => {
+    render(<ResumeTable rows={[row]} />);
+    const link = screen.getByRole("link");
+    expect(within(link).getByText("ExampleCo")).toBeInTheDocument();
+    expect(within(link).getByText("Technical Program Manager")).toBeInTheDocument();
+    expect(within(link).getByText("Draft")).toBeInTheDocument();
+    expect(within(link).getByRole("img", { name: "Fit 82" })).toBeInTheDocument();
   });
 
-  it("says what is empty rather than rendering an empty table", () => {
-    render(<ResumeTable rows={[]} tracks={{}} filter="ready" />);
-    expect(screen.getByText(/nothing ready to apply/i)).toBeInTheDocument();
+  it.each([
+    ["ready", "Ready to send", "Review"],
+    ["draft", "Draft", "Review"],
+    ["blocked", "Needs attention", "Fix"],
+  ])("a %s row says %s and ends in the text %s, inside its one link", (status, word, action) => {
+    render(<ResumeTable rows={[{ ...row, status }]} />);
+    const link = screen.getByRole("link");
+    expect(within(link).getByText(word)).toBeInTheDocument();
+    expect(within(link).getByText(action, { exact: true })).toBeInTheDocument();
+  });
+
+  it("is exactly one link per row, to that resume, named by company, role and status", () => {
+    render(<ResumeTable rows={[row, { ...row, id: "p2", job_id: "j2", company: "Globex", status: "blocked" }]} />);
+    const links = screen.getAllByRole("link");
+    expect(links).toHaveLength(2);
+    expect(links[0]).toHaveAttribute("href", "/jobs/j1/packages/p1");
+    expect(links[1]).toHaveAttribute("href", "/jobs/j2/packages/p2");
+    expect(links[0]).toHaveAccessibleName("ExampleCo, Technical Program Manager, Draft");
+    expect(links[1]).toHaveAccessibleName("Globex, Technical Program Manager, Needs attention");
+    expect(links[0].className).toContain("min-h-11");
+  });
+
+  it("has no buttons and no row actions, and none of the old columns", () => {
+    const { container } = render(<ResumeTable rows={[{ ...row, status: "blocked", violations: 2 }]} />);
+    expect(screen.queryAllByRole("button")).toHaveLength(0);
+    for (const gone of [/mark ready/i, /regenerate/i, /skip/i, /\bmode\b/i, /\btune\b/i, /\bv2\b/, /guardrail/i, /violation/i, /data pm/i]) {
+      expect(container.textContent).not.toMatch(gone);
+    }
+  });
+
+  it("falls back to readable words for a missing company or title", () => {
+    render(<ResumeTable rows={[{ ...row, company: null, title: null }]} />);
+    expect(screen.getByRole("link")).toHaveAccessibleName("Unknown company, Untitled role, Draft");
+  });
+
+  it("shows an unknown status as it came rather than hiding the row", () => {
+    render(<ResumeTable rows={[{ ...row, status: "archived" }]} />);
+    expect(screen.getByText("archived")).toBeInTheDocument();
   });
 });
-
-describe("ResumeTable, a blocked row", () => {
-  it("says how many guardrail violations blocked it, not just that it is blocked", () => {
-    render(
-      <ResumeTable
-        rows={[{ ...row, id: "p9", status: "blocked", violations: 2 }]}
-        tracks={{ t1: { name: "Data PM", min_fit: 60 } }}
-        filter="blocked"
-      />,
-    );
-    const tr = screen.getByRole("row", { name: /ExampleCo/ });
-    expect(within(tr).getByText("v2 · blocked")).toBeInTheDocument();
-    expect(within(tr).getByText("2 guardrail violations")).toBeInTheDocument();
-  });
-
-  it("says it in the singular for one", () => {
-    // A second, different count, so the assertion cannot be satisfied by a literal in the component.
-    render(
-      <ResumeTable
-        rows={[{ ...row, id: "p9", status: "blocked", violations: 1 }]}
-        tracks={{}}
-        filter="blocked"
-      />,
-    );
-    expect(screen.getByText("1 guardrail violation")).toBeInTheDocument();
-  });
-
-  it("says nothing about violations on a row that has none", () => {
-    render(<ResumeTable rows={[row]} tracks={{}} filter="review" />);
-    expect(screen.queryByText(/guardrail violation/i)).not.toBeInTheDocument();
-  });
-});
-
