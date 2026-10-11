@@ -18,21 +18,23 @@ import { useSignedIn, useVisitorHeader } from "./TokenGate";
 
 export const TABS = [
   { href: "/dashboard", label: "Dashboard" },
+  { href: "/jobs", label: "Jobs" },
   { href: "/resumes", label: "My resumes" },
 ] as const;
 
-/** Which tab a page belongs to. Jobs are reached from the Dashboard; a tailored resume belongs to My
- * resumes. The coach, Profile and Settings light neither. */
-export function activeTab(pathname: string): string | null {
-  if (pathname.startsWith("/resumes") || pathname.includes("/packages/")) return "/resumes";
-  if (pathname.startsWith("/dashboard") || pathname.startsWith("/jobs")) return "/dashboard";
+/** Which tab a page belongs to. A job page lights Jobs; a tailored resume (a job's /packages/ page)
+ * belongs to My resumes, so that check comes first. The coach, Profile, Settings and Help light none. */
+export function activeTab(pathname: string): "/dashboard" | "/jobs" | "/resumes" | null {
+  if (pathname === "/resumes" || pathname.startsWith("/resumes/") || pathname.includes("/packages/")) return "/resumes";
+  if (pathname === "/jobs" || pathname.startsWith("/jobs/")) return "/jobs";
+  if (pathname === "/dashboard" || pathname.startsWith("/dashboard/")) return "/dashboard";
   return null;
 }
 
 const ACCOUNT_LINKS = [
   { href: "/profile", label: "Your profile" },
   { href: "/settings", label: "Settings" },
-  { href: "/settings#help", label: "Help" },
+  { href: "/help", label: "Help" },
 ] as const;
 
 /** Cloudflare Access serves this on every protected hostname. A plain anchor on purpose: it is not a
@@ -169,7 +171,7 @@ function EntryLink({ pathname, className, onClick }: { pathname: string; classNa
 
 /** Below md the header is the logo (plus, in the app, the + button) and this button. A right-hand
  * sheet holds the items the desktop header shows for this page. Controlled: every item closes it in its own
- * onClick, because a hash link such as /settings#help does not change the pathname; the caller also keys
+ * onClick, and the caller also keys
  * it by pathname so a back/forward navigation closes it too. Escape and an outside click are Base UI's. */
 function MobileMenu({
   pathname,

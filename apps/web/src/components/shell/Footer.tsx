@@ -9,7 +9,8 @@ import { useVisitorHeader } from "./TokenGate";
 const LINK = "inline-flex items-center text-muted-foreground underline-offset-4 hover:text-foreground hover:underline max-md:min-h-11";
 
 /** One slim row on every page, mounted once in Shell. "Feedback" is a protected route, so it shows only
- * where the header shows the app (the same `useVisitorHeader` predicate): a visitor on / never sees it. */
+ * where the header shows the app (the same `useVisitorHeader` predicate): a visitor on / never sees it.
+ * "Request beta access" is the mirror: a signed-in person already has access, so only visitors see it. */
 export function Footer() {
   const visitor = useVisitorHeader();
   const access = accessRequestLink();
@@ -20,7 +21,7 @@ export function Footer() {
           <a href={GITHUB_URL} target="_blank" rel="noreferrer" className={LINK}>
             Open source
           </a>
-          {SAME_ORIGIN_DEPLOYMENT ? (
+          {SAME_ORIGIN_DEPLOYMENT && visitor ? (
             <a href={access.href} target={access.external ? "_blank" : undefined} rel={access.external ? "noreferrer" : undefined} className={LINK}>
               Request beta access
             </a>

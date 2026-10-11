@@ -120,15 +120,15 @@ describe("TopBar", () => {
       pathname.mockReturnValue("/settings");
       sameOrigin.value = false;
       renderBar("token");
-      expect(within(screen.getByRole("navigation", { name: "Primary" })).getAllByRole("link").map((a) => a.textContent)).toEqual(["Dashboard", "My resumes"]);
+      expect(within(screen.getByRole("navigation", { name: "Primary" })).getAllByRole("link").map((a) => a.textContent)).toEqual(["Dashboard", "Jobs", "My resumes"]);
       expect(screen.queryByRole("button", { name: /advanced/i })).toBeNull();
     });
 
-    it("hosted /settings is an in-app screen: two tabs, no Advanced", () => {
+    it("hosted /settings is an in-app screen: three tabs, no Advanced", () => {
       pathname.mockReturnValue("/settings");
       sameOrigin.value = true;
       renderBar();
-      expect(within(screen.getByRole("navigation", { name: "Primary" })).getAllByRole("link").map((a) => a.textContent)).toEqual(["Dashboard", "My resumes"]);
+      expect(within(screen.getByRole("navigation", { name: "Primary" })).getAllByRole("link").map((a) => a.textContent)).toEqual(["Dashboard", "Jobs", "My resumes"]);
       expect(screen.queryByRole("button", { name: /advanced/i })).toBeNull();
     });
 
