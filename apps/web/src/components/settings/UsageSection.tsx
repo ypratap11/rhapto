@@ -124,7 +124,7 @@ export function UsageSection() {
           </p>
         )}
         <details className="rounded-md border border-border">
-          <summary className="cursor-pointer select-none rounded-md px-3 py-2 text-sm font-medium">Details</summary>
+          <summary className="cursor-pointer select-none rounded-md px-3 py-2 max-md:py-3 text-sm font-medium">Details</summary>
           <div className="space-y-6 border-t border-border p-3">
             <div className="grid gap-4 sm:grid-cols-2">
               <SummaryGrid title="All time" summary={totals} />
