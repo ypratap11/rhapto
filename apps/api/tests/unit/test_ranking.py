@@ -13,7 +13,8 @@ from rhapto.services.ranking import (
     company_key,
     relevance_key,
     title_key,
-    wants_arrangement,
+    wants_collapse,
+    wants_company_spread,
 )
 
 
@@ -89,8 +90,8 @@ def test_same_title_at_different_companies_is_not_a_duplicate() -> None:
     assert len(arrange([row(1, "A Co", "Engineer"), row(2, "B Co", "Engineer")])) == 2
 
 
-def test_normalisation_is_case_whitespace_and_requisition_suffix_only() -> None:
-    assert company_key("  ACME   Corp ") == "acme corp"
+def test_normalisation_is_case_whitespace_legal_suffix_and_requisition_suffix_only() -> None:
+    assert company_key("  ACME   Corp ") == "acme"  # intentional: "Corp" is a legal suffix now
     assert company_key("   ") is None and company_key(None) is None
     assert title_key("Senior  Engineer (R5803) ") == "senior engineer"
     assert title_key("Senior Engineer [REQ-12345]") == "senior engineer"
@@ -107,18 +108,71 @@ def test_arrange_never_reorders_rows_that_need_no_change() -> None:
 
 
 @pytest.mark.parametrize(
-    ("ids_given", "sort", "recommended", "expected"),
+    ("ids_given", "expected"),
     [
-        (False, "relevance", False, True),  # the Jobs page default
-        (False, "fit", True, True),  # the dashboard
-        (False, "fit", False, False),
-        (False, "newest", False, False),
-        (True, "relevance", False, False),  # live search re-fetching its own results
-        (True, "fit", True, False),
+        (False, True),  # every list collapses duplicates
+        (True, False),  # live search re-fetching its own results gets every row it asked for
     ],
 )
-def test_wants_arrangement(ids_given: bool, sort: str, recommended: bool, expected: bool) -> None:
-    assert wants_arrangement(ids_given=ids_given, sort=sort, recommended=recommended) is expected
+def test_wants_collapse(ids_given: bool, expected: bool) -> None:
+    assert wants_collapse(ids_given=ids_given) is expected
+
+
+@pytest.mark.parametrize(
+    ("sort", "recommended", "expected"),
+    [
+        ("relevance", False, True),  # the Jobs page default
+        ("fit", True, True),  # the dashboard
+        ("fit", False, False),
+        ("newest", False, False),
+    ],
+)
+def test_wants_company_spread(sort: str, recommended: bool, expected: bool) -> None:
+    assert wants_company_spread(sort=sort, recommended=recommended) is expected
+
+
+@pytest.mark.parametrize(
+    ("a", "b"),
+    [
+        ("Acme, Inc.", "ACME LLC"),
+        ("Acme", "Acme Inc"),
+        ("Amazon.com", "Amazon"),
+        ("Acme Corporation", "acme"),
+    ],
+)
+def test_legal_suffix_and_dotcom_noise_collapse(a: str, b: str) -> None:
+    assert company_key(a) == company_key(b)
+
+
+@pytest.mark.parametrize(
+    ("a", "b"),
+    [
+        ("Amazon Web Services", "Amazon"),
+        ("Amazon.com Services LLC", "Amazon"),
+        ("X Labs", "X"),
+        ("Acme Group", "Acme"),
+    ],
+)
+def test_extra_words_do_not_collapse(a: str, b: str) -> None:
+    assert company_key(a) != company_key(b)
+
+
+def test_company_key_never_empty() -> None:
+    assert company_key("Co") == "co"
+    assert company_key("Inc.") == "inc"
+    assert company_key(".com") == ".com"
+
+
+def test_arrange_can_skip_company_spread() -> None:
+    rows = [
+        row(1, "C1", "T1", 90),
+        row(2, "C1", "T2", 89),
+        row(3, "C1", "T3", 88),
+        row(4, "C1", "T4", 87),
+        row(5, "Other", "U1", 86),
+    ]
+    assert [a.index for a in arrange(rows, spread_companies=False)] == [0, 1, 2, 3, 4]
+    assert [a.index for a in arrange(rows)] == [0, 1, 4, 2, 3]
 
 
 def test_recommended_floor_matches_the_title_miss_cap() -> None:
