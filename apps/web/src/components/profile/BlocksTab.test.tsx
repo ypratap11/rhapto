@@ -90,6 +90,18 @@ describe("BlocksTab", () => {
     expect(screen.getByText("Letters, numbers and dashes. You can't change it later.")).toBeInTheDocument();
   });
 
+  it("keeps the inline period button 44px tall on phones and lets the Confirmed button wrap", () => {
+    blocksData = [blockNoPeriod];
+    renderTab();
+    expect(screen.getByRole("button", { name: /edit period for/i }).className).toContain("max-md:min-h-11");
+    const toggle = screen.getByRole("button", { name: /toggle confirmed for/i });
+    expect(toggle.className).toContain("whitespace-normal");
+    expect(toggle.className).toContain("max-w-full");
+    expect(toggle.className).toContain("min-w-0");
+    // The override only works if the badge really carries the slot attribute it targets.
+    expect(toggle.querySelector("[data-slot=badge]")).not.toBeNull();
+  });
+
   it("opens the editor as a centred dialog, not a sheet, with Save reachable", async () => {
     blocksData = [blockWithPeriod];
     renderTab();

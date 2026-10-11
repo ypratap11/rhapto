@@ -263,7 +263,7 @@ export function BlocksTab() {
                   type="button"
                   aria-label={`Edit period for ${blockLabel(b)}`}
                   onClick={() => startEditingPeriod(b)}
-                  className="rounded-sm px-1 -mx-1 text-left hover:bg-muted focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring"
+                  className="inline-flex items-center rounded-sm px-1 -mx-1 text-left hover:bg-muted max-md:min-h-11 focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring"
                 >
                   {b.period ?? <span className="text-muted-foreground">Add period</span>}
                 </button>
@@ -277,6 +277,8 @@ export function BlocksTab() {
                 type="button"
                 variant="ghost"
                 size="sm"
+                // Wraps instead of forcing the badge's one-line width, so long text can never overflow.
+                className="h-auto min-w-0 max-w-full whitespace-normal [&_[data-slot=badge]]:h-auto [&_[data-slot=badge]]:shrink [&_[data-slot=badge]]:whitespace-normal"
                 aria-pressed={b.verified}
                 aria-label={`Toggle confirmed for ${blockLabel(b)}`}
                 onClick={() => void toggleVerified(b.id)}
