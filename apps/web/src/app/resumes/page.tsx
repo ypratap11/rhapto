@@ -1,33 +1,25 @@
 "use client";
 
 import { Suspense, useMemo } from "react";
+import Link from "next/link";
+import { FileText } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import type { TrackInfo } from "@/components/jobs/JobCard";
 import { ResumeTable } from "@/components/resumes/ResumeTable";
 import { ApiErrorBanner } from "@/components/shell/ApiErrorBanner";
-import { Breadcrumbs } from "@/components/shell/Breadcrumbs";
 import { HeroBand } from "@/components/shell/HeroBand";
+import { buttonVariants } from "@/components/ui/button";
+import { EmptyState } from "@/components/ui/empty-state";
 import { TableSkeleton } from "@/components/ui/table-skeleton";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { usePackageList, useTracks, type PackageListFilter } from "@/lib/api/queries";
+import { usePackageList, usePackageListAny, useTracks } from "@/lib/api/queries";
+import { resolveTab, type ResumesTab } from "@/lib/resumes-tab";
 
-const FILTERS: { value: PackageListFilter; label: string }[] = [
-  { value: "review", label: "Needs review" },
-  { value: "ready", label: "Ready" },
-  { value: "blocked", label: "Blocked" },
-  { value: "applied", label: "Applied" },
+const FILTERS: { value: ResumesTab; label: string }[] = [
+  { value: "review", label: "To review" },
+  { value: "ready", label: "Ready to send" },
+  { value: "blocked", label: "Needs attention" },
 ];
-
-function isPackageListFilter(value: string | null): value is PackageListFilter {
-  return value === "review" || value === "ready" || value === "blocked" || value === "applied";
-}
-
-// The old /packages route 307-redirected here with its ?filter= intact, including the retired
-// "all" value — that value, and any other unrecognized one, falls back to "review".
-function resolveTab(searchParams: URLSearchParams): PackageListFilter {
-  const raw = searchParams.get("tab") ?? searchParams.get("filter");
-  return isPackageListFilter(raw) ? raw : "review";
-}
 
 function ResumesPageInner() {
   const router = useRouter();
@@ -36,6 +28,9 @@ function ResumesPageInner() {
 
   const list = usePackageList(tab);
   const tracksQuery = useTracks();
+  // Only asked once this tab has come back empty: tells "nothing in this tab" from "no resumes yet".
+  const tabIsEmpty = list.data !== undefined && list.data.length === 0;
+  const anyList = usePackageListAny(tabIsEmpty);
 
   const tracks = useMemo(() => {
     const map: Record<string, TrackInfo> = {};
@@ -52,10 +47,9 @@ function ResumesPageInner() {
   return (
     <>
       <HeroBand tone="sand">
-        <h1 className="font-serif text-2xl font-medium">Resumes</h1>
-        <p className="text-sm text-muted-foreground">Every tailored resume, and what it is waiting on.</p>
+        <h1 className="font-serif text-2xl font-medium">My resumes</h1>
+        <p className="text-sm text-muted-foreground">Every tailored resume and what it is waiting on.</p>
       </HeroBand>
-      <Breadcrumbs items={[{ label: "Resumes" }]} />
       <div className="mb-4">
         <Tabs value={tab} onValueChange={(value) => value && router.replace(`/resumes?tab=${value}`)}>
           <TabsList aria-label="Resume status">
@@ -72,7 +66,25 @@ function ResumesPageInner() {
           <ApiErrorBanner error={list.error ?? "Can't reach Rhapto's API."} />
         </div>
       ) : null}
-      {list.isLoading ? <TableSkeleton /> : nothingToShow ? null : <ResumeTable rows={list.data ?? []} tracks={tracks} filter={tab} />}
+      {list.isLoading ? (
+        <TableSkeleton />
+      ) : nothingToShow ? null : tabIsEmpty ? (
+        anyList.data && anyList.data.length === 0 ? (
+          <EmptyState
+            icon={FileText}
+            title="No resumes yet. Pick a job and Rhapto tailors your resume to it."
+            action={
+              <Link href="/start" className={buttonVariants()}>
+                + Tailor a resume
+              </Link>
+            }
+          />
+        ) : (
+          <EmptyState icon={FileText} title="Nothing here right now." />
+        )
+      ) : (
+        <ResumeTable rows={list.data ?? []} tracks={tracks} filter={tab} />
+      )}
     </>
   );
 }

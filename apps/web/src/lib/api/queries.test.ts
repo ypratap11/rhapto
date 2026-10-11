@@ -73,6 +73,7 @@ describe("PACKAGE_LIST_PARAMS", () => {
     expect(PACKAGE_LIST_PARAMS.ready).toEqual({ applied: false, status: "ready", archived: false });
     expect(PACKAGE_LIST_PARAMS.blocked).toEqual({ status: "blocked", archived: false });
     expect(PACKAGE_LIST_PARAMS.applied).toEqual({ applied: true });
+    expect(PACKAGE_LIST_PARAMS.any).toEqual({ archived: false });
   });
 });
 

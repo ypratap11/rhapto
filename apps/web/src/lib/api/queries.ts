@@ -220,11 +220,14 @@ export const packageListKeys = {
   list: (filter: PackageListFilter) => ["package-list", filter] as const,
 };
 
-export const PACKAGE_LIST_PARAMS: Record<PackageListFilter, { status?: "draft" | "ready" | "blocked"; applied?: boolean; archived?: boolean }> = {
+export const PACKAGE_LIST_PARAMS: Record<PackageListFilter | "any", { status?: "draft" | "ready" | "blocked"; applied?: boolean; archived?: boolean }> = {
   review: { applied: false, status: "draft", archived: false },
   ready: { applied: false, status: "ready", archived: false },
   blocked: { status: "blocked", archived: false },
   applied: { applied: true },
+  // Every live (not archived) resume, whatever its status — only used to tell "this tab is empty"
+  // from "there are no resumes at all".
+  any: { archived: false },
 };
 
 export function usePackageList(filter: PackageListFilter) {
@@ -232,6 +235,17 @@ export function usePackageList(filter: PackageListFilter) {
     queryKey: packageListKeys.list(filter),
     queryFn: () => unwrap(apiClient().GET("/api/v1/packages", { params: { query: PACKAGE_LIST_PARAMS[filter] } })),
     staleTime: 10_000,
+  });
+}
+
+/** Lets the My resumes page tell an empty tab from a user with no resumes at all. Under the same
+ * ["package-list"] prefix as usePackageList, so invalidatePackageList covers it. */
+export function usePackageListAny(enabled = true) {
+  return useQuery({
+    queryKey: ["package-list", "any"] as const,
+    queryFn: () => unwrap(apiClient().GET("/api/v1/packages", { params: { query: PACKAGE_LIST_PARAMS.any } })),
+    staleTime: 10_000,
+    enabled,
   });
 }
 
