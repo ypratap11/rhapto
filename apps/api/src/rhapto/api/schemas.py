@@ -3,6 +3,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 from typing import Any, Literal
+from urllib.parse import urlsplit
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -143,6 +144,18 @@ class JobCreate(BaseModel):
     company: str | None = None
     title: str | None = None
     location: str | None = None
+
+    @field_validator("url")
+    @classmethod
+    def _http_url(cls, value: str | None) -> str | None:
+        # The URL is fetched server-side and later rendered as a link, so only absolute http(s) is
+        # accepted: a javascript:/data:/file: value must never reach either place.
+        if value is None or value == "":
+            return value
+        parsed = urlsplit(value.strip())
+        if parsed.scheme.lower() not in ("http", "https") or not parsed.netloc:
+            raise ValueError("url must be an absolute http or https address")
+        return value.strip()
 
     @model_validator(mode="after")
     def _one_source(self) -> JobCreate:

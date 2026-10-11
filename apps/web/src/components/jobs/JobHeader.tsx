@@ -10,6 +10,7 @@ import { StatusBadge } from "@/components/ui/StatusBadge";
 import { ApiError } from "@/lib/api/client";
 import { useApplications, type JobOut } from "@/lib/api/queries";
 import { markApplyOpened } from "@/lib/apply-prompt";
+import { safeHttpUrl } from "@/lib/links";
 import { downloadPackage } from "@/lib/download";
 import { locationTierLabel, SOURCE_LABEL } from "@/lib/fit";
 import { STATUS_LABEL, statusTone, type ApplicationStatus } from "@/lib/status";
@@ -38,7 +39,8 @@ export function JobHeader({ job, track }: { job: JobOut; track: TrackInfo | null
   async function onApply() {
     if (!latest) return;
     markApplyOpened(job.id);
-    if (job.url) window.open(job.url, "_blank", "noopener");
+    const postingUrl = safeHttpUrl(job.url);
+    if (postingUrl) window.open(postingUrl, "_blank", "noopener");
     try {
       await downloadPackage(latest.id, "pdf");
     } catch (e) {
