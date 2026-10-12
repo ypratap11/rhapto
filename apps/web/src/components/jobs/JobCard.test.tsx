@@ -3,7 +3,13 @@ import { describe, expect, it, vi } from "vitest";
 import type { JobOut } from "@/lib/api/queries";
 import { JobCard } from "./JobCard";
 
-vi.mock("./NotInterestedButton", () => ({ NotInterestedButton: () => <button>Not interested</button> }));
+const notInterested = vi.fn();
+vi.mock("./NotInterestedButton", () => ({
+  NotInterestedButton: (props: { iconOnly?: boolean }) => {
+    notInterested(props);
+    return <button>Not interested</button>;
+  },
+}));
 vi.mock("@/lib/api/queries", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/api/queries")>()),
   useSimilarPostings: () => ({ data: undefined, isLoading: false, isError: false }),
@@ -56,15 +62,38 @@ describe("JobCard", () => {
     warnSpy.mockRestore();
   });
 
-  it("shows the fit ring, the logo initial, chips, salary and the posted line", () => {
+  it("shows the fit ring (no logo tile), chips, salary and the posted line", () => {
     render(<JobCard job={job} track={track} />);
     expect(screen.getByRole("img", { name: "Fit 82" })).toBeInTheDocument();
-    expect(screen.getByTestId("logo-placeholder")).toHaveTextContent("E");
+    expect(screen.queryByTestId("logo-placeholder")).not.toBeInTheDocument();
+    expect(screen.getByText("ExampleCo · Austin, TX")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Technical Program Manager/ })).toHaveAttribute("href", "/jobs/j1");
     expect(screen.getByRole("link", { name: /tailor/i })).toHaveAttribute("href", "/jobs/j1");
     for (const chip of ["Data PM", "The Muse", "Preferred area"]) expect(screen.getByText(chip)).toBeInTheDocument();
     expect(screen.getByText("$150k – $180k")).toBeInTheDocument();
-    expect(screen.getByText(/Posted ·/)).toBeInTheDocument();
+    expect(screen.getByText(/Posted /)).toBeInTheDocument();
+    expect(screen.getByRole("article")).toBeInTheDocument();
+  });
+
+  it("asks for the icon-only Not interested button", () => {
+    render(<JobCard job={job} track={track} />);
+    expect(notInterested).toHaveBeenCalledWith(expect.objectContaining({ iconOnly: true }));
+  });
+
+  it("falls back to the area label for the meta line when there is no location, without repeating it", () => {
+    render(<JobCard job={{ ...job, location: null } as JobOut} track={track} />);
+    expect(screen.getByText("ExampleCo · Preferred area")).toBeInTheDocument();
+    expect(screen.getAllByText(/Preferred area/)).toHaveLength(1);
+  });
+
+  it("shows New today for a job found 23 hours ago, not 25", () => {
+    const now = new Date("2026-09-13T12:00:00Z");
+    const found = (h: number) => ({ ...job, discovered_at: new Date(now.getTime() - h * 3_600_000).toISOString() }) as JobOut;
+    const { unmount } = render(<JobCard job={found(23)} track={track} now={now} />);
+    expect(screen.getByText("New today")).toBeInTheDocument();
+    unmount();
+    render(<JobCard job={found(25)} track={track} now={now} />);
+    expect(screen.queryByText("New today")).not.toBeInTheDocument();
   });
 
   it("shows a raw adzuna salary range as readable dollars", () => {

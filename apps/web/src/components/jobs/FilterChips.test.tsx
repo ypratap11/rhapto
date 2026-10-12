@@ -22,4 +22,13 @@ describe("FilterChips", () => {
     await user.click(screen.getByRole("button", { name: "Adzuna" }));
     expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ sources: ["adzuna"] }));
   });
+
+  it("keeps the labelled groups and shows a short visible label before each segmented track", () => {
+    render(<FilterChips value={DEFAULT_SEARCH_STATE} onChange={vi.fn()} sources={sources} />);
+    for (const name of ["Date posted", "Source", "Fit"]) expect(screen.getByRole("group", { name })).toBeInTheDocument();
+    expect(screen.getByText("Posted")).toBeInTheDocument();
+    expect(screen.getByText("Fit", { selector: "span" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "75+" })).toHaveAttribute("aria-pressed", "false");
+    expect(screen.getByRole("button", { name: "The Muse" })).toHaveAttribute("aria-pressed", "false");
+  });
 });
