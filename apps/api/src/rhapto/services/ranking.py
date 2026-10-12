@@ -91,6 +91,48 @@ def company_key(company: str | None) -> str | None:
     return " ".join(tokens) or None
 
 
+#: Single-word brands too generic to stand for a longer company name: "United" must not absorb
+#: "United Airlines". Equal brands still match.
+GENERIC_HEADS = frozenset(
+    {
+        "the",
+        "american",
+        "united",
+        "national",
+        "general",
+        "first",
+        "global",
+        "international",
+        "new",
+        "great",
+    }
+)
+
+
+def brand_key(company: str | None) -> tuple[str, ...] | None:
+    """Tokens of `company_key` with ".com" removed from the end of every token (a lone ".com" stays).
+
+    "Amazon.com Services LLC" -> ("amazon", "services"). None for a missing or blank company.
+    """
+    key = company_key(company)
+    if key is None:
+        return None
+    return tuple(
+        t[: -len(".com")] if t.endswith(".com") and len(t) > len(".com") else t
+        for t in key.split(" ")
+    )
+
+
+def _brands_match(a: tuple[str, ...], b: tuple[str, ...]) -> bool:
+    """Equal, or one is a whole-word (token) prefix of the other unless that prefix is a generic head."""
+    if a == b:
+        return True
+    short, long = (a, b) if len(a) < len(b) else (b, a)
+    if len(short) == 1 and short[0] in GENERIC_HEADS:
+        return False
+    return long[: len(short)] == short
+
+
 def title_key(title: str | None) -> str | None:
     """Lower-case, whitespace collapsed, trailing requisition ids stripped; None when nothing is left."""
     if not title:
@@ -113,8 +155,11 @@ def arrange(
 ) -> list[Arranged]:
     """C1 then C2 over an already-ordered sequence.
 
-    C1: rows with the same normalised company and title collapse to the first of them, which
-    carries the others' ids. C2 (owner decision, plan review I-1): among the rows ABOVE the
+    C1: rows with the same title_key and a loosely matching company (`brand_key` tokens equal, or one a
+    whole-word prefix of the other, see `_brands_match`) collapse to the first of them, which carries
+    the others' ids. A row joins the earliest-created group whose REPRESENTATIVE's brand matches, so
+    the result is order-dependent but deterministic: [Delta, Delta Dental, Delta Air Lines] is one
+    row, [Delta Dental, Delta Air Lines, Delta] is two (Delta joins Delta Dental). C2 (owner decision, plan review I-1): among the rows ABOVE the
     title-miss cap (`best_fit > cap`) only, a company's rows after its first `per_company` are
     moved behind the other above-cap rows; they are written back into the same positions the
     above-cap rows already occupied, so a deferred title match still precedes every row at or
@@ -122,17 +167,20 @@ def arrange(
     removed. A row with no company or no title is never collapsed, and a row with no company is
     never capped. With `spread_companies=False` only C1 runs.
     """
-    first_of: dict[tuple[str, str], int] = {}
+    # (title_key, first brand token) -> [(brand, representative position)] in creation order. A
+    # whole-word prefix implies an equal first token, so only this bucket needs scanning.
+    groups: dict[tuple[str, str], list[tuple[tuple[str, ...], int]]] = {}
     order: list[int] = []
     also: dict[int, list[uuid.UUID]] = {}
     for position, item in enumerate(items):
-        company, title = company_key(item.company), title_key(item.title)
-        if company is not None and title is not None:
-            representative = first_of.get((company, title))
+        brand, title = brand_key(item.company), title_key(item.title)
+        if brand is not None and title is not None:
+            bucket = groups.setdefault((title, brand[0]), [])
+            representative = next((pos for b, pos in bucket if _brands_match(b, brand)), None)
             if representative is not None:
                 also[representative].append(item.id)
                 continue
-            first_of[(company, title)] = position
+            bucket.append((brand, position))
         order.append(position)
         also[position] = []
     if spread_companies:
