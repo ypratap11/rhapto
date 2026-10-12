@@ -394,11 +394,12 @@ def test_present_as_a_verb_is_not_a_date(demo_profile_dir: Path) -> None:
 
 
 def test_homepage_proof_matches_the_engine_wording(demo_profile_dir: Path) -> None:
-    """The landing page's proof (apps/web/src/components/landing/TuneProof.tsx) says, in plain words,
-    "Rhapto stopped this draft: 45 is not in your resume." That is this catch: a sentence from the
-    document with a number the model added. The page no longer prints the rule name, the path or the
-    engine message, but the claim it makes is exactly what the engine does, so the rule, path and
-    message stay pinned here against the real guardrail. TuneProof.test.tsx asserts the sentence."""
+    """The landing hero's proof box (apps/web/src/components/landing/TuneProof.tsx, rendered by
+    Landing.tsx) shows an AI draft with "45 teams" and says "45 is not in your resume." That is this
+    catch: a sentence from the document with a number the model added. The page does not print the rule
+    name, the path or the engine message, but the claim it makes is exactly what the engine does, so
+    the rule, path and message stay pinned here against the real guardrail. TuneProof.tsx's AI_DRAFT
+    string must match `after` below byte for byte."""
     doc = _doc()
     b = _bullet(doc)
     assert b.text == "Led the Snowflake migration for 12 teams, cutting warehouse cost 30%."
@@ -408,7 +409,7 @@ def test_homepage_proof_matches_the_engine_wording(demo_profile_dir: Path) -> No
             Edit(
                 paragraph_id=b.id,
                 before=b.text,
-                after="Led the Snowflake migration for 45 teams, cutting warehouse cost 30%.",
+                after="Moved 45 teams onto Snowflake and cut data-platform cost 30%.",
                 reason="r",
             )
         ],
@@ -422,3 +423,29 @@ def test_homepage_proof_matches_the_engine_wording(demo_profile_dir: Path) -> No
     assert violation.path == "edits[0]"
     assert violation.message == "number(s) not found in the document: 45"
     assert "no-new-numbers" in report.rules_run[:2]  # always runs, whatever the user configured
+
+
+def test_homepage_tailored_line_passes_the_engine(demo_profile_dir: Path) -> None:
+    """The hero's "Rhapto gives" line (TuneProof.tsx RHAPTO_GIVES) must survive the engine itself,
+    including the configurable entity and date rules, so the homepage never shows a line the engine
+    would stop. `after` below must match that string byte for byte."""
+    doc = _doc()
+    b = _bullet(doc)
+    report = run_tune_guardrails(
+        doc,
+        [
+            Edit(
+                paragraph_id=b.id,
+                before=b.text,
+                after="Moved 12 teams onto Snowflake and cut data-platform cost 30%.",
+                reason="r",
+            )
+        ],
+        demo_extract(),
+        _rules(demo_profile_dir),
+        cover_note=None,
+    )
+    assert report.passed
+    assert report.violations == []
+    assert "no-invented-entities" in report.rules_run
+    assert "date-consistency" in report.rules_run
