@@ -1,17 +1,22 @@
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { useState } from "react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ApplicationOut } from "@/lib/api/queries";
+import type { ChipId } from "@/lib/applications-view";
 import { ApplicationsSection } from "./ApplicationsSection";
 
-vi.mock("@/lib/api/queries", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@/lib/api/queries")>()),
-  usePatchApplication: () => ({ mutateAsync: vi.fn().mockResolvedValue({}), isPending: false }),
-  useDeleteApplication: () => ({ mutateAsync: vi.fn().mockResolvedValue({}), isPending: false }),
-}));
-vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
+// The filter and the open application are the page's now (the hero tiles and the next-step card drive them),
+// so this section is exercised through a small controlled harness. The chip row it used to own is gone:
+// the tiles replaced it, and their behaviour is tested in the page test.
+const NOW = new Date("2026-10-11T12:00:00Z");
+beforeEach(() => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(NOW);
+});
+afterEach(() => vi.useRealTimers());
 
-const row = (id: string, status: string, updated_at: string, closed_reason: string | null = null) =>
+const row = (id: string, status: string, updated_at: string, closed_reason: string | null = null, extra: Partial<ApplicationOut> = {}) =>
   ({
     id,
     status,
@@ -19,9 +24,11 @@ const row = (id: string, status: string, updated_at: string, closed_reason: stri
     closed_reason,
     notes: "",
     follow_up_at: null,
+    applied_at: null,
     package_id: null,
     status_history: [],
     job: { id: `j${id}`, company: `Co ${id}`, title: "TPM" },
+    ...extra,
   }) as unknown as ApplicationOut;
 
 const seven = [
@@ -36,155 +43,148 @@ const seven = [
 const extra = Array.from({ length: 8 }, (_, i) => row(`x${i}`, "applied", `2026-09-0${i + 1}T00:00:00Z`));
 const all = [...seven, ...extra];
 
-const chipNames = () =>
-  within(screen.getByRole("group", { name: "Filter applications" }))
-    .getAllByRole("button")
-    .map((b) => b.textContent);
-
-describe("ApplicationsSection chip row", () => {
-  it("is one non-wrapping, horizontally scrollable row with a hidden scrollbar", () => {
-    render(<ApplicationsSection rows={all} dueIds={new Set(["2"])} />);
-    const group = screen.getByRole("group", { name: "Filter applications" });
-    expect(group.className).toMatch(/flex-nowrap/);
-    expect(group.className).toMatch(/overflow-x-auto/);
-    expect(group.className).toMatch(/scrollbar-width:none/);
-    for (const b of within(group).getAllByRole("button")) expect(b.className).toMatch(/shrink-0/);
-  });
-
-  it("brings the active chip into view with the row's scrollLeft, never scrollIntoView", async () => {
-    const intoView = vi.fn();
-    Element.prototype.scrollIntoView = intoView;
-    const offsetLeft = vi.spyOn(HTMLElement.prototype, "offsetLeft", "get").mockReturnValue(300);
-    const offsetWidth = vi.spyOn(HTMLElement.prototype, "offsetWidth", "get").mockReturnValue(40);
-    const clientWidth = vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(100);
-    try {
-      const user = userEvent.setup({ delay: null });
-      render(<ApplicationsSection rows={all} />);
-      const group = screen.getByRole("group", { name: "Filter applications" });
-      await user.click(within(group).getByRole("button", { name: /^Closed/ }));
-      expect(group.scrollLeft).toBe(270);
-      expect(intoView).not.toHaveBeenCalled();
-    } finally {
-      offsetLeft.mockRestore();
-      offsetWidth.mockRestore();
-      clientWidth.mockRestore();
-    }
-  });
-});
-
-describe("ApplicationsSection initial scroll", () => {
-  it("starts at scrollLeft 0 on load, even though a chip is active", () => {
-    const offsetLeft = vi.spyOn(HTMLElement.prototype, "offsetLeft", "get").mockReturnValue(300);
-    const offsetWidth = vi.spyOn(HTMLElement.prototype, "offsetWidth", "get").mockReturnValue(40);
-    const clientWidth = vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(100);
-    try {
-      render(<ApplicationsSection rows={all} />);
-      expect(screen.getByRole("group", { name: "Filter applications" }).scrollLeft).toBe(0);
-    } finally {
-      offsetLeft.mockRestore();
-      offsetWidth.mockRestore();
-      clientWidth.mockRestore();
-    }
-  });
-});
+function Harness({ rows, dueIds, initial = "all", onSelect = () => {} }: { rows: ApplicationOut[]; dueIds?: ReadonlySet<string>; initial?: ChipId; onSelect?: (id: string) => void }) {
+  const [chip, setChip] = useState<ChipId>(initial);
+  return <ApplicationsSection rows={rows} dueIds={dueIds} chip={chip} onChipChange={setChip} onSelect={onSelect} />;
+}
 
 describe("ApplicationsSection", () => {
-  it("lists the chips in order with counts", () => {
-    render(<ApplicationsSection rows={all} />);
-    expect(chipNames()).toEqual(["Applied10", "Interviewing1", "Offer1", "Closed3", "All15"]);
+  it("is the Your applications region", () => {
+    render(<Harness rows={seven} />);
+    expect(screen.getByRole("region", { name: "Your applications" })).toBeInTheDocument();
   });
 
-  it("still shows a chip with zero", () => {
-    render(<ApplicationsSection rows={extra} />);
-    expect(chipNames()).toContain("Offer0");
-  });
-
-  it("filters by chip", async () => {
+  it("filters to the chosen status and says so, with a way back", async () => {
     const user = userEvent.setup({ delay: null });
-    render(<ApplicationsSection rows={all} />);
-    await user.click(screen.getByRole("button", { name: /^Interviewing/ }));
+    render(<Harness rows={all} initial="interviewing" />);
     expect(screen.getByText("Co 3")).toBeInTheDocument();
     expect(screen.queryByText("Co 4")).toBeNull();
+    expect(screen.getByText(/Showing:/)).toHaveTextContent("Showing: Interviewing");
+    await user.click(screen.getByRole("button", { name: "Show all applications" }));
+    expect(screen.getByText("Co 4")).toBeInTheDocument();
+    expect(screen.queryByText(/Showing:/)).toBeNull();
+  });
+
+  it("shows no filter line when nothing is filtered", () => {
+    render(<Harness rows={all} />);
+    expect(screen.queryByText(/Showing:/)).toBeNull();
   });
 
   it("says statuses in words", () => {
-    render(<ApplicationsSection rows={seven} />);
+    render(<Harness rows={seven} />);
     expect(screen.getByText("Rejected")).toBeInTheDocument();
     expect(screen.getByText("Position filled")).toBeInTheDocument();
     expect(screen.getByText("Screening")).toBeInTheDocument();
   });
 
-  it("shows the date of the last change on every row", () => {
-    render(<ApplicationsSection rows={[row("1", "applied", "2026-09-29T00:00:00Z")]} />);
-    expect(screen.getByText("29 Sep 2026")).toBeInTheDocument();
+  it("says when you applied and how long ago, else when it last changed", () => {
+    render(
+      <Harness
+        rows={[
+          row("1", "applied", "2026-10-10T00:00:00Z", null, { applied_at: "2026-09-29T00:00:00Z" }),
+          row("2", "interview", "2026-10-10T00:00:00Z", null, { status_history: [{ at: "2026-10-09T00:00:00Z" }] as never }),
+        ]}
+      />,
+    );
+    expect(screen.getByText("Applied 29 Sep 2026 · 12 days ago")).toBeInTheDocument();
+    expect(screen.getByText("Updated 9 Oct 2026 · 2 days ago")).toBeInTheDocument();
   });
 
-  it("shows ten rows and reveals the rest", async () => {
+  it("shows six rows and reveals the rest", async () => {
     const user = userEvent.setup({ delay: null });
-    render(<ApplicationsSection rows={all} />);
-    expect(within(screen.getByRole("list")).getAllByRole("listitem")).toHaveLength(10);
+    render(<Harness rows={all} />);
+    const list = () => within(screen.getByRole("region", { name: "Your applications" })).getAllByRole("listitem");
+    expect(list()).toHaveLength(6);
     await user.click(screen.getByRole("button", { name: "Show all 15" }));
-    expect(within(screen.getByRole("list")).getAllByRole("listitem")).toHaveLength(15);
+    expect(list()).toHaveLength(15);
+    expect(screen.queryByRole("button", { name: /^Show all \d+/ })).toBeNull();
   });
 
-  it("opens the application sheet from a row", async () => {
+  it("folds the list again when the filter changes", async () => {
     const user = userEvent.setup({ delay: null });
-    render(<ApplicationsSection rows={seven} />);
+    render(<Harness rows={all} initial="applied" />);
+    await user.click(screen.getByRole("button", { name: "Show all 10" }));
+    await user.click(screen.getByRole("button", { name: "Show all applications" }));
+    expect(screen.getByRole("button", { name: "Show all 15" })).toBeInTheDocument();
+  });
+
+  it("hands the clicked application to the page", async () => {
+    const user = userEvent.setup({ delay: null });
+    const onSelect = vi.fn();
+    render(<Harness rows={seven} onSelect={onSelect} />);
     await user.click(screen.getByText("Co 3"));
-    const dialog = await screen.findByRole("dialog", { name: "Co 3" });
-    expect(within(dialog).getByRole("combobox", { name: "Status" })).toBeInTheDocument();
+    expect(onSelect).toHaveBeenCalledWith("3");
+  });
+
+  describe("bar", () => {
+    it("is one image with the counts as its label", () => {
+      render(<Harness rows={all} />);
+      expect(screen.getByRole("img", { name: "10 applied, 1 interviewing, 1 offer, 3 closed" })).toBeInTheDocument();
+    });
+
+    it("sizes segments in proportion to the counts", () => {
+      render(<Harness rows={all} />);
+      const bar = screen.getByRole("img", { name: /applied/ });
+      const widths = Array.from(bar.children).map((c) => (c as HTMLElement).style.width);
+      expect(widths).toEqual(["66.66666666666666%", "6.666666666666667%", "6.666666666666667%", "20%"]);
+    });
+
+    it("lists the four counts in the legend", () => {
+      render(<Harness rows={all} />);
+      for (const text of ["Applied 10", "Interviewing 1", "Offer 1", "Closed 3"]) expect(screen.getByText(text)).toBeInTheDocument();
+    });
   });
 
   describe("follow-ups due", () => {
     const due = new Set(["2", "x1"]);
 
     it("badges only the rows whose follow-up is due", () => {
-      render(<ApplicationsSection rows={all} dueIds={due} />);
-      const items = within(screen.getByRole("list")).getAllByRole("listitem");
-      const badged = items.filter((li) => within(li).queryByText("Follow up"));
-      expect(badged).toHaveLength(1);
-      expect(within(badged[0]!).getByText("Co 2")).toBeInTheDocument();
+      render(<Harness rows={all} dueIds={due} initial="all" />);
+      // Both due rows are on top, so both show even though x1 is old.
+      const badged = screen.getAllByText("Follow up").map((b) => b.closest("li")!.textContent);
+      expect(badged).toEqual([expect.stringContaining("Co 2"), expect.stringContaining("Co x1")]);
     });
 
-    it("says how many are due and filters to them on click", async () => {
-      const user = userEvent.setup({ delay: null });
-      render(<ApplicationsSection rows={all} dueIds={due} />);
-      await user.click(screen.getByRole("button", { name: "2 follow-ups due" }));
-      const items = within(screen.getByRole("list")).getAllByRole("listitem");
-      expect(items.map((li) => li.textContent)).toEqual([expect.stringContaining("Co 2"), expect.stringContaining("Co x1")]);
+    it("lists due rows first, so one is never hidden behind Show all", () => {
+      render(<Harness rows={all} dueIds={new Set(["x0"])} />); // x0 is the oldest, last in date order
+      const first = within(screen.getByRole("region", { name: "Your applications" })).getAllByRole("listitem")[0]!;
+      expect(within(first).getByText("Co x0")).toBeInTheDocument();
+      expect(within(first).getByText("Follow up")).toBeInTheDocument();
     });
 
-    it("uses the singular for one", () => {
-      render(<ApplicationsSection rows={all} dueIds={new Set(["3"])} />);
-      expect(screen.getByRole("button", { name: "1 follow-up due" })).toBeInTheDocument();
-    });
-
-    it("sits last in the chip row, shows as a pressed chip, and un-presses the status chips", async () => {
-      const user = userEvent.setup({ delay: null });
-      render(<ApplicationsSection rows={all} dueIds={due} />);
-      const group = screen.getByRole("group", { name: "Filter applications" });
-      const buttons = within(group).getAllByRole("button");
-      const toggle = buttons[buttons.length - 1]!;
-      expect(toggle).toHaveTextContent("2 follow-ups due");
-      expect(toggle.className).not.toMatch(/underline/);
-      expect(within(group).getByRole("button", { name: /^All/ })).toHaveAttribute("aria-pressed", "true");
-      await user.click(toggle);
-      expect(toggle).toHaveAttribute("aria-pressed", "true");
-      expect(toggle.className).toMatch(/border-primary/);
-      expect(toggle.className).toMatch(/bg-primary\/10/);
-      expect(within(group).getByRole("button", { name: /^All/ })).toHaveAttribute("aria-pressed", "false");
-      expect(within(group).getByRole("button", { name: /^All/ }).className).not.toMatch(/border-primary/);
-    });
-
-    it("is hidden when nothing is due", () => {
-      render(<ApplicationsSection rows={all} dueIds={new Set()} />);
-      expect(screen.queryByText(/follow-ups? due/)).toBeNull();
+    it("shows no badge when nothing is due", () => {
+      render(<Harness rows={all} dueIds={new Set()} />);
       expect(screen.queryByText("Follow up")).toBeNull();
     });
 
     it("ignores due ids that match no row", () => {
-      render(<ApplicationsSection rows={seven} dueIds={new Set(["gone"])} />);
-      expect(screen.queryByText(/follow-ups? due/)).toBeNull();
+      render(<Harness rows={seven} dueIds={new Set(["gone"])} />);
+      expect(screen.queryByText("Follow up")).toBeNull();
     });
+  });
+
+  describe("tip", () => {
+    const sent = (id: string, daysAgo: number, extra: Partial<ApplicationOut> = {}) =>
+      row(id, "applied", "2026-10-10T00:00:00Z", null, { applied_at: new Date(NOW.getTime() - daysAgo * 86_400_000).toISOString(), ...extra });
+
+    it("asks about an application sent seven days ago and opens its sheet", async () => {
+      const user = userEvent.setup({ delay: null });
+      const onSelect = vi.fn();
+      render(<Harness rows={[sent("a", 7)]} onSelect={onSelect} />);
+      expect(screen.getByText("Heard back from Co a?")).toBeInTheDocument();
+      expect(screen.getByText("Mark the reply so your dashboard stays current.")).toBeInTheDocument();
+      await user.click(screen.getByRole("button", { name: "Update status →" }));
+      expect(onSelect).toHaveBeenCalledWith("a");
+    });
+
+    it("stays away at six days, and when a follow-up date is set", () => {
+      render(<Harness rows={[sent("a", 6), sent("b", 30, { follow_up_at: "2026-10-20T00:00:00Z" })]} />);
+      expect(screen.queryByText(/Heard back from/)).toBeNull();
+    });
+  });
+
+  it("says so when the filter matches nothing", () => {
+    render(<Harness rows={extra} initial="offer" />);
+    expect(screen.getByText("Nothing here yet.")).toBeInTheDocument();
   });
 });

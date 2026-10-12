@@ -120,9 +120,8 @@ export default function JobPage() {
                 // land the reviewer on the specific violation, not just the package — "here is
                 // what to fix" is the whole point of surfacing guardrails on the job page.
                 onSelect={(path) => router.push(`/jobs/${job.data.id}/packages/${latest.id}?path=${encodeURIComponent(path)}`)}
-                // A completeness row names a block absent from the document, so there is no node to
-                // deep-link to; it still takes the reviewer to the package.
-                nodelessHref={`/jobs/${job.data.id}/packages/${latest.id}`}
+                // No nodelessHref on purpose: a row that names no node would link to the same page as the
+                // header's "Fix and review", leaving two links to one place.
               />
             ) : (
               <Skeleton className="h-40 w-full rounded-card" />

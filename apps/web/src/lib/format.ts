@@ -15,6 +15,16 @@ export function formatRelative(iso: string, now: Date = new Date()): string {
   return `${Math.round(hours / 24)}d ago`;
 }
 
+/** "today", "yesterday", "12 days ago", "2 months ago": the wordy version of `formatRelative`, for rows that
+ * say when something happened. A future date reads as today. */
+export function formatDaysAgo(iso: string, now: Date = new Date()): string {
+  const days = Math.floor((now.getTime() - new Date(iso).getTime()) / 86_400_000);
+  if (!(days >= 1)) return "today";
+  if (days === 1) return "yesterday";
+  if (days < 60) return `${days} days ago`;
+  return `${Math.floor(days / 30)} months ago`;
+}
+
 export function truncate(text: string, max: number): string {
   return text.length > max ? `${text.slice(0, max - 1)}…` : text;
 }

@@ -14,7 +14,7 @@ import { StatusBadge } from "@/components/ui/StatusBadge";
 import { Textarea } from "@/components/ui/textarea";
 import { ApiError } from "@/lib/api/client";
 import { packageKeys, useBlocks, useDeleteBlock, usePutBlock, type Block } from "@/lib/api/queries";
-import { datelessBlocks } from "@/lib/blocks";
+import { blockLabel, datelessBlocks } from "@/lib/blocks";
 import { BLOCK_TYPES, blockToForm, emptyBlockForm, formToBlock, validateBlockForm, type BlockForm } from "@/lib/profile-forms";
 import { EntityTable } from "./EntityTable";
 import { CheckboxField } from "./fields";
@@ -64,7 +64,7 @@ export function BlocksTab() {
    */
   async function patchBlock(id: string, patch: Partial<Block>): Promise<Block> {
     const current = readBlock(id);
-    if (!current) throw new Error(`${id} is no longer available — it may have just been deleted.`);
+    if (!current) throw new Error("That item is no longer available — it may have just been deleted.");
     const next: Block = { ...current, ...patch };
     setPendingIds((s) => new Set(s).add(id));
     try {
@@ -94,7 +94,7 @@ export function BlocksTab() {
     if (Object.keys(v).length) return;
     try {
       await put.mutateAsync(formToBlock(form));
-      toast.success(`Saved ${form.id}`);
+      toast.success(`Saved ${blockLabel(form)}`);
       setForm(null);
     } catch (e) {
       toast.error(e instanceof ApiError ? e.message : "Could not save the item");
@@ -104,14 +104,14 @@ export function BlocksTab() {
   async function toggleVerified(id: string) {
     const current = readBlock(id);
     if (!current) {
-      toast.error(`${id} is no longer available — it may have just been deleted.`);
+      toast.error("That item is no longer available — it may have just been deleted.");
       return;
     }
     const target = !current.verified;
     const previousVerified = current.verified;
     try {
       await patchBlock(id, { verified: target });
-      toast.success(`${target ? "Confirmed" : "Marked not confirmed yet:"} ${id}`, {
+      toast.success(`${target ? "Confirmed" : "Marked not confirmed yet:"} ${blockLabel(current)}`, {
         duration: 8000,
         action: {
           label: "Undo",
@@ -149,7 +149,7 @@ export function BlocksTab() {
     if (period === editingOriginalPeriod) return;
     try {
       await patchBlock(id, { period });
-      toast.success(`Saved ${id}`);
+      toast.success(`Saved ${blockLabel(readBlock(id) ?? { id })}`);
     } catch (e) {
       toast.error(e instanceof ApiError ? e.message : "Could not save the period");
     }
@@ -158,10 +158,15 @@ export function BlocksTab() {
   if (blocks.isLoading) return <Skeleton className="h-40 w-full" />;
   if (blocks.error) return <ApiErrorBanner error={blocks.error} />;
   const set = (patch: Partial<BlockForm>) => setForm((f) => (f ? { ...f, ...patch } : f));
-  const field = (id: keyof BlockForm, label: string, autoFocus = false) => (
+  const field = (id: keyof BlockForm, label: string, autoFocus = false, hint?: string) => (
     <div className="space-y-1">
       <Label htmlFor={`block-${id}`}>{label}</Label>
-      <Input id={`block-${id}`} autoFocus={autoFocus} value={String(form?.[id] ?? "")} onChange={(e) => set({ [id]: e.target.value } as Partial<BlockForm>)} disabled={id === "id" && !isNew} />
+      <Input id={`block-${id}`} autoFocus={autoFocus} value={String(form?.[id] ?? "")} onChange={(e) => set({ [id]: e.target.value } as Partial<BlockForm>)} disabled={id === "id" && !isNew} aria-describedby={hint ? `block-${id}-hint` : undefined} />
+      {hint ? (
+        <p id={`block-${id}-hint`} className="text-xs text-muted-foreground">
+          {hint}
+        </p>
+      ) : null}
       {errors[id] ? <p className="text-xs text-destructive">{errors[id]}</p> : null}
     </div>
   );
@@ -196,21 +201,29 @@ export function BlocksTab() {
       <EntityTable<Block>
         rows={rows}
         getKey={(b) => b.id}
-        getLabel={(b) => b.id}
+        getLabel={blockLabel}
         emptyText="Nothing here yet. Add an item, or add from a resume in Settings."
         onEdit={open}
         onDelete={async (b) => {
           try {
             await remove.mutateAsync(b.id);
-            toast.success(`Deleted ${b.id}`);
+            toast.success(`Deleted ${blockLabel(b)}`);
           } catch (e) {
             toast.error(e instanceof ApiError ? e.message : "Could not delete the item");
           }
         }}
         columns={[
-          { key: "id", header: "Short ID", render: (b) => <span className="font-mono text-xs">{b.id}</span> },
+          {
+            key: "org",
+            header: "Employer / role",
+            render: (b) => (
+              <div className="space-y-0.5">
+                <div className="break-words font-medium">{[b.org, b.role].filter(Boolean).join(" · ") || b.type}</div>
+                {b.content.trim() ? <div className="line-clamp-2 break-words text-xs text-muted-foreground">{b.content}</div> : null}
+              </div>
+            ),
+          },
           { key: "type", header: "Type", render: (b) => b.type },
-          { key: "org", header: "Employer / role", render: (b) => [b.org, b.role].filter(Boolean).join(" · ") },
           {
             key: "period",
             header: "Period",
@@ -218,7 +231,7 @@ export function BlocksTab() {
               editingPeriodId === b.id ? (
                 <Input
                   autoFocus
-                  aria-label={`Period ${b.id}`}
+                  aria-label={`Period ${blockLabel(b)}`}
                   value={periodDraft}
                   onChange={(e) => setPeriodDraft(e.target.value)}
                   onKeyDown={(e) => {
@@ -248,9 +261,9 @@ export function BlocksTab() {
               ) : (
                 <button
                   type="button"
-                  aria-label={`Edit period for ${b.id}`}
+                  aria-label={`Edit period for ${blockLabel(b)}`}
                   onClick={() => startEditingPeriod(b)}
-                  className="rounded-sm px-1 -mx-1 text-left hover:bg-muted focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring"
+                  className="inline-flex items-center rounded-sm px-1 -mx-1 text-left hover:bg-muted max-md:min-h-11 focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring"
                 >
                   {b.period ?? <span className="text-muted-foreground">Add period</span>}
                 </button>
@@ -264,8 +277,10 @@ export function BlocksTab() {
                 type="button"
                 variant="ghost"
                 size="sm"
+                // Wraps instead of forcing the badge's one-line width, so long text can never overflow.
+                className="h-auto max-w-full"
                 aria-pressed={b.verified}
-                aria-label={`Toggle confirmed for ${b.id}`}
+                aria-label={`Toggle confirmed for ${blockLabel(b)}`}
                 onClick={() => void toggleVerified(b.id)}
                 disabled={pendingIds.has(b.id)}
               >
@@ -278,7 +293,7 @@ export function BlocksTab() {
       <Dialog open={form !== null} onOpenChange={(o) => !o && setForm(null)}>
         <DialogContent className="flex max-h-[85vh] flex-col overflow-hidden sm:max-w-lg">
           <DialogHeader>
-            <DialogTitle>{isNew ? "New item" : `Edit ${form?.id}`}</DialogTitle>
+            <DialogTitle>{isNew ? "New item" : "Edit item"}</DialogTitle>
           </DialogHeader>
           {form ? (
             <div className="min-h-0 flex-1 space-y-4 overflow-y-auto pr-1">
@@ -295,7 +310,7 @@ export function BlocksTab() {
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-3">
-                {field("id", "Short ID")}
+                {field("id", "Short name (used inside Rhapto)", false, "Letters, numbers and dashes. You can't change it later.")}
                 <div className="space-y-1">
                   <Label>Type</Label>
                   <Select value={form.type} onValueChange={(type) => type && set({ type })}>

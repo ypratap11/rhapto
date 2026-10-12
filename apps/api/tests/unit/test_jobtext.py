@@ -1,3 +1,5 @@
+import ipaddress
+
 import httpx
 import pytest
 
@@ -134,6 +136,63 @@ async def test_rejects_ipv4_mapped_and_nat64_loopback(monkeypatch: pytest.Monkey
     monkeypatch.setattr(jobtext, "resolve_host", lambda host: ["64:ff9b::7f00:1"])
     with pytest.raises(JobTextError, match="not allowed"):
         await fetch_job_text("http://example.com/jobs")
+
+
+BLOCKED_ADDRESSES = [
+    "100.64.0.1",  # CGNAT, low end
+    "100.127.255.254",  # CGNAT, high end
+    "::ffff:100.64.0.1",  # IPv4-mapped CGNAT
+    "::ffff:127.0.0.1",
+    "2002:7f00:1::",  # 6to4 wrapping 127.0.0.1
+    "2002:808:808::1",  # 6to4 wrapping 8.8.8.8: blocked by design
+    "64:ff9b::7f00:1",
+    "64:ff9b::808:808",  # NAT64 wrapping 8.8.8.8: blocked by design
+    "64:ff9b:1::1",  # RFC 8215 local-use NAT64
+    "127.0.0.1",
+    "10.0.0.1",
+    "169.254.169.254",
+    "::1",
+]
+PUBLIC_ADDRESSES = [
+    "8.8.8.8",
+    "100.63.255.255",  # just below CGNAT
+    "100.128.0.0",  # just above CGNAT
+    "::ffff:8.8.8.8",
+    "2606:4700::1111",
+]
+
+
+@pytest.mark.parametrize("address", BLOCKED_ADDRESSES)
+def test_is_blocked_refuses_non_public_addresses(address: str) -> None:
+    assert jobtext._is_blocked(ipaddress.ip_address(address)) is True
+
+
+@pytest.mark.parametrize("address", PUBLIC_ADDRESSES)
+def test_is_blocked_allows_public_addresses(address: str) -> None:
+    assert jobtext._is_blocked(ipaddress.ip_address(address)) is False
+
+
+@pytest.mark.parametrize("address", BLOCKED_ADDRESSES)
+async def test_public_addresses_rejects_blocked(
+    monkeypatch: pytest.MonkeyPatch, address: str
+) -> None:
+    monkeypatch.setattr(jobtext, "resolve_host", lambda host: [address])
+    with pytest.raises(JobTextError, match="not allowed"):
+        await jobtext.public_addresses("example.com")
+
+
+@pytest.mark.parametrize("address", PUBLIC_ADDRESSES)
+async def test_public_addresses_passes_public(
+    monkeypatch: pytest.MonkeyPatch, address: str
+) -> None:
+    monkeypatch.setattr(jobtext, "resolve_host", lambda host: [address])
+    assert await jobtext.public_addresses("example.com") == [address]
+
+
+async def test_one_blocked_record_rejects_the_host(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(jobtext, "resolve_host", lambda host: ["8.8.8.8", "100.64.0.1"])
+    with pytest.raises(JobTextError, match="not allowed"):
+        await jobtext.public_addresses("example.com")
 
 
 async def test_oversized_body_is_rejected() -> None:

@@ -27,7 +27,22 @@ afterEach(() => {
   mutateAsync.mockReset();
 });
 
+const BANNED = /\.env|RHAPTO_API_TOKEN|rapidapi_key|app_key|app_id|LLM|tokens|\bpoll|\bblocks?\b|\bbases?\b|\btracks?\b|guardrails?|provenance|verified|docs\/|database|rhapto profile/i;
+
 describe("RegenerateDialog", () => {
+  it("uses no technical words in the open dialog, in text or aria-labels", () => {
+    resumeDocument = { filename: "Maya_Chen_Resume.docx" };
+    render(<RegenerateDialog job={job} pkg={pkg} open onOpenChange={() => undefined} />);
+    const dialog = screen.getByRole("dialog");
+    const body = dialog.cloneNode(true) as HTMLElement;
+    body.querySelectorAll("details").forEach((d) => d.remove());
+    expect((body.textContent ?? "").match(BANNED)?.[0] ?? null).toBeNull();
+    const labels = Array.from(body.querySelectorAll("[aria-label]")).map((el) => el.getAttribute("aria-label") ?? "");
+    for (const label of labels) expect(label).not.toMatch(BANNED);
+    // Not a vacuous pass: the dialog really rendered its form.
+    expect(body.textContent).toMatch(/feedback/i);
+  });
+
   it("requires feedback and posts it with the parent package id", async () => {
     mutateAsync.mockResolvedValueOnce({ id: "t1", status: "running" });
     render(<RegenerateDialog job={job} pkg={pkg} open onOpenChange={() => undefined} />);

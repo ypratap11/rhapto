@@ -56,7 +56,7 @@ test.beforeAll(async () => {
 
 async function tailorInBlocksMode(page: Page, jobId: string): Promise<void> {
   await page.goto(`/jobs/${jobId}`);
-  // Explicit "Build from blocks" — see dashboard.spec.ts for why the default must not be trusted.
+  // Explicit "Full rewrite" (Options) — see dashboard.spec.ts for why the default must not be trusted.
   await page.getByText("Options", { exact: true }).click();
   await page.getByRole("radio", { name: /Full rewrite/ }).check();
   await page.getByRole("button", { name: "Tailor my resume for this job" }).click();

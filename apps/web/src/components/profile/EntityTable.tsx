@@ -4,9 +4,8 @@ import { Pencil, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
-export type ColumnDef<T> = { key: string; header: string; render: (row: T) => React.ReactNode; className?: string };
+export type ColumnDef<T> = { key: string; header: string; render: (row: T) => React.ReactNode };
 
 export function EntityTable<T>({
   columns,
@@ -29,26 +28,29 @@ export function EntityTable<T>({
   if (rows.length === 0) return <p className="py-6 text-sm text-muted-foreground">{emptyText}</p>;
   return (
     <>
-      <Table>
-        <TableHeader>
-          <TableRow>
-            {columns.map((c) => (
-              <TableHead key={c.key} className={c.className}>
-                {c.header}
-              </TableHead>
-            ))}
-            <TableHead className="w-24" />
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {rows.map((row) => (
-            <TableRow key={getKey(row)}>
-              {columns.map((c) => (
-                <TableCell key={c.key} className={c.className}>
-                  {c.render(row)}
-                </TableCell>
-              ))}
-              <TableCell className="text-right">
+      {/* A stacked card list, not a <table>: the editors open in a side sheet only ~520px wide (and the
+        * screen is 375px on a phone), where a table of nowrap cells outgrew its box and pushed Edit and
+        * Delete out of view. Cards wrap their content, so nothing here depends on the container width and
+        * no horizontal scroller is needed. The first column is the row's title; the rest are labelled. */}
+      <ul className="space-y-2">
+        {rows.map((row) => {
+          const [title, ...rest] = columns;
+          return (
+            <li key={getKey(row)} data-slot="entity-row" className="flex items-start gap-2 rounded-card border border-border bg-surface p-3 text-sm">
+              <div className="min-w-0 flex-1 space-y-1.5">
+                {title ? <div className="min-w-0 break-words">{title.render(row)}</div> : null}
+                {rest.length > 0 ? (
+                  <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
+                    {rest.map((c) => (
+                      <div key={c.key} className="flex min-w-0 max-w-full flex-wrap items-center gap-x-1.5 gap-y-1">
+                        <span className="shrink-0 text-muted-foreground">{c.header}</span>
+                        <div className="min-w-0 break-words text-sm">{c.render(row)}</div>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+              <div className="flex shrink-0 items-center">
                 <Button variant="ghost" size="icon" className="max-md:min-h-11 max-md:min-w-11" aria-label={`Edit ${getLabel(row)}`} onClick={() => onEdit(row)}>
                   <Pencil className="size-4" aria-hidden />
                 </Button>
@@ -57,11 +59,11 @@ export function EntityTable<T>({
                     <Trash2 className="size-4" aria-hidden />
                   </Button>
                 ) : null}
-              </TableCell>
-            </TableRow>
-          ))}
-        </TableBody>
-      </Table>
+              </div>
+            </li>
+          );
+        })}
+      </ul>
       <AlertDialog open={pending !== null} onOpenChange={(o) => !o && setPending(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>

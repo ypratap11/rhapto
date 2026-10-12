@@ -49,6 +49,9 @@ async function createApplication(page: Page, job: JobSummary): Promise<void> {
  * company and role together: this dev stack already has several applications at the same company. */
 async function openApplication(page: Page, job: JobSummary) {
   const section = page.getByRole("region", { name: "Your applications" });
+  // The list shows six rows; an older application sits behind "Show all".
+  const more = section.getByRole("button", { name: /^Show all \d+$/ });
+  if (await more.isVisible()) await more.click();
   await section.getByRole("button", { name: job.company ?? "" }).filter({ hasText: job.title ?? "" }).click();
   return page.getByRole("dialog", { name: job.company ?? "" });
 }
@@ -80,8 +83,8 @@ test("an application moves to Interviewing in its sheet, takes a follow-up, then
   await expect(page.getByText("Follow-up saved")).toBeVisible();
   await page.keyboard.press("Escape");
 
-  // The Interviewing chip now holds it.
-  await page.getByRole("button", { name: /^Interviewing/ }).click();
+  // The Interviewing tile now counts it; its accessible name starts with the count.
+  await page.getByRole("button", { name: /^\d+\s*Interviewing/ }).click();
   sheet = await openApplication(page, job);
 
   await sheet.getByRole("combobox", { name: "Status" }).click();

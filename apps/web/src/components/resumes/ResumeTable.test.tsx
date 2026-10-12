@@ -1,5 +1,5 @@
 import { render, screen, within } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { PackageListItem } from "@/lib/api/queries";
 import { ResumeTable } from "./ResumeTable";
 
@@ -45,9 +45,22 @@ describe("ResumeTable rows", () => {
     expect(links).toHaveLength(2);
     expect(links[0]).toHaveAttribute("href", "/jobs/j1/packages/p1");
     expect(links[1]).toHaveAttribute("href", "/jobs/j2/packages/p2");
-    expect(links[0]).toHaveAccessibleName("ExampleCo, Technical Program Manager, Draft");
-    expect(links[1]).toHaveAccessibleName("Globex, Technical Program Manager, Needs attention");
+    expect(links[0]).toHaveAccessibleName(/^ExampleCo, Technical Program Manager, Draft, made (just now|\d+[mhd] ago)$/);
+    expect(links[1]).toHaveAccessibleName(/^Globex, Technical Program Manager, Needs attention, made (just now|\d+[mhd] ago)$/);
     expect(links[0]!.className).toContain("min-h-11");
+  });
+
+  it("tells two identical rows apart with when each was made", () => {
+    const now = new Date("2026-09-13T12:00:00Z").getTime();
+    vi.useFakeTimers({ now });
+    try {
+      render(<ResumeTable rows={[row, { ...row, id: "p2", created_at: "2026-09-10T12:00:00Z" }]} />);
+      const links = screen.getAllByRole("link");
+      expect(within(links[0]!).getByText("Made 3h ago")).toBeInTheDocument();
+      expect(within(links[1]!).getByText("Made 3d ago")).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("has no buttons and no row actions, and none of the old columns", () => {
@@ -60,7 +73,7 @@ describe("ResumeTable rows", () => {
 
   it("falls back to readable words for a missing company or title", () => {
     render(<ResumeTable rows={[{ ...row, company: null, title: null }]} />);
-    expect(screen.getByRole("link")).toHaveAccessibleName("Unknown company, Untitled role, Draft");
+    expect(screen.getByRole("link")).toHaveAccessibleName(/^Unknown company, Untitled role, Draft, made /);
   });
 
   it("shows an unknown status as it came rather than hiding the row", () => {

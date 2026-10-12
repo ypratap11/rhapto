@@ -58,7 +58,7 @@ export function ProfileSummaryCard({
           <SheetHeader>
             <SheetTitle>{title}</SheetTitle>
           </SheetHeader>
-          {children}
+          <div className="px-4 pb-4">{children}</div>
         </SheetContent>
       </Sheet>
     </div>

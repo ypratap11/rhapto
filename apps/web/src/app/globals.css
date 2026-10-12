@@ -32,6 +32,8 @@
   --color-fit-mid-bg: var(--fit-mid-bg);
   --color-fit-low: var(--fit-low);
   --color-fit-low-bg: var(--fit-low-bg);
+  --color-tone-blue: var(--tone-blue);
+  --color-tone-blue-bg: var(--tone-blue-bg);
   --color-diff-add: var(--diff-add);
   --color-diff-add-bg: var(--diff-add-bg);
   --color-diff-del: var(--diff-del);
@@ -127,6 +129,9 @@
   --fit-mid-bg: #f8e9cf;
   --fit-low: #6b6259;
   --fit-low-bg: #f1ece4;
+  /* Interviewing tone (dashboard tile, applications bar): a calm blue, distinct from teal (done) and amber (offer). */
+  --tone-blue: #2f5f9e;
+  --tone-blue-bg: #e4ecf7;
   --diff-add: #2b7349;
   --diff-add-bg: #dff0e5;
   --diff-del: #a32d2d;
@@ -195,6 +200,8 @@
   --fit-mid-bg: #3f2d10;
   --fit-low: #b3a89c;
   --fit-low-bg: #2b2622;
+  --tone-blue: #8fb5ea;
+  --tone-blue-bg: #1e2a3b;
   --diff-add: #7fd19a;
   --diff-add-bg: #1f3d2b;
   --diff-del: #f08a8a;
@@ -295,6 +302,14 @@
 /* The highlighter under one headline word: a background gradient on a span, not <mark>. */
 @utility highlight-underline {
   background-image: linear-gradient(transparent 62%, color-mix(in srgb, var(--decor-amber) 55%, transparent) 62% 92%, transparent 92%);
+}
+
+/* Signed-in page heroes (PageHero): a warm wash top-left and a mint one top-right, both fading into the
+ * page background. Only existing glow and band tokens, so every text colour that already passes on them passes here. */
+@utility bg-page-hero {
+  background-image:
+    radial-gradient(ellipse 70% 100% at 15% 0%, color-mix(in srgb, var(--glow-from) 80%, var(--glow-to)), transparent 75%),
+    radial-gradient(ellipse 50% 90% at 90% 10%, color-mix(in srgb, var(--band-mint) 70%, var(--glow-to)), transparent 75%);
 }
 
 /* The hover lift used by cards and rows: shadow plus a 1px rise, 150ms ease-out. */

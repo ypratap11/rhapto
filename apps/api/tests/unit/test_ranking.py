@@ -138,6 +138,10 @@ def test_wants_company_spread(sort: str, recommended: bool, expected: bool) -> N
         ("Acme", "Acme Inc"),
         ("Amazon.com", "Amazon"),
         ("Acme Corporation", "acme"),
+        # Pinned as-is (ruling 2026-10-11): a trailing "Ag" or "Co" is stripped like any legal suffix.
+        # No real company in the data needed them kept, so behaviour stays until a failing case shows up.
+        ("Acme Ag", "Acme"),
+        ("Foo Co", "Foo"),
     ],
 )
 def test_legal_suffix_and_dotcom_noise_collapse(a: str, b: str) -> None:
@@ -148,7 +152,7 @@ def test_legal_suffix_and_dotcom_noise_collapse(a: str, b: str) -> None:
     ("a", "b"),
     [
         ("Amazon Web Services", "Amazon"),
-        ("Amazon.com Services LLC", "Amazon"),
+        ("Amazon.com Services LLC", "Amazon"),  # owner confirmed: stays separate from "Amazon"
         ("X Labs", "X"),
         ("Acme Group", "Acme"),
     ],

@@ -48,7 +48,7 @@ const tunePackage = {
 const pkg = { current: tunePackage };
 const one = [{ id: "pkg-1", version: 1, status: "blocked", created_at: "2026-09-11T00:00:00Z" }];
 const blockList: unknown[] = [];
-const state = { versions: one as unknown[], queue: [] as unknown[], jobTitle: "Staff Engineer" as string | null };
+const state = { versions: one as unknown[], queue: [] as unknown[], jobTitle: "Staff Engineer" as string | null, applications: {} as Record<string, unknown[]> };
 vi.mock("@/components/review/useArchiveAndHide", () => ({ useArchiveAndHide: () => ({ archiveAndHide: vi.fn(), isPending: false }) }));
 
 vi.mock("@/lib/api/queries", () => ({
@@ -56,7 +56,7 @@ vi.mock("@/lib/api/queries", () => ({
   usePackage: () => ({ data: pkg.current, error: null }),
   usePackages: () => ({ data: state.versions, error: null }),
   useBlocks: () => ({ data: blockList, error: null }),
-  useApplications: () => ({ data: { columns: {} }, error: null }),
+  useApplications: () => ({ data: { columns: state.applications }, error: null }),
   usePackageList: () => ({ data: state.queue, error: null }),
   useMarkPackageReady: () => ({ mutateAsync: vi.fn(), isPending: false }),
   usePatchPackage: () => ({ mutateAsync: vi.fn() }),
@@ -127,6 +127,23 @@ describe("PackageReviewPage", () => {
     render(<PackageReviewPage />);
     expect(screen.getByTestId("resume-header")).toHaveTextContent("Draft");
     expect(screen.getByRole("button", { name: "Mark ready to send" })).toBeInTheDocument();
+  });
+
+  it("says Needs attention for a blocked resume even when an application already exists", () => {
+    pkg.current = tunePackage;
+    state.applications = { applied: [{ id: "a1", status: "applied", job: { id: "j1" } }] };
+    render(<PackageReviewPage />);
+    expect(screen.getByTestId("resume-header")).toHaveTextContent("Needs attention");
+    expect(screen.getByTestId("resume-header")).not.toHaveTextContent(/applied/i);
+    state.applications = {};
+  });
+
+  it("shows Applied for an applied job whose resume is not blocked", () => {
+    pkg.current = { ...tunePackage, status: "ready" } as unknown as PackageOut;
+    state.applications = { applied: [{ id: "a1", status: "applied", job: { id: "j1" } }] };
+    render(<PackageReviewPage />);
+    expect(screen.getByTestId("resume-header")).toHaveTextContent("Applied");
+    state.applications = {};
   });
 
   it("ends with the next resume to review when there is one", () => {

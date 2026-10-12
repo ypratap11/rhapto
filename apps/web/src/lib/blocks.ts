@@ -18,3 +18,21 @@ export function isDateless(block: { period?: string | null }): boolean {
 export function datelessBlocks<T extends { period?: string | null }>(blocks: readonly T[]): T[] {
   return blocks.filter(isDateless);
 }
+
+function snippet(text: string | null | undefined, max: number): string {
+  const flat = (text ?? "").replace(/\s+/g, " ").trim();
+  return flat.length > max ? `${flat.slice(0, max).trimEnd()}…` : flat;
+}
+
+/**
+ * A human name for one row of "Your experience", used in button labels, the delete confirmation and
+ * toasts so the internal short name never leaks to the screen. Several achievements share one
+ * employer and role, so the label adds the start of the item's own text to stay unique per row:
+ * `org · role: text`, else the text alone, else the employer/role, else the short name.
+ */
+export function blockLabel(block: { id: string; org?: string | null; role?: string | null; content?: string | null }): string {
+  const who = [block.org, block.role].filter(Boolean).join(" · ");
+  const text = snippet(block.content, 40);
+  if (who && text) return `${who}: ${text}`;
+  return text || who || block.id;
+}
