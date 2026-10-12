@@ -45,9 +45,25 @@ describe("ResumeTable rows", () => {
     expect(links).toHaveLength(2);
     expect(links[0]).toHaveAttribute("href", "/jobs/j1/packages/p1");
     expect(links[1]).toHaveAttribute("href", "/jobs/j2/packages/p2");
-    expect(links[0]).toHaveAccessibleName(/^ExampleCo, Technical Program Manager, Draft, made (just now|\d+[mhd] ago)$/);
-    expect(links[1]).toHaveAccessibleName(/^Globex, Technical Program Manager, Needs attention, made (just now|\d+[mhd] ago)$/);
+    expect(links[0]).toHaveAccessibleName(/^ExampleCo, Technical Program Manager, Draft, made (just now|\d+[mhd] ago), (Light touch|Full rewrite)$/);
+    expect(links[1]).toHaveAccessibleName(/^Globex, Technical Program Manager, Needs attention, made (just now|\d+[mhd] ago), (Light touch|Full rewrite)$/);
     expect(links[0]!.className).toContain("min-h-11");
+  });
+
+  it("names the mode in the meta line and at the end of the link's name", () => {
+    render(<ResumeTable rows={[row, { ...row, id: "p2", mode: "blocks" }]} />);
+    const [tune, blocks] = screen.getAllByRole("link");
+    expect(within(tune!).getByText("Light touch")).toBeInTheDocument();
+    expect(tune).toHaveAccessibleName(/, Light touch$/);
+    expect(within(blocks!).getByText("Full rewrite")).toBeInTheDocument();
+    expect(blocks).toHaveAccessibleName(/, Full rewrite$/);
+  });
+
+  it("has no header row, and the action is a plain element inside the link", () => {
+    render(<ResumeTable rows={[row]} />);
+    for (const col of ["Company", "Role", "Fit", "Status"]) expect(screen.queryByText(col, { exact: true })).not.toBeInTheDocument();
+    const action = within(screen.getByRole("link")).getByText("Review", { exact: true });
+    expect(action.tagName).toBe("SPAN");
   });
 
   it("tells two identical rows apart with when each was made", () => {
