@@ -34,18 +34,18 @@ afterEach(() => {
 });
 
 describe("Landing, the light front door", () => {
-  it("has a hero, a tour, three steps, one proof and a closing call to action", () => {
+  it("has a hero with the proof box, a tour, three steps and a closing call to action", () => {
     const { container } = render(<Landing />);
     expect(screen.getAllByTestId("hero-band")).toHaveLength(1);
     expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);
-    expect(container.querySelectorAll("section")).toHaveLength(4); // tour + steps + proof + closing; the hero is a band
+    expect(container.querySelectorAll("section")).toHaveLength(3); // tour + steps + closing; the hero (with the proof box) is a band
     const steps = within(screen.getByRole("list", { name: /three steps/i })).getAllByRole("listitem");
     expect(steps.map((li) => li.textContent)).toEqual([
       expect.stringContaining("Upload your resume"),
       expect.stringContaining("Pick a job"),
       expect.stringContaining("Download your tailored resume"),
     ]);
-    expect(screen.getByText("Rhapto stopped this draft: 45 is not in your resume.")).toBeInTheDocument();
+    expect(container.querySelector("section[aria-labelledby='proof-heading']")).toBeNull(); // the proof lives in the hero now
   });
 
   it("hosted: Tailor my resume -> /start; request-access appears in the hero and the closing CTA only (not under the tour); no Sign in", () => {
@@ -97,13 +97,38 @@ describe("Landing, the light front door", () => {
   it("hero copy: headline, subline, one facts line, free-limit line; no badge", () => {
     render(<Landing />);
     expect(screen.getByText(/first resume import and 5 AI runs are on us/)).toBeInTheDocument();
-    expect(screen.getByText("Upload your resume, pick a job, and get your own document rewritten for it.")).toBeInTheDocument();
+    expect(screen.getByText("Tailored to each job — every number checked against your resume.")).toBeInTheDocument();
     expect(screen.getByText("Open source · You always submit · Every number checked")).toBeInTheDocument();
     expect(screen.queryByText("Every number checked against your resume")).toBeNull();
     expect(screen.queryByText(/Your own document$/)).toBeNull();
     expect(screen.getByRole("heading", { level: 1 }).className).toContain("font-semibold");
-    expect(screen.getByText("defend").tagName).toBe("SPAN");
-    expect(screen.getByText("defend").className).toContain("highlight-underline");
+    const h1 = screen.getByRole("heading", { level: 1 });
+    expect(h1.textContent).toBe("AI resumes make things up. Rhapto doesn’t.");
+    const mark = screen.getByText("Rhapto doesn’t.");
+    expect(mark.tagName).toBe("SPAN");
+    expect(mark.className).toContain("highlight-underline");
+    expect(h1.querySelectorAll(".highlight-underline")).toHaveLength(1);
+  });
+
+  it("hero order: h1, subline, proof box, CTA, request line, trust line, free-limit line; the tour follows the column", () => {
+    render(<Landing />);
+    const hero = screen.getByTestId("hero-band");
+    const nodes = [
+      screen.getByRole("heading", { level: 1 }),
+      screen.getByText("Tailored to each job — every number checked against your resume."),
+      screen.getByText("Your resume"),
+      within(hero).getByRole("link", { name: "Tailor my resume" }),
+      within(hero).getByRole("link", { name: "Request beta access" }),
+      screen.getByText("Open source · You always submit · Every number checked"),
+      screen.getByText(/first resume import and 5 AI runs are on us/),
+      hero.querySelector("section#tour") as HTMLElement,
+    ];
+    for (let i = 1; i < nodes.length; i++) {
+      expect(nodes[i - 1]!.compareDocumentPosition(nodes[i]!) & Node.DOCUMENT_POSITION_FOLLOWING, `node ${i}`).toBeTruthy();
+    }
+    expect(screen.getByText("Stopped")).toBeInTheDocument();
+    expect(screen.getByText("Tailored, true")).toBeInTheDocument();
+    expect(hero.textContent).toContain("45 is not in your resume.");
   });
 
   it("is centred on one content width and one section rhythm", () => {
@@ -111,12 +136,12 @@ describe("Landing, the light front door", () => {
     const hero = screen.getByTestId("hero-band");
     expect((hero.firstElementChild as HTMLElement).className).toContain("max-w-5xl");
     expect(screen.getByRole("heading", { level: 1 }).parentElement!.className).toContain("items-center");
-    for (const sel of ["section#tour", "section[aria-labelledby='steps-heading']", "section[aria-labelledby='proof-heading']", "section[aria-labelledby='closing-heading']"]) {
+    for (const sel of ["section#tour", "section[aria-labelledby='steps-heading']", "section[aria-labelledby='closing-heading']"]) {
       const el = container.querySelector(sel) as HTMLElement;
       expect(el.className, sel).toContain("mx-auto");
       expect(el.className, sel).toContain("max-w-5xl");
     }
-    for (const sel of ["section[aria-labelledby='steps-heading']", "section[aria-labelledby='proof-heading']"]) {
+    for (const sel of ["section[aria-labelledby='steps-heading']"]) {
       expect((container.querySelector(sel) as HTMLElement).className, sel).toMatch(/\bmb-16\b.*\bsm:mb-20\b|\bsm:mb-20\b.*\bmb-16\b/);
     }
     expect((container.querySelector("section[aria-labelledby='closing-heading']") as HTMLElement).className).toContain("sm:mb-12"); // + main's pb-8 = the same gap before the footer
@@ -155,9 +180,9 @@ describe("Landing, the light front door", () => {
     expect(closing.textContent).not.toMatch(CLAIM);
   });
 
-  it("steps, proof and closing fade up on entry (class `reveal`); the hero and tour do not", () => {
+  it("steps and closing fade up on entry (class `reveal`); the hero and tour do not", () => {
     const { container } = render(<Landing />);
-    for (const sel of ["steps-heading", "proof-heading", "closing-heading"]) {
+    for (const sel of ["steps-heading", "closing-heading"]) {
       expect((container.querySelector(`section[aria-labelledby='${sel}']`) as HTMLElement).className).toContain("reveal");
     }
     expect((container.querySelector("section#tour") as HTMLElement).className).not.toContain("reveal");

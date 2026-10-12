@@ -1,4 +1,4 @@
-/** Rhapto's front door at `/`: a hero with the coach tour inside the band, the three steps, one proof and a
+/** Rhapto's front door at `/`: a hero with the coach tour inside the band, the proof box, the three steps and a
  * closing call to action. Server component: keep it free of client hooks; `CoachTour` carries its own
  * client boundary. */
 import Link from "next/link";
@@ -42,11 +42,14 @@ export function Landing() {
       <HeroBand tone="glow" height="tall">
         <div className="flex min-w-0 max-w-3xl flex-col items-center gap-3">
           <h1 className="font-heading text-[clamp(2.5rem,2.5vw+1.5rem,4rem)] leading-[0.98] font-semibold tracking-tight">
-            A resume you can <span className="highlight-underline">defend</span> in any interview.
+            AI resumes make things up. <span className="highlight-underline">Rhapto doesn&rsquo;t.</span>
           </h1>
           <p className="max-w-2xl text-base text-muted-foreground sm:text-lg">
-            Upload your resume, pick a job, and get your own document rewritten for it.
+            Tailored to each job — every number checked against your resume.
           </p>
+          <div className="mt-3 w-full">
+            <TuneProof />
+          </div>
           {/* A plain styled link, not the Base UI `Button` primitive: it navigates. */}
           <div className="mt-2 flex flex-wrap items-center justify-center gap-x-4 gap-y-3">
             <Link href={cta.href} prefetch={false} className={ctaClass}>
@@ -79,13 +82,6 @@ export function Landing() {
             </li>
           ))}
         </ol>
-      </section>
-
-      <section aria-labelledby="proof-heading" className="reveal mx-auto mb-16 w-full max-w-5xl sm:mb-20">
-        <h2 id="proof-heading" className="sr-only">
-          What the check catches
-        </h2>
-        <TuneProof />
       </section>
 
       {/* Visitors who scroll to the end always have a next step. No numbers, logos or promises. mb-8 +

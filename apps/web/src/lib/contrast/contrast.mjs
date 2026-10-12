@@ -46,6 +46,13 @@ export const PAIRS = [
   text("primary", "surface", "primary chip (10% primary over a card)", { token: "primary", alpha: 0.1 }),
   text("primary", "background", "primary chip (10% primary over the page)", { token: "primary", alpha: 0.1 }),
   text("foreground", "surface", "tour changed-line highlight (25% amber over a card)", { token: "decor-amber", alpha: 0.25 }),
+  // Hero proof box (TuneProof): the AI-draft row is 6% destructive over the card; its "45 teams" mark is 20% over
+  // that row (effective 1-(1-.06)(1-.20) = 24.8%, rounded up to 25% because the checker composites one layer).
+  text("foreground", "surface", "proof AI-draft row text (6% destructive over a card)", { token: "destructive", alpha: 0.06 }),
+  text("muted-foreground", "surface", "proof AI-draft note (6% destructive over a card)", { token: "destructive", alpha: 0.06 }),
+  text("destructive", "surface", "proof 'Stopped' tag (6% destructive over a card)", { token: "destructive", alpha: 0.06 }),
+  text("foreground", "surface", "proof '45 teams' mark (25% destructive over a card)", { token: "destructive", alpha: 0.25 }),
+  text("foreground", "fit-high-bg", "proof '12 teams' mark on the tailored line"),
   // links on a band or glow are TEXT (4.5), not UI (3).
   ...[...BANDS, ...GLOWS].map((b) => text("link-on-band", b, `link on ${b}`)),
   ...[...BANDS, ...GLOWS].map((b) => text("muted-foreground", b, `muted text on ${b}`)),

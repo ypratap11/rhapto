@@ -99,7 +99,7 @@ export function CoachTour() {
             className="relative w-full flex-nowrap justify-start gap-x-1 overflow-x-auto pb-3 sm:justify-center [scrollbar-width:none] [&::-webkit-scrollbar]:hidden group-data-horizontal/tabs:h-auto"
           >
             {TOUR_TABS.map((t) => (
-              <TabsTrigger key={t.value} value={t.value} className="h-auto flex-none px-3 py-1.5 max-md:min-h-11">
+              <TabsTrigger key={t.value} value={t.value} className="h-auto flex-none px-3 py-1.5 max-md:min-h-11 max-sm:min-w-0 max-sm:flex-1 max-sm:whitespace-normal max-sm:px-1 max-sm:text-[13px] max-sm:leading-tight">
                 {t.label}
                 {running && !reduced && t.value === value ? (
                   <span
