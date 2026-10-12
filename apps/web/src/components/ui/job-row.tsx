@@ -4,7 +4,8 @@ import { cn } from "cn";
 /**
  * The shell of one job in a list: fit ring, one-line title (wraps on phones), a meta line, and actions on
  * the right (below on phones). Hovering turns the border to the primary colour. Callers fill `meta` with
- * company, location and pills, and `actions` with buttons, so the Dashboard, Jobs and My resumes can share it.
+ * company, location and pills, and `actions` with whatever belongs there (buttons on the Dashboard, a button-looking
+ * span on My resumes, where the whole row is one link). The Dashboard and My resumes share it; Jobs uses `JobCard`.
  * Renders an `li` by default, for use inside a `ul`.
  */
 export function JobRow({

@@ -220,7 +220,7 @@ function ProfilePageInner() {
           heroLoading ? (
             <>
               <span className="sr-only">Loading your profile</span>
-              <Skeleton aria-hidden className="h-10 w-64 max-w-full" />
+              <Skeleton aria-hidden className="h-[1.15em] w-64 max-w-full" />
             </>
           ) : heroNothingToShow ? (
             "Your profile"
@@ -230,7 +230,7 @@ function ProfilePageInner() {
         }
         subtitle={
           heroLoading ? (
-            <Skeleton aria-hidden className="h-5 w-80 max-w-full" />
+            <Skeleton aria-hidden className="h-6 w-80 max-w-full" />
           ) : heroNothingToShow ? (
             <>Couldn&rsquo;t load your profile summary right now.</>
           ) : (

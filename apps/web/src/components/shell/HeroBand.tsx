@@ -45,7 +45,7 @@ export function HeroBand({
     >
       {glow ? null : <StitchMotif className="pointer-events-none absolute inset-y-0 right-0 hidden h-full w-1/3 md:block" />}
       {/* Glow: max-w-5xl is the front page's one content width (steps, tour, proof and closing use it
-          too). Other tones keep max-w-6xl: they are in-app pages whose content is left-aligned. */}
+          too). Other tones keep max-w-6xl; no in-app page uses them any more (signed-in pages use PageHero), so only the front page (glow) uses this component today. */}
       <div className={cn("relative mx-auto flex h-full w-full flex-col justify-center gap-3", glow ? "max-w-5xl items-center text-center" : "max-w-6xl")}>
         {children}
       </div>
