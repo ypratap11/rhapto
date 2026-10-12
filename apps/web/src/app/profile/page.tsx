@@ -13,7 +13,7 @@ import { TracksTab } from "@/components/profile/TracksTab";
 import { WatchlistTab } from "@/components/profile/WatchlistTab";
 import { ApiErrorBanner } from "@/components/shell/ApiErrorBanner";
 import { Breadcrumbs } from "@/components/shell/Breadcrumbs";
-import { HeroBand } from "@/components/shell/HeroBand";
+import { PageHero } from "@/components/shell/PageHero";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   useAnswers,
@@ -215,26 +215,31 @@ function ProfilePageInner() {
 
   return (
     <>
-      <HeroBand tone="sand">
-        {heroLoading ? (
-          <div aria-hidden="true" className="space-y-2">
-            <Skeleton className="h-8 w-64" />
-            <Skeleton className="h-4 w-80" />
-          </div>
-        ) : heroNothingToShow ? (
-          <>
-            <h1 className="font-serif text-2xl font-medium">Your profile</h1>
-            <p className="text-sm text-muted-foreground">Couldn&rsquo;t load your profile summary right now.</p>
-          </>
-        ) : (
-          <>
-            <h1 className="font-serif text-2xl font-medium">{answers.data?.name ?? "Your profile"}</h1>
-            <p className="text-sm text-muted-foreground">
+      <PageHero
+        title={
+          heroLoading ? (
+            <>
+              <span className="sr-only">Loading your profile</span>
+              <Skeleton aria-hidden className="h-10 w-64 max-w-full" />
+            </>
+          ) : heroNothingToShow ? (
+            "Your profile"
+          ) : (
+            (answers.data?.name ?? "Your profile")
+          )
+        }
+        subtitle={
+          heroLoading ? (
+            <Skeleton aria-hidden className="h-5 w-80 max-w-full" />
+          ) : heroNothingToShow ? (
+            <>Couldn&rsquo;t load your profile summary right now.</>
+          ) : (
+            <>
               {answers.data?.location_home ?? "Location not set"} · {checklist?.verified_blocks ?? 0} of {checklist?.total_blocks ?? 0} items confirmed
-            </p>
-          </>
-        )}
-      </HeroBand>
+            </>
+          )
+        }
+      />
       <Breadcrumbs items={[{ label: "Profile" }]} />
       {heroIssue && !heroNothingToShow ? (
         <div className="mb-6">

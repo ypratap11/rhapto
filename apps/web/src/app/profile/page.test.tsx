@@ -94,11 +94,10 @@ describe("ProfilePage", () => {
     routerReplace.mockClear();
   });
 
-  it("shows the name, location and items-confirmed tally in the sand band", () => {
+  it("shows the name, location and items-confirmed tally in the page hero", () => {
     setSearchParams(new URLSearchParams());
     render(<ProfilePage />);
-    const band = screen.getByTestId("hero-band");
-    expect(band.className).toContain("bg-band-sand");
+    const band = screen.getByTestId("page-hero");
     expect(within(band).getByRole("heading", { level: 1, name: "Maya Chen" })).toBeInTheDocument();
     expect(within(band).getByText(/Denver, CO/)).toBeInTheDocument();
     expect(within(band).getByText(/18 of 23 items confirmed/)).toBeInTheDocument();
@@ -192,7 +191,10 @@ describe("ProfilePage", () => {
     setSearchParams(new URLSearchParams());
     state.answers = { data: undefined, isLoading: true, error: null, isPaused: false };
     render(<ProfilePage />);
-    expect(screen.queryByRole("heading", { level: 1 })).not.toBeInTheDocument();
+    // The page's one h1 is always present; while loading it only says so, never the fallback name.
+    expect(screen.getByRole("heading", { level: 1 })).toHaveAccessibleName("Loading your profile");
+    expect(screen.queryByRole("heading", { level: 1, name: "Your profile" })).not.toBeInTheDocument();
+    expect(within(screen.getByTestId("page-hero")).queryByText(/items confirmed/)).not.toBeInTheDocument();
     state.answers = ok(answersData);
   });
 
