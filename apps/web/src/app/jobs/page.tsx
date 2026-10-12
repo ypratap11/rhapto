@@ -199,11 +199,11 @@ function JobsPageInner() {
               <SelectItem value="newest">Newest</SelectItem>
             </SelectContent>
           </Select>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 max-md:min-h-11">
             <Switch aria-labelledby="show-hidden-label" checked={state.hidden} onCheckedChange={(v) => updateState({ ...state, hidden: v === true })} />
             <label
               id="show-hidden-label"
-              className="cursor-pointer text-sm font-medium select-none"
+              className="flex cursor-pointer items-center text-sm font-medium select-none max-md:min-h-11"
               onClick={() => updateState({ ...state, hidden: !state.hidden })}
             >
               Show jobs I hid

@@ -16,7 +16,8 @@ vi.mock("@tanstack/react-query", async (importOriginal) => ({
 }));
 
 const run = vi.fn();
-const liveState = { current: { run, jobs: [] as JobOut[], perSource: null, status: "idle", error: null } as Record<string, unknown> };
+type LiveState = { run: typeof run; jobs: JobOut[]; perSource: null; status: "idle" | "searching" | "done" | "error"; error: string | null };
+const liveState: { current: LiveState } = { current: { run, jobs: [], perSource: null, status: "idle", error: null } };
 const saveSearch = vi.fn().mockResolvedValue({ id: "s1", name: "pm" });
 const jobsQuery = vi.fn();
 const tracksQuery = vi.fn();
@@ -150,6 +151,12 @@ describe("Jobs page", () => {
       jobsQuery.mockReturnValue({ data: [], isLoading: false, error: null });
       render(<JobsPage />);
       expect(hero()).not.toHaveTextContent(/jobs? (match|found)/);
+    });
+
+    it("is hidden while a live search is still running, even with earlier results held", () => {
+      liveState.current = { run, jobs: [job("a")], perSource: null, status: "searching", error: null };
+      render(<JobsPage />);
+      expect(hero()).not.toHaveTextContent(/match your roles|found/);
     });
 
     it("words a live search as found", () => {

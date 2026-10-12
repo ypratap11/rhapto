@@ -86,6 +86,18 @@ describe("JobCard", () => {
     expect(screen.getAllByText(/Preferred area/)).toHaveLength(1);
   });
 
+  it("never ends the meta line in a dangling dot", () => {
+    render(<JobCard job={{ ...job, location: null, location_tier: null } as JobOut} track={track} />);
+    expect(screen.getByText("ExampleCo")).toBeInTheDocument();
+    expect(screen.queryByText(/ExampleCo ·/)).not.toBeInTheDocument();
+  });
+
+  it("treats an empty location like none, so the area label still shows", () => {
+    render(<JobCard job={{ ...job, location: "" } as JobOut} track={track} />);
+    expect(screen.getByText("ExampleCo · Preferred area")).toBeInTheDocument();
+    expect(screen.getAllByText(/Preferred area/)).toHaveLength(1);
+  });
+
   it("shows New today for a job found 23 hours ago, not 25", () => {
     const now = new Date("2026-09-13T12:00:00Z");
     const found = (h: number) => ({ ...job, discovered_at: new Date(now.getTime() - h * 3_600_000).toISOString() }) as JobOut;

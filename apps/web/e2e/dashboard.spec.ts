@@ -47,6 +47,6 @@ test("the dashboard lists applications and recommendations, and a recommendation
   // playwright.config.ts's 120_000 test-level timeout so a real failure reports this assertion's message.
   await expect(async () => {
     await page.goto("/resumes?tab=review");
-    await expect(page.getByRole("link", { name: new RegExp(role) }).filter({ hasText: company })).toBeVisible({ timeout: 3_000 });
+    await expect(page.getByRole("link", { name: role }).filter({ hasText: company })).toBeVisible({ timeout: 3_000 });
   }).toPass({ timeout: 90_000 });
 });

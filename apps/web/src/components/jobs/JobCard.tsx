@@ -24,6 +24,9 @@ export function JobCard({ job, track, now }: { job: JobOut; track: TrackInfo | n
   const salary = formatSalary(job.salary_text, job.source);
   const alsoIds = job.also_ids ?? []; // absent on a response from before the field existed
   const isNew = isNewToday(job.discovered_at, now);
+  // A blank location counts as none, so the area label still shows and the meta line never ends in a bare dot.
+  const location = job.location?.trim() || null;
+  const place = location ?? tier;
   return (
     <article className="flex h-full flex-col gap-3 rounded-2xl border border-border bg-surface p-4 transition-[border-color,box-shadow,transform] hover:border-primary motion-safe:hover:-translate-y-0.5 motion-safe:hover:shadow-card">
       <div className="flex items-start gap-3.5">
@@ -35,7 +38,7 @@ export function JobCard({ job, track, now }: { job: JobOut; track: TrackInfo | n
             </Link>
           </h3>
           <p className="text-sm text-muted-foreground">
-            {company} · {job.location ?? tier}
+            {place ? `${company} · ${place}` : company}
           </p>
         </div>
       </div>
@@ -44,7 +47,7 @@ export function JobCard({ job, track, now }: { job: JobOut; track: TrackInfo | n
         {track ? <StatusBadge tone="primary">{track.name}</StatusBadge> : null}
         {isNew ? <StatusBadge tone="primary">New today</StatusBadge> : null}
         <StatusBadge tone="muted">{SOURCE_LABEL[job.source] ?? job.source}</StatusBadge>
-        {job.location && tier ? <StatusBadge tone="muted">{tier}</StatusBadge> : null}
+        {location && tier ? <StatusBadge tone="muted">{tier}</StatusBadge> : null}
         {job.repost_of ? <StatusBadge tone="mid">Reposted</StatusBadge> : null}
         {job.unlisted_at ? <StatusBadge tone="muted">No longer listed</StatusBadge> : null}
         {job.search_name ? <StatusBadge tone="muted">{`via ${job.search_name}`}</StatusBadge> : null}
