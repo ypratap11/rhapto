@@ -10,6 +10,7 @@ import pytest
 from rhapto.db.repositories.jobs import RECOMMENDED_FIT_FLOOR
 from rhapto.engine.scoring import TITLE_MISS_CAP
 from rhapto.services.ranking import (
+    GENERIC_HEADS,
     arrange,
     brand_key,
     company_key,
@@ -308,3 +309,44 @@ def test_arrange_stays_near_linear_for_many_distinct_companies() -> None:
     result = arrange(rows)
     assert time.perf_counter() - started < 0.5
     assert len(result) == 5000
+
+
+def test_arrange_stays_near_linear_when_companies_share_a_first_word() -> None:
+    rows = [row(n + 1, f"Acme {n}", "Engineer") for n in range(5000)]
+    started = time.perf_counter()
+    result = arrange(rows)
+    assert time.perf_counter() - started < 1.0
+    assert len(result) == 5000
+
+
+def test_reversed_three_way_order_splits_into_two_cards() -> None:
+    # Documented decision (conditions 4-5): a row joins the earliest group whose representative matches.
+    assert groups(["Amazon.com Services LLC", "Amazon Web Services", "Amazon"]) == [
+        (0, (2,)),
+        (1, ()),
+    ]
+    assert groups(["Amazon Web Services", "Amazon", "Amazon.com Services LLC"]) == [
+        (0, (1,)),
+        (2, ()),
+    ]
+
+
+@pytest.mark.parametrize(("a", "b"), [("Bank", "Bank of America"), ("Capital", "Capital One")])
+def test_more_generic_heads_do_not_absorb_longer_names(a: str, b: str) -> None:
+    assert groups([a, b]) == [(0, ()), (1, ())]
+
+
+def test_generic_heads_contains_every_required_word() -> None:
+    required = {
+        "the",
+        "american",
+        "united",
+        "national",
+        "general",
+        "first",
+        "global",
+        "international",
+        "new",
+        "great",
+    }
+    assert required <= GENERIC_HEADS

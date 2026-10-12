@@ -105,6 +105,12 @@ GENERIC_HEADS = frozenset(
         "international",
         "new",
         "great",
+        "bank",
+        "capital",
+        "city",
+        "state",
+        "university",
+        "co",
     }
 )
 
@@ -159,28 +165,43 @@ def arrange(
     whole-word prefix of the other, see `_brands_match`) collapse to the first of them, which carries
     the others' ids. A row joins the earliest-created group whose REPRESENTATIVE's brand matches, so
     the result is order-dependent but deterministic: [Delta, Delta Dental, Delta Air Lines] is one
-    row, [Delta Dental, Delta Air Lines, Delta] is two (Delta joins Delta Dental). C2 (owner decision, plan review I-1): among the rows ABOVE the
-    title-miss cap (`best_fit > cap`) only, a company's rows after its first `per_company` are
-    moved behind the other above-cap rows; they are written back into the same positions the
+    row, [Delta Dental, Delta Air Lines, Delta] is two (Delta joins Delta Dental). Likewise
+    [Amazon.com Services LLC, Amazon Web Services, Amazon] is two cards (Amazon joins the first).
+
+    C2 (owner decision, plan review I-1): among the rows ABOVE the title-miss cap (`best_fit > cap`) only,
+    a company's rows after its first `per_company` are moved behind the other above-cap rows; they are written
+    back into the same positions the
     above-cap rows already occupied, so a deferred title match still precedes every row at or
     below the cap and every unscored row, and those rows keep their plain order exactly. Nothing is
     removed. A row with no company or no title is never collapsed, and a row with no company is
     never capped. With `spread_companies=False` only C1 runs.
     """
-    # (title_key, first brand token) -> [(brand, representative position)] in creation order. A
-    # whole-word prefix implies an equal first token, so only this bucket needs scanning.
-    groups: dict[tuple[str, str], list[tuple[tuple[str, ...], int]]] = {}
+    # Representative positions, keyed with the title_key. `exact`: a representative's whole brand.
+    # `prefix_of`: every proper token prefix of a representative's brand, earliest position kept.
+    exact: dict[tuple[str, tuple[str, ...]], int] = {}
+    prefix_of: dict[tuple[str, tuple[str, ...]], int] = {}
     order: list[int] = []
     also: dict[int, list[uuid.UUID]] = {}
     for position, item in enumerate(items):
         brand, title = brand_key(item.company), title_key(item.title)
         if brand is not None and title is not None:
-            bucket = groups.setdefault((title, brand[0]), [])
-            representative = next((pos for b, pos in bucket if _brands_match(b, brand)), None)
-            if representative is not None:
-                also[representative].append(item.id)
+            hits: list[int] = []
+            if (pos := exact.get((title, brand))) is not None:
+                hits.append(pos)
+            single_generic = len(brand) == 1 and brand[0] in GENERIC_HEADS
+            if not single_generic and (pos := prefix_of.get((title, brand))) is not None:
+                hits.append(pos)  # this brand is a prefix of an existing representative's
+            for i in range(1, len(brand)):  # an existing representative is a prefix of this brand
+                if i == 1 and brand[0] in GENERIC_HEADS:
+                    continue
+                if (pos := exact.get((title, brand[:i]))) is not None:
+                    hits.append(pos)
+            if hits:
+                also[min(hits)].append(item.id)
                 continue
-            bucket.append((brand, position))
+            exact[(title, brand)] = position
+            for i in range(1, len(brand)):
+                prefix_of.setdefault((title, brand[:i]), position)
         order.append(position)
         also[position] = []
     if spread_companies:
