@@ -1,5 +1,6 @@
 """Tune-mode guardrails: scope, no new numbers, no invented entities, date consistency."""
 
+import json
 from pathlib import Path
 
 import pytest
@@ -393,23 +394,35 @@ def test_present_as_a_verb_is_not_a_date(demo_profile_dir: Path) -> None:
     assert [v.rule for v in bad.violations] == ["date-consistency"]
 
 
+_PROOF: dict[str, str] = json.loads(
+    (
+        Path(__file__).resolve().parents[3]
+        / "web"
+        / "src"
+        / "components"
+        / "landing"
+        / "homepage-proof.json"
+    ).read_text(encoding="utf-8")
+)
+
+
 def test_homepage_proof_matches_the_engine_wording(demo_profile_dir: Path) -> None:
     """The landing hero's proof box (apps/web/src/components/landing/TuneProof.tsx, rendered by
     Landing.tsx) shows an AI draft with "45 teams" and says "45 is not in your resume." That is this
     catch: a sentence from the document with a number the model added. The page does not print the rule
     name, the path or the engine message, but the claim it makes is exactly what the engine does, so
-    the rule, path and message stay pinned here against the real guardrail. TuneProof.tsx's AI_DRAFT
-    string must match `after` below byte for byte."""
+    the rule, path and message stay pinned here against the real guardrail. the strings come from apps/web/src/components/landing/homepage-proof.json, the file TuneProof.tsx imports,
+    so the page and this pin cannot drift apart."""
     doc = _doc()
     b = _bullet(doc)
-    assert b.text == "Led the Snowflake migration for 12 teams, cutting warehouse cost 30%."
+    assert b.text == _PROOF["yourResume"]
     report = run_tune_guardrails(
         doc,
         [
             Edit(
                 paragraph_id=b.id,
                 before=b.text,
-                after="Moved 45 teams onto Snowflake and cut data-platform cost 30%.",
+                after=_PROOF["aiDraft"],
                 reason="r",
             )
         ],
@@ -421,14 +434,15 @@ def test_homepage_proof_matches_the_engine_wording(demo_profile_dir: Path) -> No
     (violation,) = report.violations
     assert violation.rule == "no-new-numbers"
     assert violation.path == "edits[0]"
-    assert violation.message == "number(s) not found in the document: 45"
+    assert violation.message == f"number(s) not found in the document: {_PROOF['inventedNumber']}"
+    assert _PROOF["stoppedNote"] == f"{_PROOF['inventedNumber']} is not in your resume."
     assert "no-new-numbers" in report.rules_run[:2]  # always runs, whatever the user configured
 
 
 def test_homepage_tailored_line_passes_the_engine(demo_profile_dir: Path) -> None:
-    """The hero's "Rhapto gives" line (TuneProof.tsx RHAPTO_GIVES) must survive the engine itself,
+    """The hero's "Rhapto gives" line (homepage-proof.json rhaptoGives) must survive the engine itself,
     including the configurable entity and date rules, so the homepage never shows a line the engine
-    would stop. `after` below must match that string byte for byte."""
+    would stop. Same file as the web page."""
     doc = _doc()
     b = _bullet(doc)
     report = run_tune_guardrails(
@@ -437,7 +451,7 @@ def test_homepage_tailored_line_passes_the_engine(demo_profile_dir: Path) -> Non
             Edit(
                 paragraph_id=b.id,
                 before=b.text,
-                after="Moved 12 teams onto Snowflake and cut data-platform cost 30%.",
+                after=_PROOF["rhaptoGives"],
                 reason="r",
             )
         ],

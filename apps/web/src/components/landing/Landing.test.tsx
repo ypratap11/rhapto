@@ -103,8 +103,8 @@ describe("Landing, the light front door", () => {
     expect(screen.queryByText(/Your own document$/)).toBeNull();
     expect(screen.getByRole("heading", { level: 1 }).className).toContain("font-semibold");
     const h1 = screen.getByRole("heading", { level: 1 });
-    expect(h1.textContent).toBe("AI resumes make things up. Rhapto doesn't.");
-    const mark = screen.getByText("Rhapto doesn't.");
+    expect(h1.textContent).toBe("AI resumes make things up. Rhapto doesn’t.");
+    const mark = screen.getByText("Rhapto doesn’t.");
     expect(mark.tagName).toBe("SPAN");
     expect(mark.className).toContain("highlight-underline");
     expect(h1.querySelectorAll(".highlight-underline")).toHaveLength(1);

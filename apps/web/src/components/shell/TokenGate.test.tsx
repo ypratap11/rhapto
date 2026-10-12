@@ -174,7 +174,7 @@ describe("TokenGate", () => {
     pathname.current = "/";
     renderGate(<TokenGate><Landing /></TokenGate>);
     expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(
-      "AI resumes make things up. Rhapto doesn't.",
+      "AI resumes make things up. Rhapto doesn’t.",
     );
     expect(mockBootstrapMutate).not.toHaveBeenCalled();
   });

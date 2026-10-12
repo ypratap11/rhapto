@@ -42,7 +42,7 @@ export function Landing() {
       <HeroBand tone="glow" height="tall">
         <div className="flex min-w-0 max-w-3xl flex-col items-center gap-3">
           <h1 className="font-heading text-[clamp(2.5rem,2.5vw+1.5rem,4rem)] leading-[0.98] font-semibold tracking-tight">
-            AI resumes make things up. <span className="highlight-underline">Rhapto doesn&apos;t.</span>
+            AI resumes make things up. <span className="highlight-underline">Rhapto doesn&rsquo;t.</span>
           </h1>
           <p className="max-w-2xl text-base text-muted-foreground sm:text-lg">
             Tailored to each job — every number checked against your resume.
