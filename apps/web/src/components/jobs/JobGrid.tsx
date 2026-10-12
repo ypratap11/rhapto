@@ -8,15 +8,17 @@ const SKELETON_COUNT = 6;
  * replace), rather than reusing the row-shaped `TableSkeleton`. */
 function JobCardSkeleton() {
   return (
-    <div className="flex h-56 flex-col gap-3 rounded-card border border-border bg-surface p-4">
-      <div className="flex items-start justify-between gap-3">
-        <Skeleton className="size-9 rounded-control" />
-        <Skeleton className="size-9 shrink-0 rounded-full" />
+    <div className="flex h-56 flex-col gap-3 rounded-2xl border border-border bg-surface p-4">
+      <div className="flex items-start gap-3.5">
+        <Skeleton className="size-[52px] shrink-0 rounded-full" />
+        <div className="flex-1 space-y-2 pt-1">
+          <Skeleton className="h-4 w-2/3" />
+          <Skeleton className="h-3 w-1/3" />
+        </div>
       </div>
-      <Skeleton className="h-4 w-2/3" />
-      <Skeleton className="h-3 w-1/3" />
-      <Skeleton className="mt-auto h-3 w-full" />
-      <Skeleton className="h-3 w-5/6" />
+      <Skeleton className="h-5 w-24 rounded-full" />
+      <Skeleton className="h-3 w-full" />
+      <Skeleton className="mt-auto h-8 w-full" />
     </div>
   );
 }
@@ -28,11 +30,14 @@ export function JobGrid({
   tracks,
   loading,
   empty,
+  now,
 }: {
   jobs: JobOut[];
   tracks: Record<string, TrackInfo>;
   loading: boolean;
   empty: React.ReactNode;
+  /** The page's one clock reading, so every card agrees with the header's "new today" count. */
+  now?: Date;
 }) {
   if (loading) {
     return (
@@ -49,7 +54,7 @@ export function JobGrid({
   return (
     <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
       {jobs.map((job) => (
-        <JobCard key={job.id} job={job} track={(job.best_track_id && tracks[job.best_track_id]) || null} />
+        <JobCard key={job.id} job={job} track={(job.best_track_id && tracks[job.best_track_id]) || null} now={now} />
       ))}
     </div>
   );

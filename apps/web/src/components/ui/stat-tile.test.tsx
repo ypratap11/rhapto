@@ -36,4 +36,9 @@ describe("StatTile", () => {
     expect(screen.getByText("0").className).toContain("text-muted-foreground");
     expect(screen.getByText("0").className).not.toContain("text-fit-mid");
   });
+
+  it("lets a caller restyle the hint (for example hide it on phones)", () => {
+    render(<StatTile tone="peach" value={1} label="To review" hint="Read it first" hintClassName="max-sm:hidden" onClick={() => {}} />);
+    expect(screen.getByText("Read it first").className).toContain("max-sm:hidden");
+  });
 });

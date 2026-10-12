@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import time
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
@@ -9,7 +10,9 @@ import pytest
 from rhapto.db.repositories.jobs import RECOMMENDED_FIT_FLOOR
 from rhapto.engine.scoring import TITLE_MISS_CAP
 from rhapto.services.ranking import (
+    GENERIC_HEADS,
     arrange,
+    brand_key,
     company_key,
     relevance_key,
     title_key,
@@ -217,3 +220,133 @@ def test_a_dateless_posting_is_judged_by_when_it_was_discovered() -> None:
     fresh = Scored(uuid.UUID(int=1), 70, None, now - timedelta(days=0))
     stale = Scored(uuid.UUID(int=2), 70, None, now - timedelta(days=60))
     assert relevance_key(fresh, now) < relevance_key(stale, now)
+
+
+# --- loose company match in C1 (dedupe) -------------------------------------------------------
+
+T = "Sr. Technical Program Manager"
+
+
+def groups(companies: list[str | None], title: str | None = T) -> list[tuple[int, tuple[int, ...]]]:
+    rows = [row(n + 1, c, title) for n, c in enumerate(companies)]
+    by_id = {r.id: n for n, r in enumerate(rows)}
+    return [(a.index, tuple(by_id[i] for i in a.also_ids)) for a in arrange(rows)]
+
+
+def test_brand_key_strips_dotcom_from_every_token() -> None:
+    assert brand_key("Amazon.com Services LLC") == ("amazon", "services")
+    assert brand_key("Amazon.com") == ("amazon",)
+    assert brand_key(".com") == (".com",)
+    assert brand_key(None) is None
+    assert brand_key("   ") is None
+
+
+def test_company_key_is_untouched_by_brand_key() -> None:
+    assert company_key("Amazon.com Services LLC") == "amazon.com services"
+
+
+@pytest.mark.parametrize(
+    ("a", "b"),
+    [
+        ("Amazon", "Amazon.com Services LLC"),
+        ("Amazon.com Services LLC", "Amazon"),
+        ("Amazon.com", "Amazon"),
+        ("Acme Labs Inc", "Acme Labs"),
+        ("Delta", "Delta Dental"),
+        ("United", "United"),
+    ],
+)
+def test_loose_company_match_collapses(a: str, b: str) -> None:
+    assert groups([a, b]) == [(0, (1,))]
+
+
+@pytest.mark.parametrize(
+    ("a", "b"),
+    [
+        ("Delta Dental", "Delta Air Lines"),
+        ("Amaz", "Amazon"),
+        ("Amazon", "Amaz"),
+        ("United", "United Airlines"),
+        ("American", "American Express"),
+    ],
+)
+def test_loose_company_match_refuses(a: str, b: str) -> None:
+    assert groups([a, b]) == [(0, ()), (1, ())]
+
+
+def test_loose_match_needs_the_same_title() -> None:
+    rows = [row(1, "Amazon", T), row(2, "Amazon.com Services LLC", "Data Engineer")]
+    assert [a.index for a in arrange(rows)] == [0, 1]
+
+
+def test_loose_match_never_collapses_missing_company_or_title() -> None:
+    assert groups([None, None]) == [(0, ()), (1, ())]
+    assert groups(["Amazon", "Amazon Web Services"], title=None) == [(0, ()), (1, ())]
+
+
+@pytest.mark.parametrize(
+    "order", [["Amazon", "Amazon.com Services LLC"], ["Amazon.com Services LLC", "Amazon"]]
+)
+def test_amazon_case_collapses_in_either_arrival_order(order: list[str]) -> None:
+    assert groups(order) == [(0, (1,))]  # whichever arrived first represents
+
+
+def test_three_way_join_follows_input_order() -> None:
+    assert groups(["Amazon", "Amazon.com Services LLC", "Amazon Web Services"]) == [(0, (1, 2))]
+
+
+def test_bare_brand_representative_absorbs_both_longer_names() -> None:
+    assert groups(["Delta", "Delta Dental", "Delta Air Lines"]) == [(0, (1, 2))]
+
+
+def test_bare_brand_arriving_last_joins_only_the_earliest_group() -> None:
+    assert groups(["Delta Dental", "Delta Air Lines", "Delta"]) == [(0, (2,)), (1, ())]
+
+
+def test_arrange_stays_near_linear_for_many_distinct_companies() -> None:
+    rows = [row(n + 1, f"Company{n}", T) for n in range(5000)]
+    started = time.perf_counter()
+    result = arrange(rows)
+    assert time.perf_counter() - started < 0.5
+    assert len(result) == 5000
+
+
+def test_arrange_stays_near_linear_when_companies_share_a_first_word() -> None:
+    rows = [row(n + 1, f"Acme {n}", "Engineer") for n in range(5000)]
+    started = time.perf_counter()
+    result = arrange(rows)
+    assert time.perf_counter() - started < 1.0
+    assert len(result) == 5000
+
+
+def test_reversed_three_way_order_splits_into_two_cards() -> None:
+    # Documented decision (conditions 4-5): a row joins the earliest group whose representative matches.
+    assert groups(["Amazon.com Services LLC", "Amazon Web Services", "Amazon"]) == [
+        (0, (2,)),
+        (1, ()),
+    ]
+    assert groups(["Amazon Web Services", "Amazon", "Amazon.com Services LLC"]) == [
+        (0, (1,)),
+        (2, ()),
+    ]
+
+
+@pytest.mark.parametrize(("a", "b"), [("Bank", "Bank of America"), ("Capital", "Capital One")])
+def test_more_generic_heads_do_not_absorb_longer_names(a: str, b: str) -> None:
+    assert groups([a, b]) == [(0, ()), (1, ())]
+
+
+def test_generic_heads_contains_every_required_word() -> None:
+    required = {
+        "the",
+        "american",
+        "united",
+        "national",
+        "general",
+        "first",
+        "global",
+        "international",
+        "new",
+        "great",
+    }
+    assert required <= GENERIC_HEADS

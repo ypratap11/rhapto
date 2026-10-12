@@ -2,7 +2,7 @@ import { cn } from "cn";
 
 /**
  * The signed-in pages' hero band: a warm wash behind the page title, summary and (optionally) one card on
- * the right, with room below for tiles or filters. Dashboard, Jobs and My resumes all use it.
+ * the right, with room below for tiles or filters. Dashboard, Jobs, My resumes and Profile all use it.
  *
  * Like HeroBand's glow tone, the content stays in main's own column (so it lines up with the header logo
  * and the sections below) and only the wash breaks out, as a viewport-wide ::before centred on that column.

@@ -5,20 +5,23 @@ in the header, after Dashboard and Jobs.
 
 ![My resumes](images/resumes-light.png)
 
-## The three tabs
+## The three tiles
+
+Each tile shows how many resumes are in it; press one to list them.
 
 - **To review** - freshly tailored, not yet marked ready to send.
 - **Ready to send** - you have reviewed it and marked it ready.
 - **Needs attention** - the truth check held something back; it needs a fix before it can be ready.
 
-There is no Applied tab. Once you have applied, follow that application on the Dashboard, under
+There is no Applied tile. Once you have applied, follow that application on the Dashboard, under
 **Your applications**; its sheet links back to the resume you used.
 
 ## Reading a row
 
-Each row shows the company, the role, a fit ring, and a status badge. The whole row is one link to
-the resume's page; the word at its right end says what to do next: **Review**, or **Fix** when the
-truth check held the resume back.
+Each row shows a fit ring, the role, then the company, when it was made, how it was made (**Light
+touch** or **Full rewrite**) and its status. The whole row is one link to the resume's page; the
+button at its right says what to do next: **Review**, or **Fix** when the truth check held the
+resume back.
 
 ## Review
 

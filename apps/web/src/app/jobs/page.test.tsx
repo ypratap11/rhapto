@@ -16,6 +16,8 @@ vi.mock("@tanstack/react-query", async (importOriginal) => ({
 }));
 
 const run = vi.fn();
+type LiveState = { run: typeof run; jobs: JobOut[]; perSource: null; status: "idle" | "searching" | "done" | "error"; error: string | null };
+const liveState: { current: LiveState } = { current: { run, jobs: [], perSource: null, status: "idle", error: null } };
 const saveSearch = vi.fn().mockResolvedValue({ id: "s1", name: "pm" });
 const jobsQuery = vi.fn();
 const tracksQuery = vi.fn();
@@ -40,7 +42,7 @@ vi.mock("next/navigation", () => ({
 }));
 vi.mock("@/lib/api/queries", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/api/queries")>()),
-  useLiveSearch: () => ({ run, jobs: [], perSource: null, status: "idle", error: null }),
+  useLiveSearch: () => liveState.current,
   useJobsQuery: () => jobsQuery(),
   useJobsEmptyReason: (...args: unknown[]) => emptyReason(...args),
   useTracks: () => tracksQuery(),
@@ -79,6 +81,7 @@ function job(id: string): JobOut {
 }
 
 beforeEach(() => {
+  liveState.current = { run, jobs: [], perSource: null, status: "idle", error: null };
   tracksQuery.mockReturnValue({ data: [{ id: "t1", name: "Data PM", min_fit: 60 }] });
   jobsQuery.mockReturnValue({ data: [], isLoading: false, error: null });
   emptyReason.mockReset();
@@ -109,13 +112,59 @@ describe("Jobs page", () => {
     expect(routerReplace).not.toHaveBeenCalled();
   });
 
-  it("puts the search form in a mint band and runs a live search", async () => {
+  it("puts the search form in the page hero and runs a live search", async () => {
     const user = userEvent.setup({ delay: null });
     render(<JobsPage />);
-    expect(screen.getByTestId("hero-band").className).toContain("bg-band-mint");
+    expect(screen.getByTestId("page-hero")).toContainElement(screen.getByLabelText("Title"));
+    expect(screen.getByTestId("page-hero")).toContainElement(screen.getByRole("group", { name: "Fit" }));
     await user.type(screen.getByLabelText("Title"), "pm");
     await user.click(screen.getByRole("button", { name: "Search" }));
     expect(run).toHaveBeenCalledWith(expect.objectContaining({ query: "pm" }));
+  });
+
+  describe("hero subtitle", () => {
+    const hero = () => screen.getByTestId("page-hero");
+    const fresh = (id: string) => ({ ...job(id), discovered_at: new Date(Date.now() - 2 * 3_600_000).toISOString() }) as JobOut;
+
+    it("counts the matching jobs and the ones found today", () => {
+      jobsQuery.mockReturnValue({ data: [fresh("a"), job("b"), job("c")], isLoading: false, error: null });
+      render(<JobsPage />);
+      expect(hero()).toHaveTextContent("3 jobs match your roles · 1 new today");
+    });
+
+    it("leaves the new-today clause out at zero, and uses the singular", () => {
+      jobsQuery.mockReturnValue({ data: [job("a")], isLoading: false, error: null });
+      render(<JobsPage />);
+      expect(hero()).toHaveTextContent("1 job matches your roles");
+      expect(hero()).not.toHaveTextContent(/new today/);
+    });
+
+    it("is hidden while loading, on an error, and with no jobs", () => {
+      jobsQuery.mockReturnValue({ data: undefined, isLoading: true, error: null });
+      const loading = render(<JobsPage />);
+      expect(hero()).not.toHaveTextContent(/match your roles/);
+      loading.unmount();
+      jobsQuery.mockReturnValue({ data: [job("a")], isLoading: false, error: new Error("boom") });
+      const failed = render(<JobsPage />);
+      expect(hero()).not.toHaveTextContent(/match your roles/);
+      failed.unmount();
+      jobsQuery.mockReturnValue({ data: [], isLoading: false, error: null });
+      render(<JobsPage />);
+      expect(hero()).not.toHaveTextContent(/jobs? (match|found)/);
+    });
+
+    it("is hidden while a live search is still running, even with earlier results held", () => {
+      liveState.current = { run, jobs: [job("a")], perSource: null, status: "searching", error: null };
+      render(<JobsPage />);
+      expect(hero()).not.toHaveTextContent(/match your roles|found/);
+    });
+
+    it("words a live search as found", () => {
+      liveState.current = { run, jobs: [fresh("a"), job("b")], perSource: null, status: "done", error: null };
+      render(<JobsPage />);
+      expect(hero()).toHaveTextContent("2 jobs found");
+      expect(hero()).not.toHaveTextContent(/new today/);
+    });
   });
 
   it("offers sort, Show jobs I hid and Save this search", async () => {

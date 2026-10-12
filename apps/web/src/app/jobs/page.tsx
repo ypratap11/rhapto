@@ -15,13 +15,15 @@ import { SaveSearchButton } from "@/components/jobs/SaveSearchButton";
 import { SearchForm } from "@/components/jobs/SearchForm";
 import { SourceReport } from "@/components/jobs/SourceReport";
 import { ApiErrorBanner } from "@/components/shell/ApiErrorBanner";
-import { HeroBand } from "@/components/shell/HeroBand";
+import { PageHero } from "@/components/shell/PageHero";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { invalidateJobs, useJobsEmptyReason, useJobsQuery, useLiveSearch, useSavedSearches, useSourceSettings, useTaxonomy, useTracks } from "@/lib/api/queries";
+import { isNewToday } from "@/lib/dashboard-view";
 import { fieldsWithTracks } from "@/lib/fields";
+import { jobsSubtitle } from "@/lib/jobs-view";
 import { decodeSearchState, encodeSearchState, passesFit, type SearchState } from "@/lib/search-state";
 
 const SORT_LABEL: Record<SearchState["sort"], string> = {
@@ -121,6 +123,14 @@ function JobsPageInner() {
   const hasIssue = live.status === "idle" ? Boolean(browse.error) || browse.isPaused : live.status === "error";
   const nothingToShow = jobs.length === 0 && hasIssue;
 
+  // One clock reading for the header's "new today" count and every card's pill, so they cannot disagree.
+  // TokenGate renders nothing on the server, so reading the clock at render cannot mismatch hydration.
+  const now = new Date();
+  const subtitle =
+    loading || hasIssue
+      ? null
+      : jobsSubtitle({ count: jobs.length, newToday: jobs.filter((j) => isNewToday(j.discovered_at, now)).length, live: live.status !== "idle" });
+
   // Which layer is responsible for an empty grid, and therefore which layer explains it.
   //
   // `fit` is applied HERE, by `passesFit`, and the API has no equivalent — so when the API returned
@@ -162,12 +172,17 @@ function JobsPageInner() {
   return (
     <div className="space-y-6">
       {searchId ? <MarkSearchViewed searchId={searchId} /> : null}
-      <HeroBand tone="mint">
-        <h1 className="font-serif text-[32px] font-medium">Find your next role</h1>
-        <SearchForm value={state} onChange={updateState} onSubmit={() => live.run(state)} fields={fields} pending={live.status === "searching"} />
-        <SaveSearchButton state={state} saved={saved} />
-      </HeroBand>
-      <FilterChips value={state} onChange={updateState} sources={sources} />
+      <PageHero title="Find your next role" subtitle={subtitle}>
+        <div className="space-y-4">
+          <div className="rounded-2xl border border-border bg-surface p-4 shadow-card">
+            <SearchForm value={state} onChange={updateState} onSubmit={() => live.run(state)} fields={fields} pending={live.status === "searching"} />
+          </div>
+          <div className="flex flex-wrap items-center gap-3">
+            <FilterChips value={state} onChange={updateState} sources={sources} />
+            <SaveSearchButton state={state} saved={saved} />
+          </div>
+        </div>
+      </PageHero>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 className="font-sans text-lg font-semibold">All matching jobs</h2>
         <div className="flex flex-wrap items-center gap-4">
@@ -184,11 +199,11 @@ function JobsPageInner() {
               <SelectItem value="newest">Newest</SelectItem>
             </SelectContent>
           </Select>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 max-md:min-h-11">
             <Switch aria-labelledby="show-hidden-label" checked={state.hidden} onCheckedChange={(v) => updateState({ ...state, hidden: v === true })} />
             <label
               id="show-hidden-label"
-              className="cursor-pointer text-sm font-medium select-none"
+              className="flex cursor-pointer items-center text-sm font-medium select-none max-md:min-h-11"
               onClick={() => updateState({ ...state, hidden: !state.hidden })}
             >
               Show jobs I hid
@@ -203,6 +218,7 @@ function JobsPageInner() {
         jobs={pageJobs}
         tracks={tracks}
         loading={loading}
+        now={now}
         empty={
           nothingToShow ? (
             <EmptyState icon={Search} title="Couldn&rsquo;t load jobs" description="Try refreshing the page." />

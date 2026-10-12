@@ -28,7 +28,7 @@ With nothing to suggest, the card is not shown.
 
 ## The four tiles
 
-**To review** (opens the To review tab on My resumes), **Applied**, **Interviewing** and **Offers** show
+**To review** (opens the To review list on My resumes), **Applied**, **Interviewing** and **Offers** show
 the count and a short line beneath. The last three filter **Your applications** (on a phone they also
 scroll you there); press the same one again to clear the filter.
 

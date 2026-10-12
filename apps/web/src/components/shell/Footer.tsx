@@ -16,7 +16,7 @@ export function Footer() {
   const access = accessRequestLink();
   return (
     <footer className="border-t border-border">
-      <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-center gap-x-6 gap-y-1 px-6 py-4 text-sm md:justify-between">
+      <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-center gap-x-6 gap-y-1 px-4 py-4 sm:px-6 text-sm md:justify-between">
         <nav aria-label="Footer" className="flex flex-wrap items-center justify-center gap-x-6 gap-y-1">
           <a href={GITHUB_URL} target="_blank" rel="noreferrer" className={LINK}>
             Open source

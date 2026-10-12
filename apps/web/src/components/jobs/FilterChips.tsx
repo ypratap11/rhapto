@@ -19,6 +19,24 @@ const FIT_OPTIONS: { value: FitFilter; label: string }[] = [
   { value: "all", label: "All fits" },
 ];
 
+/** A segmented option: the pressed one is a raised pill on the muted track, the rest plain text. */
+function Segment({ pressed, onClick, children }: { pressed: boolean; onClick: () => void; children: React.ReactNode }) {
+  return (
+    <button
+      type="button"
+      aria-pressed={pressed}
+      onClick={onClick}
+      className={cn(
+        "rounded-full px-2.5 py-1 text-sm font-medium transition-colors sm:px-3 max-md:min-h-11 focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
+        pressed ? "bg-surface text-foreground shadow-card" : "text-muted-foreground hover:text-foreground",
+      )}
+    >
+      {children}
+    </button>
+  );
+}
+
+/** A source toggle: an outline pill, filled with the primary colour while on. */
 function Chip({ pressed, onClick, children }: { pressed: boolean; onClick: () => void; children: React.ReactNode }) {
   return (
     <button
@@ -26,12 +44,21 @@ function Chip({ pressed, onClick, children }: { pressed: boolean; onClick: () =>
       aria-pressed={pressed}
       onClick={onClick}
       className={cn(
-        "rounded-chip border px-2.5 py-1 max-md:min-h-11 text-sm font-medium transition-colors",
+        "rounded-full border px-3 py-1 text-sm font-medium transition-colors max-md:min-h-11 focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
         pressed ? "border-primary bg-primary text-primary-foreground" : "border-border bg-surface text-foreground hover:bg-surface-muted",
       )}
     >
       {children}
     </button>
+  );
+}
+
+/** The small visible label before a track. Hidden from assistive tech: the group's own aria-label already names it. */
+function GroupLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <span aria-hidden="true" className="text-xs font-medium text-muted-foreground">
+      {children}
+    </span>
   );
 }
 
@@ -50,13 +77,16 @@ export function FilterChips({
   }
 
   return (
-    <div className="flex flex-wrap items-center gap-4">
-      <div role="group" aria-label="Date posted" className="flex flex-wrap gap-1.5">
-        {DATE_OPTIONS.map((opt) => (
-          <Chip key={opt.value} pressed={value.posted_within === opt.value} onClick={() => onChange({ ...value, posted_within: opt.value })}>
-            {opt.label}
-          </Chip>
-        ))}
+    <div className="flex flex-wrap items-center gap-x-5 gap-y-3">
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+        <GroupLabel>Posted</GroupLabel>
+        <div role="group" aria-label="Date posted" className="flex flex-wrap gap-0.5 rounded-2xl bg-surface-muted p-1">
+          {DATE_OPTIONS.map((opt) => (
+            <Segment key={opt.value} pressed={value.posted_within === opt.value} onClick={() => onChange({ ...value, posted_within: opt.value })}>
+              {opt.label}
+            </Segment>
+          ))}
+        </div>
       </div>
       {sources.length > 0 ? (
         <div role="group" aria-label="Source" className="flex flex-wrap gap-1.5">
@@ -67,12 +97,15 @@ export function FilterChips({
           ))}
         </div>
       ) : null}
-      <div role="group" aria-label="Fit" className="flex flex-wrap gap-1.5">
-        {FIT_OPTIONS.map((opt) => (
-          <Chip key={opt.value} pressed={value.fit === opt.value} onClick={() => onChange({ ...value, fit: opt.value })}>
-            {opt.label}
-          </Chip>
-        ))}
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+        <GroupLabel>Fit</GroupLabel>
+        <div role="group" aria-label="Fit" className="flex flex-wrap gap-0.5 rounded-2xl bg-surface-muted p-1">
+          {FIT_OPTIONS.map((opt) => (
+            <Segment key={opt.value} pressed={value.fit === opt.value} onClick={() => onChange({ ...value, fit: opt.value })}>
+              {opt.label}
+            </Segment>
+          ))}
+        </div>
       </div>
     </div>
   );

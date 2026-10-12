@@ -16,6 +16,8 @@ type Common = {
   value: number | string;
   label: string;
   hint?: string;
+  /** Extra classes for the hint line, e.g. `max-sm:hidden` to drop it on phones. */
+  hintClassName?: string;
   /** Zero or unknown: the number goes quiet. */
   muted?: boolean;
   className?: string;
@@ -27,7 +29,7 @@ type Common = {
  * At least 44px tall, visible focus ring, lifts on hover only when motion is allowed.
  */
 export function StatTile(props: Common & ({ href: string; onClick?: never; pressed?: never } | { href?: undefined; onClick: () => void; pressed?: boolean })) {
-  const { tone, value, label, hint, muted, className } = props;
+  const { tone, value, label, hint, hintClassName, muted, className } = props;
   const t = TONE[tone];
   const classes = cn(
     "flex min-h-11 flex-col gap-0.5 rounded-2xl border border-transparent px-[18px] py-4 text-left text-foreground no-underline outline-none",
@@ -40,7 +42,7 @@ export function StatTile(props: Common & ({ href: string; onClick?: never; press
     <>
       <span className={cn("font-serif text-[34px] leading-none font-semibold tabular-nums", muted ? "text-muted-foreground" : t.number)}>{value}</span>
       <span className="font-medium">{label}</span>
-      {hint ? <span className="text-[0.8rem] text-muted-foreground">{hint}</span> : null}
+      {hint ? <span className={cn("text-[0.8rem] text-muted-foreground", hintClassName)}>{hint}</span> : null}
     </>
   );
   if (props.href !== undefined) {

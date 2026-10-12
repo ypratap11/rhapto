@@ -5,7 +5,7 @@ const TONE_CLASS = { peach: "bg-band-peach", mint: "bg-band-mint", sand: "bg-ban
 const HEIGHT_CLASS = { tall: "min-h-band-tall", short: "min-h-band-short" } as const;
 
 /** Full-bleed tinted band. The shell's main element is width-capped (`max-w-6xl`) and centered, so
- * a fixed `-mx-6` only cancels main's own padding — it stops at main's box edge, not the viewport,
+ * a fixed negative margin would only cancel main's own gutter (px-4 sm:px-6) — it stops at main's box edge, not the viewport,
  * on any screen wider than the cap (spec §8: full-width). `w-screen` + `mx-[calc(50%-50vw)]` is the
  * standard breakout: because main is itself centered on the page, the parent-width term in `50%`
  * cancels algebraically against main's offset from the viewport, so this reaches the true viewport
@@ -27,7 +27,7 @@ export function HeroBand({
   const glow = tone === "glow";
   // Glow: the band's own bottom padding (py-8 / sm:py-12) plus mb-8 makes the gap to the next section 64px on
   // phones and 80px from sm, the same as the sections' mb-16 / sm:mb-20.
-  // Glow: the band stays in main's own column (main's px-6 is the content padding, so the content is exactly as
+  // Glow: the band stays in main's own column (main's gutter, px-4 sm:px-6, is the content padding, so the content is exactly as
   // wide as the sections below) and only its wash breaks out, as a viewport-wide ::before centred on that
   // column. A `w-screen` band would be centred on the viewport, whose 100vw includes the scrollbar, and its
   // content would sit half a scrollbar wider per side than the sections.
@@ -45,7 +45,7 @@ export function HeroBand({
     >
       {glow ? null : <StitchMotif className="pointer-events-none absolute inset-y-0 right-0 hidden h-full w-1/3 md:block" />}
       {/* Glow: max-w-5xl is the front page's one content width (steps, tour, proof and closing use it
-          too). Other tones keep max-w-6xl: they are in-app pages whose content is left-aligned. */}
+          too). Other tones keep max-w-6xl; no in-app page uses them any more (signed-in pages use PageHero), so only the front page (glow) uses this component today. */}
       <div className={cn("relative mx-auto flex h-full w-full flex-col justify-center gap-3", glow ? "max-w-5xl items-center text-center" : "max-w-6xl")}>
         {children}
       </div>
