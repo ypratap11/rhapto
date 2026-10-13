@@ -417,8 +417,12 @@ export function useBases() {
 export function useGuardrails() {
   return useQuery({ queryKey: profileKeys.guardrails, queryFn: () => unwrap(apiClient().GET("/api/v1/profile/guardrails")) });
 }
-export function useAnswers() {
-  return useQuery({ queryKey: profileKeys.answers, queryFn: () => unwrap(apiClient().GET("/api/v1/profile/answers")) });
+export function useAnswers(options: { enabled?: boolean } = {}) {
+  return useQuery({
+    queryKey: profileKeys.answers,
+    queryFn: () => unwrap(apiClient().GET("/api/v1/profile/answers")),
+    enabled: options.enabled ?? true,
+  });
 }
 export function useWatchlist() {
   return useQuery({ queryKey: profileKeys.watchlist, queryFn: () => unwrap(apiClient().GET("/api/v1/profile/watchlist")) });

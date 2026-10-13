@@ -126,9 +126,8 @@ describe("Landing, the light front door", () => {
     for (let i = 1; i < nodes.length; i++) {
       expect(nodes[i - 1]!.compareDocumentPosition(nodes[i]!) & Node.DOCUMENT_POSITION_FOLLOWING, `node ${i}`).toBeTruthy();
     }
-    expect(screen.getByText("Stopped")).toBeInTheDocument();
-    expect(screen.getByText("Tailored, true")).toBeInTheDocument();
-    expect(hero.textContent).toContain("45 is not in your resume.");
+    expect(within(hero).getByText("45 isn’t in your resume")).toBeInTheDocument();
+    expect(within(hero).getByText("Same facts, fits the job")).toBeInTheDocument();
   });
 
   it("is centred on one content width and one section rhythm", () => {

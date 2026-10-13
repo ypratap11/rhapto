@@ -11,6 +11,16 @@ export function firstName(name: string | null | undefined): string {
   return name?.trim().split(/\s+/)[0] ?? "";
 }
 
+/** Avatar letters: first and last word of the profile name ("Pratap Yeragudipati" → "PY", "Maya" → "M"),
+ * else the email's first letter, else null (the caller shows a person icon). */
+export function initials(name: string | null | undefined, email: string | null | undefined): string | null {
+  const words = name?.trim().split(/\s+/).filter(Boolean) ?? [];
+  const first = words[0]?.charAt(0) ?? "";
+  const last = words.length > 1 ? (words[words.length - 1]?.charAt(0) ?? "") : "";
+  const letters = (first + last).toUpperCase();
+  return letters || email?.trim().charAt(0).toUpperCase() || null;
+}
+
 /** Before 12 morning, before 18 afternoon, else evening. Pure on purpose: the caller reads the clock.
  * The dashboard is never server-rendered (TokenGate renders nothing on the server), so reading the
  * browser's hour at render cannot cause a hydration mismatch. */

@@ -408,7 +408,7 @@ _PROOF: dict[str, str] = json.loads(
 
 def test_homepage_proof_matches_the_engine_wording(demo_profile_dir: Path) -> None:
     """The landing hero's proof box (apps/web/src/components/landing/TuneProof.tsx, rendered by
-    Landing.tsx) shows an AI draft with "45 teams" and says "45 is not in your resume." That is this
+    Landing.tsx) shows an AI draft with "45 teams" and says "45 isn’t in your resume" That is this
     catch: a sentence from the document with a number the model added. The page does not print the rule
     name, the path or the engine message, but the claim it makes is exactly what the engine does, so
     the rule, path and message stay pinned here against the real guardrail. the strings come from apps/web/src/components/landing/homepage-proof.json, the file TuneProof.tsx imports,
@@ -435,7 +435,7 @@ def test_homepage_proof_matches_the_engine_wording(demo_profile_dir: Path) -> No
     assert violation.rule == "no-new-numbers"
     assert violation.path == "edits[0]"
     assert violation.message == f"number(s) not found in the document: {_PROOF['inventedNumber']}"
-    assert _PROOF["stoppedNote"] == f"{_PROOF['inventedNumber']} is not in your resume."
+    assert _PROOF["stoppedNote"] == f"{_PROOF['inventedNumber']} isn’t in your resume"
     assert "no-new-numbers" in report.rules_run[:2]  # always runs, whatever the user configured
 
 

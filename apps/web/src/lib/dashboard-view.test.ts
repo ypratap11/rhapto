@@ -4,6 +4,7 @@ import {
   barLabel,
   barSegments,
   firstName,
+  initials,
   followUpTip,
   greeting,
   isNewToday,
@@ -200,5 +201,15 @@ describe("pickNextStep", () => {
   it("waits for jobs before choosing to show nothing", () => {
     expect(pickNextStep({ ...base, jobs: "loading" })).toEqual({ kind: "loading" });
     expect(pickNextStep({ ...base, jobs: "error" })).toBeNull();
+  });
+});
+
+describe("initials", () => {
+  it("takes the first and last word of the name, else the email, else null", () => {
+    expect(initials("Pratap Yeragudipati", "x@y.z")).toBe("PY");
+    expect(initials("  maya   van der chen ", null)).toBe("MC");
+    expect(initials("Maya", "x@y.z")).toBe("M");
+    expect(initials("", "pratap@vritti.us")).toBe("P");
+    expect(initials(null, undefined)).toBeNull();
   });
 });
