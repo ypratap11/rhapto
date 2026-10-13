@@ -18,10 +18,10 @@ describe("TuneProof, the hero's proof box", () => {
     expect(container.querySelectorAll("ol > li[data-proof-row]")).toHaveLength(3);
   });
 
-  it("the note sits exactly under the sentence column (7.5rem label + 0.75rem gap + 1.25rem pad)", () => {
+  it("every row uses the same label / sentence / verdict columns", () => {
     const { container } = render(<TuneProof />);
-    expect(container.innerHTML).toContain("sm:pl-[9.5rem]");
-    expect(container.innerHTML).toContain("sm:grid-cols-[7.5rem_minmax(0,1fr)_auto]");
+    const rows = Array.from(container.querySelectorAll("[data-proof-row]"));
+    for (const r of rows) expect(r.className).toContain("sm:grid-cols-[7.5rem_minmax(0,1fr)_auto]");
   });
 
   it("marked() throws rather than mangle a sentence when the phrase is missing", () => {
@@ -33,7 +33,7 @@ describe("TuneProof, the hero's proof box", () => {
     const here = dirname(fileURLToPath(import.meta.url));
     const file = join(here, "homepage-proof.json");
     const json = JSON.parse(readFileSync(file, "utf8")) as Record<string, string>;
-    expect([json.yourResume, json.aiDraft, json.rhaptoGives, json.stoppedNote]).toEqual([YOUR_RESUME, AI_DRAFT, RHAPTO_GIVES, "45 is not in your resume."]);
+    expect([json.yourResume, json.aiDraft, json.rhaptoGives, json.stoppedNote, json.givesNote]).toEqual([YOUR_RESUME, AI_DRAFT, RHAPTO_GIVES, "45 isn’t in your resume", "Same facts, fits the job"]);
     const api = readFileSync(join(here, "..", "..", "..", "..", "api", "tests", "unit", "test_guardrails_tune.py"), "utf8");
     expect(api).toContain("homepage-proof.json"); // the API pin reads the same file, not its own copy
     expect(api).not.toContain(AI_DRAFT); // ...and holds no literal that could drift
@@ -48,13 +48,13 @@ describe("TuneProof, the hero's proof box", () => {
     expect(text[0]).toContain(YOUR_RESUME);
     expect(text[1]).toContain("AI draft");
     expect(text[1]).toContain(AI_DRAFT);
-    expect(text[1]).toContain("Stopped");
-    expect(text[1]).toContain("45 is not in your resume.");
+    expect(text[1]).toContain("45 isn’t in your resume");
     expect(text[2]).toContain("Rhapto gives");
     expect(text[2]).toContain(RHAPTO_GIVES);
-    expect(text[2]).toContain("Tailored, true");
-    expect(screen.getByText("Stopped")).toBeInTheDocument();
-    expect(screen.getByText("Tailored, true")).toBeInTheDocument();
+    expect(text[2]).toContain("Same facts, fits the job");
+    expect(screen.getByText("45 isn’t in your resume")).toBeInTheDocument(); // one verdict per row, no second note
+    expect(screen.getByText("Same facts, fits the job")).toBeInTheDocument();
+    expect(container.textContent).not.toMatch(/Stopped|Tailored, true|is not in your resume\./);
   });
 
   it("marks 12 teams softly in the resume, 45 teams as the stop and 12 teams as the fix", () => {

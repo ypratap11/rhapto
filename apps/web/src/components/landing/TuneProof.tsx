@@ -20,6 +20,7 @@ export const AI_DRAFT: string = proof.aiDraft;
 /** The API test expects the engine to ACCEPT this. */
 export const RHAPTO_GIVES: string = proof.rhaptoGives;
 const STOPPED_NOTE: string = proof.stoppedNote;
+const GIVES_NOTE: string = proof.givesNote;
 
 /** Split `sentence` around `phrase` so the phrase can be wrapped in a `<mark>`; text order is unchanged. */
 function marked(sentence: string, phrase: string, className: string): ReactNode {
@@ -45,7 +46,7 @@ export { marked };
 export function TuneProof() {
   return (
     <div className="mx-auto w-full max-w-3xl overflow-hidden rounded-card border border-border bg-surface text-left shadow-card">
-      <p className="sr-only">One sentence from a resume, the AI draft Rhapto stops, and the line Rhapto gives instead.</p>
+      <p className="sr-only">Example: an AI draft adds a number that is not in the resume, and Rhapto keeps the real one.</p>
       <ol className="list-none p-0">
         <li data-proof-row="resume" className={ROW}>
           <p className={LABEL}>Your resume</p>
@@ -53,27 +54,24 @@ export function TuneProof() {
             {marked(YOUR_RESUME, "12 teams", `${MARK} bg-surface-muted`)}
           </p>
         </li>
-        <li data-proof-row="draft" className="border-t border-border bg-destructive/[0.06]">
-          <div className={`${ROW} border-t-0`}>
-            <p className={LABEL}>AI draft</p>
-            <p data-proof-sentence className={SENTENCE}>
-              {marked(AI_DRAFT, "45 teams", `${MARK} bg-destructive/20`)}
-            </p>
-            <p className={`${TAG} text-destructive`}>
-              <X className="size-3.5 shrink-0" aria-hidden="true" />
-              <span>Stopped</span>
-            </p>
-          </div>
-          <p className="px-4 pb-3 text-[13px] text-muted-foreground sm:pl-[9.5rem] sm:pr-5">{STOPPED_NOTE}</p>
+        <li data-proof-row="draft" className={`${ROW} bg-destructive/[0.06]`}>
+          <p className={LABEL}>AI draft</p>
+          <p data-proof-sentence className={SENTENCE}>
+            {marked(AI_DRAFT, "45 teams", `${MARK} bg-destructive/20`)}
+          </p>
+          <p className={`${TAG} text-destructive`}>
+            <X className="size-3.5 shrink-0" aria-hidden="true" />
+            <span>{STOPPED_NOTE}</span>
+          </p>
         </li>
-        <li data-proof-row="gives" className={`${ROW} border-t`}>
+        <li data-proof-row="gives" className={ROW}>
           <p className={LABEL}>Rhapto gives</p>
           <p data-proof-sentence className={SENTENCE}>
             {marked(RHAPTO_GIVES, "12 teams", `${MARK} bg-fit-high-bg`)}
           </p>
           <p className={`${TAG} text-fit-high`}>
             <Check className="size-3.5 shrink-0" aria-hidden="true" />
-            <span>Tailored, true</span>
+            <span>{GIVES_NOTE}</span>
           </p>
         </li>
       </ol>
