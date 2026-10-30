@@ -34,15 +34,20 @@ The app cap is the first fence; this limit is the one that still holds if the ap
 
 ## 3. Confirm the model is priced
 
-Confirm the server's `RHAPTO_LLM_MODEL` (or the env model in use) appears in
-`apps/api/src/rhapto/services/pricing.py` `MODEL_RATES`. An unpriced model is charged at the table's
-highest rate (`claude-opus-5`), which under-records a pricier model, so the $50 budget would last
-longer in the ledger than it does on the invoice.
+A blank `RHAPTO_LLM_MODEL` (the default) means the provider default from
+`apps/api/src/rhapto/engine/providers/registry.py` (`claude-sonnet-5` for Anthropic), which `printenv`
+does not show. Whichever model id is in force must appear as a key in `MODEL_RATES`
+(`apps/api/src/rhapto/services/pricing.py`). An unpriced model is charged at the table's highest rate
+(`claude-opus-5`), which under-records a pricier model, so the $50 budget would last longer in the
+ledger than it does on the invoice.
+
+Print the effective model and whether it is priced (no key is printed). It must end in `True`:
 
 ```bash
-ssh root@64.225.30.51 'cd /opt/rhapto && docker compose exec -T api printenv RHAPTO_LLM_MODEL'
-grep -n "claude" apps/api/src/rhapto/services/pricing.py           # from your workstation
+ssh root@64.225.30.51 'cd /opt/rhapto && docker compose exec -T api python -c "from rhapto.config import get_settings; from rhapto.services.llm import env_llm_config; from rhapto.services.pricing import estimate_cost; from rhapto.engine.providers.llm import TokenUsage; c=env_llm_config(get_settings()); print(c.model, estimate_cost(c.model, TokenUsage()) is not None)"'
 ```
+
+If it prints `False`, set a priced `RHAPTO_LLM_MODEL` in `.env` before going on.
 
 ## 4. Edit `/opt/rhapto/.env`
 
@@ -133,5 +138,5 @@ shell history, tickets or chat**. To respond, set those accounts' allowance to t
 Cloudflare seats (Zero Trust -> Users):
 
 ```sql
-UPDATE users SET trial_runs_used = 5 WHERE id IN (...);
+UPDATE users SET trial_runs_used = 5, free_import_used_at = now() WHERE id IN (...);
 ```

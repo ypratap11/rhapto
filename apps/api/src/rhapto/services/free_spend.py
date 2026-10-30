@@ -66,8 +66,13 @@ class MeteredLLM:
                     cost_usd=conservative_cost(self.model, usage),
                 )
                 await session.commit()
-        except Exception:
-            logger.error("free-spend ledger write failed for user %s", self._user_id)
+        except Exception as exc:
+            # Class name only: the message can carry SQL or bound parameters.
+            logger.error(
+                "free-spend ledger write failed for user %s: %s",
+                self._user_id,
+                type(exc).__name__,
+            )
 
     async def complete_structured(
         self,

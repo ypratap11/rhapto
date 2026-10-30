@@ -156,6 +156,8 @@ async def test_a_failing_ledger_write_is_logged_and_the_result_still_returned(
         result = await _call(_metered(FakeLLMProvider(responses=[{"text": "kept"}]), ledger))
     assert result.value.text == "kept"
     assert str(USER) in caplog.text
+    assert "RuntimeError" in caplog.text
+    assert "database is down" not in caplog.text
 
 
 def test_metered_llm_exposes_the_model() -> None:
