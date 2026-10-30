@@ -90,3 +90,32 @@ def estimate_cost(model: str | None, usage: TokenUsage) -> Decimal | None:
         / million
     )
     return input_cost + output_cost + cache_read_cost + cache_creation_cost
+
+
+def conservative_cost(model: str | None, usage: TokenUsage) -> Decimal:
+    """`estimate_cost`, except an unpriced model is charged at the dearest listed rates.
+
+    The free-spend ledger must never record zero or NULL for a call that cost something: an unknown
+    model (a new release, a typo in the env) is priced at the highest input rate and the highest
+    output rate in `MODEL_RATES`, so the budget errs toward stopping early rather than late.
+    """
+    priced = estimate_cost(model, usage)
+    if priced is not None:
+        return priced
+    worst = ModelRate(
+        max(r.input_per_million for r in MODEL_RATES.values()),
+        max(r.output_per_million for r in MODEL_RATES.values()),
+    )
+    million = Decimal(1_000_000)
+    return (
+        Decimal(usage.input_tokens) * worst.input_per_million / million
+        + Decimal(usage.output_tokens) * worst.output_per_million / million
+        + Decimal(usage.cache_read_input_tokens)
+        * worst.input_per_million
+        * CACHE_READ_MULTIPLIER
+        / million
+        + Decimal(usage.cache_creation_input_tokens)
+        * worst.input_per_million
+        * CACHE_CREATION_MULTIPLIER
+        / million
+    )

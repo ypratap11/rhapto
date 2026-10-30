@@ -113,40 +113,46 @@ class GeminiProvider:
             )
         except Exception as exc:
             raise _mapped_error(exc) from exc
-        name = output_schema.__name__
-        finish = _finish_reason(response)
-        if finish == "MAX_TOKENS":
-            # Thinking tokens count against max_output_tokens, so a long answer can run out early.
-            raise MalformedOutputError(f"Gemini hit the token cap before finishing {name}")
-        if finish in _SAFETY_STOPS:
-            raise MalformedOutputError(f"Gemini stopped on its safety filter before {name}")
-        if finish == "RECITATION":
-            raise MalformedOutputError(f"Gemini stopped on its recitation check before {name}")
-        text = response.text
-        if not text:
-            raise MalformedOutputError(
-                f"Gemini returned no text for {name} (the response was empty or blocked)"
-            )
-        try:
-            value = output_schema.model_validate_json(text)
-        except ValidationError as exc:
-            raise MalformedOutputError(
-                f"{name} did not match the schema: {exc.error_count()} validation error(s)"
-            ) from exc
-        except ValueError as exc:
-            raise MalformedOutputError(
-                f"Gemini did not return valid JSON for {name}: {exc}"
-            ) from exc
         usage = getattr(response, "usage_metadata", None)
         # Thinking is on by default on 2.5 models and those tokens are billed as output.
         output_tokens = (getattr(usage, "candidates_token_count", 0) or 0) + (
             getattr(usage, "thoughts_token_count", 0) or 0
         )
-        return StructuredResult(
-            value=value,
-            usage=TokenUsage(
-                input_tokens=getattr(usage, "prompt_token_count", 0) or 0,
-                output_tokens=output_tokens,
-                cache_read_input_tokens=getattr(usage, "cached_content_token_count", 0) or 0,
-            ),
+        token_usage = TokenUsage(
+            input_tokens=getattr(usage, "prompt_token_count", 0) or 0,
+            output_tokens=output_tokens,
+            cache_read_input_tokens=getattr(usage, "cached_content_token_count", 0) or 0,
         )
+        name = output_schema.__name__
+        finish = _finish_reason(response)
+        if finish == "MAX_TOKENS":
+            # Thinking tokens count against max_output_tokens, so a long answer can run out early.
+            raise MalformedOutputError(
+                f"Gemini hit the token cap before finishing {name}", usage=token_usage
+            )
+        if finish in _SAFETY_STOPS:
+            raise MalformedOutputError(
+                f"Gemini stopped on its safety filter before {name}", usage=token_usage
+            )
+        if finish == "RECITATION":
+            raise MalformedOutputError(
+                f"Gemini stopped on its recitation check before {name}", usage=token_usage
+            )
+        text = response.text
+        if not text:
+            raise MalformedOutputError(
+                f"Gemini returned no text for {name} (the response was empty or blocked)",
+                usage=token_usage,
+            )
+        try:
+            value = output_schema.model_validate_json(text)
+        except ValidationError as exc:
+            raise MalformedOutputError(
+                f"{name} did not match the schema: {exc.error_count()} validation error(s)",
+                usage=token_usage,
+            ) from exc
+        except ValueError as exc:
+            raise MalformedOutputError(
+                f"Gemini did not return valid JSON for {name}: {exc}", usage=token_usage
+            ) from exc
+        return StructuredResult(value=value, usage=token_usage)

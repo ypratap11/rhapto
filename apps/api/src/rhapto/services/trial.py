@@ -98,6 +98,25 @@ async def on_deployment_key(session: AsyncSession, settings: Settings, user_id: 
     return same_key(stored.api_key, env.api_key)
 
 
+def _operator_exempt(settings: Settings) -> bool:
+    """Token mode or the fake provider: no account here spends the deployment's money.
+
+    The two operator-level exemptions, shared by the trial cap and the free-spend ledger so that
+    neither can disagree with the other about whether the deployment is paying.
+    """
+    # 1. Token mode is a single-account, self-hosted deployment whose one user is the operator
+    #    (`api/deps.py`'s token branch hands every request the one bootstrapped `state.user_id`).
+    #    The env key is their own. Capping it would break every self-hoster and every e2e stack on
+    #    the default setting -- and this exemption is what makes a default of 3 safe to ship.
+    if settings.rhapto_auth_mode != "access":
+        return True
+    # 2. Mirrors `resolve_llm_config`'s fake-provider branch exactly, including the `is not None`
+    #    guard, so the gate and the resolver can never disagree about whether the fake is really in
+    #    force. The fake bills nothing; the operator's no-bill promise outranks the cap and outranks
+    #    a stored key, exactly as it already outranks it for provider selection.
+    return settings.rhapto_llm_provider == FAKE_PROVIDER_ID and env_llm_config(settings) is not None
+
+
 def deployment_key_trial_limit(settings: Settings) -> int | None:
     """The cap that would apply to a user who IS on the deployment's key, or None if none can.
 
@@ -106,19 +125,23 @@ def deployment_key_trial_limit(settings: Settings) -> int | None:
     for exactly that reason: the checklist has already resolved the stored row and must not re-derive
     these, nor pay for a second read of it.
     """
-    # 1. Token mode is a single-account, self-hosted deployment whose one user is the operator
-    #    (`api/deps.py`'s token branch hands every request the one bootstrapped `state.user_id`).
-    #    The env key is their own. Capping it would break every self-hoster and every e2e stack on
-    #    the default setting -- and this exemption is what makes a default of 3 safe to ship.
-    if settings.rhapto_auth_mode != "access":
-        return None
-    # 2. Mirrors `resolve_llm_config`'s fake-provider branch exactly, including the `is not None`
-    #    guard, so the gate and the resolver can never disagree about whether the fake is really in
-    #    force. The fake bills nothing; the operator's no-bill promise outranks the cap and outranks
-    #    a stored key, exactly as it already outranks it for provider selection.
-    if settings.rhapto_llm_provider == FAKE_PROVIDER_ID and env_llm_config(settings) is not None:
+    if _operator_exempt(settings):
         return None
     return configured_trial_limit(settings)
+
+
+def free_budget_applies(settings: Settings) -> bool:
+    """True when calls on the deployment's key must be written to the `free_spend` ledger.
+
+    Shares `deployment_key_trial_limit`'s operator-level exemptions (token mode, the fake provider)
+    through `_operator_exempt`, then adds its own: a usable env key and an enabled budget. Disabled
+    means nothing reads the ledger, so nothing writes it.
+    """
+    return (
+        not _operator_exempt(settings)
+        and env_llm_config(settings) is not None
+        and settings.rhapto_monthly_free_budget_usd >= 0
+    )
 
 
 async def trial_limit_for(

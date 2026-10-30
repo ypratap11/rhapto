@@ -331,3 +331,19 @@ async def test_gemini_per_minute_rate_limit_is_not_a_key_problem() -> None:
             system=[], messages=[Message(role="user", content="go")], output_schema=TuneOutput
         )
     assert not isinstance(excinfo.value, ProviderAuthError)
+
+
+async def test_gemini_malformed_output_carries_the_response_usage() -> None:
+    provider = _provider(_FakeModels(text="not json"))
+    with pytest.raises(MalformedOutputError) as excinfo:
+        await provider.complete_structured(
+            system=[], messages=[Message(role="user", content="go")], output_schema=TuneOutput
+        )
+    usage = excinfo.value.usage
+    assert usage is not None
+    # Thinking tokens are billed as output: 40 + 15.
+    assert (usage.input_tokens, usage.output_tokens, usage.cache_read_input_tokens) == (
+        200,
+        55,
+        150,
+    )

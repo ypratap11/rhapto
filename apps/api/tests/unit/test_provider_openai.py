@@ -351,3 +351,14 @@ def test_the_strict_schema_keeps_a_property_named_like_a_dropped_keyword() -> No
     assert "title" in body["properties"]
     assert "title" not in body
     assert "title" not in body["properties"]["title"]
+
+
+async def test_openai_malformed_output_carries_the_response_usage() -> None:
+    provider = _provider(_FakeCompletions(content="", usage=_usage()))
+    with pytest.raises(MalformedOutputError) as excinfo:
+        await provider.complete_structured(
+            system=[], messages=[Message(role="user", content="go")], output_schema=JDExtract
+        )
+    usage = excinfo.value.usage
+    assert usage is not None
+    assert (usage.input_tokens, usage.output_tokens, usage.cache_read_input_tokens) == (120, 30, 64)

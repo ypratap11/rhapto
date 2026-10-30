@@ -31,6 +31,7 @@ from rhapto.services.discovery.poller import poll_sources
 from rhapto.services.documents import load_source
 from rhapto.services.enqueue import TaskFn
 from rhapto.services.eventbus import EventBus, task_channel
+from rhapto.services.free_spend import meter_if_free
 from rhapto.services.llm import (
     KEY_UNREADABLE_MESSAGE,
     LLMNotConfiguredError,
@@ -227,6 +228,9 @@ async def tailor_job(ctx: dict[str, Any], task_id: str) -> None:
             # Per task, not per worker: which provider runs this depends on whose task it is.
             resolver: LlmResolver = ctx.get("llm_resolver") or resolve_llm
             llm = await resolver(session, settings, user_id)
+            # After the resolver, so an injected resolver is metered too. A no-op unless this call
+            # would be billed to the deployment's own key with a free budget in force.
+            llm = await meter_if_free(llm, session, settings, user_id, factory)
 
             job = await session.get(Job, uuid.UUID(request["job_id"]))
             if job is None or job.user_id != user_id:
