@@ -8,7 +8,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from rhapto.db.models import FreeSpend
 from rhapto.db.repositories.free_spend import month_free_spend, record_free_spend
-from rhapto.engine.providers.llm import TokenUsage
 
 
 async def _add(session: AsyncSession, cost: str) -> None:
@@ -16,7 +15,10 @@ async def _add(session: AsyncSession, cost: str) -> None:
         session,
         user_id=uuid.uuid4(),
         model="test-model",
-        usage=TokenUsage(input_tokens=10, output_tokens=5),
+        input_tokens=10,
+        output_tokens=5,
+        cache_read_tokens=0,
+        cache_creation_tokens=0,
         cost_usd=Decimal(cost),
     )
 

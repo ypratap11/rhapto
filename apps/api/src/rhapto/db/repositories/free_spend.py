@@ -9,7 +9,6 @@ from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from rhapto.db.models import FreeSpend
-from rhapto.engine.providers.llm import TokenUsage
 
 
 async def record_free_spend(
@@ -17,7 +16,10 @@ async def record_free_spend(
     *,
     user_id: uuid.UUID,
     model: str,
-    usage: TokenUsage,
+    input_tokens: int,
+    output_tokens: int,
+    cache_read_tokens: int,
+    cache_creation_tokens: int,
     cost_usd: Decimal,
 ) -> None:
     """Add one ledger row. The caller commits."""
@@ -25,10 +27,10 @@ async def record_free_spend(
         FreeSpend(
             user_id=user_id,
             model=model,
-            input_tokens=usage.input_tokens,
-            output_tokens=usage.output_tokens,
-            cache_read_tokens=usage.cache_read_input_tokens,
-            cache_creation_tokens=usage.cache_creation_input_tokens,
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+            cache_read_tokens=cache_read_tokens,
+            cache_creation_tokens=cache_creation_tokens,
             cost_usd=cost_usd,
         )
     )
