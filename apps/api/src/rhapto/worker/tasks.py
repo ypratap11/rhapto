@@ -45,7 +45,9 @@ from rhapto.services.scoring import rescore_user, score_and_store
 from rhapto.services.secrets import KeyUnreadableError, SecretsError, fernet_for
 from rhapto.services.storage import PackageStorage
 from rhapto.services.trial import (
+    FreeRunsPausedError,
     TrialLimitExceededError,
+    check_free_budget,
     consume_trial_run,
     on_deployment_key,
 )
@@ -64,7 +66,13 @@ LlmResolver = Callable[[AsyncSession, Settings, uuid.UUID], Awaitable[LLMProvide
 
 # A provider key the user has to fix: the task fails with the message alone, because the exception
 # class name tells them nothing they can act on.
-SETUP_ERRORS = (LLMNotConfiguredError, SecretsError, ProviderAuthError, TrialLimitExceededError)
+SETUP_ERRORS = (
+    LLMNotConfiguredError,
+    SecretsError,
+    ProviderAuthError,
+    TrialLimitExceededError,
+    FreeRunsPausedError,
+)
 
 # Shown instead of the provider's own words when the rejected key belongs to the deployment rather
 # than to the person reading it. Names no provider, no model, no account and no balance.
@@ -280,6 +288,9 @@ async def tailor_job(ctx: dict[str, Any], task_id: str) -> None:
             # mutation, matching `task_repo.set_step`: a plain JSONB column does not track in-place
             # writes. Not inside `resolve_llm`, because that is swappable through
             # ctx["llm_resolver"] -- a gate hidden in there is a gate the tests replace.
+            # The budget is checked every time, including on an arq re-delivery that skips the claim
+            # below: a retry after the month's money ran out must not run.
+            await check_free_budget(session, settings, user_id)
             if not active_task.progress_json.get("trial_claimed"):
                 await consume_trial_run(session, settings, user_id)
                 active_task.progress_json = {

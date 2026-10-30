@@ -21,11 +21,13 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass
+from decimal import Decimal
 from typing import Literal
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from rhapto.config import Settings
+from rhapto.db.repositories.free_spend import month_free_spend
 from rhapto.db.repositories.users import claim_free_import, claim_trial_run, trial_runs_used
 from rhapto.engine.providers.registry import FAKE_PROVIDER_ID
 from rhapto.services.llm import env_llm_config, same_key, stored_llm_config
@@ -50,6 +52,21 @@ def trial_limit_message(limit: int) -> str:
         f"You have used all {limit} free tailoring {runs} on this instance. Add your own provider "
         "API key in Settings to keep going."
     )
+
+
+#: What the user is told when the operator's monthly budget is spent. A fixed sentence with no
+#: interpolation: no amount, no spend figure, no provider, model, key or env var name.
+FREE_RUNS_PAUSED_MESSAGE = (
+    "Free runs are paused until the 1st of next month. Add your own provider API key in Settings "
+    "to keep going."
+)
+
+
+class FreeRunsPausedError(Exception):
+    """This UTC month's free spend has reached the operator's budget; no deployment-key run starts."""
+
+    def __init__(self) -> None:
+        super().__init__(FREE_RUNS_PAUSED_MESSAGE)
 
 
 class TrialLimitExceededError(Exception):
@@ -157,6 +174,21 @@ async def trial_limit_for(
     return limit
 
 
+async def check_free_budget(session: AsyncSession, settings: Settings, user_id: uuid.UUID) -> None:
+    """Raise `FreeRunsPausedError` when the month's budget is spent and this user is on the deployment's key.
+
+    Independent of the trial cap: it runs even when the cap is disabled. A budget of 0 refuses every
+    deployment-key run; a negative one disables the gate (`free_budget_applies`). Own-key users pass.
+    Reads only.
+    """
+    if not free_budget_applies(settings):
+        return
+    if not await on_deployment_key(session, settings, user_id):
+        return
+    if await month_free_spend(session) >= Decimal(str(settings.rhapto_monthly_free_budget_usd)):
+        raise FreeRunsPausedError()
+
+
 async def check_trial_allowance(
     session: AsyncSession, settings: Settings, user_id: uuid.UUID
 ) -> None:
@@ -167,11 +199,12 @@ async def check_trial_allowance(
     enforcement, and it has no race window.
     """
     limit = await trial_limit_for(session, settings, user_id)
-    if limit is None:
-        return
-    used = await trial_runs_used(session, user_id)
-    if used >= limit:
-        raise TrialLimitExceededError(used, limit)
+    if limit is not None:
+        used = await trial_runs_used(session, user_id)
+        if used >= limit:
+            raise TrialLimitExceededError(used, limit)
+    # After the trial check, so an exhausted account still hears its own sentence.
+    await check_free_budget(session, settings, user_id)
 
 
 async def consume_trial_run(session: AsyncSession, settings: Settings, user_id: uuid.UUID) -> None:
@@ -181,6 +214,7 @@ async def consume_trial_run(session: AsyncSession, settings: Settings, user_id: 
     call must not hand out a free run, and there is no refund path: a refund is a second place the
     counter can move and the first thing an attacker would reach for.
     """
+    await check_free_budget(session, settings, user_id)
     limit = await trial_limit_for(session, settings, user_id)
     if limit is None:
         return
@@ -279,7 +313,10 @@ async def claim_import_allowance(
     fake-provider or cap-disabled account (limit None) neither spends its free import nor is
     counted, and a zero cap still refuses (limit 0 skips the free import and falls to the counted
     claim, which fails exactly as before). THE CALLER MUST COMMIT before the model call.
+
+    The budget check is first of all, so a refusal consumes neither a run nor the free import.
     """
+    await check_free_budget(session, settings, user_id)
     limit = await trial_limit_for(session, settings, user_id)
     if limit is None:
         return
