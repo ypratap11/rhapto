@@ -40,6 +40,9 @@ class Settings(BaseSettings):
     rhapto_access_aud: str = ""
     rhapto_allowed_emails: str = ""  # comma-separated, exact, casefolded
     rhapto_allowed_email_domains: str = ""  # comma-separated, casefolded, no leading "@"
+    # Only in access mode. True admits any email Cloudflare Access has verified, so Access is then
+    # the only gate; the allowlists above are not consulted per request.
+    rhapto_open_signup: bool = False
     rhapto_packages_dir: Path = Path("data/packages")
     rhapto_web_origin: str = "http://localhost:3000"
     rhapto_poll_interval_hours: int = 6
