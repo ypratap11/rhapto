@@ -931,3 +931,61 @@ async def test_bootstrap_does_not_stamp_seeded_at_when_there_is_nothing_to_copy_
 
         jobs_after = await c.get("/api/v1/jobs", headers=headers)
         assert len(jobs_after.json()) == 1
+
+
+def _access_mode(app: FastAPI, monkeypatch, rsa_keypair, *, open_signup: bool | None) -> None:
+    state: AppState = app.state.rhapto
+    state.settings.rhapto_auth_mode = "access"
+    state.settings.rhapto_access_team = "test-team"
+    state.settings.rhapto_access_aud = "test-aud"
+    state.settings.rhapto_allowed_emails = "wife@example.com"
+    if open_signup is not None:
+        state.settings.rhapto_open_signup = open_signup
+    _, public_key = rsa_keypair
+    cache = auth_module.JwksCache("http://unused")
+    cache._keys["test-kid"] = public_key
+    cache._fetched_at = time.monotonic()
+    monkeypatch.setitem(auth_module._jwks_caches, "test-team", cache)
+
+
+async def test_open_signup_admits_an_unlisted_email_and_creates_its_account(
+    app: FastAPI, rsa_keypair, signed_assertion, monkeypatch, session_factory
+) -> None:
+    _access_mode(app, monkeypatch, rsa_keypair, open_signup=True)
+    token = signed_assertion("stranger@gmail.com")
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://test"
+    ) as c:
+        response = await c.get("/api/v1/me", headers={"Cf-Access-Jwt-Assertion": token})
+    assert response.status_code == 200
+    async with session_factory() as session:
+        rows = (await session.scalars(select(User).where(User.email == "stranger@gmail.com"))).all()
+    assert len(rows) == 1
+
+
+async def test_open_signup_off_still_refuses_an_unlisted_email(
+    app: FastAPI, rsa_keypair, signed_assertion, monkeypatch, session_factory
+) -> None:
+    _access_mode(app, monkeypatch, rsa_keypair, open_signup=None)  # the default
+    token = signed_assertion("stranger@gmail.com")
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://test"
+    ) as c:
+        response = await c.get("/api/v1/me", headers={"Cf-Access-Jwt-Assertion": token})
+    assert response.status_code == 403
+    async with session_factory() as session:
+        existing = await session.scalar(select(User).where(User.email == "stranger@gmail.com"))
+    assert existing is None
+
+
+async def test_open_signup_still_requires_a_valid_assertion(
+    app: FastAPI, rsa_keypair, monkeypatch
+) -> None:
+    _access_mode(app, monkeypatch, rsa_keypair, open_signup=True)
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://test"
+    ) as c:
+        missing = await c.get("/api/v1/me")
+        invalid = await c.get("/api/v1/me", headers={"Cf-Access-Jwt-Assertion": "not-a-jwt"})
+    assert missing.status_code == 401
+    assert invalid.status_code == 401

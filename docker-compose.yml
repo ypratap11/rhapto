@@ -99,6 +99,8 @@ services:
         # baked in at build time from the SAME variable the API reads. Changing RHAPTO_TRIAL_RUNS
         # therefore needs `docker compose build web`. Empty/unset/0/negative => the copy names no number.
         NEXT_PUBLIC_TRIAL_RUNS: ${RHAPTO_TRIAL_RUNS-3}
+        # With open sign-up the "Request beta access" links hide. Build-time, from the variable the API reads.
+        NEXT_PUBLIC_OPEN_SIGNUP: ${RHAPTO_OPEN_SIGNUP-false}
     restart: unless-stopped
     ports:
       - "127.0.0.1:3000:3000"

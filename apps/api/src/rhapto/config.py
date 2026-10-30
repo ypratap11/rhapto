@@ -40,6 +40,9 @@ class Settings(BaseSettings):
     rhapto_access_aud: str = ""
     rhapto_allowed_emails: str = ""  # comma-separated, exact, casefolded
     rhapto_allowed_email_domains: str = ""  # comma-separated, casefolded, no leading "@"
+    # Only in access mode. True admits any email Cloudflare Access has verified, so Access is then
+    # the only gate; the allowlists above are not consulted per request.
+    rhapto_open_signup: bool = False
     rhapto_packages_dir: Path = Path("data/packages")
     rhapto_web_origin: str = "http://localhost:3000"
     rhapto_poll_interval_hours: int = 6
@@ -50,6 +53,10 @@ class Settings(BaseSettings):
     # entirely in token mode, which is a single self-hosted account already using its own env key --
     # that exemption is what makes a default of 3 safe to ship without an env change anywhere.
     rhapto_trial_runs: int = 3
+    # Monthly USD ceiling on the deployment's own key, summed over every account in the
+    # `free_spend` ledger. Negative disables the budget (and the metering that feeds it), which keeps
+    # self-hosters and e2e stacks unchanged; 0 is a ceiling nobody can fit under.
+    rhapto_monthly_free_budget_usd: float = -1
     # Short git SHA of the build, stamped into feedback rows' app_version. Passed as a Docker build
     # arg (not a runtime env) so it survives a hand-recreated container. Empty is fine.
     rhapto_build_id: str = ""

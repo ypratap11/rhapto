@@ -222,6 +222,22 @@ describe("Landing, the light front door", () => {
 
 const CLAIM = /\b(the\s+)?(only|first)\s+(tool|app|product|copilot|resume\s+(tool|builder)|one)\b/i;
 
+describe("open sign-up hides the request links", () => {
+  it("no request link and no 'No invite yet?' line; the primary CTA stays", () => {
+    vi.stubEnv("NEXT_PUBLIC_OPEN_SIGNUP", "true");
+    render(<Landing />);
+    expect(screen.queryByRole("link", { name: /request beta access/i })).toBeNull();
+    expect(screen.queryByText(/no invite yet/i)).toBeNull();
+    expect(screen.getAllByRole("link", { name: "Tailor my resume" })[0]).toHaveAttribute("href", "/start");
+  });
+  it("unset: the request link renders as today", () => {
+    vi.stubEnv("NEXT_PUBLIC_OPEN_SIGNUP", undefined as unknown as string);
+    render(<Landing />);
+    expect(screen.getAllByRole("link", { name: "Request beta access" }).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/no invite yet/i).length).toBeGreaterThan(0);
+  });
+});
+
 describe("marketing claims (I4)", () => {
   it("the regex catches a real claim and spares the retained honest lines", () => {
     expect(CLAIM.test("The only resume tool that checks numbers")).toBe(true);

@@ -43,3 +43,11 @@ export function accessRequestLink(url: string = ACCESS_REQUEST_URL): AccessReque
  * convention (`underline underline-offset-4 hover:text-foreground`, as in CoachFrame), no invented effect.
  * The footer's request link deliberately uses the footer's own `LINK` class like its siblings (M-5). */
 export const REQUEST_LINK_CLASS = "text-link-on-band max-md:inline-block max-md:py-3 underline underline-offset-4 hover:text-foreground";
+
+/** True when the instance lets anyone sign in, from the build arg `NEXT_PUBLIC_OPEN_SIGNUP` (compose
+ * sources it from `RHAPTO_OPEN_SIGNUP`, the variable the API reads). Then there is no invite to ask for,
+ * so the "Request beta access" links hide. The reference is a literal `process.env.X` so Next inlines
+ * it at build time; tests set it with `vi.stubEnv`. */
+export function openSignup(): boolean {
+  return process.env.NEXT_PUBLIC_OPEN_SIGNUP === "true";
+}

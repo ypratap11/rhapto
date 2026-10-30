@@ -16,7 +16,7 @@ from rhapto.engine.types import EngineError, ProfileError
 from rhapto.services.jobtext import JobTextError
 from rhapto.services.llm import KEY_UNREADABLE_MESSAGE, LLMNotConfiguredError
 from rhapto.services.secrets import KeyUnreadableError, SecretsError
-from rhapto.services.trial import TrialLimitExceededError
+from rhapto.services.trial import FreeRunsPausedError, TrialLimitExceededError
 
 PROBLEM = "application/problem+json"
 logger = logging.getLogger("rhapto.api")
@@ -114,6 +114,12 @@ def install_error_handlers(app: FastAPI) -> None:
             used=exc.used,
             limit=exc.limit,
         )
+
+    @app.exception_handler(FreeRunsPausedError)
+    async def _free_runs_paused(request: Request, exc: FreeRunsPausedError) -> JSONResponse:
+        # 409 with a `code`, like the trial limit. The body is the fixed sentence and nothing else:
+        # no spend, budget, provider, model or env var name.
+        return problem(409, "Conflict", str(exc), code="free_runs_paused")
 
     @app.exception_handler(SecretsError)
     async def _secrets(request: Request, exc: SecretsError) -> JSONResponse:

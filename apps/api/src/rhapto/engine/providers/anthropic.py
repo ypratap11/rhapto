@@ -121,18 +121,23 @@ class AnthropicProvider:
             )
         except Exception as exc:
             raise _mapped_error(exc) from exc
+        usage = response.usage
+        token_usage = TokenUsage(
+            input_tokens=getattr(usage, "input_tokens", 0) or 0,
+            output_tokens=getattr(usage, "output_tokens", 0) or 0,
+            cache_read_input_tokens=getattr(usage, "cache_read_input_tokens", 0) or 0,
+            cache_creation_input_tokens=getattr(usage, "cache_creation_input_tokens", 0) or 0,
+        )
         tool_use = next(
             (b for b in response.content if getattr(b, "type", None) == "tool_use"), None
         )
         if tool_use is None:
-            raise MalformedOutputError("Anthropic response contained no tool_use block")
-        usage = response.usage
-        return StructuredResult(
-            value=parse_tool_input(output_schema, tool_use.input),
-            usage=TokenUsage(
-                input_tokens=getattr(usage, "input_tokens", 0) or 0,
-                output_tokens=getattr(usage, "output_tokens", 0) or 0,
-                cache_read_input_tokens=getattr(usage, "cache_read_input_tokens", 0) or 0,
-                cache_creation_input_tokens=getattr(usage, "cache_creation_input_tokens", 0) or 0,
-            ),
-        )
+            raise MalformedOutputError(
+                "Anthropic response contained no tool_use block", usage=token_usage
+            )
+        try:
+            value = parse_tool_input(output_schema, tool_use.input)
+        except MalformedOutputError as exc:
+            exc.usage = token_usage
+            raise
+        return StructuredResult(value=value, usage=token_usage)

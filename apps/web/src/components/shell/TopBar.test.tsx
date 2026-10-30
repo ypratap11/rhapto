@@ -185,6 +185,15 @@ describe("TopBar", () => {
       expect(within(dialog).getByRole("button", { name: /toggle theme/i })).toBeInTheDocument();
     });
 
+    it("visitor, hosted, open sign-up: Sign in only, no Request beta access", async () => {
+      vi.stubEnv("NEXT_PUBLIC_OPEN_SIGNUP", "true");
+      pathname.mockReturnValue("/");
+      sameOrigin.value = true;
+      renderPlain();
+      const { dialog } = await open();
+      expect(within(dialog).getAllByRole("link").map((a) => a.textContent)).toEqual(["Sign in"]);
+    });
+
     it("visitor, token mode: Get started and the theme toggle only", async () => {
       pathname.mockReturnValue("/");
       sameOrigin.value = false;
@@ -538,6 +547,7 @@ describe("signed-in header", () => {
 });
 
 afterEach(() => {
+  vi.unstubAllEnvs();
   sameOrigin.value = true;
   vi.unstubAllGlobals();
   window.localStorage.clear();

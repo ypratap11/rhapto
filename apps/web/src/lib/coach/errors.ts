@@ -20,6 +20,7 @@ const RUN_DID_NOT_FINISH = "The run didn't finish. Try again, or pick another jo
 const KEY_PROVIDERS = "(?:OpenAI|Anthropic|Google Gemini|Groq|OpenRouter)";
 const SETTINGS_SENTENCES: RegExp[] = [
   /^You have used all \d+ free tailoring runs? on this instance\. Add your own provider API key in Settings to keep going\.$/,
+  /^Free runs are paused until the 1st of next month\. Add your own provider API key in Settings to keep going\.$/,
   /^This instance does not offer free runs\. Add your own provider API key in Settings to use it\.$/,
   /^This instance's shared LLM key was refused by its provider\. Add your own key in Settings to keep going, or ask whoever runs this instance to check it\.$/,
   /^Your stored API key can no longer be decrypted \(the server secret changed\)\. Re-enter it in Settings\.$/,
@@ -50,6 +51,11 @@ export function describeCoachError(error: unknown, where: CoachWhere): CoachErro
       return isSettingsSentence(error.message)
         ? { message: error.message, next: "settings", link: SETTINGS_LINK }
         : { message: "You have used your free runs. Add your own provider API key in Settings to keep going.", next: "settings", link: SETTINGS_LINK };
+    }
+    if (error.status === 409 && code === "free_runs_paused") {
+      return isSettingsSentence(error.message)
+        ? { message: error.message, next: "settings", link: SETTINGS_LINK }
+        : { message: "Free runs are paused until the 1st of next month. Add your own provider API key in Settings to keep going.", next: "settings", link: SETTINGS_LINK };
     }
     if (error.status === 409 && (code === "llm_not_configured" || code === "llm_key_unreadable")) {
       return { message: "Rhapto isn't set up to tailor yet", next: "feedback", link: { label: "Tell us", href: "/feedback" } };

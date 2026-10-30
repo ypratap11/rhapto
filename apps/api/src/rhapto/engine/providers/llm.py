@@ -39,7 +39,15 @@ class TokenUsage(BaseModel):
 
 
 class MalformedOutputError(EngineError):
-    """The model answered, but its structured output did not match the requested schema."""
+    """The model answered, but its structured output did not match the requested schema.
+
+    `usage` is what the response that produced it consumed, when a response arrived at all. A
+    malformed answer is still a billed call, and the free-spend meter reads it from here.
+    """
+
+    def __init__(self, message: str = "", usage: TokenUsage | None = None) -> None:
+        super().__init__(message)
+        self.usage = usage
 
 
 @dataclass(frozen=True)

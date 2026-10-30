@@ -41,6 +41,17 @@ describe("describeCoachError (spec 3.4, one row per case, always one way forward
     const error = describeCoachError(new ApiError(409, problem(409, { detail: sentence, code: "trial_limit_reached" }), "x"), "tailor");
     expect(error).toEqual({ message: sentence, next: "settings", link: { label: "Open Settings", href: "/settings" } });
   });
+  it("409 free_runs_paused -> the paused sentence, Settings; an unknown detail falls back to the same sentence", () => {
+    const sentence = "Free runs are paused until the 1st of next month. Add your own provider API key in Settings to keep going.";
+    const known = describeCoachError(new ApiError(409, problem(409, { detail: sentence, code: "free_runs_paused" }), "x"), "tailor");
+    expect(known).toEqual({ message: sentence, next: "settings", link: { label: "Open Settings", href: "/settings" } });
+    const unknown = describeCoachError(new ApiError(409, problem(409, { detail: "budget row 7 spent 50.01", code: "free_runs_paused" }), "x"), "tailor");
+    expect(unknown).toEqual(known);
+  });
+  it("a failed task carrying the paused sentence shows it verbatim", () => {
+    const sentence = "Free runs are paused until the 1st of next month. Add your own provider API key in Settings to keep going.";
+    expect(describeCoachError(new Error(sentence), "tailor").next).toBe("settings");
+  });
   it("409 llm_not_configured -> Rhapto isn't set up to tailor yet, Feedback", () => {
     const error = describeCoachError(new ApiError(409, problem(409, { code: "llm_not_configured" }), "x"), "tailor");
     expect(error.message).toBe("Rhapto isn't set up to tailor yet");

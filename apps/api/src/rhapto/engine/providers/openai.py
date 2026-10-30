@@ -158,35 +158,39 @@ class OpenAIProvider:
             )
         except Exception as exc:
             raise _mapped_error(exc) from exc
+        usage = getattr(response, "usage", None)
+        details = getattr(usage, "prompt_tokens_details", None)
+        token_usage = TokenUsage(
+            input_tokens=getattr(usage, "prompt_tokens", 0) or 0,
+            output_tokens=getattr(usage, "completion_tokens", 0) or 0,
+            cache_read_input_tokens=getattr(details, "cached_tokens", 0) or 0,
+        )
         if not response.choices:
-            raise MalformedOutputError(f"OpenAI returned no choices for {name}")
+            raise MalformedOutputError(f"OpenAI returned no choices for {name}", usage=token_usage)
         choice = response.choices[0]
         message = choice.message
         if getattr(message, "refusal", None):
-            raise MalformedOutputError(f"OpenAI refused to produce {name}: {message.refusal}")
+            raise MalformedOutputError(
+                f"OpenAI refused to produce {name}: {message.refusal}", usage=token_usage
+            )
         # `.create` reports these on the choice instead of raising the way `.parse` did, so they are
         # mapped here as well as in `_mapped_error`. Both are retryable output problems.
         finish = getattr(choice, "finish_reason", None)
         if finish == "length":
-            raise MalformedOutputError(f"OpenAI hit the token cap before finishing {name}")
+            raise MalformedOutputError(
+                f"OpenAI hit the token cap before finishing {name}", usage=token_usage
+            )
         if finish == "content_filter":
-            raise MalformedOutputError(f"OpenAI stopped on its content filter before {name}")
+            raise MalformedOutputError(
+                f"OpenAI stopped on its content filter before {name}", usage=token_usage
+            )
         content = getattr(message, "content", None)
         if not content:
-            raise MalformedOutputError(f"OpenAI returned no content for {name}")
+            raise MalformedOutputError(f"OpenAI returned no content for {name}", usage=token_usage)
         try:
             parsed = output_schema.model_validate_json(content)
         except ValidationError as exc:
             raise MalformedOutputError(
-                f"OpenAI returned content that is not a valid {name}: {exc}"
+                f"OpenAI returned content that is not a valid {name}: {exc}", usage=token_usage
             ) from exc
-        usage = response.usage
-        details = getattr(usage, "prompt_tokens_details", None)
-        return StructuredResult(
-            value=parsed,
-            usage=TokenUsage(
-                input_tokens=getattr(usage, "prompt_tokens", 0) or 0,
-                output_tokens=getattr(usage, "completion_tokens", 0) or 0,
-                cache_read_input_tokens=getattr(details, "cached_tokens", 0) or 0,
-            ),
-        )
+        return StructuredResult(value=parsed, usage=token_usage)

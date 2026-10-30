@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import date, datetime
+from decimal import Decimal
 from typing import Any
 
 from pgvector.sqlalchemy import Vector
@@ -13,6 +14,7 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Integer,
+    Numeric,
     SmallInteger,
     String,
     Text,
@@ -487,3 +489,29 @@ class CoachEvent(UserScopedMixin, Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
+
+
+class FreeSpend(Base):
+    """One model call paid for by the deployment's key on behalf of a free-tier user.
+
+    Append-only ledger. `user_id` is deliberately a plain column, not a foreign key: deleting a
+    user (or their job) must not lower the month's spend, which is what the cap is measured on.
+    """
+
+    __tablename__ = "free_spend"
+    __table_args__ = (CheckConstraint("cost_usd >= 0", name="ck_free_spend_cost_usd"),)
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=new_uuid)
+    user_id: Mapped[uuid.UUID] = mapped_column(nullable=False, index=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False, index=True
+    )
+    model: Mapped[str] = mapped_column(String(60), nullable=False)
+    input_tokens: Mapped[int] = mapped_column(Integer, server_default=text("0"), nullable=False)
+    output_tokens: Mapped[int] = mapped_column(Integer, server_default=text("0"), nullable=False)
+    cache_read_tokens: Mapped[int] = mapped_column(
+        Integer, server_default=text("0"), nullable=False
+    )
+    cache_creation_tokens: Mapped[int] = mapped_column(
+        Integer, server_default=text("0"), nullable=False
+    )
+    cost_usd: Mapped[Decimal] = mapped_column(Numeric(12, 6), nullable=False)

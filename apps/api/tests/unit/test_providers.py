@@ -217,3 +217,31 @@ def test_parse_tool_input_raises_malformed_for_placeholders_and_bad_wrappers() -
         parse_tool_input(Answer, {"Answer": {"text": "ok"}})
     with pytest.raises(MalformedOutputError, match="list"):
         parse_tool_input(Answer, [{"text": "ok", "score": 1}])
+
+
+async def test_anthropic_malformed_output_carries_the_response_usage() -> None:
+    class _BadInput:
+        async def create(self, **kwargs: Any) -> Any:
+            return SimpleNamespace(
+                content=[SimpleNamespace(type="tool_use", input={"nope": 1})],
+                usage=SimpleNamespace(
+                    input_tokens=111,
+                    output_tokens=22,
+                    cache_read_input_tokens=33,
+                    cache_creation_input_tokens=44,
+                ),
+            )
+
+    provider = AnthropicProvider(
+        model="claude-sonnet-5", client=SimpleNamespace(messages=_BadInput())
+    )
+    with pytest.raises(MalformedOutputError) as excinfo:
+        await provider.complete_structured(
+            system=[], messages=[Message(role="user", content="go")], output_schema=Answer
+        )
+    assert excinfo.value.usage == TokenUsage(
+        input_tokens=111,
+        output_tokens=22,
+        cache_read_input_tokens=33,
+        cache_creation_input_tokens=44,
+    )
