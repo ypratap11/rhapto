@@ -6,7 +6,7 @@ import { HeroBand } from "@/components/shell/HeroBand";
 import { buttonVariants } from "@/components/ui/button";
 import { SAME_ORIGIN_DEPLOYMENT } from "@/lib/api/client";
 import { cn } from "cn";
-import { accessRequestLink, REQUEST_LINK_CLASS } from "./access";
+import { accessRequestLink, openSignup, REQUEST_LINK_CLASS } from "./access";
 import { CoachTour } from "./CoachTour";
 import { freeLimitLine } from "./copy";
 import { primaryCta } from "./cta";
@@ -23,7 +23,7 @@ export function Landing() {
   const access = accessRequestLink();
   const cta = primaryCta(SAME_ORIGIN_DEPLOYMENT);
   const ctaClass = cn(buttonVariants({ size: "lg" }), "shadow-cta cta-lift max-md:h-11");
-  const requestLine = SAME_ORIGIN_DEPLOYMENT ? (
+  const requestLine = SAME_ORIGIN_DEPLOYMENT && !openSignup() ? (
     <p className="text-sm text-muted-foreground">
       No invite yet?{" "}
       <a

@@ -19,6 +19,7 @@ const pathname = vi.fn(() => "/");
 vi.mock("next/navigation", () => ({ usePathname: () => pathname() }));
 
 afterEach(() => {
+  vi.unstubAllEnvs();
   sameOrigin.value = true;
   window.localStorage.clear();
 });
@@ -38,6 +39,13 @@ describe("Footer", () => {
     expect(screen.getByRole("link", { name: "Open source" })).toHaveAttribute("href", GITHUB_URL);
     expect(screen.getByRole("link", { name: "Request beta access" })).toHaveAttribute("href", ACCESS_REQUEST_URL || ACCESS_REQUEST_MAILTO);
     expect(screen.getByText("© 2026 Rhapto")).toBeInTheDocument();
+  });
+
+  it("open sign-up: no Request beta access link", () => {
+    vi.stubEnv("NEXT_PUBLIC_OPEN_SIGNUP", "true");
+    pathname.mockReturnValue("/");
+    render(<Footer />);
+    expect(names()).toEqual(["Open source"]);
   });
 
   it("token mode / : Open source only (no request link, no Feedback)", () => {
