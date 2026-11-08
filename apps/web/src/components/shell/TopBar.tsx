@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { type RefObject, useEffect, useId, useRef, useState } from "react";
 import { Menu, Plus, User } from "lucide-react";
-import { accessRequestLink } from "@/components/landing/access";
+import { accessRequestLink, openSignup } from "@/components/landing/access";
 import { primaryCta } from "@/components/landing/cta";
 import { type FeedbackTarget, QuickFeedbackDialog } from "@/components/feedback/QuickFeedbackDialog";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -209,7 +209,7 @@ function MobileMenu({
                   <EntryLink pathname={pathname} onClick={close} className="min-h-11 inline-flex items-center" />
                 </li>
               ) : null}
-              {SAME_ORIGIN_DEPLOYMENT ? (
+              {SAME_ORIGIN_DEPLOYMENT && !openSignup() ? (
                 <li>
                   <a
                     href={access.href}

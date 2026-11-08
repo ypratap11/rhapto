@@ -9,11 +9,18 @@ import zipfile
 from pathlib import Path
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Response, UploadFile
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, UploadFile
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from rhapto.api.deps import current_user, get_enqueuer, get_session, get_settings_dep, get_storage
+from rhapto.api.deps import (
+    current_user,
+    get_enqueuer,
+    get_session,
+    get_settings_dep,
+    get_state,
+    get_storage,
+)
 from rhapto.api.errors import not_found
 from rhapto.api.schemas import ImportOut, ResumeDocumentOut, ResumeImportOut
 from rhapto.config import Settings
@@ -37,6 +44,7 @@ from rhapto.services.documents import (
     store_resume_document,
 )
 from rhapto.services.enqueue import Enqueuer
+from rhapto.services.free_spend import meter_if_free
 from rhapto.services.llm import resolve_llm
 from rhapto.services.profile_sync import (
     aggregator_row_to_model,
@@ -324,6 +332,7 @@ async def import_profile(
 
 @router.post("/import-resume", response_model=ResumeImportOut)
 async def import_resume_endpoint(
+    request: Request,
     file: UploadFile,
     user_id: UserDep,
     session: SessionDep,
@@ -348,6 +357,7 @@ async def import_resume_endpoint(
         ) from exc
 
     llm = await resolve_llm(session, settings, user_id)
+    llm = await meter_if_free(llm, session, settings, user_id, get_state(request).session_factory)
     # This endpoint spends a provider key synchronously, on the request path, on a whole uploaded
     # resume -- and it writes no package row, so any mechanism that counted packages would leave it
     # both invisible and unbounded. Same allowance, same sentence, same 409 as the tailoring path, except the account's first import is free.

@@ -123,7 +123,7 @@ async def current_user(
     # endpoint for that (plan-review C6: every endpoint depends on current_user, so it must stay
     # fast and its failure must never look like an auth failure).
     settings = state.settings
-    if not is_allowed_email(
+    if not settings.rhapto_open_signup and not is_allowed_email(
         principal.email, settings.rhapto_allowed_emails, settings.rhapto_allowed_email_domains
     ):
         raise HTTPException(status_code=403, detail="this instance is invite-only")

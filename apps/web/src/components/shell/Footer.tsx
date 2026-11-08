@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { accessRequestLink } from "@/components/landing/access";
+import { accessRequestLink, openSignup } from "@/components/landing/access";
 import { SAME_ORIGIN_DEPLOYMENT } from "@/lib/api/client";
 import { GITHUB_URL } from "@/lib/links";
 import { useVisitorHeader } from "./TokenGate";
@@ -21,7 +21,7 @@ export function Footer() {
           <a href={GITHUB_URL} target="_blank" rel="noreferrer" className={LINK}>
             Open source
           </a>
-          {SAME_ORIGIN_DEPLOYMENT && visitor ? (
+          {SAME_ORIGIN_DEPLOYMENT && visitor && !openSignup() ? (
             <a href={access.href} target={access.external ? "_blank" : undefined} rel={access.external ? "noreferrer" : undefined} className={LINK}>
               Request beta access
             </a>
