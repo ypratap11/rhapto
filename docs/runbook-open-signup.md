@@ -1,4 +1,4 @@
-# Runbook — opening sign-up (anyone can sign in, 5 free runs each)
+# Runbook — opening sign-up (anyone can sign in, 3 free runs each)
 
 Written to be followed at 2am with no prior context. `$RHAPTO` is `/opt/rhapto`, which is **not a git
 checkout** (no `.git`, no remote): code arrives by `scripts/deploy-server.sh`, never by `git` on the box.
@@ -10,7 +10,7 @@ the watch queries.
 
 **How the allowance works:**
 
-- The **5-run allowance** (`RHAPTO_TRIAL_RUNS`) and the **first free import** are **per account and
+- The **3-run allowance** (`RHAPTO_TRIAL_RUNS`) and the **first free import** are **per account and
   lifetime**, not monthly. They do not refill.
 - The **$50 budget** (`RHAPTO_MONTHLY_FREE_BUDGET_USD`) is shared by all accounts and **resets on the
   1st (UTC)**. When it is spent, free runs answer 409 `free_runs_paused` ("Free runs are paused until
@@ -53,7 +53,7 @@ If it prints `False`, set a priced `RHAPTO_LLM_MODEL` in `.env` before going on.
 
 ```
 RHAPTO_OPEN_SIGNUP=true
-RHAPTO_TRIAL_RUNS=5
+RHAPTO_TRIAL_RUNS=3
 RHAPTO_MONTHLY_FREE_BUDGET_USD=50
 ```
 
@@ -71,7 +71,11 @@ From a workstation with an up-to-date `main` (the owner runs it with `!`):
 scripts/deploy-server.sh api worker web
 ```
 
-**With no arguments the script rebuilds only the web**, so name all three. The rebuilt api runs
+**With no arguments the script rebuilds only the web**, so name all three. It stops at a
+`Deploy this to ...? [y/N]` prompt; with no terminal (Claude Code's `!`, a tool call) that prompt is
+invisible (bash prints a `read -p` prompt only to a terminal) and the script exits there with no
+message, so pipe the answer in:
+`echo y | scripts/deploy-server.sh api worker web`. The rebuilt api runs
 migration `0015` on start. Confirm:
 
 ```bash
@@ -84,7 +88,7 @@ ssh root@64.225.30.51 'cd /opt/rhapto && docker compose ps --format "{{.Service}
 
 ```bash
 ssh root@64.225.30.51 'cd /opt/rhapto && docker compose exec -T api printenv RHAPTO_OPEN_SIGNUP RHAPTO_TRIAL_RUNS RHAPTO_MONTHLY_FREE_BUDGET_USD'
-# expect: true / 5 / 50, one per line
+# expect: true / 3 / 50, one per line
 ```
 
 Never `printenv` the whole environment or `cat .env`: they hold `RHAPTO_ALLOWED_EMAILS` and the keys.
@@ -104,7 +108,7 @@ the only gate behind the open policy.
 ## 8. Smoke test as a visitor
 
 In a private window, with an address that is **not** on the allowlist: open the site, confirm there is
-no "Request beta access" link, sign in with the one-time code, reach `/start`, and see the 5-run
+no "Request beta access" link, sign in with the one-time code, reach `/start`, and see the 3-run
 allowance. Do not run a tailor on the owner's key unless you mean to spend a few cents.
 
 ## 9. Rollback
@@ -138,5 +142,6 @@ shell history, tickets or chat**. To respond, set those accounts' allowance to t
 Cloudflare seats (Zero Trust -> Users):
 
 ```sql
-UPDATE users SET trial_runs_used = 5, free_import_used_at = now() WHERE id IN (...);
+-- 3 = the current RHAPTO_TRIAL_RUNS; use the live value if the cap has changed
+UPDATE users SET trial_runs_used = 3, free_import_used_at = now() WHERE id IN (...);
 ```
