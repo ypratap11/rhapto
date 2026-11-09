@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ast
 import re
 import time
 import uuid
@@ -162,11 +163,48 @@ async def test_openapi_endpoint_anonymous_has_no_admin(anon_client: httpx.AsyncC
     assert "admin" not in r.text.lower()
 
 
+def _admin_path_literals(source: str) -> list[str]:
+    """String literals in code whose value begins with "/admin" (a route path or prefix=).
+
+    Docstrings and comments are ignored: a bare string statement is skipped, and comments never
+    reach the AST. An f-string counts by its first literal part.
+    """
+    tree = ast.parse(source)
+    skipped = {
+        id(n.value)
+        for n in ast.walk(tree)
+        if isinstance(n, ast.Expr) and isinstance(n.value, ast.Constant)
+    }
+    found: list[str] = []
+    for n in ast.walk(tree):
+        if isinstance(n, ast.Constant) and isinstance(n.value, str) and id(n) not in skipped:
+            if n.value.startswith("/admin"):
+                found.append(n.value)
+        elif isinstance(n, ast.JoinedStr) and n.values:
+            head = n.values[0]
+            if (
+                isinstance(head, ast.Constant)
+                and isinstance(head.value, str)
+                and head.value.startswith("/admin")
+            ):
+                found.append(head.value)
+    return found
+
+
+def test_admin_path_literal_scanner_catches_prefix_and_ignores_docs() -> None:
+    assert _admin_path_literals('router = APIRouter(prefix="/admin")')
+    assert _admin_path_literals('url = f"/admin/users/{uid}"')
+    assert _admin_path_literals('@r.get("/admin/overview")\ndef f(): ...')
+    docs = '"""See repositories/admin.py and /admin docs."""'
+    assert not _admin_path_literals(docs + "\nx = 1")
+    assert not _admin_path_literals("# /admin/overview\nx = 1")
+
+
 def test_no_other_router_mentions_admin_paths() -> None:
     routers = Path(admin.__file__).parent
     others = [p for p in routers.glob("*.py") if p.name != "admin.py"]
     assert others
-    assert [p.name for p in others if "/admin" in p.read_text("utf-8")] == []
+    assert [p.name for p in others if _admin_path_literals(p.read_text("utf-8"))] == []
 
 
 # ---- identical 404 -----------------------------------------------------------------------------
