@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import logging
 import uuid
 from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
 from typing import Annotated
 
 from fastapi import Depends, HTTPException, Request
@@ -13,6 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 from rhapto.api.auth import Principal, is_allowed_email, resolve_principal
 from rhapto.config import Settings
 from rhapto.db.models import User
+from rhapto.db.repositories.users import touch_last_seen
 from rhapto.engine.providers.llm import LLMProvider
 from rhapto.engine.providers.registry import build_llm
 from rhapto.services.accounts import ensure_account
@@ -26,6 +29,10 @@ from rhapto.services.trial import AccountBlockedError
 # (provider, model, api_key) -> adapter. Injectable so the "test this key" endpoint can be
 # exercised without an SDK client or a real key.
 LlmFactory = Callable[[str, str, str], LLMProvider]
+
+logger = logging.getLogger(__name__)
+
+_LAST_SEEN_INTERVAL = timedelta(hours=1)
 
 
 @dataclass
@@ -140,4 +147,13 @@ async def current_user(
         raise AccountBlockedError()
     if principal.subject:
         await _record_idp_subject(session, user.id, principal.subject)
+    # Reads the already-loaded attribute, so a fresh value costs no query. A failure here must
+    # never look like an auth failure: roll back, log the class name only, carry on.
+    if datetime.now(UTC) - user.last_seen_at > _LAST_SEEN_INTERVAL:
+        try:
+            await touch_last_seen(session, user.id)
+            await session.commit()
+        except Exception as exc:
+            await session.rollback()
+            logger.warning("last_seen_at update failed: %s", type(exc).__name__)
     return user.id

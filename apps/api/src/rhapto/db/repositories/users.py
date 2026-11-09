@@ -119,3 +119,19 @@ async def claim_free_import(session: AsyncSession, user_id: uuid.UUID) -> bool:
         {"uid": str(user_id)},
     )
     return claim.first() is not None
+
+
+async def touch_last_seen(session: AsyncSession, user_id: uuid.UUID) -> bool:
+    """Stamp `last_seen_at` unless it was already stamped within the hour. True if a row changed.
+
+    The `WHERE` makes the throttle atomic: concurrent requests that all loaded a stale value
+    still produce one write. Does not commit.
+    """
+    result = await session.execute(
+        text(
+            "UPDATE users SET last_seen_at = now() "
+            "WHERE id = :id AND last_seen_at < now() - interval '1 hour'"
+        ),
+        {"id": user_id},
+    )
+    return bool(result.rowcount)  # type: ignore[attr-defined]
