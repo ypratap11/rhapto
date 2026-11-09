@@ -86,3 +86,30 @@ def test_only_admin_router_imports_admin_repo() -> None:
                 if any(a.name == "rhapto.db.repositories.admin" for a in node.names):
                     offenders.append(rel)
     assert offenders == []
+
+
+def test_ignore_line_and_router_import_arrive_together() -> None:
+    """The ignore line exists if and only if the admin router imports the repository."""
+    tree = ast.parse((SRC / "api" / "routers" / "admin.py").read_text(encoding="utf-8"))
+    imports = False
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom):
+            mod = node.module or ""
+            names = [a.name for a in node.names]
+            if mod == "rhapto.db.repositories.admin" or (
+                mod == "rhapto.db.repositories" and "admin" in names
+            ):
+                imports = True
+        elif isinstance(node, ast.Import):
+            if any(a.name == "rhapto.db.repositories.admin" for a in node.names):
+                imports = True
+    parser = configparser.ConfigParser()
+    parser.read(API_ROOT / ".importlinter")
+    section = f"importlinter:contract:{CONTRACT}"
+    has_line = parser.has_option(section, "ignore_imports") and ALLOWED_IGNORE in _lines(
+        parser.get(section, "ignore_imports")
+    )
+    assert imports, "the router must import the admin repository"
+    assert has_line == imports
+    result = _lint(API_ROOT)
+    assert result.returncode == 0, result.stdout + result.stderr
