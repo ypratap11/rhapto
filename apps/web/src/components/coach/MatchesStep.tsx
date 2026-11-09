@@ -12,6 +12,7 @@ import { matchLabel, runsLeftLine } from "@/lib/coach/labels";
 import { COACH_TOP_N } from "@/lib/coach/constants";
 import { useCoachMatches } from "@/lib/coach/matches";
 import { PICKER_MIN_FIT } from "@/lib/taxonomy";
+import { WantMoreRuns } from "@/components/feedback/WantMoreRuns";
 import { CoachErrorNote, CoachFrame, type TranscriptItem } from "./CoachFrame";
 import { MatchChip } from "./MatchChip";
 
@@ -72,6 +73,7 @@ export function MatchesStep({
   const myMinFit = tracks.data?.find((t) => t.id === trackId)?.min_fit ?? PICKER_MIN_FIT;
   const minFitFor = (job: JobOut) => tracks.data?.find((t) => t.id === job.best_track_id)?.min_fit ?? PICKER_MIN_FIT;
   const runsLine = runsLeftLine(dashboard.data?.checklist.trial_runs_left);
+  const outOfRuns = (dashboard.data?.checklist.trial_runs_left ?? 1) <= 0;
 
   const other = useQuery({
     queryKey: ["coach", "other-jobs"],
@@ -156,6 +158,7 @@ export function MatchesStep({
       )}
       <JobChoices jobs={state.jobs} minFit={() => myMinFit} pickedId={pickedId} disabled={pickedId !== null} onPick={(j) => void pick(j)} />
       {runsLine ? <p className="text-sm text-muted-foreground">{runsLine}</p> : null}
+      {outOfRuns && !error?.wantMoreRuns ? <WantMoreRuns area="coach" /> : null}
       <p className="text-sm">{pasteLink("Paste a job instead")}</p>
     </CoachFrame>
   );

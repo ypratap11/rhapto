@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
+import { WantMoreRuns } from "@/components/feedback/WantMoreRuns";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ApiError } from "@/lib/api/client";
@@ -33,6 +34,7 @@ export function TailorButton({ job }: { job: JobOut }) {
   const [trackId, setTrackId] = useState<string | undefined>(undefined);
   const [mode, setMode] = useState<"blocks" | "tune" | undefined>(undefined);
   const [taskId, setTaskId] = useState<string | null>(null);
+  const [outOfRuns, setOutOfRuns] = useState(false);
   // Tracks whether the tailoring store currently counts this job as running,
   // so the unmount cleanup below only stops it if it was never finished.
   const started = useRef(false);
@@ -88,6 +90,7 @@ export function TailorButton({ job }: { job: JobOut }) {
         });
         return;
       }
+      if (error instanceof ApiError && error.status === 409 && error.problem?.code === "trial_limit_reached") setOutOfRuns(true);
       toast.error(error instanceof ApiError ? error.message : "Could not start tailoring");
     }
   }
@@ -104,6 +107,7 @@ export function TailorButton({ job }: { job: JobOut }) {
       <Button className="max-sm:w-full min-h-11" onClick={start} disabled={tailor.isPending || taskId !== null}>
         {taskId ? "Tailoring\u2026" : "Tailor my resume for this job"}
       </Button>
+      {outOfRuns ? <WantMoreRuns area="job_detail" /> : null}
       <details className="text-sm">
         <summary className="flex min-h-11 cursor-pointer items-center text-muted-foreground">Options</summary>
         <div className="space-y-3 pb-2">
