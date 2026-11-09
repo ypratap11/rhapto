@@ -8,6 +8,7 @@ import { SAME_ORIGIN_DEPLOYMENT } from "@/lib/api/client";
 import { cn } from "cn";
 import { accessRequestLink, openSignup, REQUEST_LINK_CLASS } from "./access";
 import { CoachTour } from "./CoachTour";
+import { CommercialVideo } from "./CommercialVideo";
 import { freeLimitLine } from "./copy";
 import { primaryCta } from "./cta";
 import { RevealOnScroll } from "./RevealOnScroll";
@@ -62,6 +63,8 @@ export function Landing() {
         </div>
         <CoachTour />
       </HeroBand>
+
+      <CommercialVideo />
 
       <section aria-labelledby="steps-heading" className="reveal mx-auto mb-16 w-full max-w-5xl sm:mb-20">
         <h2 id="steps-heading" className="mb-6 text-center font-heading text-2xl font-semibold tracking-tight sm:text-3xl">

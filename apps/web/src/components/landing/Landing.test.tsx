@@ -38,7 +38,10 @@ describe("Landing, the light front door", () => {
     const { container } = render(<Landing />);
     expect(screen.getAllByTestId("hero-band")).toHaveLength(1);
     expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);
-    expect(container.querySelectorAll("section")).toHaveLength(3); // tour + steps + closing; the hero (with the proof box) is a band
+    expect(container.querySelectorAll("section")).toHaveLength(4); // tour + video + steps + closing; the hero (with the proof box) is a band
+    // The video sits directly below the hero band, before the steps.
+    const band = screen.getByTestId("hero-band");
+    expect(band.nextElementSibling?.querySelector("video")).not.toBeNull();
     const steps = within(screen.getByRole("list", { name: /three steps/i })).getAllByRole("listitem");
     expect(steps.map((li) => li.textContent)).toEqual([
       expect.stringContaining("Upload your resume"),
