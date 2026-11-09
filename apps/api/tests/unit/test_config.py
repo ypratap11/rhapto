@@ -52,3 +52,13 @@ def test_get_settings_requires_a_secret_key(monkeypatch) -> None:  # type: ignor
         monkeypatch.setenv("RHAPTO_SECRET_KEY", "test-config-reseed-after-cache-clear")
         get_settings.cache_clear()
         get_settings()
+
+
+def test_admin_emails_default_is_empty(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    monkeypatch.delenv("RHAPTO_ADMIN_EMAILS", raising=False)
+    assert Settings(_env_file=None).rhapto_admin_emails == ""
+
+
+def test_admin_emails_reads_the_env_var(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    monkeypatch.setenv("RHAPTO_ADMIN_EMAILS", "owner@example.com,second@example.com")
+    assert Settings(_env_file=None).rhapto_admin_emails == "owner@example.com,second@example.com"
