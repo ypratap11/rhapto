@@ -12,6 +12,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Input } from "@/components/ui/input";
+import { ApiError } from "@/lib/api/client";
 import { useResetRuns } from "@/lib/admin/queries";
 
 type Props = {
@@ -21,6 +22,14 @@ type Props = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
 };
+
+const RESET_FAILED = "Could not reset. Try again.";
+
+/** The server's own sentence only for the known 409; anything else (proxy, network, validation) is one fixed sentence. */
+function resetMessage(error: unknown): string {
+  if (error instanceof ApiError && error.status === 409 && error.problem?.detail) return error.problem.detail;
+  return RESET_FAILED;
+}
 
 export function ResetRunsDialog({ userId, runsUsed, suggested, open, onOpenChange }: Props) {
   const initial = suggested === null ? runsUsed : Math.max(0, runsUsed - suggested);
@@ -52,7 +61,7 @@ export function ResetRunsDialog({ userId, runsUsed, suggested, open, onOpenChang
           Runs used after the reset
           <Input type="number" inputMode="numeric" min={0} max={runsUsed} value={text} onChange={(e) => setText(e.target.value)} className="min-h-11" />
         </label>
-        {reset.error ? <p role="alert" className="text-sm text-destructive">{reset.error.message}</p> : null}
+        {reset.error ? <p role="alert" className="text-sm text-destructive">{resetMessage(reset.error)}</p> : null}
         <AlertDialogFooter>
           <AlertDialogCancel>Cancel</AlertDialogCancel>
           <AlertDialogAction disabled={!valid || reset.isPending} onClick={(e) => { e.preventDefault(); void submit(); }}>

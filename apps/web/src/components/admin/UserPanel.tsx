@@ -152,7 +152,13 @@ export function UserPanel({ userId }: { userId: string }) {
         <ResetRunsDialog userId={userId} runsUsed={u.runs_used} suggested={u.suggested_reset_runs} open onOpenChange={setResetOpen} />
       ) : null}
 
-      <AlertDialog open={blockOpen} onOpenChange={setBlockOpen}>
+      <AlertDialog
+        open={blockOpen}
+        onOpenChange={(next) => {
+          setBlockOpen(next);
+          if (!next) setBlocked.reset();
+        }}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Block {u.email}?</AlertDialogTitle>

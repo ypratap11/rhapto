@@ -46,4 +46,25 @@ describe("ResetRunsDialog", () => {
     await userEvent.click(confirm());
     expect(await screen.findByText("Runs used changed since you opened this.")).toBeTruthy();
   });
+  it("shows one plain sentence, no status code or field names, for anything but the known 409", async () => {
+    mockFetch([["POST", "/reset-runs", 422, { title: "Unprocessable", status: 422, detail: "request validation failed", errors: [{ loc: ["body", "to"], msg: "bad" }] }]]);
+    open();
+    await userEvent.click(confirm());
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toBe("Could not reset. Try again.");
+  });
+  it("shows the same plain sentence when the network fails", async () => {
+    vi.spyOn(globalThis, "fetch").mockRejectedValue(new TypeError("Failed to fetch"));
+    open();
+    await userEvent.click(confirm());
+    expect((await screen.findByRole("alert")).textContent).toBe("Could not reset. Try again.");
+  });
+  it("shows the plain sentence for a bare 502 from the proxy", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("<html>Bad gateway</html>", { status: 502 }));
+    open();
+    await userEvent.click(confirm());
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toBe("Could not reset. Try again.");
+    expect(alert.textContent).not.toMatch(/502|HTTP/);
+  });
 });

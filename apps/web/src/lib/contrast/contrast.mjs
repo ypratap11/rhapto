@@ -78,6 +78,7 @@ export const PAIRS = [
   // Owner admin dashboard (components/admin): tile bar fill on its track, and the Blocked chip.
   { fg: "fit-high", bg: "surface-muted", label: "admin tile bar fill on its track", kind: "ui" },
   text("destructive", "surface", "admin Blocked chip (10% destructive over a card)", { token: "destructive", alpha: 0.1 }),
+  text("destructive", "surface", "admin Blocked chip, dark theme (20% destructive over a card)", { token: "destructive", alpha: 0.2 }),
 ];
 
 const VALUE = /^\s*--([a-z0-9-]+)\s*:\s*(#[0-9a-fA-F]{3,8}|var\(--[a-z0-9-]+\))\s*;/;

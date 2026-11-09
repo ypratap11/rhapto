@@ -44,4 +44,15 @@ describe("UserPanel", () => {
     await userEvent.click(await screen.findByRole("button", { name: "Block" }));
     expect(await screen.findByText("Admin accounts cannot be blocked")).toBeTruthy();
   });
+  it("clears the block error when the dialog is cancelled and reopened", async () => {
+    mockFetch([["GET", "/admin/users/u1", 200, detail], ["POST", "/block", 409, { title: "Conflict", status: 409, detail: "x" }]]);
+    renderWithClient(<UserPanel userId="u1" />);
+    await userEvent.click(await screen.findByRole("button", { name: "Block user" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Block" }));
+    await screen.findByText("Admin accounts cannot be blocked");
+    await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Block user" }));
+    await screen.findByText(/Block alex@example.com?/);
+    expect(screen.queryByText("Admin accounts cannot be blocked")).toBeNull();
+  });
 });
