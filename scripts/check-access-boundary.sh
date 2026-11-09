@@ -93,8 +93,8 @@ else
 fi
 
 # Files under apps/web/public/<dir> (the homepage video and poster). They are not routes, so the lists above
-# never mention them, but Access prefix-matches them like anything else: a dir missing from the bypass
-# application answers a signed-out visitor with a 302 and the homepage shows a broken player.
+# never mention them. Under the protected-prefix model they are public by default (no Cloudflare change);
+# this probe catches a regression, e.g. a hostname-wide Access application that would 302 them to login.
 for d in "${PUBLIC_ASSET_DIRS[@]}"; do
   for f in "$(dirname "$VISIBILITY")/../../public${d}"/*; do
     [[ -f "$f" ]] || continue
@@ -103,7 +103,7 @@ for d in "${PUBLIC_ASSET_DIRS[@]}"; do
     if [[ "$CODE" == "200" ]]; then
       note "ok       $p -> 200"
     else
-      note "FAIL     $p -> $CODE${LOCATION:+ (Location: $LOCATION)}. Add ${d}/* to the Rhapto-Public bypass."
+      note "FAIL     $p -> $CODE${LOCATION:+ (Location: $LOCATION)}. Is a hostname-wide Access application protecting ${d}? Only the protectedAtEdge prefixes should be."
       failures=$((failures + 1))
     fi
   done

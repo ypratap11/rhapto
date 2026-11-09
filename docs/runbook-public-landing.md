@@ -43,7 +43,7 @@ the Access login.
 
 | Application | Destinations | Policy |
 |---|---|---|
-| `Rhapto-Public` | `rhapto.augaster.com/` , `/about` (legacy, harmless: it only redirects to `/`; safe to remove) , `/_next/*` , `/favicon.ico` , `/media/*` | Bypass / Everyone |
+| `Rhapto-Public` | `rhapto.augaster.com/` , `/about` (legacy, harmless: it only redirects to `/`; safe to remove) , `/_next/*` , `/favicon.ico` | Bypass / Everyone |
 | `rhapto` | the seven prefixes below, **not** the bare hostname | Email Policy / Allow |
 
 ```
@@ -112,7 +112,7 @@ existing application keeps protecting everything else.
 |---|---|
 | Application | `rhapto-public` |
 | Domain | `rhapto.augaster.com` |
-| Paths | `/` (exact), `/about` (legacy, harmless: it only redirects to `/`; safe to remove), `/_next/*`, `/favicon.ico`, `/media/*` (the homepage video and poster, `apps/web/public/media`) |
+| Paths | `/` (exact), `/about` (legacy, harmless: it only redirects to `/`; safe to remove), `/_next/*`, `/favicon.ico` |
 | Policy | one policy, action **Bypass**, rule **Everyone** |
 
 `/_next/*` is not optional. `next/font/google` self-hosts the fonts at build time under

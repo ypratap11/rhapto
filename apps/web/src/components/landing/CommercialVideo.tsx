@@ -3,7 +3,7 @@
 import { useEffect, useId, useRef } from "react";
 import { usePrefersReducedMotion } from "@/lib/motion";
 
-/** Served from public/media, a prefix Cloudflare Access bypasses (apps/web/src/lib/edge-visibility.json). */
+/** Served from public/media, a prefix outside the Access-protected list, so signed-out visitors can fetch it (apps/web/src/lib/edge-visibility.json). */
 export const COMMERCIAL_SRC = "/media/rhapto-commercial.mp4";
 export const COMMERCIAL_POSTER = "/media/rhapto-commercial-poster.webp";
 export const COMMERCIAL_LABEL = "Rhapto in 34 seconds";
