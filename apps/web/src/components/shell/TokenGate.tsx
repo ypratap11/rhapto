@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ApiError, hasToken, SAME_ORIGIN_DEPLOYMENT } from "@/lib/api/client";
 import { useBootstrap, useMe } from "@/lib/api/queries";
+import { BLOCKED_MESSAGE } from "@/lib/coach/errors";
 
 // Fix-round M1: a `sessionStorage` latch, not `bootstrap.isIdle` alone -- `isIdle` only protects a
 // single mount's effect running twice (see M2 below), but a signed-in user navigating through
@@ -159,6 +160,18 @@ export function TokenGate({ children }: { children: React.ReactNode }) {
         </>
       );
     const deniedByAllowlist = me.error instanceof ApiError && (me.error.status === 401 || me.error.status === 403);
+    if (me.error instanceof ApiError && me.error.status === 403 && me.error.problem?.code === "account_blocked") {
+      return (
+        <Card className="mx-auto max-w-md">
+          <CardHeader>
+            <CardTitle>Account blocked</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3 text-sm text-muted-foreground">
+            <p>{BLOCKED_MESSAGE}</p>
+          </CardContent>
+        </Card>
+      );
+    }
     if (deniedByAllowlist) {
       const access = accessRequestLink();
       return (

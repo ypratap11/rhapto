@@ -56,6 +56,28 @@ describe("api proxy route", () => {
     fetchSpy.mockRestore();
   });
 
+  it("forwards the origin header", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("{}", { status: 200 }));
+    const request = new Request("http://localhost:3000/api/v1/admin/x", {
+      method: "POST",
+      headers: { "Cf-Access-Jwt-Assertion": EDGE_JWS, Origin: "https://rhapto.example.com" },
+      body: "{}",
+    });
+    await POST(request, { params: Promise.resolve({ path: ["admin", "x"] }) });
+    const forwarded = fetchSpy.mock.calls[0]?.[1]?.headers as Headers;
+    expect(forwarded.get("origin")).toBe("https://rhapto.example.com");
+    fetchSpy.mockRestore();
+  });
+
+  it("does not invent an origin when absent", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("{}", { status: 200 }));
+    const request = new Request("http://localhost:3000/api/v1/health", { headers: { "Cf-Access-Jwt-Assertion": EDGE_JWS } });
+    await GET(request, { params: Promise.resolve({ path: ["health"] }) });
+    const forwarded = fetchSpy.mock.calls[0]?.[1]?.headers as Headers;
+    expect(forwarded.has("origin")).toBe(false);
+    fetchSpy.mockRestore();
+  });
+
   it("drops the client's Cookie header", async () => {
     const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(null, { status: 200 }));
     const request = new Request("http://localhost:3000/api/v1/health", { headers: { Cookie: "session=abc" } });

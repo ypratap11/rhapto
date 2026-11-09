@@ -30,6 +30,12 @@ describe("describeCoachError (spec 3.4, one row per case, always one way forward
       next: "role-picker",
     });
   });
+  it("account_blocked 403 is not request-access", () => {
+    const error = describeCoachError(new ApiError(403, problem(403, { code: "account_blocked" }), "x"), "tailor");
+    expect(error.message).toBe("This account has been blocked. If you think that is a mistake, contact whoever invited you.");
+    expect(error.next).not.toBe("request-access");
+    expect(error.link).toBeUndefined();
+  });
   it("403 -> invite-only with the request-access link, anywhere", () => {
     const error = describeCoachError(new ApiError(403, problem(403, { detail: "this instance is invite-only" }), "x"), "upload");
     expect(error.message).toBe("Rhapto is invite-only right now");
