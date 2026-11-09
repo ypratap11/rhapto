@@ -8,7 +8,7 @@ export const COMMERCIAL_SRC = "/media/rhapto-commercial.mp4";
 export const COMMERCIAL_POSTER = "/media/rhapto-commercial-poster.webp";
 export const COMMERCIAL_LABEL = "Rhapto in 34 seconds";
 export const COMMERCIAL_DESCRIPTION =
-  "The video shows an AI-written resume line with an invented number being blocked, then Rhapto producing the same line with the number from your own resume.";
+  "The video shows an invented 40% resume line being blocked, a line backed by a verified fact replacing it, and then the person applying themselves on the employer's own site.";
 
 /** Wide screens only: phones never autoplay and never fetch the file until the viewer presses play. */
 const WIDE_QUERY = "(min-width: 1024px)";

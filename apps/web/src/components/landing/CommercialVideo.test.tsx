@@ -65,6 +65,11 @@ describe("CommercialVideo", () => {
     const desc = screen.getByText(COMMERCIAL_DESCRIPTION);
     expect(video().getAttribute("aria-describedby")).toBe(desc.id);
     expect(COMMERCIAL_DESCRIPTION.match(/[.!?]/g)).toHaveLength(1);
+    // What the video actually shows: blocked invented 40%, a verified-fact replacement, the person applies.
+    expect(COMMERCIAL_DESCRIPTION).toMatch(/invented 40%.*blocked/);
+    expect(COMMERCIAL_DESCRIPTION).toMatch(/verified fact/);
+    expect(COMMERCIAL_DESCRIPTION).toMatch(/person applying themselves/);
+    expect(COMMERCIAL_DESCRIPTION).not.toMatch(/same line|your own resume/);
   });
 
   it("keeps the copy free of only/first claims and of any promise to submit", () => {
