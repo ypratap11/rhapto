@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
+import time
 from typing import Any
+
+import httpx
+import jwt as pyjwt
 
 from rhapto.engine.compose import AnswerItem, ComposeOutput
 from rhapto.engine.scoring import RoleTitles
@@ -14,6 +18,8 @@ from rhapto.models.resume_document import (
     ResumeHeader,
     ResumeSection,
 )
+
+EMAIL = "wife@example.com"
 
 
 def bullet(text: str, source_block_id: str) -> ResumeBullet:
@@ -145,3 +151,25 @@ TPM = RoleTitles(
     exclude=("construction", "clinical", "nursing", "facilities", "real estate", "manufacturing"),
 )
 TPM_NO_EXCLUDE = RoleTitles(titles=TPM.titles)
+
+
+def _headers(app: Any) -> dict[str, str]:
+    now = int(time.time())
+    token = pyjwt.encode(
+        {
+            "email": EMAIL,
+            "sub": "idp-sub-1",
+            "aud": "test-aud",
+            "iss": "https://test-team.cloudflareaccess.com",
+            "iat": now,
+            "exp": now + 300,
+        },
+        app.state.test_key,
+        algorithm="RS256",
+        headers={"kid": "test-kid"},
+    )
+    return {"Cf-Access-Jwt-Assertion": token}
+
+
+def _client(app: Any) -> httpx.AsyncClient:
+    return httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test")

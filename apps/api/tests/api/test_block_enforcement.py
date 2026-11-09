@@ -1,62 +1,19 @@
 from __future__ import annotations
 
-import time
 import uuid
 
 import httpx
-import jwt as pyjwt
-import pytest
-from cryptography.hazmat.primitives.asymmetric import rsa
 from fastapi import FastAPI
+from helpers import EMAIL, _client, _headers
 from sqlalchemy import select, text
 
-from rhapto.api import auth as auth_module
 from rhapto.api.deps import AppState
 from rhapto.db.models import User
 
-EMAIL = "wife@example.com"
 BLOCKED_MESSAGE = "This account has been blocked."
 # SELECT statements one /me call by a normal access-mode user issues, captured from the code
 # before the block check was added (the check reads an already-loaded attribute, so it must add none).
 BASELINE_SELECT_COUNT = 3
-
-
-@pytest.fixture
-def access_app(app: FastAPI, monkeypatch) -> FastAPI:
-    key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
-    state: AppState = app.state.rhapto
-    state.settings.rhapto_auth_mode = "access"
-    state.settings.rhapto_access_team = "test-team"
-    state.settings.rhapto_access_aud = "test-aud"
-    state.settings.rhapto_allowed_emails = EMAIL
-    cache = auth_module.JwksCache("http://unused")
-    cache._keys["test-kid"] = key.public_key()
-    cache._fetched_at = time.monotonic()
-    monkeypatch.setitem(auth_module._jwks_caches, "test-team", cache)
-    app.state.test_key = key
-    return app
-
-
-def _headers(app: FastAPI) -> dict[str, str]:
-    now = int(time.time())
-    token = pyjwt.encode(
-        {
-            "email": EMAIL,
-            "sub": "idp-sub-1",
-            "aud": "test-aud",
-            "iss": "https://test-team.cloudflareaccess.com",
-            "iat": now,
-            "exp": now + 300,
-        },
-        app.state.test_key,
-        algorithm="RS256",
-        headers={"kid": "test-kid"},
-    )
-    return {"Cf-Access-Jwt-Assertion": token}
-
-
-def _client(app: FastAPI) -> httpx.AsyncClient:
-    return httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test")
 
 
 async def _block(session_factory, email: str = EMAIL) -> None:

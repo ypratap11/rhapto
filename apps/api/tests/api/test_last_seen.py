@@ -1,4 +1,3 @@
-# ruff: noqa: F811
 from __future__ import annotations
 
 import logging
@@ -6,11 +5,11 @@ from collections.abc import Iterator
 
 import pytest
 from fastapi import FastAPI
+from helpers import EMAIL, _client, _headers
 from sqlalchemy import event, text
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from rhapto.api import deps
-from tests.api.test_block_enforcement import EMAIL, _client, _headers, access_app  # noqa: F401
 
 
 @pytest.fixture
@@ -96,8 +95,10 @@ async def test_failing_update_does_not_fail_the_request(
     monkeypatch,
     caplog,
 ) -> None:
+    # The failure must come from the database, inside an open transaction: a function that
+    # raises before any SQL leaves nothing to roll back and hides the expired-instance bug.
     async def boom(session, user_id):  # type: ignore[no-untyped-def]
-        raise RuntimeError("secret-detail-xyz")
+        await session.execute(text("SELECT 1/0 -- secret-detail-xyz"))
 
     monkeypatch.setattr(deps, "touch_last_seen", boom)
     async with _client(access_app) as c:
@@ -106,7 +107,7 @@ async def test_failing_update_does_not_fail_the_request(
         with caplog.at_level(logging.WARNING):
             response = await c.get("/api/v1/me", headers=_headers(access_app))
     assert response.status_code == 200
-    assert "RuntimeError" in caplog.text
+    assert "last_seen_at update failed" in caplog.text
     assert "secret-detail-xyz" not in caplog.text
     assert EMAIL not in caplog.text
 

@@ -136,24 +136,29 @@ async def current_user(
     ):
         raise HTTPException(status_code=403, detail="this instance is invite-only")
     user = await ensure_account(session, principal.email)
+    # Captured now: a rollback below expires `user`, and an async lazy load then raises
+    # MissingGreenlet. Nothing after the commit may touch the instance again.
+    user_id = user.id
+    last_seen_at = user.last_seen_at
+    blocked_at = user.blocked_at
     # The account row is committed on its own, before the idp_subject write below is even
     # attempted -- see _record_idp_subject's docstring (N1) for why sharing one transaction
     # between the two turned a rare subject collision into a permanent account lockout.
     await session.commit()
-    if user.blocked_at is not None:
+    if blocked_at is not None:
         # Reads the already-loaded attribute (no extra query), and runs before the idp_subject
         # write so a blocked request records nothing. Access mode only: token mode is the
         # single-user self-hosted path and has no operator to block anyone.
         raise AccountBlockedError()
     if principal.subject:
-        await _record_idp_subject(session, user.id, principal.subject)
+        await _record_idp_subject(session, user_id, principal.subject)
     # Reads the already-loaded attribute, so a fresh value costs no query. A failure here must
     # never look like an auth failure: roll back, log the class name only, carry on.
-    if datetime.now(UTC) - user.last_seen_at > _LAST_SEEN_INTERVAL:
+    if datetime.now(UTC) - last_seen_at > _LAST_SEEN_INTERVAL:
         try:
-            await touch_last_seen(session, user.id)
+            await touch_last_seen(session, user_id)
             await session.commit()
         except Exception as exc:
             await session.rollback()
             logger.warning("last_seen_at update failed: %s", type(exc).__name__)
-    return user.id
+    return user_id
