@@ -6,11 +6,10 @@ import pytest
 
 from rhapto.engine.guardrails.registry import UnknownGuardrailError
 from rhapto.engine.pipeline import LLMBudgetExceeded
-from rhapto.engine.providers.errors import ProviderAuthError
 from rhapto.engine.providers.llm import MalformedOutputError
 from rhapto.engine.render.docx import OrphanBulletError
 from rhapto.engine.render.pdf import PdfRenderError
-from rhapto.engine.types import ProfileError
+from rhapto.engine.types import EngineError, ProfileError
 from rhapto.services import failure_categories as fc
 from rhapto.services.documents import DocumentError
 from rhapto.services.failure_categories import FAILURE_LABELS, FailureCategory, classify
@@ -69,7 +68,7 @@ SENTENCES: list[tuple[str, FailureCategory]] = [
 ]
 
 CLASS_PREFIXES: list[tuple[type[BaseException], FailureCategory]] = [
-    (ProviderAuthError, FailureCategory.provider_error),
+    (EngineError, FailureCategory.provider_error),
     (MalformedOutputError, FailureCategory.malformed_output),
     (LLMBudgetExceeded, FailureCategory.over_budget),
     (ProfileError, FailureCategory.profile_problem),
@@ -104,6 +103,11 @@ def test_every_prefix_in_the_table_is_tested() -> None:
     assert set(fc.CLASS_PREFIXES) == {cls.__name__ for cls, _ in CLASS_PREFIXES}
 
 
+UNKNOWN_PROVIDER_SENTENCE = (
+    "Your Mystery key was refused. It may have expired or been revoked. "
+    "Paste a new key in Settings, then try again."
+)
+
 ADVERSARIAL = [
     f"EngineError: {SENTINEL}",
     f"ValueError: {SENTINEL}",
@@ -114,8 +118,7 @@ ADVERSARIAL = [
     "API key in Settings to keep going.",
     "Your Mystery key was refused. It may have expired or been revoked. "
     f"Paste a new key in Settings, then try again. {SENTINEL}",
-    "Your Mystery key was refused. It may have expired or been revoked. "
-    "Paste a new key in Settings, then try again.",
+    UNKNOWN_PROVIDER_SENTENCE,
     f"job {SENTINEL} not found for task {SENTINEL}",
     f"ValueError: job {SENTINEL} not found for task {SENTINEL}",
     f"ValueError: parent package {SENTINEL} not found",
@@ -138,7 +141,6 @@ def test_sentinel_never_survives(error: str | None) -> None:
 @pytest.mark.parametrize(
     "error",
     [
-        f"EngineError: {SENTINEL}",
         f"ValueError: {SENTINEL}",
         f"{BLOCKED_MESSAGE} {SENTINEL}",
         f"{trial_limit_message(3)} {SENTINEL}",
@@ -152,7 +154,7 @@ def test_unmatched_inputs_are_other(error: str | None) -> None:
 
 
 def test_unknown_provider_user_key_sentence_is_other() -> None:
-    assert classify(ADVERSARIAL[7]) is FailureCategory.other
+    assert classify(UNKNOWN_PROVIDER_SENTENCE) is FailureCategory.other
 
 
 def test_labels_cover_the_enum() -> None:
@@ -187,3 +189,11 @@ def test_prefix_match_is_exact_not_startswith() -> None:
     assert classify("ProfileErrorX: y") is FailureCategory.other
     assert classify("xProfileError: y") is FailureCategory.other
     assert classify("profileerror: y") is FailureCategory.other
+
+
+def test_engine_error_with_provider_text_is_provider_error_and_text_never_survives() -> None:
+    error = f"EngineError: 429 rate limited, key {SENTINEL}, balance $12.34"
+    category = classify(error)
+    assert category is FailureCategory.provider_error
+    assert SENTINEL not in FAILURE_LABELS[category]
+    assert "429" not in FAILURE_LABELS[category]

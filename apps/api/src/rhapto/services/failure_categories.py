@@ -22,11 +22,10 @@ from enum import StrEnum
 
 from rhapto.engine.guardrails.registry import UnknownGuardrailError
 from rhapto.engine.pipeline import LLMBudgetExceeded
-from rhapto.engine.providers.errors import ProviderAuthError
 from rhapto.engine.providers.llm import MalformedOutputError
 from rhapto.engine.render.docx import OrphanBulletError
 from rhapto.engine.render.pdf import PdfRenderError
-from rhapto.engine.types import ProfileError
+from rhapto.engine.types import EngineError, ProfileError
 from rhapto.services.documents import DocumentError
 from rhapto.services.llm import (
     KEY_UNREADABLE_MESSAGE,
@@ -73,7 +72,7 @@ FAILURE_LABELS: dict[FailureCategory, str] = {
     FailureCategory.key_rejected_shared: "Shared API key refused",
     FailureCategory.key_rejected_own: "Their own API key refused",
     FailureCategory.key_unreadable: "Stored API key could not be read",
-    FailureCategory.provider_error: "AI provider error",
+    FailureCategory.provider_error: "The AI step failed",
     FailureCategory.malformed_output: "AI returned unusable output",
     FailureCategory.over_budget: "Run needed more AI calls than allowed",
     FailureCategory.profile_problem: "Problem with their profile",
@@ -86,10 +85,12 @@ FAILURE_LABELS: dict[FailureCategory, str] = {
     FailureCategory.other: "Other (see server logs)",
 }
 
-# Exact class-name lookup. `ProviderAuthError` is normally stored as one of the sentences above;
-# a bare class prefix means the run did not get that far, so it is only a provider problem.
+# Exact class-name lookup, by prefix only. `EngineError` is what the provider adapters wrap rate
+# limits, timeouts and 5xx in (and what the registry and tune renderer also raise), so the label
+# says "the AI step failed", not "provider". `ProviderAuthError` is stored as a fixed sentence,
+# never as a prefix, so it has no entry.
 CLASS_PREFIXES: dict[str, FailureCategory] = {
-    ProviderAuthError.__name__: FailureCategory.provider_error,
+    EngineError.__name__: FailureCategory.provider_error,
     MalformedOutputError.__name__: FailureCategory.malformed_output,
     LLMBudgetExceeded.__name__: FailureCategory.over_budget,
     ProfileError.__name__: FailureCategory.profile_problem,
