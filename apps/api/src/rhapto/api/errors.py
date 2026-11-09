@@ -16,7 +16,11 @@ from rhapto.engine.types import EngineError, ProfileError
 from rhapto.services.jobtext import JobTextError
 from rhapto.services.llm import KEY_UNREADABLE_MESSAGE, LLMNotConfiguredError
 from rhapto.services.secrets import KeyUnreadableError, SecretsError
-from rhapto.services.trial import FreeRunsPausedError, TrialLimitExceededError
+from rhapto.services.trial import (
+    AccountBlockedError,
+    FreeRunsPausedError,
+    TrialLimitExceededError,
+)
 
 PROBLEM = "application/problem+json"
 logger = logging.getLogger("rhapto.api")
@@ -114,6 +118,11 @@ def install_error_handlers(app: FastAPI) -> None:
             used=exc.used,
             limit=exc.limit,
         )
+
+    @app.exception_handler(AccountBlockedError)
+    async def _account_blocked(request: Request, exc: AccountBlockedError) -> JSONResponse:
+        # Fixed sentence only: no setting, address or reason is named.
+        return problem(403, "Forbidden", str(exc), code="account_blocked")
 
     @app.exception_handler(FreeRunsPausedError)
     async def _free_runs_paused(request: Request, exc: FreeRunsPausedError) -> JSONResponse:

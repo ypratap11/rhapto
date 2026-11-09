@@ -15,7 +15,7 @@ import redis.asyncio
 import redis.exceptions
 from alembic.config import Config
 from service_guard import service_unreachable
-from sqlalchemy import text
+from sqlalchemy import event, text
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from alembic import command
@@ -235,3 +235,23 @@ def test_redis_url() -> str:
             f"Redis not reachable at {url}: {exc}. Run `docker compose up -d db redis`."
         )
     return url
+
+
+@pytest.fixture
+def select_counter(engine: AsyncEngine) -> Iterator[list[str]]:
+    """Every SELECT the app issues while the fixture is active.
+
+    The dashboard is one request that has to answer five questions; the guard exists so a
+    well-meaning refactor cannot turn it back into a loop of per-row queries.
+    """
+    seen: list[str] = []
+
+    def before(conn, cursor, statement, parameters, context, executemany):  # type: ignore[no-untyped-def]
+        if statement.lstrip().upper().startswith("SELECT"):
+            seen.append(statement)
+
+    event.listen(engine.sync_engine, "before_cursor_execute", before)
+    try:
+        yield seen
+    finally:
+        event.remove(engine.sync_engine, "before_cursor_execute", before)

@@ -263,6 +263,27 @@ describe("TokenGate in access mode", () => {
     expect(screen.queryByText(/Connect to your Rhapto API/i)).not.toBeInTheDocument();
   });
 
+  it("blocked account sees the blocked message not invite-only", () => {
+    pathname.current = "/jobs";
+    vi.mocked(useMe).mockReturnValue({
+      isPending: false,
+      isSuccess: false,
+      error: new ApiError(403, { title: "x", status: 403, code: "account_blocked" }, "Forbidden"),
+    } as unknown as ReturnType<typeof useMe>);
+    renderGate(<TokenGate><p>secret content</p></TokenGate>);
+    expect(screen.getByText("This account has been blocked. If you think that is a mistake, contact whoever invited you.")).toBeInTheDocument();
+    expect(screen.queryByText(/invite-only/i)).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /request access/i })).not.toBeInTheDocument();
+    // a plain 403 still shows invite-only
+    vi.mocked(useMe).mockReturnValue({
+      isPending: false,
+      isSuccess: false,
+      error: new ApiError(403, null, "Forbidden"),
+    } as unknown as ReturnType<typeof useMe>);
+    renderGate(<TokenGate><p>secret content</p></TokenGate>);
+    expect(screen.getByText(/invite-only/i)).toBeInTheDocument();
+  });
+
   it("the hosted refusal says it is invite-only and links to the request-access form", () => {
     vi.mocked(useMe).mockReturnValue({
       isPending: false,

@@ -1,3 +1,5 @@
+import { COMPACT_JWS } from "@/lib/access-assertion";
+
 const UPSTREAM = process.env.RHAPTO_API_INTERNAL_URL ?? "http://api:8000";
 
 // Forwarded verbatim from the incoming request; the client's own `Authorization` is always
@@ -8,13 +10,9 @@ const UPSTREAM = process.env.RHAPTO_API_INTERNAL_URL ?? "http://api:8000";
 // rather than having both forwarded (fix-round finding S1: the previous comment here claimed the
 // client's assertion was "dropped", which was false -- it was forwarded first in the joined list).
 // range/accept-encoding are forwarded because the package-download endpoints may want them.
-const FORWARD_REQUEST_HEADERS = ["accept", "content-type", "range", "accept-encoding"];
+const FORWARD_REQUEST_HEADERS = ["accept", "content-type", "range", "accept-encoding", "origin"];
 
 const CF_ASSERTION_HEADER = "cf-access-jwt-assertion";
-// A compact JWS is exactly three base64url segments joined by ".". Cloudflare Access always sends
-// one such value in one header; anything else -- absent, malformed, or two values joined by
-// Headers.get's ", " -- is refused outright instead of sanitised or truncated.
-const COMPACT_JWS = /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/;
 
 // undici's fetch accepts `duplex` to stream a request body through, but not every installed DOM
 // lib types it yet; declaring our own permissive intersection avoids both an untyped call and a

@@ -1,10 +1,11 @@
 import { accessRequestLink } from "@/components/landing/access";
 import { ApiError } from "@/lib/api/client";
 
-export type NextAction = "reupload" | "role-picker" | "paste" | "request-access" | "settings" | "feedback" | "retry";
+export type NextAction = "reupload" | "role-picker" | "paste" | "request-access" | "settings" | "feedback" | "retry" | "blocked";
 export type CoachError = { message: string; next: NextAction; link?: { label: string; href: string }; wantMoreRuns?: boolean };
 export type CoachWhere = "upload" | "import" | "tailor" | "jobs";
 
+export const BLOCKED_MESSAGE = "This account has been blocked. If you think that is a mistake, contact whoever invited you.";
 export const MAX_RESUME_BYTES = 5 * 1024 * 1024;
 export const DOCX_MESSAGE =
   "Rhapto reads Word (.docx) files up to 5 MB. In Word or Google Docs, use Save as / Download as .docx";
@@ -46,6 +47,7 @@ export function checkResumeFile(file: { name: string; size: number }): CoachErro
 export function describeCoachError(error: unknown, where: CoachWhere): CoachError {
   if (error instanceof ApiError) {
     const code = typeof error.problem?.code === "string" ? error.problem.code : null;
+    if (error.status === 403 && code === "account_blocked") return { message: BLOCKED_MESSAGE, next: "blocked" };
     if (error.status === 403) {
       const access = accessRequestLink();
       return { message: "Rhapto is invite-only right now", next: "request-access", link: { label: "Request access", href: access.href } };

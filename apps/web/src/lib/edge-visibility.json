@@ -13,6 +13,7 @@
     "/settings",
     "/feedback",
     "/start",
-    "/api"
+    "/api",
+    "/admin"
   ]
 }

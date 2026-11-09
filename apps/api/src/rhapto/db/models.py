@@ -48,6 +48,7 @@ PAGE_AREAS = (
     "coach",
     "other",
 )
+ADMIN_ACTIONS = ("reset_runs", "block", "unblock")
 COACH_STEPS = (
     "started",
     "resume_in",
@@ -62,9 +63,8 @@ class User(TimestampMixin, Base):
     __tablename__ = "users"
     __table_args__ = (
         UniqueConstraint("idp_subject", name="uq_users_idp_subject"),
-        # `claim_trial_run`'s conditional UPDATE cannot drive this below zero; the constraint is
-        # here for the hand-written reset (see `trial_runs_used` below), which is the one way a
-        # human touches this column.
+        # `claim_trial_run`'s conditional UPDATE only ever adds one; the constraint backstops the
+        # owner's audited admin reset (see `trial_runs_used` below), the one path that lowers it.
         CheckConstraint("trial_runs_used >= 0", name="ck_users_trial_runs_used"),
     )
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=new_uuid)
@@ -78,12 +78,13 @@ class User(TimestampMixin, Base):
         Boolean, default=False, server_default="false", nullable=False
     )
     seeded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    # Model runs this account has spent on the DEPLOYMENT's provider key. Monotone: claimed before
-    # the call, never decremented, never refunded, and deliberately not derived from `packages` --
+    # Model runs this account has spent on the DEPLOYMENT's provider key. The app only ever
+    # increments it: claimed before the call, never refunded automatically, and deliberately not derived from `packages` --
     # a package is an artifact the user can edit (PATCH writes a new row carrying the parent's
     # llm_model) and delete (DELETE /jobs cascades), so counting packages both over- and
-    # under-counts spend. Untouched for a user on their own key. Reset by hand:
-    #   UPDATE users SET trial_runs_used = 0 WHERE email = '...';
+    # under-counts spend. Untouched for a user on their own key. A failed run is never refunded
+    # automatically; the owner can lower the count by hand through the audited admin reset
+    # (`repositories/admin.py: reset_runs`), which takes the row lock and writes an `admin_actions` row.
     trial_runs_used: Mapped[int] = mapped_column(
         Integer, default=0, server_default="0", nullable=False
     )
@@ -91,6 +92,8 @@ class User(TimestampMixin, Base):
     # means "this account has not used its free import". Never cleared by code; reset by hand if
     # an operator wants to give someone another.
     free_import_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Set by the owner's admin page; NULL means the account is not blocked. No default.
+    blocked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class ResumeBlock(UserScopedMixin, TimestampMixin, Base):
@@ -515,3 +518,28 @@ class FreeSpend(Base):
         Integer, server_default=text("0"), nullable=False
     )
     cost_usd: Mapped[Decimal] = mapped_column(Numeric(12, 6), nullable=False)
+
+
+class AdminAction(Base):
+    """Append-only audit row for an owner action (reset runs, block, unblock).
+
+    Not user-scoped: it is written by the admin area about another account. `target_user_id` is a
+    plain column with no foreign key, so deleting a user does not erase the record of what was done.
+    """
+
+    __tablename__ = "admin_actions"
+    __table_args__ = (
+        CheckConstraint(
+            "action IN ('reset_runs','block','unblock')", name="ck_admin_actions_action"
+        ),
+        Index("ix_admin_actions_target_created", "target_user_id", "created_at"),
+    )
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=new_uuid)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    actor_email: Mapped[str] = mapped_column(String(320), nullable=False)
+    action: Mapped[str] = mapped_column(String(20), nullable=False)
+    target_user_id: Mapped[uuid.UUID] = mapped_column(nullable=False)
+    before_json: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    after_json: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)

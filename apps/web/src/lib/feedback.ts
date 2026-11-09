@@ -4,8 +4,14 @@ export type FeedbackIn = components["schemas"]["FeedbackIn"];
 export type FeedbackQuickAnswers = components["schemas"]["QuickAnswers"];
 export type PageArea = NonNullable<FeedbackIn["page_area"]>;
 
-/** Where the shell feedback button stays out of the way: the front page, the public Help page and the survey itself. */
+/** Where the shell feedback button stays out of the way: the front page, the public Help page the survey itself and the owner-only admin area (see isFeedbackHidden). */
 export const FEEDBACK_HIDDEN_ROUTES: ReadonlySet<string> = new Set(["/", "/feedback", "/help"]);
+
+/** True on the exact hidden routes and on everything under /admin, so /admin/users/{id} is covered too. */
+export function isFeedbackHidden(pathname: string): boolean {
+  const path = normalise(pathname);
+  return FEEDBACK_HIDDEN_ROUTES.has(path) || path === "/admin" || path.startsWith("/admin/");
+}
 
 const UUID = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}";
 const CONTEXT = new RegExp(`^/jobs/(${UUID})(?:/packages/(${UUID}))?(?:/|$)`, "i");

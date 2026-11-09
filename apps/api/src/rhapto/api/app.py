@@ -13,6 +13,7 @@ from rhapto.api.auth import is_allowed_email
 from rhapto.api.deps import AppState, LlmFactory
 from rhapto.api.errors import install_error_handlers
 from rhapto.api.routers import (
+    admin,
     applications,
     coach,
     dashboard,
@@ -172,6 +173,7 @@ def create_app(
     app.include_router(dashboard.router, prefix=API_PREFIX, tags=["dashboard"])
     app.include_router(feedback.router, prefix=API_PREFIX, tags=["feedback"])
     app.include_router(coach.router, prefix=API_PREFIX, tags=["coach"])
+    app.include_router(admin.router, prefix=API_PREFIX, tags=["admin"], include_in_schema=False)
     return app
 
 

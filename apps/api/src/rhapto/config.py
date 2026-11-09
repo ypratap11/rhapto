@@ -43,6 +43,9 @@ class Settings(BaseSettings):
     # Only in access mode. True admits any email Cloudflare Access has verified, so Access is then
     # the only gate; the allowlists above are not consulted per request.
     rhapto_open_signup: bool = False
+    # Comma-separated, casefolded, exact addresses that may open /admin. Access mode only; empty
+    # means there is no admin area. Matched with `is_allowed_email(email, this, "")`.
+    rhapto_admin_emails: str = ""
     rhapto_packages_dir: Path = Path("data/packages")
     rhapto_web_origin: str = "http://localhost:3000"
     rhapto_poll_interval_hours: int = 6

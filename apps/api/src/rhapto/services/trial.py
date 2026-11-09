@@ -28,7 +28,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from rhapto.config import Settings
 from rhapto.db.repositories.free_spend import month_free_spend
-from rhapto.db.repositories.users import claim_free_import, claim_trial_run, trial_runs_used
+from rhapto.db.repositories.users import (
+    blocked_at_of,
+    claim_free_import,
+    claim_trial_run,
+    trial_runs_used,
+)
 from rhapto.engine.providers.registry import FAKE_PROVIDER_ID
 from rhapto.services.llm import env_llm_config, same_key, stored_llm_config
 from rhapto.services.secrets import SecretsError
@@ -67,6 +72,16 @@ class FreeRunsPausedError(Exception):
 
     def __init__(self) -> None:
         super().__init__(FREE_RUNS_PAUSED_MESSAGE)
+
+
+BLOCKED_MESSAGE = "This account has been blocked."
+
+
+class AccountBlockedError(Exception):
+    """The operator has blocked this account; every authenticated request is refused."""
+
+    def __init__(self) -> None:
+        super().__init__(BLOCKED_MESSAGE)
 
 
 class TrialLimitExceededError(Exception):
@@ -207,12 +222,25 @@ async def check_trial_allowance(
     await check_free_budget(session, settings, user_id)
 
 
+async def check_not_blocked(session: AsyncSession, settings: Settings, user_id: uuid.UUID) -> None:
+    """Raise `AccountBlockedError` for a blocked account. A no-op outside access mode.
+
+    Called by the worker before any money can be spent. Reads only.
+    """
+    if settings.rhapto_auth_mode != "access":
+        return
+    if await blocked_at_of(session, user_id) is not None:
+        raise AccountBlockedError()
+
+
 async def consume_trial_run(session: AsyncSession, settings: Settings, user_id: uuid.UUID) -> None:
     """Consume one run atomically, or raise `TrialLimitExceededError`.
 
     THE CALLER MUST COMMIT before making the model call. A worker killed between the claim and the
-    call must not hand out a free run, and there is no refund path: a refund is a second place the
-    counter can move and the first thing an attacker would reach for.
+    call must not hand out a free run, and there is no refund path: a failed run is never refunded
+    automatically, because a refund is a second place the counter can move and the first thing an
+    attacker would reach for. The only other mover is the owner's audited admin reset, which can
+    only lower the count by hand.
     """
     await check_free_budget(session, settings, user_id)
     limit = await trial_limit_for(session, settings, user_id)

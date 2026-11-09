@@ -1,6 +1,7 @@
 """Tester feedback intake. One route, insert-only: there is no GET, list, PATCH or DELETE for
-feedback over HTTP, and nothing under `rhapto.api` imports the cross-user read. The owner reads it
-with `rhapto feedback report` on the server.
+feedback text over HTTP, and nothing under `rhapto.api` imports the cross-user read. The owner reads
+it with `rhapto feedback report` on the server. An admin area exists under `rhapto.api`; it reads
+feedback only as a count of the "wants more" marker, through `repositories/admin.py`.
 
 Nothing here logs the body, and the 422 handler already drops `input` from validation errors.
 """

@@ -8,6 +8,7 @@ import {
   contextForPath,
   draftKey,
   FEEDBACK_HIDDEN_ROUTES,
+  isFeedbackHidden,
   loadDraft,
   saveDraft,
   SURVEY_STEPS,
@@ -82,20 +83,22 @@ function pageRoutes(dir = APP_DIR, prefix = ""): string[] {
 describe("area coverage (a new page without an area fails here)", () => {
   const hidden = FEEDBACK_HIDDEN_ROUTES;
 
-  it("hides the button on exactly /, /feedback and /help", () => {
+  it("hides the button on exactly /, /feedback and /help, plus the whole admin area", () => {
     expect([...hidden].sort()).toEqual(["/", "/feedback", "/help"]);
     expect(hidden.has("/help")).toBe(true);
+    for (const p of ["/admin", "/admin/users/abc", "/admin/"]) expect(isFeedbackHidden(p), p).toBe(true);
+    for (const p of ["/administrator", "/jobs", "/profile"]) expect(isFeedbackHidden(p), p).toBe(false);
   });
 
   it("maps every edge-protected top-level route, except /api and the hidden ones, to a real area", () => {
-    const routes = visibility.protectedAtEdge.filter((r) => r !== "/api" && !hidden.has(r));
+    const routes = visibility.protectedAtEdge.filter((r) => r !== "/api" && !isFeedbackHidden(r));
     expect(routes.length).toBeGreaterThan(4); // guard on the guard
     const other = routes.filter((r) => areaForPath(r) === "other");
     expect(other, `routes with no feedback area: ${other.join(", ")}`).toEqual([]);
   });
 
   it("maps every page.tsx route under app/, including nested and dynamic ones", () => {
-    const routes = pageRoutes().filter((r) => !hidden.has(r));
+    const routes = pageRoutes().filter((r) => !isFeedbackHidden(r));
     // Prove the walk really reaches nested and dynamic pages, or the loop below is decoration.
     expect(routes).toContain(`/jobs/${JOB}/packages/${JOB}`);
     const other = routes.filter((r) => areaForPath(r) === "other");

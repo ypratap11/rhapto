@@ -1,19 +1,21 @@
 from __future__ import annotations
 
+import time
 import uuid
-from collections.abc import AsyncIterator, Awaitable, Callable, Iterator
+from collections.abc import AsyncIterator, Awaitable, Callable
 from pathlib import Path
 from typing import Any
 
 import httpx
 import pytest
 from asgi_lifespan import LifespanManager
+from cryptography.hazmat.primitives.asymmetric import rsa
 from fastapi import FastAPI
-from helpers import default_tailor_script
+from helpers import EMAIL, default_tailor_script
 from pydantic import BaseModel
-from sqlalchemy import event
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
+from rhapto.api import auth as auth_module
 from rhapto.api.app import create_app
 from rhapto.api.deps import AppState, LlmFactory
 from rhapto.config import Settings
@@ -207,26 +209,6 @@ async def imported_profile(
 
 
 @pytest.fixture
-def select_counter(engine: AsyncEngine) -> Iterator[list[str]]:
-    """Every SELECT the app issues while the fixture is active.
-
-    The dashboard is one request that has to answer five questions; the guard exists so a
-    well-meaning refactor cannot turn it back into a loop of per-row queries.
-    """
-    seen: list[str] = []
-
-    def before(conn, cursor, statement, parameters, context, executemany):  # type: ignore[no-untyped-def]
-        if statement.lstrip().upper().startswith("SELECT"):
-            seen.append(statement)
-
-    event.listen(engine.sync_engine, "before_cursor_execute", before)
-    try:
-        yield seen
-    finally:
-        event.remove(engine.sync_engine, "before_cursor_execute", before)
-
-
-@pytest.fixture
 async def tailored_package(
     client: httpx.AsyncClient, imported_profile: None, fake_llm: ScriptableLLM
 ) -> dict[str, Any]:
@@ -251,3 +233,19 @@ async def tailored_package(
     packages = (await client.get(f"/api/v1/jobs/{job['id']}/packages")).json()
     assert packages, "the inline enqueuer should have produced a package"
     return dict(packages[-1])
+
+
+@pytest.fixture
+def access_app(app: FastAPI, monkeypatch) -> FastAPI:
+    key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    state: AppState = app.state.rhapto
+    state.settings.rhapto_auth_mode = "access"
+    state.settings.rhapto_access_team = "test-team"
+    state.settings.rhapto_access_aud = "test-aud"
+    state.settings.rhapto_allowed_emails = EMAIL
+    cache = auth_module.JwksCache("http://unused")
+    cache._keys["test-kid"] = key.public_key()
+    cache._fetched_at = time.monotonic()
+    monkeypatch.setitem(auth_module._jwks_caches, "test-team", cache)
+    app.state.test_key = key
+    return app

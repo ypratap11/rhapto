@@ -120,6 +120,14 @@ matter what Include says).
 
 After this, Cloudflare is never edited to invite someone again.
 
+## Admin addresses
+
+`RHAPTO_ADMIN_EMAILS` is a comma-separated list of exact, casefolded addresses (no domains) that may open
+`/admin`. Empty means nobody is an admin, and `/admin` answers 404 for everyone. Admin addresses cannot be
+blocked from the UI. If a listed address was blocked earlier (directly in SQL, or before it was listed), it
+sees "Account blocked" on `/admin` and cannot unblock itself in the UI; clear `users.blocked_at` in SQL.
+Like the allowlist, changing it needs a restart: `docker compose up -d --force-recreate api worker`.
+
 ## Step 6 — invite the second person
 
 ```

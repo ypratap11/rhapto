@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import uuid
+from datetime import datetime
 
 from sqlalchemy import select, text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -78,6 +79,11 @@ async def trial_runs_used(session: AsyncSession, user_id: uuid.UUID) -> int:
     return int(used or 0)
 
 
+async def blocked_at_of(session: AsyncSession, user_id: uuid.UUID) -> datetime | None:
+    """When this account was blocked, or None (also for an unknown user). Reads the column only."""
+    return await session.scalar(select(User.blocked_at).where(User.id == user_id))
+
+
 async def claim_trial_run(session: AsyncSession, user_id: uuid.UUID, limit: int) -> int | None:
     """Atomically consume one run. Returns the new count, or None when the account is already at
     `limit` (or the row is gone). The caller must commit before the money is spent.
@@ -119,3 +125,19 @@ async def claim_free_import(session: AsyncSession, user_id: uuid.UUID) -> bool:
         {"uid": str(user_id)},
     )
     return claim.first() is not None
+
+
+async def touch_last_seen(session: AsyncSession, user_id: uuid.UUID) -> bool:
+    """Stamp `last_seen_at` unless it was already stamped within the hour. True if a row changed.
+
+    The `WHERE` makes the throttle atomic: concurrent requests that all loaded a stale value
+    still produce one write. Does not commit.
+    """
+    result = await session.execute(
+        text(
+            "UPDATE users SET last_seen_at = now() "
+            "WHERE id = :id AND last_seen_at < now() - interval '1 hour'"
+        ),
+        {"id": user_id},
+    )
+    return bool(result.rowcount)  # type: ignore[attr-defined]

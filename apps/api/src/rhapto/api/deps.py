@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import logging
 import uuid
 from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
 from typing import Annotated
 
 from fastapi import Depends, HTTPException, Request
@@ -13,6 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 from rhapto.api.auth import Principal, is_allowed_email, resolve_principal
 from rhapto.config import Settings
 from rhapto.db.models import User
+from rhapto.db.repositories.users import touch_last_seen
 from rhapto.engine.providers.llm import LLMProvider
 from rhapto.engine.providers.registry import build_llm
 from rhapto.services.accounts import ensure_account
@@ -21,10 +24,15 @@ from rhapto.services.enqueue import Enqueuer
 from rhapto.services.eventbus import EventBus
 from rhapto.services.jobtext import FetchText
 from rhapto.services.storage import PackageStorage
+from rhapto.services.trial import AccountBlockedError
 
 # (provider, model, api_key) -> adapter. Injectable so the "test this key" endpoint can be
 # exercised without an SDK client or a real key.
 LlmFactory = Callable[[str, str, str], LLMProvider]
+
+logger = logging.getLogger(__name__)
+
+_LAST_SEEN_INTERVAL = timedelta(hours=1)
 
 
 @dataclass
@@ -128,10 +136,29 @@ async def current_user(
     ):
         raise HTTPException(status_code=403, detail="this instance is invite-only")
     user = await ensure_account(session, principal.email)
+    # Captured now: a rollback below expires `user`, and an async lazy load then raises
+    # MissingGreenlet. Nothing after the commit may touch the instance again.
+    user_id = user.id
+    last_seen_at = user.last_seen_at
+    blocked_at = user.blocked_at
     # The account row is committed on its own, before the idp_subject write below is even
     # attempted -- see _record_idp_subject's docstring (N1) for why sharing one transaction
     # between the two turned a rare subject collision into a permanent account lockout.
     await session.commit()
+    if blocked_at is not None:
+        # Reads the already-loaded attribute (no extra query), and runs before the idp_subject
+        # write so a blocked request records nothing. Access mode only: token mode is the
+        # single-user self-hosted path and has no operator to block anyone.
+        raise AccountBlockedError()
     if principal.subject:
-        await _record_idp_subject(session, user.id, principal.subject)
-    return user.id
+        await _record_idp_subject(session, user_id, principal.subject)
+    # Reads the already-loaded attribute, so a fresh value costs no query. A failure here must
+    # never look like an auth failure: roll back, log the class name only, carry on.
+    if datetime.now(UTC) - last_seen_at > _LAST_SEEN_INTERVAL:
+        try:
+            await touch_last_seen(session, user_id)
+            await session.commit()
+        except Exception as exc:
+            await session.rollback()
+            logger.warning("last_seen_at update failed: %s", type(exc).__name__)
+    return user_id

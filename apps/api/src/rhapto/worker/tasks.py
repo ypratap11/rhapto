@@ -41,13 +41,24 @@ from rhapto.services.llm import (
 )
 from rhapto.services.packaging import persist_package
 from rhapto.services.profile_sync import block_row_to_model, load_profile_from_db
+from rhapto.services.provider_messages import (
+    PROVIDER_DISPLAY_NAMES as PROVIDER_DISPLAY_NAMES,
+)
+from rhapto.services.provider_messages import (
+    SHARED_KEY_REJECTED_MESSAGE as SHARED_KEY_REJECTED_MESSAGE,
+)
+from rhapto.services.provider_messages import (
+    user_key_message as user_key_message,
+)
 from rhapto.services.scoring import rescore_user, score_and_store
 from rhapto.services.secrets import KeyUnreadableError, SecretsError, fernet_for
 from rhapto.services.storage import PackageStorage
 from rhapto.services.trial import (
+    AccountBlockedError,
     FreeRunsPausedError,
     TrialLimitExceededError,
     check_free_budget,
+    check_not_blocked,
     consume_trial_run,
     on_deployment_key,
 )
@@ -72,39 +83,8 @@ SETUP_ERRORS = (
     ProviderAuthError,
     TrialLimitExceededError,
     FreeRunsPausedError,
+    AccountBlockedError,
 )
-
-# Shown instead of the provider's own words when the rejected key belongs to the deployment rather
-# than to the person reading it. Names no provider, no model, no account and no balance.
-SHARED_KEY_REJECTED_MESSAGE = (
-    "This instance's shared LLM key was refused by its provider. Add your own key in Settings to "
-    "keep going, or ask whoever runs this instance to check it."
-)
-
-
-# Display names for the user-key sentences. Written out (not the registry label, which says
-# "Groq (free tier)") because these two sentences are matched word for word by the web
-# (`SETTINGS_SENTENCES` in apps/web/src/lib/coach/errors.ts). Change one side, change the other.
-PROVIDER_DISPLAY_NAMES = {
-    "openai": "OpenAI",
-    "anthropic": "Anthropic",
-    "gemini": "Google Gemini",
-    "groq": "Groq",
-    "openrouter": "OpenRouter",
-}
-
-
-def user_key_message(kind: str, provider_id: str) -> str | None:
-    """What a person whose OWN key was refused should read, or None for a provider we have no name for."""
-    name = PROVIDER_DISPLAY_NAMES.get(provider_id)
-    if name is None:
-        return None
-    if kind == "quota":
-        return f"Your {name} account is out of credit. Add credit with {name} or paste a different key in Settings."
-    return (
-        f"Your {name} key was refused. It may have expired or been revoked. "
-        "Paste a new key in Settings, then try again."
-    )
 
 
 async def _stored_provider_id(session: AsyncSession, user_id: uuid.UUID) -> str | None:
@@ -290,6 +270,10 @@ async def tailor_job(ctx: dict[str, Any], task_id: str) -> None:
             # ctx["llm_resolver"] -- a gate hidden in there is a gate the tests replace.
             # The budget is checked every time, including on an arq re-delivery that skips the claim
             # below: a retry after the month's money ran out must not run.
+            # A blocked account spends nothing, own key or deployment key, first delivery or
+            # re-delivery -- so this sits before the budget check and outside the claim
+            # conditional below, and not in the swappable resolver.
+            await check_not_blocked(session, settings, user_id)
             await check_free_budget(session, settings, user_id)
             if not active_task.progress_json.get("trial_claimed"):
                 await consume_trial_run(session, settings, user_id)

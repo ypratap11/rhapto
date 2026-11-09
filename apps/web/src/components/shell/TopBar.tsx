@@ -13,7 +13,7 @@ import { ThemeMenuItem, ThemeToggle } from "@/components/ui/theme-toggle";
 import { SAME_ORIGIN_DEPLOYMENT } from "@/lib/api/client";
 import { useAnswers, useMe } from "@/lib/api/queries";
 import { initials } from "@/lib/dashboard-view";
-import { areaForPath, contextForPath, FEEDBACK_HIDDEN_ROUTES } from "@/lib/feedback";
+import { areaForPath, contextForPath, isFeedbackHidden } from "@/lib/feedback";
 import { cn } from "cn";
 import { useSignedIn, useVisitorHeader } from "./TokenGate";
 
@@ -293,7 +293,7 @@ export function TopBar() {
   const answers = useAnswers({ enabled: signedIn && me.isSuccess });
   const initial = initials(answers.data?.name, me.data?.email);
   const path = pathname.length > 1 ? pathname.replace(/\/+$/, "") : pathname;
-  const canFeedback = signedIn && me.isSuccess && !FEEDBACK_HIDDEN_ROUTES.has(path);
+  const canFeedback = signedIn && me.isSuccess && !isFeedbackHidden(path);
   // Area and context are fixed at open time, so navigating while the dialog is open cannot retag it.
   const openFeedback = () => setFeedback({ area: areaForPath(pathname), ...contextForPath(pathname) });
   const current = activeTab(pathname);
