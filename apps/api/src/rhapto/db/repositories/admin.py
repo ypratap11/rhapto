@@ -520,3 +520,9 @@ async def set_blocked(
         await session.rollback()
         raise
     return BlockResult(changed=True, blocked_at=new_at)
+
+
+async def email_of(session: AsyncSession, user_id: uuid.UUID) -> str | None:
+    """The user's email, or None when there is no such user."""
+    email: str | None = await session.scalar(select(User.email).where(User.id == user_id))
+    return email

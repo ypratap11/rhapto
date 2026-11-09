@@ -7,21 +7,24 @@ from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from rhapto.api.admin_guard import AdminRoute
 from rhapto.api.admin_schemas import (
     ActionOut,
+    ActionResultOut,
     AdminSessionOut,
     AlertOut,
     FailureOut,
     OverviewOut,
+    ResetIn,
     UserDetailOut,
     UserRowOut,
     UserSearchIn,
     UserSearchOut,
 )
+from rhapto.api.auth import is_allowed_email
 from rhapto.api.deps import get_session, get_settings_dep
 from rhapto.api.errors import not_found
 from rhapto.config import Settings
@@ -170,6 +173,73 @@ async def admin_user_detail(
             for h in detail.history
         ],
     )
+
+
+RESET_RAISE_DETAIL = "A reset can only lower the number of runs used, never raise it."
+PROTECTED_DETAIL = "This account is listed as an admin and cannot be blocked."
+
+
+async def _target_email(session: AsyncSession, user_id: uuid.UUID) -> str:
+    email = await admin_repo.email_of(session, user_id)
+    if email is None:
+        raise not_found("user", user_id)
+    return email
+
+
+@router.post("/users/{user_id}/reset-runs", response_model=ActionResultOut)
+async def admin_reset_runs(
+    user_id: uuid.UUID, body: ResetIn, request: Request, session: SessionDep
+) -> ActionResultOut:
+    await _target_email(session, user_id)
+    try:
+        result = await admin_repo.reset_runs(
+            session, actor_email=request.state.admin_email, user_id=user_id, to=body.to
+        )
+    except admin_repo.UserNotFound:
+        raise not_found("user", user_id) from None
+    except admin_repo.ResetWouldRaise:
+        raise HTTPException(status_code=409, detail=RESET_RAISE_DETAIL) from None
+    return ActionResultOut(changed=result.changed, runs_used=result.after, blocked=None)
+
+
+async def _set_blocked(
+    user_id: uuid.UUID,
+    blocked: bool,
+    request: Request,
+    session: AsyncSession,
+    settings: Settings,
+) -> ActionResultOut:
+    email = await _target_email(session, user_id)
+    protected = is_allowed_email(email, settings.rhapto_admin_emails, "")
+    try:
+        result = await admin_repo.set_blocked(
+            session,
+            actor_email=request.state.admin_email,
+            user_id=user_id,
+            blocked=blocked,
+            protected=protected,
+        )
+    except admin_repo.UserNotFound:
+        raise not_found("user", user_id) from None
+    except admin_repo.ProtectedAccount:
+        raise HTTPException(status_code=409, detail=PROTECTED_DETAIL) from None
+    return ActionResultOut(
+        changed=result.changed, runs_used=None, blocked=result.blocked_at is not None
+    )
+
+
+@router.post("/users/{user_id}/block", response_model=ActionResultOut)
+async def admin_block(
+    user_id: uuid.UUID, request: Request, session: SessionDep, settings: SettingsDep
+) -> ActionResultOut:
+    return await _set_blocked(user_id, True, request, session, settings)
+
+
+@router.post("/users/{user_id}/unblock", response_model=ActionResultOut)
+async def admin_unblock(
+    user_id: uuid.UUID, request: Request, session: SessionDep, settings: SettingsDep
+) -> ActionResultOut:
+    return await _set_blocked(user_id, False, request, session, settings)
 
 
 # Real admin routes (Tasks 11 and 12) must be registered ABOVE this call: Starlette takes the first

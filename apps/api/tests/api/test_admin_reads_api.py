@@ -14,7 +14,7 @@ import jwt as pyjwt
 import pytest
 from cryptography.hazmat.primitives.asymmetric import rsa
 from fastapi import FastAPI
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from rhapto.api import auth as auth_module
@@ -150,8 +150,11 @@ async def _seed_scenario(sf: async_sessionmaker[AsyncSession], name: str) -> Non
             u = await _user(s, "r@x.com", runs=3)
             s.add(_wants_more(u))
         elif name == "signin_limit":
+            # The bootstrap user is backdated so "today" is exactly the 40 seeded here, whatever
+            # the real date is (created_at defaults to the database clock, `NOW` is injected).
+            await s.execute(update(User).values(created_at=NOW - timedelta(days=30)))
             for i in range(40):
-                await _user(s, f"u{i}@x.com")
+                await _user(s, f"u{i}@x.com", created_at=NOW - timedelta(hours=1))
         await s.commit()
 
 
@@ -182,7 +185,11 @@ async def test_overview_shape_and_alerts_fire_on_seeded_data(
     assert body["budget_usd"] == 10.0
     assert isinstance(body["free_spend_month_usd"], str)
     if scenario == "signin_limit":
-        assert body["accounts"] >= 40 and body["account_cap"] == 50
+        # 40 seeded + the bootstrap user
+        assert body["accounts"] == 41 and body["account_cap"] == 50
+        assert body["signups_total"] == 41 and body["signups_today"] == 40
+    if scenario == "ready_to_ask":
+        assert body["want_more_users"] == 1
     if scenario == "failures":
         assert body["failed_7d"] == 5
         assert "Other" in body["alerts"][0]["detail"]

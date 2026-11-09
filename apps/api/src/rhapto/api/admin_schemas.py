@@ -79,3 +79,13 @@ class UserDetailOut(BaseModel):
     failures: list[FailureOut]
     suggested_reset_runs: int | None
     history: list[ActionOut]
+
+
+class ResetIn(BaseModel):
+    to: int = Field(ge=0)
+
+
+class ActionResultOut(BaseModel):
+    changed: bool
+    runs_used: int | None
+    blocked: bool | None

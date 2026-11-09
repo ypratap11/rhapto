@@ -23,7 +23,7 @@ from rhapto.db.models import User
 ADMIN = "Owner@Example.com"
 ORIGIN = "https://rhapto.example.test"
 EXPECTED_ADMIN_ROUTES = (
-    6  # session, catch-all, bare /admin, overview, search, user detail; Task 12 raises it to 9
+    9  # session, catch-all, bare /admin, overview, search, detail, reset-runs, block, unblock
 )
 UNKNOWN = "/api/v1/definitely-unknown"
 PROBE_POST = "/api/v1/adminprobe/echo"

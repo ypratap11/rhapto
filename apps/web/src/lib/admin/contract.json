@@ -1,0 +1,645 @@
+{
+  "models": {
+    "ActionOut": {
+      "properties": {
+        "action": {
+          "title": "Action",
+          "type": "string"
+        },
+        "actor_email": {
+          "title": "Actor Email",
+          "type": "string"
+        },
+        "after": {
+          "additionalProperties": true,
+          "title": "After",
+          "type": "object"
+        },
+        "before": {
+          "additionalProperties": true,
+          "title": "Before",
+          "type": "object"
+        },
+        "when": {
+          "format": "date-time",
+          "title": "When",
+          "type": "string"
+        }
+      },
+      "required": [
+        "when",
+        "actor_email",
+        "action",
+        "before",
+        "after"
+      ],
+      "title": "ActionOut",
+      "type": "object"
+    },
+    "ActionResultOut": {
+      "properties": {
+        "blocked": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Blocked"
+        },
+        "changed": {
+          "title": "Changed",
+          "type": "boolean"
+        },
+        "runs_used": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Runs Used"
+        }
+      },
+      "required": [
+        "changed",
+        "runs_used",
+        "blocked"
+      ],
+      "title": "ActionResultOut",
+      "type": "object"
+    },
+    "AdminSessionOut": {
+      "properties": {
+        "ok": {
+          "title": "Ok",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "ok"
+      ],
+      "title": "AdminSessionOut",
+      "type": "object"
+    },
+    "AlertOut": {
+      "properties": {
+        "detail": {
+          "title": "Detail",
+          "type": "string"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "title": {
+          "title": "Title",
+          "type": "string"
+        },
+        "tone": {
+          "enum": [
+            "warn",
+            "info"
+          ],
+          "title": "Tone",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "tone",
+        "title",
+        "detail"
+      ],
+      "title": "AlertOut",
+      "type": "object"
+    },
+    "FailureOut": {
+      "$defs": {
+        "FailureCategory": {
+          "enum": [
+            "blocked",
+            "trial_limit",
+            "free_runs_paused",
+            "key_not_configured",
+            "key_rejected_shared",
+            "key_rejected_own",
+            "key_unreadable",
+            "provider_error",
+            "malformed_output",
+            "over_budget",
+            "profile_problem",
+            "render_failed",
+            "guardrail_failed",
+            "document_problem",
+            "job_missing",
+            "no_resume",
+            "did_not_finish",
+            "other"
+          ],
+          "title": "FailureCategory",
+          "type": "string"
+        }
+      },
+      "properties": {
+        "category": {
+          "$ref": "#/$defs/FailureCategory"
+        },
+        "label": {
+          "title": "Label",
+          "type": "string"
+        },
+        "type": {
+          "title": "Type",
+          "type": "string"
+        },
+        "when": {
+          "format": "date-time",
+          "title": "When",
+          "type": "string"
+        }
+      },
+      "required": [
+        "when",
+        "type",
+        "category",
+        "label"
+      ],
+      "title": "FailureOut",
+      "type": "object"
+    },
+    "OverviewOut": {
+      "$defs": {
+        "AlertOut": {
+          "properties": {
+            "detail": {
+              "title": "Detail",
+              "type": "string"
+            },
+            "id": {
+              "title": "Id",
+              "type": "string"
+            },
+            "title": {
+              "title": "Title",
+              "type": "string"
+            },
+            "tone": {
+              "enum": [
+                "warn",
+                "info"
+              ],
+              "title": "Tone",
+              "type": "string"
+            }
+          },
+          "required": [
+            "id",
+            "tone",
+            "title",
+            "detail"
+          ],
+          "title": "AlertOut",
+          "type": "object"
+        }
+      },
+      "properties": {
+        "account_cap": {
+          "title": "Account Cap",
+          "type": "integer"
+        },
+        "accounts": {
+          "title": "Accounts",
+          "type": "integer"
+        },
+        "alerts": {
+          "items": {
+            "$ref": "#/$defs/AlertOut"
+          },
+          "title": "Alerts",
+          "type": "array"
+        },
+        "budget_usd": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Budget Usd"
+        },
+        "failed_7d": {
+          "title": "Failed 7D",
+          "type": "integer"
+        },
+        "free_spend_month_usd": {
+          "title": "Free Spend Month Usd",
+          "type": "string"
+        },
+        "signups_today": {
+          "title": "Signups Today",
+          "type": "integer"
+        },
+        "signups_total": {
+          "title": "Signups Total",
+          "type": "integer"
+        },
+        "want_more_users": {
+          "title": "Want More Users",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "signups_total",
+        "signups_today",
+        "free_spend_month_usd",
+        "budget_usd",
+        "accounts",
+        "account_cap",
+        "want_more_users",
+        "failed_7d",
+        "alerts"
+      ],
+      "title": "OverviewOut",
+      "type": "object"
+    },
+    "ResetIn": {
+      "properties": {
+        "to": {
+          "minimum": 0,
+          "title": "To",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "to"
+      ],
+      "title": "ResetIn",
+      "type": "object"
+    },
+    "UserDetailOut": {
+      "$defs": {
+        "ActionOut": {
+          "properties": {
+            "action": {
+              "title": "Action",
+              "type": "string"
+            },
+            "actor_email": {
+              "title": "Actor Email",
+              "type": "string"
+            },
+            "after": {
+              "additionalProperties": true,
+              "title": "After",
+              "type": "object"
+            },
+            "before": {
+              "additionalProperties": true,
+              "title": "Before",
+              "type": "object"
+            },
+            "when": {
+              "format": "date-time",
+              "title": "When",
+              "type": "string"
+            }
+          },
+          "required": [
+            "when",
+            "actor_email",
+            "action",
+            "before",
+            "after"
+          ],
+          "title": "ActionOut",
+          "type": "object"
+        },
+        "FailureCategory": {
+          "enum": [
+            "blocked",
+            "trial_limit",
+            "free_runs_paused",
+            "key_not_configured",
+            "key_rejected_shared",
+            "key_rejected_own",
+            "key_unreadable",
+            "provider_error",
+            "malformed_output",
+            "over_budget",
+            "profile_problem",
+            "render_failed",
+            "guardrail_failed",
+            "document_problem",
+            "job_missing",
+            "no_resume",
+            "did_not_finish",
+            "other"
+          ],
+          "title": "FailureCategory",
+          "type": "string"
+        },
+        "FailureOut": {
+          "properties": {
+            "category": {
+              "$ref": "#/$defs/FailureCategory"
+            },
+            "label": {
+              "title": "Label",
+              "type": "string"
+            },
+            "type": {
+              "title": "Type",
+              "type": "string"
+            },
+            "when": {
+              "format": "date-time",
+              "title": "When",
+              "type": "string"
+            }
+          },
+          "required": [
+            "when",
+            "type",
+            "category",
+            "label"
+          ],
+          "title": "FailureOut",
+          "type": "object"
+        }
+      },
+      "properties": {
+        "asked_for_more": {
+          "title": "Asked For More",
+          "type": "boolean"
+        },
+        "blocked": {
+          "title": "Blocked",
+          "type": "boolean"
+        },
+        "email": {
+          "title": "Email",
+          "type": "string"
+        },
+        "failures": {
+          "items": {
+            "$ref": "#/$defs/FailureOut"
+          },
+          "title": "Failures",
+          "type": "array"
+        },
+        "free_spend_usd": {
+          "title": "Free Spend Usd",
+          "type": "string"
+        },
+        "history": {
+          "items": {
+            "$ref": "#/$defs/ActionOut"
+          },
+          "title": "History",
+          "type": "array"
+        },
+        "id": {
+          "format": "uuid",
+          "title": "Id",
+          "type": "string"
+        },
+        "joined_at": {
+          "format": "date-time",
+          "title": "Joined At",
+          "type": "string"
+        },
+        "runs_limit": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Runs Limit"
+        },
+        "runs_used": {
+          "title": "Runs Used",
+          "type": "integer"
+        },
+        "suggested_reset_runs": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Suggested Reset Runs"
+        }
+      },
+      "required": [
+        "id",
+        "email",
+        "joined_at",
+        "runs_used",
+        "runs_limit",
+        "free_spend_usd",
+        "asked_for_more",
+        "blocked",
+        "failures",
+        "suggested_reset_runs",
+        "history"
+      ],
+      "title": "UserDetailOut",
+      "type": "object"
+    },
+    "UserRowOut": {
+      "properties": {
+        "blocked": {
+          "title": "Blocked",
+          "type": "boolean"
+        },
+        "email": {
+          "title": "Email",
+          "type": "string"
+        },
+        "failed_count": {
+          "title": "Failed Count",
+          "type": "integer"
+        },
+        "id": {
+          "format": "uuid",
+          "title": "Id",
+          "type": "string"
+        },
+        "last_seen_at": {
+          "format": "date-time",
+          "title": "Last Seen At",
+          "type": "string"
+        },
+        "runs_limit": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Runs Limit"
+        },
+        "runs_used": {
+          "title": "Runs Used",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "id",
+        "email",
+        "runs_used",
+        "runs_limit",
+        "failed_count",
+        "last_seen_at",
+        "blocked"
+      ],
+      "title": "UserRowOut",
+      "type": "object"
+    },
+    "UserSearchIn": {
+      "properties": {
+        "offset": {
+          "default": 0,
+          "maximum": 10000,
+          "minimum": 0,
+          "title": "Offset",
+          "type": "integer"
+        },
+        "q": {
+          "default": "",
+          "maxLength": 320,
+          "title": "Q",
+          "type": "string"
+        }
+      },
+      "title": "UserSearchIn",
+      "type": "object"
+    },
+    "UserSearchOut": {
+      "$defs": {
+        "UserRowOut": {
+          "properties": {
+            "blocked": {
+              "title": "Blocked",
+              "type": "boolean"
+            },
+            "email": {
+              "title": "Email",
+              "type": "string"
+            },
+            "failed_count": {
+              "title": "Failed Count",
+              "type": "integer"
+            },
+            "id": {
+              "format": "uuid",
+              "title": "Id",
+              "type": "string"
+            },
+            "last_seen_at": {
+              "format": "date-time",
+              "title": "Last Seen At",
+              "type": "string"
+            },
+            "runs_limit": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Runs Limit"
+            },
+            "runs_used": {
+              "title": "Runs Used",
+              "type": "integer"
+            }
+          },
+          "required": [
+            "id",
+            "email",
+            "runs_used",
+            "runs_limit",
+            "failed_count",
+            "last_seen_at",
+            "blocked"
+          ],
+          "title": "UserRowOut",
+          "type": "object"
+        }
+      },
+      "properties": {
+        "next_offset": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Next Offset"
+        },
+        "users": {
+          "items": {
+            "$ref": "#/$defs/UserRowOut"
+          },
+          "title": "Users",
+          "type": "array"
+        }
+      },
+      "required": [
+        "users",
+        "next_offset"
+      ],
+      "title": "UserSearchOut",
+      "type": "object"
+    }
+  },
+  "routes": [
+    {
+      "method": "GET",
+      "path": "/admin/overview"
+    },
+    {
+      "method": "GET",
+      "path": "/admin/session"
+    },
+    {
+      "method": "POST",
+      "path": "/admin/users/search"
+    },
+    {
+      "method": "GET",
+      "path": "/admin/users/{user_id}"
+    },
+    {
+      "method": "POST",
+      "path": "/admin/users/{user_id}/block"
+    },
+    {
+      "method": "POST",
+      "path": "/admin/users/{user_id}/reset-runs"
+    },
+    {
+      "method": "POST",
+      "path": "/admin/users/{user_id}/unblock"
+    }
+  ]
+}
