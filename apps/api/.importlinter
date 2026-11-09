@@ -67,3 +67,13 @@ type = independence
 modules =
     rhapto.worker
     rhapto.api
+
+[importlinter:contract:admin-reads-are-admin-only]
+name = admin-reads-are-admin-only
+type = forbidden
+source_modules =
+    rhapto.api
+    rhapto.worker
+    rhapto.services
+forbidden_modules =
+    rhapto.db.repositories.admin

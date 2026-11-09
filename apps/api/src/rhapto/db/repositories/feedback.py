@@ -1,5 +1,6 @@
-"""Tester feedback persistence. Insert-only, plus the one cross-user read (`all_with_email`), which
-exists for the owner's CLI report and is imported by nothing under `rhapto.api`."""
+"""Tester feedback persistence. Insert-only, plus this module's one cross-user read (`all_with_email`),
+which exists for the owner's CLI report and is imported by nothing under `rhapto.api`. The admin
+dashboard's separate count of the "wants more" marker lives in `repositories/admin.py`."""
 
 from __future__ import annotations
 
