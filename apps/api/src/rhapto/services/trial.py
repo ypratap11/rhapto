@@ -69,6 +69,16 @@ class FreeRunsPausedError(Exception):
         super().__init__(FREE_RUNS_PAUSED_MESSAGE)
 
 
+BLOCKED_MESSAGE = "This account has been blocked."
+
+
+class AccountBlockedError(Exception):
+    """The operator has blocked this account; every authenticated request is refused."""
+
+    def __init__(self) -> None:
+        super().__init__(BLOCKED_MESSAGE)
+
+
 class TrialLimitExceededError(Exception):
     """This account has spent its allowance of runs on the deployment's provider key."""
 

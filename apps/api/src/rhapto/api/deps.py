@@ -21,6 +21,7 @@ from rhapto.services.enqueue import Enqueuer
 from rhapto.services.eventbus import EventBus
 from rhapto.services.jobtext import FetchText
 from rhapto.services.storage import PackageStorage
+from rhapto.services.trial import AccountBlockedError
 
 # (provider, model, api_key) -> adapter. Injectable so the "test this key" endpoint can be
 # exercised without an SDK client or a real key.
@@ -132,6 +133,11 @@ async def current_user(
     # attempted -- see _record_idp_subject's docstring (N1) for why sharing one transaction
     # between the two turned a rare subject collision into a permanent account lockout.
     await session.commit()
+    if user.blocked_at is not None:
+        # Reads the already-loaded attribute (no extra query), and runs before the idp_subject
+        # write so a blocked request records nothing. Access mode only: token mode is the
+        # single-user self-hosted path and has no operator to block anyone.
+        raise AccountBlockedError()
     if principal.subject:
         await _record_idp_subject(session, user.id, principal.subject)
     return user.id
