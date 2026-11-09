@@ -16,13 +16,16 @@ async def admin_session() -> AdminSessionOut:
 
 # Real admin routes (Tasks 11 and 12) must be registered ABOVE this call: Starlette takes the first
 # full match, so the catch-all has to come last.
+_ALL_METHODS = ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "TRACE"]
+
+
 def _register_catch_all(r: APIRouter) -> None:
-    @r.api_route(
-        "/{rest:path}",
-        methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
-        include_in_schema=False,
-    )
-    async def admin_unknown(rest: str) -> None:
+    # Every method, so none answers 405 + `Allow` (which would reveal the area to anyone); and the
+    # bare `/admin` too, since `/{rest:path}` needs the slash and Starlette would redirect (307)
+    # before any guard ran.
+    @r.api_route("", methods=_ALL_METHODS, include_in_schema=False)
+    @r.api_route("/{rest:path}", methods=_ALL_METHODS, include_in_schema=False)
+    async def admin_unknown(rest: str = "") -> None:
         raise HTTPException(status_code=404)
 
 

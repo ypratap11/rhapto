@@ -8,6 +8,7 @@ assertion, so a missing or blocked `users` row cannot lock the owner out.
 
 from __future__ import annotations
 
+import inspect
 from collections.abc import Callable, Coroutine
 from typing import Any
 
@@ -15,7 +16,6 @@ from fastapi import HTTPException, Request, Response
 from fastapi.routing import APIRoute
 
 from rhapto.api.auth import is_allowed_email, resolve_principal
-from rhapto.api.errors import problem, status_title
 
 _SAFE_METHODS = frozenset({"GET", "HEAD"})
 NO_STORE = "no-store"
@@ -56,15 +56,21 @@ class AdminRoute(APIRoute):
             try:
                 await enforce_admin(request)
                 response = await original(request)
-            except HTTPException as exc:
-                # Same body the app's handler builds for an unknown path, plus no-store.
-                response = problem(
-                    exc.status_code,
-                    status_title(exc.status_code),
-                    exc.detail if isinstance(exc.detail, str) and exc.detail else None,
+            except Exception as exc:
+                # Render through the app's own handlers (404 body identical to an unknown path,
+                # 422, 500 ...) so that every admin response, whatever its status, gets no-store.
+                handler = next(
+                    (
+                        h
+                        for cls in type(exc).__mro__
+                        if (h := request.app.exception_handlers.get(cls)) is not None
+                    ),
+                    None,
                 )
-                if exc.headers:
-                    response.headers.update(exc.headers)
+                if handler is None:
+                    raise
+                result = handler(request, exc)
+                response = await result if inspect.isawaitable(result) else result
             response.headers["Cache-Control"] = NO_STORE
             return response
 

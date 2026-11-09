@@ -21,7 +21,9 @@ from rhapto.db.models import User
 
 ADMIN = "Owner@Example.com"
 ORIGIN = "https://rhapto.example.test"
-EXPECTED_ADMIN_ROUTES = 2  # session + catch-all; Task 11 raises this to 5, Task 12 to 8
+EXPECTED_ADMIN_ROUTES = (
+    3  # session + catch-all + bare /admin; Task 11 raises this to 5, Task 12 to 8
+)
 UNKNOWN = "/api/v1/definitely-unknown"
 PROBE_POST = "/api/v1/adminprobe/echo"
 
@@ -38,7 +40,15 @@ def _probe_router() -> APIRouter:
     async def echo(body: _Body) -> dict[str, str]:
         return {"name": body.name}
 
+    async def boom() -> None:
+        raise RuntimeError("secret detail that must not leak")
+
+    async def item(item_id: uuid.UUID) -> dict[str, str]:
+        return {"id": str(item_id)}
+
     probe.add_api_route("/echo", echo, methods=["POST"])
+    probe.add_api_route("/boom", boom, methods=["GET"])
+    probe.add_api_route("/item/{item_id}", item, methods=["GET"])
     return probe
 
 
@@ -128,12 +138,16 @@ async def test_every_admin_route_answers_non_admin_with_the_unknown_path_404(
     for route in admin.router.routes:
         path = re.sub(r"\{[^}]+\}", str(uuid.uuid4()), route.path)  # type: ignore[attr-defined]
         for method in sorted(route.methods):  # type: ignore[attr-defined]
-            r = await http.request(
-                method, f"/api/v1{path}", headers=_hdr(make_token("x@example.com"))
-            )
-            assert (r.status_code, r.content) == expected, (method, path)
+            headers = _hdr(make_token("x@example.com"))
+            r = await http.request(method, f"/api/v1{path}", headers=headers)
+            if method in {"HEAD", "OPTIONS", "TRACE"}:
+                # Compare with the same verb on an unknown path, not with the GET body.
+                same_verb = await http.request(method, UNKNOWN, headers=headers)
+                assert (r.status_code, r.content) == (same_verb.status_code, same_verb.content)
+            else:
+                assert (r.status_code, r.content) == expected, (method, path)
             seen += 1
-    assert seen >= 6
+    assert seen >= 14
 
 
 def test_admin_routes_are_not_in_the_public_openapi(app: FastAPI) -> None:
@@ -195,6 +209,52 @@ async def test_non_admin_body_is_identical_to_unknown_path(
     else:
         r = await http.put("/api/v1/admin/session", headers=non_admin)
     assert (r.status_code, r.content) == expected
+
+
+@pytest.mark.parametrize("method", ["HEAD", "OPTIONS", "TRACE"])
+@pytest.mark.parametrize("path", ["/api/v1/admin/session", "/api/v1/admin/nope"])
+@pytest.mark.parametrize("signed_in", [True, False])
+async def test_unlisted_methods_get_the_unknown_path_404(
+    method: str, path: str, signed_in: bool, http: httpx.AsyncClient, make_token
+) -> None:
+    headers = _hdr(make_token("x@example.com")) if signed_in else {}
+    expected = await http.request(method, UNKNOWN, headers=headers)
+    r = await http.request(method, path, headers=headers)
+    assert r.status_code == expected.status_code == 404
+    assert "allow" not in r.headers
+    if method != "HEAD":
+        assert r.content == expected.content
+
+
+@pytest.mark.parametrize("signed_in", [True, False])
+async def test_admin_without_trailing_slash_is_the_unknown_path_404(
+    signed_in: bool, http: httpx.AsyncClient, make_token
+) -> None:
+    headers = _hdr(make_token("x@example.com")) if signed_in else {}
+    expected = await http.get(UNKNOWN, headers=headers)
+    r = await http.get("/api/v1/admin", headers=headers)
+    assert (r.status_code, r.content) == (404, expected.content)
+    assert "location" not in r.headers
+
+
+async def test_admin_422_and_500_are_no_store_and_leak_nothing(
+    http: httpx.AsyncClient, make_token
+) -> None:
+    hdr = _hdr(make_token(ADMIN))
+    bad_uuid = await http.get("/api/v1/adminprobe/item/not-a-uuid", headers=hdr)
+    assert bad_uuid.status_code == 422
+    assert bad_uuid.headers["cache-control"] == "no-store"
+    bad_json = await http.post(
+        PROBE_POST,
+        content=b"{not json",
+        headers={**hdr, "Origin": ORIGIN, "Content-Type": "application/json"},
+    )
+    assert bad_json.status_code == 422
+    assert bad_json.headers["cache-control"] == "no-store"
+    crash = await http.get("/api/v1/adminprobe/boom", headers=hdr)
+    assert crash.status_code == 500
+    assert crash.headers["cache-control"] == "no-store"
+    assert "secret detail" not in crash.text
 
 
 # ---- no database -------------------------------------------------------------------------------
