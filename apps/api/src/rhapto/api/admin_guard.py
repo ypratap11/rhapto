@@ -53,25 +53,38 @@ class AdminRoute(APIRoute):
         original = super().get_route_handler()
 
         async def guarded(request: Request) -> Response:
+            # Only a response that reaches a proven admin is no-store. The non-admin 404 must stay
+            # byte-identical to an unknown path, headers included, so it is rendered bare.
             try:
                 await enforce_admin(request)
+            except HTTPException as exc:
+                response = await _render(request, exc)
+                if exc.status_code != 404:
+                    response.headers["Cache-Control"] = NO_STORE
+                return response
+            try:
                 response = await original(request)
             except Exception as exc:
-                # Render through the app's own handlers (404 body identical to an unknown path,
-                # 422, 500 ...) so that every admin response, whatever its status, gets no-store.
-                handler = next(
-                    (
-                        h
-                        for cls in type(exc).__mro__
-                        if (h := request.app.exception_handlers.get(cls)) is not None
-                    ),
-                    None,
-                )
-                if handler is None:
-                    raise
-                result = handler(request, exc)
-                response = await result if inspect.isawaitable(result) else result
+                response = await _render(request, exc)
             response.headers["Cache-Control"] = NO_STORE
             return response
 
         return guarded
+
+
+async def _render(request: Request, exc: Exception) -> Response:
+    """Render `exc` through the app's own handlers (404 body identical to an unknown path, 422,
+    500 ...)."""
+    handler = next(
+        (
+            h
+            for cls in type(exc).__mro__
+            if (h := request.app.exception_handlers.get(cls)) is not None
+        ),
+        None,
+    )
+    if handler is None:
+        raise exc
+    result = handler(request, exc)
+    response: Response = await result if inspect.isawaitable(result) else result
+    return response

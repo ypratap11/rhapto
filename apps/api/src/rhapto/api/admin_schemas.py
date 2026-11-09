@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from rhapto.services.failure_categories import FailureCategory
 
@@ -35,6 +35,14 @@ class OverviewOut(BaseModel):
 class UserSearchIn(BaseModel):
     q: str = Field("", max_length=320)
     offset: int = Field(0, ge=0, le=10000)
+
+    @field_validator("q")
+    @classmethod
+    def _no_control_characters(cls, value: str) -> str:
+        # Postgres rejects NUL (a 500). Generic message: the value is never echoed.
+        if "\x00" in value or any(0xD800 <= ord(ch) <= 0xDFFF for ch in value):
+            raise ValueError("search text contains control characters")
+        return value
 
 
 class UserRowOut(BaseModel):

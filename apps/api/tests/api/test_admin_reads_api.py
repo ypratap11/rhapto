@@ -230,6 +230,18 @@ async def test_search_rejects_q_longer_than_320(http, hdr) -> None:
     assert ok.status_code == 200
 
 
+@pytest.mark.parametrize("raw", [r'"a\u0000b"', r'"a\ud800b"'])
+async def test_search_rejects_nul_and_surrogates_without_echo(http, hdr, raw) -> None:
+    body = ('{"q": ' + raw[:-1] + 'UNIQUEMARK"}').encode()
+    r = await http.post(
+        "/api/v1/admin/users/search",
+        content=body,
+        headers={**hdr, "Content-Type": "application/json"},
+    )
+    assert r.status_code == 422
+    assert "UNIQUEMARK" not in r.text
+
+
 async def test_search_returns_rows_and_pages(http, hdr, session_factory) -> None:
     async with session_factory() as s:
         for i in range(26):

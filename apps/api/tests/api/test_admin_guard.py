@@ -107,6 +107,13 @@ def _hdr(token: str, **extra: str) -> dict[str, str]:
     return {"Cf-Access-Jwt-Assertion": token, **extra}
 
 
+_VOLATILE = {"date", "content-length"}
+
+
+def _headers(r: httpx.Response) -> list[tuple[str, str]]:
+    return sorted((k, v) for k, v in r.headers.items() if k not in _VOLATILE)
+
+
 async def _unknown_body(http: httpx.AsyncClient, make_token) -> tuple[int, bytes]:
     r = await http.get(UNKNOWN, headers=_hdr(make_token("x@example.com")))
     assert r.status_code == 404
@@ -135,6 +142,7 @@ async def test_every_admin_route_answers_non_admin_with_the_unknown_path_404(
     http: httpx.AsyncClient, make_token
 ) -> None:
     expected = await _unknown_body(http, make_token)
+    unknown = await http.get(UNKNOWN, headers=_hdr(make_token("x@example.com")))
     seen = 0
     for route in admin.router.routes:
         path = re.sub(r"\{[^}]+\}", str(uuid.uuid4()), route.path)  # type: ignore[attr-defined]
@@ -145,8 +153,10 @@ async def test_every_admin_route_answers_non_admin_with_the_unknown_path_404(
                 # Compare with the same verb on an unknown path, not with the GET body.
                 same_verb = await http.request(method, UNKNOWN, headers=headers)
                 assert (r.status_code, r.content) == (same_verb.status_code, same_verb.content)
+                assert _headers(r) == _headers(same_verb), (method, path)
             else:
                 assert (r.status_code, r.content) == expected, (method, path)
+                assert _headers(r) == _headers(unknown), (method, path)
             seen += 1
     assert seen >= 14
 
@@ -247,6 +257,9 @@ async def test_non_admin_body_is_identical_to_unknown_path(
     else:
         r = await http.put("/api/v1/admin/session", headers=non_admin)
     assert (r.status_code, r.content) == expected
+    unknown = await http.get(UNKNOWN, headers=non_admin)
+    assert "cache-control" not in r.headers
+    assert _headers(r) == _headers(unknown)
 
 
 @pytest.mark.parametrize("method", ["HEAD", "OPTIONS", "TRACE"])
@@ -260,6 +273,7 @@ async def test_unlisted_methods_get_the_unknown_path_404(
     r = await http.request(method, path, headers=headers)
     assert r.status_code == expected.status_code == 404
     assert "allow" not in r.headers
+    assert _headers(r) == _headers(expected)
     if method != "HEAD":
         assert r.content == expected.content
 
@@ -273,6 +287,7 @@ async def test_admin_without_trailing_slash_is_the_unknown_path_404(
     r = await http.get("/api/v1/admin", headers=headers)
     assert (r.status_code, r.content) == (404, expected.content)
     assert "location" not in r.headers
+    assert _headers(r) == _headers(expected)
 
 
 async def test_admin_422_and_500_are_no_store_and_leak_nothing(
@@ -407,3 +422,6 @@ async def test_non_admin_post_with_foreign_origin_is_404(
     expected = await _unknown_body(http, make_token)
     r = await _post(http, make_token("x@example.com"), "https://evil.example")
     assert (r.status_code, r.content) == expected
+    assert _headers(r) == _headers(
+        await http.get(UNKNOWN, headers=_hdr(make_token("x@example.com")))
+    )

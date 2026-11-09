@@ -31,6 +31,14 @@ describe("UserTable", () => {
     expect(screen.getAllByText("Blocked")).toHaveLength(1);
     expect(screen.getByText(/failed \(7 days\)/i)).toBeTruthy();
   });
+  it("labels every cell so the phone card layout shows Failed, Last seen and Status", async () => {
+    mockFetch([["POST", "/users/search", 200, { users: [row("u1", "a@example.com")], next_offset: null }]]);
+    const { container } = renderWithClient(<UserTable />);
+    await screen.findByText("a@example.com");
+    const labels = Array.from(container.querySelectorAll("tbody td")).map((td) => td.getAttribute("data-label"));
+    expect(labels).toEqual(["User", "Runs", "Failed", "Last seen", "Status"]);
+    expect(container.querySelector("thead")!.className).toContain("max-sm:sr-only");
+  });
   it("shows Load more only when next_offset is set and sends it", async () => {
     const { calls } = mockFetch([["POST", "/users/search", 200, { users: [row("u1", "a@example.com")], next_offset: 25 }]]);
     renderWithClient(<UserTable />);
