@@ -21,6 +21,9 @@ import { useAdminUser, useSetBlocked } from "@/lib/admin/queries";
 import { actionWord, changeWords, dateOnly, dateTime, runsOf, typeWord } from "./format";
 import { ResetRunsDialog } from "./ResetRunsDialog";
 
+const HISTORY_CELL =
+  "max-sm:flex max-sm:gap-3 max-sm:px-0 max-sm:py-0.5 max-sm:before:w-16 max-sm:before:shrink-0 max-sm:before:text-muted-foreground max-sm:before:content-[attr(data-label)]";
+
 export function UserPanel({ userId }: { userId: string }) {
   const user = useAdminUser(userId);
   const setBlocked = useSetBlocked(userId);
@@ -121,9 +124,11 @@ export function UserPanel({ userId }: { userId: string }) {
           {u.history.length === 0 ? (
             <p className="text-sm text-muted-foreground">Nothing recorded yet.</p>
           ) : (
+            // At phone width each row is a stacked card (When, Who, What, Change each on its own line,
+            // labelled), so nothing hides behind a sideways scroll. From sm up it is a normal table.
             <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
+              <Table className="max-sm:block">
+                <TableHeader className="max-sm:sr-only">
                   <TableRow>
                     <TableHead>When</TableHead>
                     <TableHead>Who</TableHead>
@@ -131,13 +136,13 @@ export function UserPanel({ userId }: { userId: string }) {
                     <TableHead>Change</TableHead>
                   </TableRow>
                 </TableHeader>
-                <TableBody>
+                <TableBody className="max-sm:block">
                   {u.history.map((h, i) => (
-                    <TableRow key={`${h.when}-${i}`}>
-                      <TableCell>{dateTime(h.when)}</TableCell>
-                      <TableCell className="min-w-56 break-all whitespace-normal">{h.actor_email}</TableCell>
-                      <TableCell>{actionWord(h.action)}</TableCell>
-                      <TableCell className="min-w-44 whitespace-normal">{changeWords(h.before, h.after).join(", ")}</TableCell>
+                    <TableRow key={`${h.when}-${i}`} className="max-sm:mb-2 max-sm:block max-sm:h-auto max-sm:rounded-lg max-sm:border max-sm:px-3 max-sm:py-2">
+                      <TableCell className={HISTORY_CELL} data-label="When">{dateTime(h.when)}</TableCell>
+                      <TableCell className={`${HISTORY_CELL} sm:min-w-56 break-all whitespace-normal`} data-label="Who">{h.actor_email}</TableCell>
+                      <TableCell className={HISTORY_CELL} data-label="What">{actionWord(h.action)}</TableCell>
+                      <TableCell className={`${HISTORY_CELL} sm:min-w-44 whitespace-normal`} data-label="Change">{changeWords(h.before, h.after).join(", ")}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
