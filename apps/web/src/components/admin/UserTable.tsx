@@ -46,7 +46,7 @@ export function UserTable() {
             <TableBody>
               {users.map((u) => (
                 <TableRow key={u.id}>
-                  <TableCell className="min-w-40 break-all whitespace-normal">
+                  <TableCell className="min-w-56 break-all whitespace-normal">
                     <Link href={`/admin/users/${u.id}`} className="inline-flex min-h-11 items-center text-primary underline-offset-4 hover:underline">
                       {u.email}
                     </Link>

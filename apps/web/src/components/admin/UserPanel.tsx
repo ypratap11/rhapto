@@ -135,9 +135,9 @@ export function UserPanel({ userId }: { userId: string }) {
                   {u.history.map((h, i) => (
                     <TableRow key={`${h.when}-${i}`}>
                       <TableCell>{dateTime(h.when)}</TableCell>
-                      <TableCell className="break-all whitespace-normal">{h.actor_email}</TableCell>
+                      <TableCell className="min-w-56 break-all whitespace-normal">{h.actor_email}</TableCell>
                       <TableCell>{actionWord(h.action)}</TableCell>
-                      <TableCell className="whitespace-normal">{changeWords(h.before, h.after).join(", ")}</TableCell>
+                      <TableCell className="min-w-44 whitespace-normal">{changeWords(h.before, h.after).join(", ")}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
