@@ -28,6 +28,7 @@ VISIBILITY="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/apps/web/src/lib/ed
 [[ -f "$VISIBILITY" ]] || { echo "FATAL: $VISIBILITY not found" >&2; exit 1; }
 read -r -a PUBLIC_PATHS <<< "$(node -e 'const v=require(process.argv[1]);process.stdout.write(v.publicAtEdge.join(" "))' "$VISIBILITY")"
 read -r -a PROTECTED_PATHS <<< "$(node -e 'const v=require(process.argv[1]);process.stdout.write(v.protectedAtEdge.join(" "))' "$VISIBILITY")"
+read -r -a PUBLIC_ASSET_DIRS <<< "$(node -e 'const v=require(process.argv[1]);process.stdout.write((v.publicAssetDirs||[]).join(" "))' "$VISIBILITY")"
 [[ ${#PUBLIC_PATHS[@]} -gt 0 && ${#PROTECTED_PATHS[@]} -gt 0 ]] || { echo "FATAL: could not read the route lists" >&2; exit 1; }
 
 # Nested probes, appended to the protected set. Access matches path PREFIXES, so a single `/jobs` row
@@ -90,6 +91,23 @@ else
     failures=$((failures + 1))
   fi
 fi
+
+# Files under apps/web/public/<dir> (the homepage video and poster). They are not routes, so the lists above
+# never mention them. Under the protected-prefix model they are public by default (no Cloudflare change);
+# this probe catches a regression, e.g. a hostname-wide Access application that would 302 them to login.
+for d in "${PUBLIC_ASSET_DIRS[@]}"; do
+  for f in "$(dirname "$VISIBILITY")/../../public${d}"/*; do
+    [[ -f "$f" ]] || continue
+    p="${d}/$(basename "$f")"
+    probe "$p"
+    if [[ "$CODE" == "200" ]]; then
+      note "ok       $p -> 200"
+    else
+      note "FAIL     $p -> $CODE${LOCATION:+ (Location: $LOCATION)}. Is a hostname-wide Access application protecting ${d}? Only the protectedAtEdge prefixes should be."
+      failures=$((failures + 1))
+    fi
+  done
+done
 
 echo
 echo "PROTECTED — must be stopped by Cloudflare, before the origin"
