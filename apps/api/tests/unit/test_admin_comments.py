@@ -24,3 +24,11 @@ def test_trial_counter_comments_describe_the_audited_reset() -> None:
     trial = (SRC / "services" / "trial.py").read_text(encoding="utf-8")
     assert "no refund path" in trial
     assert "audited admin reset" in trial
+
+
+def test_trial_counter_comments_carry_no_stale_claims() -> None:
+    models = (SRC / "db" / "models.py").read_text(encoding="utf-8")
+    trial = (SRC / "services" / "trial.py").read_text(encoding="utf-8")
+    for stale in ("never decremented", "hand-written", "Monotone"):
+        assert stale not in models, stale
+        assert stale not in trial, stale
