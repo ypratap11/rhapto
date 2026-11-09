@@ -355,15 +355,43 @@ async def test_address_admitted_only_by_invite_domain_is_404(
     assert r.status_code == 404
 
 
-async def test_jwks_unreachable_is_503(http: httpx.AsyncClient, make_token, monkeypatch) -> None:
+async def test_jwks_unreachable_is_the_unknown_path_404(
+    http: httpx.AsyncClient, make_token, monkeypatch
+) -> None:
     async def boom(self: auth_module.JwksCache) -> None:
         raise httpx.ConnectError("down")
 
     monkeypatch.setattr(auth_module.JwksCache, "_refresh", boom)
     monkeypatch.setitem(auth_module._jwks_caches, "test-team", auth_module.JwksCache("http://x"))
+    expected = await http.get(UNKNOWN, headers=_hdr(make_token(ADMIN)))
     r = await http.get("/api/v1/admin/session", headers=_hdr(make_token(ADMIN)))
-    assert r.status_code == 503
-    assert r.headers["cache-control"] == "no-store"
+    assert (r.status_code, r.content) == (404, expected.content)
+    assert _headers(r) == _headers(expected)
+
+
+async def test_forged_unknown_kid_is_the_unknown_path_404(
+    http: httpx.AsyncClient, make_token
+) -> None:
+    other = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    now = int(time.time())
+    forged = pyjwt.encode(
+        {
+            "email": ADMIN,
+            "sub": "s",
+            "aud": "test-aud",
+            "iat": now,
+            "exp": now + 300,
+            "iss": "https://test-team.cloudflareaccess.com",
+        },
+        other,
+        algorithm="RS256",
+        headers={"kid": "no-such-kid"},
+    )
+    expected = await http.get(UNKNOWN, headers=_hdr(forged))
+    r = await http.get("/api/v1/admin/session", headers=_hdr(forged))
+    assert (r.status_code, r.content) == (expected.status_code, expected.content)
+    assert r.status_code == 404
+    assert _headers(r) == _headers(expected)
 
 
 async def test_session_response_is_no_store(http: httpx.AsyncClient, make_token) -> None:

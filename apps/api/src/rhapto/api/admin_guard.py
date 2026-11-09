@@ -22,7 +22,7 @@ NO_STORE = "no-store"
 
 
 async def enforce_admin(request: Request) -> str:
-    """Return the admin's email, or raise 404 (not admin), 503 (cannot verify) or 403 (Origin).
+    """Return the admin's email, or raise 404 (not admin, or identity cannot be verified) or 403 (Origin).
 
     Order matters: nothing about the admin area is revealed before the caller is proven an admin.
     """
@@ -31,11 +31,10 @@ async def enforce_admin(request: Request) -> str:
         raise HTTPException(status_code=404)
     try:
         principal = await resolve_principal(request, request.headers.get("authorization"))
-    except HTTPException as exc:
-        # 503 ("cannot verify identity right now") stays diagnosable; every other failure is
-        # indistinguishable from an unknown path. Never forward the underlying detail.
-        if exc.status_code == 503:
-            raise HTTPException(status_code=503, headers=exc.headers) from None
+    except HTTPException:
+        # Every principal failure, a 503 from key lookup included, is the unknown-path 404: a forged
+        # token with an unknown `kid` would otherwise reach a 503 only on admin paths. Never forward
+        # the underlying detail.
         raise HTTPException(status_code=404) from None
     # Empty domains argument makes domain matching impossible; same casefold comparison.
     if not is_allowed_email(principal.email, settings.rhapto_admin_emails, ""):
