@@ -88,4 +88,25 @@ describe("edge visibility", () => {
     expect(publicAtEdge.has("/help")).toBe(true);
     expect(protectedAtEdge.has("/help")).toBe(false);
   });
+
+  it("lists every directory in public/ as a public asset dir, and no dir that is missing", () => {
+    // public/<dir> is served at /<dir>, outside the App Router, so the route derivation above cannot see
+    // it. Without this, a new asset folder is a 302-to-login for signed-out visitors and nothing says so.
+    const PUBLIC_DIR = join(import.meta.dirname, "..", "..", "public");
+    const dirs = readdirSync(PUBLIC_DIR, { withFileTypes: true })
+      .filter((e) => e.isDirectory())
+      .map((e) => `/${e.name}`)
+      .sort();
+    expect([...visibility.publicAssetDirs].sort()).toEqual(dirs);
+    // An asset dir must not shadow a route.
+    for (const d of visibility.publicAssetDirs) expect(routes).not.toContain(d);
+  });
+
+  it("serves the homepage video and poster from a declared public asset dir", () => {
+    const PUBLIC_DIR = join(import.meta.dirname, "..", "..", "public");
+    for (const f of ["media/rhapto-commercial.mp4", "media/rhapto-commercial-poster.webp"]) {
+      expect(existsSync(join(PUBLIC_DIR, f)), f).toBe(true);
+      expect(visibility.publicAssetDirs).toContain(`/${f.split("/")[0]}`);
+    }
+  });
 });
