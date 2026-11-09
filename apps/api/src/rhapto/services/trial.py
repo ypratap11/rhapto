@@ -28,7 +28,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from rhapto.config import Settings
 from rhapto.db.repositories.free_spend import month_free_spend
-from rhapto.db.repositories.users import claim_free_import, claim_trial_run, trial_runs_used
+from rhapto.db.repositories.users import (
+    blocked_at_of,
+    claim_free_import,
+    claim_trial_run,
+    trial_runs_used,
+)
 from rhapto.engine.providers.registry import FAKE_PROVIDER_ID
 from rhapto.services.llm import env_llm_config, same_key, stored_llm_config
 from rhapto.services.secrets import SecretsError
@@ -215,6 +220,17 @@ async def check_trial_allowance(
             raise TrialLimitExceededError(used, limit)
     # After the trial check, so an exhausted account still hears its own sentence.
     await check_free_budget(session, settings, user_id)
+
+
+async def check_not_blocked(session: AsyncSession, settings: Settings, user_id: uuid.UUID) -> None:
+    """Raise `AccountBlockedError` for a blocked account. A no-op outside access mode.
+
+    Called by the worker before any money can be spent. Reads only.
+    """
+    if settings.rhapto_auth_mode != "access":
+        return
+    if await blocked_at_of(session, user_id) is not None:
+        raise AccountBlockedError()
 
 
 async def consume_trial_run(session: AsyncSession, settings: Settings, user_id: uuid.UUID) -> None:

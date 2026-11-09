@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import uuid
+from datetime import datetime
 
 from sqlalchemy import select, text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -76,6 +77,11 @@ async def trial_runs_used(session: AsyncSession, user_id: uuid.UUID) -> int:
     """
     used = await session.scalar(select(User.trial_runs_used).where(User.id == user_id))
     return int(used or 0)
+
+
+async def blocked_at_of(session: AsyncSession, user_id: uuid.UUID) -> datetime | None:
+    """When this account was blocked, or None (also for an unknown user). Reads the column only."""
+    return await session.scalar(select(User.blocked_at).where(User.id == user_id))
 
 
 async def claim_trial_run(session: AsyncSession, user_id: uuid.UUID, limit: int) -> int | None:
