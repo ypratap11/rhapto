@@ -18,6 +18,7 @@ vi.mock("@/lib/api/queries", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/api/queries")>()),
   useTracks: () => ({ data: [{ id: "tpm", name: "Technical Program Manager", min_fit: 60 }] }),
   useDashboard: () => ({ data: { checklist: { trial_runs_left: runsLeft.value } } }),
+  useSubmitFeedback: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }));
 // "Show other jobs" runs its own query; these tests never open it, and no QueryClientProvider is mounted.
 vi.mock("@tanstack/react-query", async (importOriginal) => ({
@@ -35,6 +36,23 @@ beforeEach(() => {
 });
 
 describe("MatchesStep", () => {
+  it("shows one 'want more' button when the cap error and the zero-runs line coincide", () => {
+    matches.state = { kind: "ready", jobs: [job("a", 90)], offerPaste: false } as unknown as MatchesState;
+    runsLeft.value = 0;
+    render(<MatchesStep {...base} error={{ message: "cap", next: "settings", wantMoreRuns: true }} onTailor={vi.fn()} />);
+    expect(screen.getAllByRole("button", { name: "Want more resumes? Tell us" })).toHaveLength(1);
+  });
+  it("offers 'want more' only when no free runs are left", () => {
+    const jobs = [job("a", 90)];
+    matches.state = { kind: "ready", jobs, offerPaste: false } as unknown as MatchesState;
+    runsLeft.value = 1;
+    const { unmount } = render(<MatchesStep {...base} onTailor={vi.fn()} />);
+    expect(screen.queryByRole("button", { name: "Want more resumes? Tell us" })).toBeNull();
+    unmount();
+    runsLeft.value = 0;
+    render(<MatchesStep {...base} onTailor={vi.fn()} />);
+    expect(screen.getByRole("button", { name: "Want more resumes? Tell us" })).toBeInTheDocument();
+  });
   it("shows the waiting title and no paste option before the threshold", () => {
     render(<MatchesStep {...base} onTailor={vi.fn()} />);
     expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(/finding your best matches/i);

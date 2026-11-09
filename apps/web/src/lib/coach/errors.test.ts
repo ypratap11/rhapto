@@ -39,7 +39,14 @@ describe("describeCoachError (spec 3.4, one row per case, always one way forward
   it("409 trial_limit_reached -> the server's trial sentence, Settings", () => {
     const sentence = "You have used all 3 free tailoring runs on this instance. Add your own provider API key in Settings to keep going.";
     const error = describeCoachError(new ApiError(409, problem(409, { detail: sentence, code: "trial_limit_reached" }), "x"), "tailor");
-    expect(error).toEqual({ message: sentence, next: "settings", link: { label: "Open Settings", href: "/settings" } });
+    expect(error).toEqual({ message: sentence, next: "settings", link: { label: "Open Settings", href: "/settings" }, wantMoreRuns: true });
+  });
+  it("offers 'want more' only for the free-run cap, on either path", () => {
+    const cap = "You have used all 3 free tailoring runs on this instance. Add your own provider API key in Settings to keep going.";
+    const paused = "Free runs are paused until the 1st of next month. Add your own provider API key in Settings to keep going.";
+    expect(describeCoachError(new Error(cap), "tailor").wantMoreRuns).toBe(true);
+    expect(describeCoachError(new Error(paused), "tailor").wantMoreRuns).toBeUndefined();
+    expect(describeCoachError(new ApiError(409, problem(409, { detail: paused, code: "free_runs_paused" }), "x"), "tailor").wantMoreRuns).toBeUndefined();
   });
   it("409 free_runs_paused -> the paused sentence, Settings; an unknown detail falls back to the same sentence", () => {
     const sentence = "Free runs are paused until the 1st of next month. Add your own provider API key in Settings to keep going.";
@@ -78,7 +85,7 @@ describe("describeCoachError (spec 3.4, one row per case, always one way forward
       "This instance's shared LLM key was refused by its provider. Add your own key in Settings to keep going, or ask whoever runs this instance to check it.",
       "Your stored API key can no longer be decrypted (the server secret changed). Re-enter it in Settings.",
     ]) {
-      expect(describeCoachError(new Error(sentence), "tailor")).toEqual({ message: sentence, next: "settings", link: { label: "Open Settings", href: "/settings" } });
+      expect(describeCoachError(new Error(sentence), "tailor")).toMatchObject({ message: sentence, next: "settings", link: { label: "Open Settings", href: "/settings" } });
     }
   });
   it("a 409 trial code with a sentence we do not know is not shown verbatim either", () => {

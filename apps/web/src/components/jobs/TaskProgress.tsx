@@ -5,7 +5,8 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
-import { isSettingsSentence } from "@/lib/coach/errors";
+import { WantMoreRuns } from "@/components/feedback/WantMoreRuns";
+import { isSettingsSentence, isTrialLimitSentence } from "@/lib/coach/errors";
 import { readTaskEvents } from "@/lib/api/sse";
 import { invalidateJobs } from "@/lib/api/queries";
 import { POLL_STEPS, initialProgress, pipelineSteps, reduceTaskEvent, resolvePackageStatus, type ProgressState } from "@/lib/task-progress";
@@ -134,6 +135,7 @@ export function TaskProgress({
           ) : null}
         </p>
       ) : null}
+      {state.status === "failed" && state.error && isTrialLimitSentence(state.error) ? <WantMoreRuns area="job_detail" /> : null}
       {kind === "tailor" && state.status === "succeeded" && state.packageId ? (
         <Link href={`/jobs/${jobId}/packages/${state.packageId}`} className="text-sm text-fit-high underline">
           Open package {state.packageStatus === "blocked" ? "(blocked)" : ""}

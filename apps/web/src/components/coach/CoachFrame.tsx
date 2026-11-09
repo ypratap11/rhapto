@@ -1,6 +1,7 @@
 import { cn } from "cn";
 import Link from "next/link";
 import { buttonVariants } from "@/components/ui/button";
+import { WantMoreRuns } from "@/components/feedback/WantMoreRuns";
 import type { CoachError } from "@/lib/coach/errors";
 
 export type TranscriptItem = { label: string; value: string };
@@ -63,6 +64,7 @@ export function CoachErrorNote({ error }: { error: CoachError | null }) {
           </a>
         </p>
       ) : null}
+      {error.wantMoreRuns ? <WantMoreRuns area="coach" /> : null}
     </div>
   );
 }
