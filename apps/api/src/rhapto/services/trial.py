@@ -237,8 +237,10 @@ async def consume_trial_run(session: AsyncSession, settings: Settings, user_id: 
     """Consume one run atomically, or raise `TrialLimitExceededError`.
 
     THE CALLER MUST COMMIT before making the model call. A worker killed between the claim and the
-    call must not hand out a free run, and there is no refund path: a refund is a second place the
-    counter can move and the first thing an attacker would reach for.
+    call must not hand out a free run, and there is no refund path: a failed run is never refunded
+    automatically, because a refund is a second place the counter can move and the first thing an
+    attacker would reach for. The only other mover is the owner's audited admin reset, which can
+    only lower the count by hand.
     """
     await check_free_budget(session, settings, user_id)
     limit = await trial_limit_for(session, settings, user_id)

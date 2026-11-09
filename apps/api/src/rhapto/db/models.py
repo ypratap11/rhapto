@@ -83,8 +83,9 @@ class User(TimestampMixin, Base):
     # the call, never decremented, never refunded, and deliberately not derived from `packages` --
     # a package is an artifact the user can edit (PATCH writes a new row carrying the parent's
     # llm_model) and delete (DELETE /jobs cascades), so counting packages both over- and
-    # under-counts spend. Untouched for a user on their own key. Reset by hand:
-    #   UPDATE users SET trial_runs_used = 0 WHERE email = '...';
+    # under-counts spend. Untouched for a user on their own key. A failed run is never refunded
+    # automatically; the owner can lower the count by hand through the audited admin reset
+    # (`repositories/admin.py: reset_runs`), which takes the row lock and writes an `admin_actions` row.
     trial_runs_used: Mapped[int] = mapped_column(
         Integer, default=0, server_default="0", nullable=False
     )

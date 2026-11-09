@@ -19,7 +19,7 @@ from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from typing import Any, Literal
 
-from sqlalchemy import Select, and_, func, or_, select
+from sqlalchemy import Select, and_, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from rhapto.db import models  # noqa: F401
@@ -379,3 +379,144 @@ async def user_detail(
         suggested_reset_runs=suggested,
         history=await list_actions(session, user_id),
     )
+
+
+# ---------------------------------------------------------------------------------------------
+# Audited writes. Each takes FOR NO KEY UPDATE on the user row (which does not conflict with the
+# FOR KEY SHARE that FK checks take), changes the row, inserts the audit row and commits once, so
+# the action and its record stand or fall together.
+# ---------------------------------------------------------------------------------------------
+
+
+class UserNotFound(Exception):
+    """No such user (maps to 404)."""
+
+
+class ResetWouldRaise(Exception):
+    """The requested value is above the current count; a reset only lowers (maps to 409)."""
+
+
+class ProtectedAccount(Exception):
+    """An admin address cannot be blocked (maps to 409)."""
+
+
+@dataclass(frozen=True)
+class ResetResult:
+    changed: bool
+    before: int
+    after: int
+
+
+@dataclass(frozen=True)
+class BlockResult:
+    changed: bool
+    blocked_at: datetime | None
+
+
+def _audit(
+    session: AsyncSession,
+    *,
+    actor_email: str,
+    action: str,
+    user_id: uuid.UUID,
+    before: dict[str, Any],
+    after: dict[str, Any],
+) -> None:
+    session.add(
+        AdminAction(
+            actor_email=actor_email,
+            action=action,
+            target_user_id=user_id,
+            before_json=before,
+            after_json=after,
+        )
+    )
+
+
+async def reset_runs(
+    session: AsyncSession, *, actor_email: str, user_id: uuid.UUID, to: int
+) -> ResetResult:
+    """Lower `trial_runs_used` to `to` (0..current). Never raises it; never refunds automatically."""
+    if to < 0:
+        raise ValueError("to must be >= 0")
+    try:
+        current = await session.scalar(
+            select(User.trial_runs_used)
+            .where(User.id == user_id)
+            .with_for_update(key_share=True)
+            .execution_options(populate_existing=True)
+        )
+        if current is None:
+            raise UserNotFound(str(user_id))
+        if to > current:
+            raise ResetWouldRaise(f"{to} > {current}")
+        if to == current:
+            await session.rollback()
+            return ResetResult(changed=False, before=current, after=current)
+        await session.execute(
+            update(User)
+            .where(User.id == user_id, User.trial_runs_used >= to)
+            .values(trial_runs_used=to)
+        )
+        _audit(
+            session,
+            actor_email=actor_email,
+            action="reset_runs",
+            user_id=user_id,
+            before={"trial_runs_used": current},
+            after={"trial_runs_used": to},
+        )
+        await session.commit()
+    except BaseException:
+        await session.rollback()
+        raise
+    return ResetResult(changed=True, before=current, after=to)
+
+
+async def set_blocked(
+    session: AsyncSession,
+    *,
+    actor_email: str,
+    user_id: uuid.UUID,
+    blocked: bool,
+    protected: bool,
+) -> BlockResult:
+    """Block or unblock an account. A protected account can be unblocked but never blocked."""
+    if blocked and protected:
+        raise ProtectedAccount(str(user_id))
+    try:
+        row = (
+            await session.execute(
+                select(User.id, User.blocked_at)
+                .where(User.id == user_id)
+                .with_for_update(key_share=True)
+                .execution_options(populate_existing=True)
+            )
+        ).one_or_none()
+        if row is None:
+            raise UserNotFound(str(user_id))
+        was_blocked = row.blocked_at is not None
+        if was_blocked == blocked:
+            await session.rollback()
+            return BlockResult(changed=False, blocked_at=row.blocked_at)
+        new_at = (
+            await session.execute(
+                update(User)
+                .where(User.id == user_id)
+                .values(blocked_at=func.now() if blocked else None)
+                .returning(User.blocked_at)
+            )
+        ).scalar_one()
+        _audit(
+            session,
+            actor_email=actor_email,
+            action="block" if blocked else "unblock",
+            user_id=user_id,
+            before={"blocked": was_blocked},
+            after={"blocked": blocked},
+        )
+        await session.commit()
+    except BaseException:
+        await session.rollback()
+        raise
+    return BlockResult(changed=True, blocked_at=new_at)
