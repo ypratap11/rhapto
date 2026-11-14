@@ -16,7 +16,9 @@ import { ApiError } from "@/lib/api/client";
 import { formatDate } from "@/lib/format";
 import { useResumeSource, useSaveSourceSettings, useSourceSettings, useTestSource, type SourceSetting } from "@/lib/api/queries";
 
-function statusLine(s: SourceSetting): string {
+function statusLine(s: SourceSetting): string | null {
+  // A vendor-blocked source has no setup state worth reporting; the reason replaces it.
+  if (s.unavailable) return `${s.label}: ${s.unavailable}`;
   if (!s.needs_key) return "No setup needed";
   return s.key_set ? "Key saved" : "Needs a key";
 }
@@ -38,6 +40,9 @@ function statusLine(s: SourceSetting): string {
  * the drift this branch exists to remove, reintroduced in the client.
  */
 function statusDetail(s: SourceSetting): string | null {
+  if (s.unavailable) return null;
+  // Live-only sources are never polled, so the poller-readiness lines below would mislead.
+  if (s.live_only) return "Searched when you search — not checked in the background";
   if (!s.configured) {
     if (s.needs_key && !s.key_set) return "Add a key and Rhapto will check this source next time.";
     if (!s.enabled) return "Switched off, so Rhapto skips it.";
@@ -172,7 +177,7 @@ export function SourcesSection() {
                         reads as one, and it comes with the control that lifts it. */}
                     {source.paused ? <StatusBadge tone="danger">Paused</StatusBadge> : null}
                   </div>
-                  <p className="text-xs text-muted-foreground">{statusLine(source)}</p>
+                  {statusLine(source) ? <p className="text-xs text-muted-foreground">{statusLine(source)}</p> : null}
                   {statusDetail(source) ? <p className="text-xs text-muted-foreground">{statusDetail(source)}</p> : null}
                   {lastRunLine(source) ? <p className="text-xs text-muted-foreground">{lastRunLine(source)}</p> : null}
                 </div>

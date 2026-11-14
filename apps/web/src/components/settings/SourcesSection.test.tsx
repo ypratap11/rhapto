@@ -10,8 +10,8 @@ import type { SourceSetting, SourceTestOut } from "@/lib/api/queries";
 // (`configured: true`) and is currently being refused by the poller, so it is paused and therefore
 // not runnable.
 const rows: SourceSetting[] = [
-  { id: "themuse", label: "The Muse", enabled: true, needs_key: false, key_set: false, fields: [], configured: false, paused: false, runnable: false, last_run: null },
-  { id: "adzuna", label: "Adzuna", enabled: false, needs_key: true, key_set: false, fields: ["app_id", "app_key"], configured: false, paused: false, runnable: false, last_run: null },
+  { id: "themuse", label: "The Muse", enabled: true, needs_key: false, key_set: false, fields: [], configured: false, paused: false, runnable: false, live_only: false, last_run: null },
+  { id: "adzuna", label: "Adzuna", enabled: false, needs_key: true, key_set: false, fields: ["app_id", "app_key"], configured: false, paused: false, runnable: false, live_only: false, last_run: null },
   {
     id: "jsearch",
     label: "JSearch",
@@ -23,6 +23,7 @@ const rows: SourceSetting[] = [
     configured: true,
     paused: true,
     runnable: false,
+    live_only: false,
     last_run: {
       started_at: "2026-09-26T12:00:00Z",
       finished_at: "2026-09-26T12:00:01Z",
@@ -296,3 +297,39 @@ describe("SourcesSection, reading runnable rather than re-deriving it", () => {
     expect(screen.getByText(/will check next time/i)).toBeInTheDocument();
   });
 });
+
+describe("SourcesSection, vendor-blocked and live-only sources", () => {
+  const blocked = "blocked by the vendor (bot protection), not available right now";
+
+  beforeEach(() => {
+    isLoading = false;
+    error = null;
+    isPaused = false;
+  });
+
+  it("shows the unavailable reason in place of any status or hint", () => {
+    data = [{ ...rows[0]!, enabled: true, unavailable: blocked, configured: false, runnable: false }];
+    render(<SourcesSection />);
+    const muse = screen.getByRole("group", { name: "The Muse" });
+    expect(within(muse).getByText(`The Muse: ${blocked}`)).toBeInTheDocument();
+    expect(within(muse).queryByText(/no setup needed/i)).not.toBeInTheDocument();
+    expect(within(muse).queryByText(/skips it|will check next time|paused/i)).not.toBeInTheDocument();
+  });
+
+  it("explains a live-only source is searched on demand, not in the background", () => {
+    data = [{ ...rows[2]!, paused: false, configured: true, runnable: false, live_only: true, last_run: null }];
+    render(<SourcesSection />);
+    const jsearch = screen.getByRole("group", { name: "JSearch" });
+    expect(within(jsearch).getByText("Searched when you search — not checked in the background")).toBeInTheDocument();
+    expect(within(jsearch).queryByText(/will check next time/i)).not.toBeInTheDocument();
+  });
+
+  it("leaves an ordinary source unchanged", () => {
+    data = [{ ...rows[1]!, live_only: false }];
+    render(<SourcesSection />);
+    const adzuna = screen.getByRole("group", { name: "Adzuna" });
+    expect(within(adzuna).queryByText(/searched when you search/i)).not.toBeInTheDocument();
+    expect(within(adzuna).getByText(/needs a key/i)).toBeInTheDocument();
+  });
+});
+

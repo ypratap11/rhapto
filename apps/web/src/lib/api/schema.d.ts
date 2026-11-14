@@ -1194,6 +1194,15 @@ export interface components {
             verified: boolean;
             visibility?: components["schemas"]["Visibility"] | null;
         };
+        /** BoardFailureOut */
+        BoardFailureOut: {
+            /** Kind */
+            kind: string;
+            /** Message */
+            message: string;
+            /** Name */
+            name: string;
+        };
         /** BoardOut */
         BoardOut: {
             /** Columns */
@@ -1984,10 +1993,22 @@ export interface components {
         PerSourceOut: {
             /** Error */
             error?: string | null;
+            /**
+             * Failed Boards
+             * @default []
+             */
+            failed_boards: components["schemas"]["BoardFailureOut"][];
             /** Found */
             found: number;
             /** New */
             new: number;
+            quota?: components["schemas"]["QuotaOut"] | null;
+            /**
+             * State
+             * @default ok
+             * @enum {string}
+             */
+            state: "ok" | "partial" | "failed" | "rate_limited" | "unavailable" | "quota_exhausted";
         };
         /** PollRunOut */
         PollRunOut: {
@@ -2048,6 +2069,15 @@ export interface components {
             rating?: number | null;
             /** Text */
             text?: string | null;
+        };
+        /** QuotaOut */
+        QuotaOut: {
+            /** Limit */
+            limit?: number | null;
+            /** Remaining */
+            remaining?: number | null;
+            /** Reset At */
+            reset_at?: string | null;
         };
         /**
          * ReadinessOut
@@ -2383,6 +2413,11 @@ export interface components {
             /** Label */
             label: string;
             last_run?: components["schemas"]["SourceRunOut"] | null;
+            /**
+             * Live Only
+             * @default false
+             */
+            live_only: boolean;
             /** Needs Key */
             needs_key: boolean;
             /**
@@ -2395,6 +2430,8 @@ export interface components {
              * @default false
              */
             runnable: boolean;
+            /** Unavailable */
+            unavailable?: string | null;
         };
         /** SourceTestOut */
         SourceTestOut: {

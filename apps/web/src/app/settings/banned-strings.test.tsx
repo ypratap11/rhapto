@@ -29,9 +29,9 @@ const usage: UsageOut = {
   ],
 };
 const sources: SourceSetting[] = [
-  { id: "themuse", label: "The Muse", enabled: true, needs_key: false, key_set: false, fields: [], configured: true, paused: false, runnable: true, last_run: { started_at: "2026-09-26T12:00:00Z", finished_at: "2026-09-26T12:00:01Z", found: 5, new: 2, error: null, search_id: "s1", search_name: "Denver PM", search_location: "Denver" } },
-  { id: "adzuna", label: "Adzuna", enabled: false, needs_key: true, key_set: false, fields: ["app_id", "app_key"], configured: false, paused: false, runnable: false, last_run: null },
-  { id: "jsearch", label: "JSearch", enabled: true, needs_key: true, key_set: true, fields: ["rapidapi_key"], configured: true, paused: true, runnable: false, last_run: null },
+  { id: "themuse", label: "The Muse", enabled: true, needs_key: false, key_set: false, fields: [], configured: true, paused: false, runnable: true, live_only: false, last_run: { started_at: "2026-09-26T12:00:00Z", finished_at: "2026-09-26T12:00:01Z", found: 5, new: 2, error: null, search_id: "s1", search_name: "Denver PM", search_location: "Denver" } },
+  { id: "adzuna", label: "Adzuna", enabled: false, needs_key: true, key_set: false, fields: ["app_id", "app_key"], configured: false, paused: false, runnable: false, live_only: false, last_run: null },
+  { id: "jsearch", label: "JSearch", enabled: true, needs_key: true, key_set: true, fields: ["rapidapi_key"], configured: true, paused: true, runnable: false, live_only: false, last_run: null },
 ];
 const searches: SearchOut[] = [
   { id: "s1", name: "Denver PM", keywords: ["program", "manager"], location: "Denver", remote: "include", active: true, derived_from_track_id: "pm", new_count: 1, created_at: "2026-09-01T00:00:00Z", last_viewed_at: null, runs: 3, ever_found: false, last_run_at: "2026-09-26T00:00:00Z" },
