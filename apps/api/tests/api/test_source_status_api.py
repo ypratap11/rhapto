@@ -602,3 +602,16 @@ async def test_resume_only_touches_updated_at(
         row = await _aggregator(session, user_id, STUB)
         assert row.enabled is False
         assert row.updated_at > before
+
+
+async def test_themuse_never_counts_toward_usable_sources(
+    client: httpx.AsyncClient, session_factory: async_sessionmaker[AsyncSession], user_id: uuid.UUID
+) -> None:
+    baseline = (await client.get("/api/v1/dashboard")).json()["checklist"]["usable_sources"]
+    async with session_factory() as session:
+        session.add(Aggregator(user_id=user_id, source="themuse", enabled=True, keywords=[]))
+        await session.commit()
+    assert (await client.get("/api/v1/dashboard")).json()["checklist"]["usable_sources"] == baseline
+    rows = {r["id"]: r for r in (await client.get(SOURCES_URL)).json()}
+    assert rows["themuse"]["enabled"] is True
+    assert rows["themuse"]["configured"] is False and rows["themuse"]["runnable"] is False

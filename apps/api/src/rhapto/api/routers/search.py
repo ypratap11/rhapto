@@ -1,8 +1,8 @@
 """One search box, every source at once.
 
-Everything slow is bounded here: `live_search` caps each source and gives it
-`LIVE_TIMEOUT_SECONDS`, so this endpoint answers in roughly that long no matter how many vendors
-are having a bad day. Scoring is not part of the response -- the new rows are enqueued and the
+Everything slow is bounded here: `live_search` caps each source and gives it a budget
+(aggregators 8s, watchlist boards 30s), so this endpoint answers in roughly the longer of those no
+matter how many vendors are having a bad day. Scoring is not part of the response -- the new rows are enqueued and the
 client refetches `GET /jobs?ids=` until they have a fit ring.
 """
 
@@ -17,12 +17,23 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from rhapto.api.deps import current_user, get_enqueuer, get_session, get_settings_dep, get_state
 from rhapto.api.routers.jobs import _outs
-from rhapto.api.schemas import LiveSearchIn, LiveSearchOut, PerSourceOut
+from rhapto.api.schemas import (
+    BoardFailureOut,
+    LiveSearchIn,
+    LiveSearchOut,
+    PerSourceOut,
+    QuotaOut,
+)
 from rhapto.config import Settings
 from rhapto.db.repositories import jobs as jobs_repo
 from rhapto.db.repositories import profile as profile_repo
 from rhapto.db.repositories import source_credentials as creds_repo
-from rhapto.services.discovery.live import LIVE_TIMEOUT_SECONDS, LiveTarget, live_search
+from rhapto.services.discovery.live import (
+    BOARD_TIMEOUT_SECONDS,
+    LIVE_TIMEOUT_SECONDS,
+    LiveTarget,
+    live_search,
+)
 from rhapto.services.discovery.search import SearchSpec
 from rhapto.services.discovery.sources import SOURCES
 from rhapto.services.enqueue import Enqueuer
@@ -92,6 +103,8 @@ async def live(
         spec=spec,
         targets=targets,
         timeout=LIVE_TIMEOUT_SECONDS,
+        board_timeout=BOARD_TIMEOUT_SECONDS,
+        quota_store=get_state(request).quota_store,
     )
     await session.commit()
     # Captured before expire_all(): touching an attribute on an expired ORM object triggers a
@@ -117,7 +130,24 @@ async def live(
     return LiveSearchOut(
         jobs=await _outs(session, user_id, rows),
         per_source={
-            name: PerSourceOut(found=o.found, new=o.new, error=o.error)
+            name: PerSourceOut(
+                found=o.found,
+                new=o.new,
+                error=o.error,
+                state=o.state,
+                failed_boards=[
+                    BoardFailureOut(name=f.name, kind=f.kind, message=f.message) for f in o.failures
+                ],
+                quota=(
+                    QuotaOut(
+                        limit=o.quota.limit,
+                        remaining=o.quota.remaining,
+                        reset_at=o.quota.reset_at,
+                    )
+                    if o.quota is not None
+                    else None
+                ),
+            )
             for name, o in result.per_source.items()
         },
     )

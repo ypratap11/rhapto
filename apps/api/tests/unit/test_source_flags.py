@@ -189,3 +189,23 @@ async def test_rate_limit_vs_api_key_vs_server_error(source: str, status: int) -
         assert secret not in str(exc)
         assert secret not in repr(exc)
         assert all(secret not in str(a) for a in exc.args)
+
+
+@pytest.mark.parametrize("source", ["jooble", "adzuna"])
+async def test_server_error_does_not_blame_the_api_key(source: str) -> None:
+    if source == "jooble":
+        http = FakeDiscoveryHttp({"jooble.org": FakeResponse(status=500)})
+        creds = {"api_key": JOOBLE_KEY}
+        secrets = [JOOBLE_KEY]
+    else:
+        http = FakeDiscoveryHttp({"api.adzuna.com": FakeResponse(status=500)})
+        creds = {"app_id": ADZUNA_ID, "app_key": ADZUNA_KEY}
+        secrets = [ADZUNA_ID, ADZUNA_KEY]
+    with pytest.raises(SourceError) as caught:
+        await get_aggregator(source).fetch_search(http, SPEC, creds)  # type: ignore[arg-type]
+    message = str(caught.value)
+    assert "API key" not in message and "HTTP 500" in message
+    assert not isinstance(caught.value, RateLimited)
+    assert caught.value.status == 500
+    for secret in secrets:
+        assert secret not in message and secret not in repr(caught.value)

@@ -75,7 +75,14 @@ class AdzunaSource:
                     ) from None
                 except SourceError as exc:
                     redacted = str(exc).replace(creds["app_id"], "…").replace(creds["app_key"], "…")
-                    raise SourceError(f"Adzuna: check the API key ({redacted})") from None
+                    if exc.status in (401, 403):
+                        raise SourceError(
+                            f"Adzuna: check the API key ({redacted})", status=exc.status
+                        ) from None
+                    # Any other failure (5xx, network) says nothing about the keys.
+                    raise SourceError(
+                        f"Adzuna: the vendor returned an error ({redacted})", status=exc.status
+                    ) from None
                 if not isinstance(data, dict):
                     raise SourceError("Adzuna: unexpected response shape")
                 results = data.get("results")

@@ -192,7 +192,8 @@ async def test_adzuna_never_puts_the_key_in_an_error() -> None:
         {
             "api.adzuna.com": SourceError(
                 "https://api.adzuna.com/v1/api/jobs/us/search/1"
-                "?app_id=id-1&app_key=key-1 returned HTTP 401"
+                "?app_id=id-1&app_key=key-1 returned HTTP 401",
+                status=401,
             )
         }
     )
@@ -207,7 +208,11 @@ async def test_adzuna_never_puts_the_key_in_an_error() -> None:
 
 async def test_jooble_never_puts_the_key_in_an_error() -> None:
     http = FakeDiscoveryHttp(
-        {"jooble.org/api": SourceError("https://jooble.org/api/s3cret returned HTTP 401")}
+        {
+            "jooble.org/api": SourceError(
+                "https://jooble.org/api/s3cret returned HTTP 401", status=401
+            )
+        }
     )
     with pytest.raises(SourceError) as exc:
         await get_aggregator("jooble").fetch_search(http, SPEC, {"api_key": "s3cret"})  # type: ignore[arg-type]

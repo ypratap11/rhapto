@@ -311,7 +311,7 @@ async def _source_settings(session: AsyncSession, user_id: uuid.UUID) -> list[So
         # missed.
         enabled = row.enabled if row is not None else False
         scopes = by_source.get(info.name, [])
-        configured = info.name in usable
+        configured = info.name in usable and info.unavailable is None
         paused = paused_as_of_last_run(
             [(e.run.error, e.run.started_at) for e in scopes],
             row.updated_at if row is not None else None,
@@ -329,7 +329,9 @@ async def _source_settings(session: AsyncSession, user_id: uuid.UUID) -> list[So
                 # One `and`, no extra query: both inputs are already here. "Runnable" is a
                 # present-tense claim about the next poll, so it has to account for pause --
                 # architecture §12.1.
-                runnable=configured and not paused,
+                runnable=configured and not paused and not info.live_only,
+                unavailable=info.unavailable,
+                live_only=info.live_only,
                 # `latest_runs_with_search` is sorted newest first, so the head of this source's
                 # scopes is its newest run across all of them.
                 last_run=_run_out(scopes[0]) if scopes else None,
@@ -413,6 +415,9 @@ async def test_source(
     info = next((i for i in aggregator_sources() if i.name == source), None)
     if info is None:
         raise HTTPException(status_code=404, detail=f"unknown source {source!r}")
+    if info.unavailable is not None:
+        # No credential lookup, no call: the vendor blocks us and we do not work around it.
+        return SourceTestOut(ok=False, error=f"{info.label}: {info.unavailable}")
     credentials = await creds_repo.get_credentials(session, fernet_for(settings), user_id, source)
     http = get_state(request).discovery_http
     spec = SearchSpec(keywords=("program manager",))

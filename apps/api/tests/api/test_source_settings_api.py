@@ -117,3 +117,44 @@ async def test_lifespan_shutdown_closes_the_quota_store(
     async with LifespanManager(application):
         assert not store.closed
     assert store.closed
+
+
+async def test_sources_list_marks_themuse_unavailable_and_jsearch_live_only(
+    client: httpx.AsyncClient,
+) -> None:
+    put = await client.put(
+        "/api/v1/settings/sources/jsearch",
+        json={"enabled": True, "credentials": {"rapidapi_key": "rk-settings-test"}},
+    )
+    assert put.status_code == 200
+    by_id = {r["id"]: r for r in (await client.get("/api/v1/settings/sources")).json()}
+    muse = by_id["themuse"]
+    assert muse["unavailable"] == "blocked by the vendor (bot protection), not available right now"
+    assert muse["runnable"] is False and muse["configured"] is False
+    js = by_id["jsearch"]
+    assert js["live_only"] is True and js["configured"] is True
+    assert js["runnable"] is False and js["unavailable"] is None
+    assert by_id["remotive"]["unavailable"] is None and by_id["remotive"]["live_only"] is False
+
+
+async def test_put_source_setting_still_allows_enabling_themuse(
+    client: httpx.AsyncClient,
+) -> None:
+    response = await client.put("/api/v1/settings/sources/themuse", json={"enabled": True})
+    assert response.status_code == 200
+    body = response.json()
+    assert body["enabled"] is True and body["unavailable"] is not None
+    assert body["runnable"] is False and body["configured"] is False
+
+
+async def test_themuse_test_endpoint_answers_without_call(
+    client: httpx.AsyncClient, app: FastAPI
+) -> None:
+    from rhapto.services.discovery.http import FakeDiscoveryHttp
+
+    fake = FakeDiscoveryHttp({})
+    app.state.rhapto.discovery_http = fake
+    body = (await client.post("/api/v1/settings/sources/themuse/test")).json()
+    assert body["ok"] is False
+    assert "blocked by the vendor" in body["error"]
+    assert fake.calls == []

@@ -48,8 +48,14 @@ class JoobleSource:
                         "Jooble rate-limited (quota used up, try again later)"
                     ) from None
                 except SourceError as exc:
+                    redacted = str(exc).replace(key, "…")
+                    if exc.status in (401, 403):
+                        raise SourceError(
+                            f"Jooble: check the API key ({redacted})", status=exc.status
+                        ) from None
+                    # Any other failure (5xx, network) says nothing about the key.
                     raise SourceError(
-                        f"Jooble: check the API key ({str(exc).replace(key, '…')})"
+                        f"Jooble: the vendor returned an error ({redacted})", status=exc.status
                     ) from None
                 if not isinstance(data, dict):
                     raise SourceError("Jooble: unexpected response shape")
