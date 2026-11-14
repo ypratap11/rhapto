@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any, ClassVar
 from urllib.parse import urlencode
 
+from rhapto.services.discovery.offload import parse_off_loop
 from rhapto.services.discovery.posting import Posting
 from rhapto.services.discovery.search import SEARCH_CAP, SearchSpec, remote_matches
 from rhapto.services.discovery.sources import register
@@ -74,36 +75,43 @@ class AdzunaSource:
                     raise SourceError("Adzuna: unexpected response shape")
                 results = data.get("results")
                 items = results if isinstance(results, list) else []
-                for item in items:
-                    posting = self._to_posting(spec, item)
-                    if posting is not None:
-                        out.append(posting)
-                    if len(out) >= SEARCH_CAP:
-                        return out
+                out += await parse_off_loop(_parse_chunk, items, spec)
+                if len(out) >= SEARCH_CAP:
+                    return out[:SEARCH_CAP]
                 if len(items) < PER_PAGE:
                     break
         return out
 
-    def _to_posting(self, spec: SearchSpec, item: Any) -> Posting | None:
-        if not isinstance(item, dict):
+
+def _to_posting(spec: SearchSpec, item: Any) -> Posting | None:
+    if not isinstance(item, dict):
+        return None
+    try:
+        title = str(item["title"])
+        text = html_to_text(str(item.get("description") or "")) or title
+        if not matches_keywords(spec.keywords, title, text):
             return None
-        try:
-            title = str(item["title"])
-            text = html_to_text(str(item.get("description") or "")) or title
-            if not matches_keywords(spec.keywords, title, text):
-                return None
-            location = str((item.get("location") or {}).get("display_name") or "") or None
-            if not remote_matches(spec, location, None):
-                return None
-            return Posting(
-                external_id=str(item["id"]),
-                company=str((item.get("company") or {}).get("display_name") or "Unknown"),
-                title=title,
-                location=location,
-                url=str(item["redirect_url"]),
-                jd_text=text,
-                posted_at=parse_iso(item.get("created")),
-                salary_text=salary_range(item),
-            )
-        except (KeyError, TypeError, ValueError):
+        location = str((item.get("location") or {}).get("display_name") or "") or None
+        if not remote_matches(spec, location, None):
             return None
+        return Posting(
+            external_id=str(item["id"]),
+            company=str((item.get("company") or {}).get("display_name") or "Unknown"),
+            title=title,
+            location=location,
+            url=str(item["redirect_url"]),
+            jd_text=text,
+            posted_at=parse_iso(item.get("created")),
+            salary_text=salary_range(item),
+        )
+    except (KeyError, TypeError, ValueError):
+        return None
+
+
+def _parse_chunk(chunk: list[Any], spec: SearchSpec) -> list[Posting]:
+    out: list[Posting] = []
+    for item in chunk:
+        posting = _to_posting(spec, item)
+        if posting is not None:
+            out.append(posting)
+    return out

@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import TYPE_CHECKING, Any, ClassVar
 
+from rhapto.services.discovery.offload import parse_off_loop
 from rhapto.services.discovery.posting import Posting
 from rhapto.services.discovery.sources import register
 from rhapto.services.discovery.sources.base import SourceInfo, matches_keywords
@@ -32,28 +33,33 @@ class GreenhouseSource:
         data = await http.get_json(
             f"https://boards-api.greenhouse.io/v1/boards/{board}/jobs?content=true"
         )
-        out: list[Posting] = []
-        for job in data.get("jobs", []) if isinstance(data, dict) else []:
-            try:
-                title = str(job["title"])
-                text = html_to_text(str(job.get("content") or ""))
-                if not matches_keywords(keywords, title, text):
-                    continue
-                location = job.get("location") or {}
-                out.append(
-                    Posting(
-                        external_id=str(job["id"]),
-                        company=str(job.get("company_name") or board),
-                        title=title,
-                        location=str(location.get("name"))
-                        if isinstance(location, dict) and location.get("name")
-                        else None,
-                        url=str(job["absolute_url"]),
-                        jd_text=text or title,
-                        posted_at=parse_iso(job.get("first_published"))
-                        or parse_iso(job.get("updated_at")),
-                    )
+        jobs = data.get("jobs", []) if isinstance(data, dict) else []
+        return await parse_off_loop(_parse_greenhouse, list(jobs), board, keywords)
+
+
+def _parse_greenhouse(chunk: list[Any], board: str | None, keywords: list[str]) -> list[Posting]:
+    out: list[Posting] = []
+    for job in chunk:
+        try:
+            title = str(job["title"])
+            text = html_to_text(str(job.get("content") or ""))
+            if not matches_keywords(keywords, title, text):
+                continue
+            location = job.get("location") or {}
+            out.append(
+                Posting(
+                    external_id=str(job["id"]),
+                    company=str(job.get("company_name") or board),
+                    title=title,
+                    location=str(location.get("name"))
+                    if isinstance(location, dict) and location.get("name")
+                    else None,
+                    url=str(job["absolute_url"]),
+                    jd_text=text or title,
+                    posted_at=parse_iso(job.get("first_published"))
+                    or parse_iso(job.get("updated_at")),
                 )
-            except (KeyError, TypeError, ValueError):
-                continue  # one bad posting never fails the board
-        return out
+            )
+        except (KeyError, TypeError, ValueError):
+            continue  # one bad posting never fails the board
+    return out

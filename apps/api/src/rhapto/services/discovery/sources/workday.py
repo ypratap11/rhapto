@@ -12,6 +12,7 @@ import re
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any, ClassVar
 
+from rhapto.services.discovery.offload import parse_off_loop
 from rhapto.services.discovery.posting import Posting
 from rhapto.services.discovery.sources import register
 from rhapto.services.discovery.sources.base import SourceError, SourceInfo, matches_keywords
@@ -175,11 +176,25 @@ class WorkdaySource:
         info = detail.get("jobPostingInfo") or {}
         if not isinstance(info, dict):
             raise TypeError("jobPostingInfo is not an object")
+        # One detail per call, so the batch is always this single info payload.
+        return await parse_off_loop(_parse_detail, [info], parsed, path, item, keywords)
+
+
+def _parse_detail(
+    chunk: list[dict[str, Any]],
+    parsed: tuple[str, str, str],
+    path: str,
+    item: Any,
+    keywords: list[str],
+) -> list[Posting]:
+    host_prefix, tenant, site = parsed
+    out: list[Posting] = []
+    for info in chunk:
         title = str(info.get("title") or item.get("title") or "")
         text = html_to_text(str(info.get("jobDescription") or ""))
         if not title or not matches_keywords(keywords, title, text):
-            return []
-        return [
+            continue
+        out.append(
             Posting(
                 # Req ids are unique within a tenant only, and jobs dedupe on
                 # (user, source, external_id) without the board, so the tenant is part of the id.
@@ -194,4 +209,5 @@ class WorkdaySource:
                 jd_text=text or title,
                 posted_at=parse_start_date(info.get("startDate")),
             )
-        ]
+        )
+    return out
