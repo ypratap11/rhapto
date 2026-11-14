@@ -84,12 +84,35 @@ async def test_runs_off_the_loop_thread_and_passes_extra_args() -> None:
 
     seen: set[int] = set()
 
+    names: set[str] = set()
+
     def fn(chunk: list[int], add: int) -> list[int]:
         seen.add(threading.get_ident())
+        names.add(threading.current_thread().name)
         return [x + add for x in chunk]
 
     assert await parse_off_loop(fn, [1, 2, 3], 10) == [11, 12, 13]
     assert seen and threading.get_ident() not in seen
+    # the dedicated pool, never the default executor (its threads are named asyncio_N)
+    assert names and all(n.startswith("discovery-parse") for n in names)
+
+
+async def test_chunk_sizes_are_bounded_by_default_and_by_argument() -> None:
+    from rhapto.services.discovery.offload import parse_off_loop
+
+    sizes: list[int] = []
+
+    def record(chunk: list[int]) -> list[int]:
+        sizes.append(len(chunk))
+        return list(chunk)
+
+    await parse_off_loop(record, list(range(80)))
+    assert max(sizes) <= 25
+    assert len(sizes) == 4
+    sizes.clear()
+    await parse_off_loop(record, list(range(80)), chunk=7)
+    assert max(sizes) <= 7
+    assert len(sizes) == 12
 
 
 async def test_parallel_equals_serial_for_real_html_to_text() -> None:
