@@ -98,7 +98,8 @@ async def test_a_new_account_starts_with_every_keyless_source_set_up(
     `configured` now agree, and both are backed by the row the poller will read.
     """
     rows = (await client.get(SOURCES_URL)).json()
-    keyless = [r for r in rows if not r["needs_key"]]
+    # An unavailable source (themuse) is keyless but is deliberately not seeded.
+    keyless = [r for r in rows if r["id"] in keyless_source_names()]
     assert keyless, "the registry should ship at least one keyless source"
     assert all(r["enabled"] is True for r in keyless)
     assert all(r["configured"] is True for r in keyless)
@@ -126,11 +127,11 @@ async def test_a_source_with_no_row_is_never_displayed_as_enabled(
     """
     async with session_factory() as session:
         await session.execute(
-            delete(Aggregator).where(Aggregator.user_id == user_id, Aggregator.source == "themuse")
+            delete(Aggregator).where(Aggregator.user_id == user_id, Aggregator.source == "remotive")
         )
         await session.commit()
 
-    row = await _row(client, "themuse")
+    row = await _row(client, "remotive")
     assert row["enabled"] is False, "a source with no row must not display as enabled"
     assert row["configured"] is False and row["runnable"] is False
 
@@ -143,17 +144,17 @@ async def test_enabling_a_keyless_source_again_makes_it_configured_and_runnable(
     Driven from OFF rather than from the seeded default, so the assertion is about the row rather than
     about the seed.
     """
-    await client.put(f"{SOURCES_URL}/themuse", json={"enabled": False})
-    assert (await _row(client, "themuse"))["configured"] is False
-    assert (await client.put(f"{SOURCES_URL}/themuse", json={"enabled": True})).status_code == 200
-    after = await _row(client, "themuse")
+    await client.put(f"{SOURCES_URL}/remotive", json={"enabled": False})
+    assert (await _row(client, "remotive"))["configured"] is False
+    assert (await client.put(f"{SOURCES_URL}/remotive", json={"enabled": True})).status_code == 200
+    after = await _row(client, "remotive")
     # Set up, and nothing has failed, so it will run on the next poll.
     assert after["configured"] is True and after["runnable"] is True
 
 
 async def test_a_disabled_row_is_neither_configured_nor_runnable(client: httpx.AsyncClient) -> None:
-    await client.put(f"{SOURCES_URL}/themuse", json={"enabled": False})
-    off = await _row(client, "themuse")
+    await client.put(f"{SOURCES_URL}/remotive", json={"enabled": False})
+    off = await _row(client, "remotive")
     assert off["enabled"] is False
     assert off["configured"] is False and off["runnable"] is False
 
@@ -197,7 +198,7 @@ async def test_configured_equals_usable_source_ids_for_the_same_fixture(
     check, until `configured` carried the pause-free predicate on its own. Now it is checkable: the
     wire field must equal the pure function, computed here from the same rows the endpoint read.
     """
-    await client.put(f"{SOURCES_URL}/themuse", json={"enabled": True})
+    await client.put(f"{SOURCES_URL}/remotive", json={"enabled": True})
     await client.put(
         f"{SOURCES_URL}/adzuna",
         json={"enabled": True, "credentials": {"app_id": "a", "app_key": "b"}},
@@ -348,7 +349,7 @@ async def test_a_board_run_has_no_search_to_name(
         session.add(
             PollRun(
                 user_id=user_id,
-                source="themuse",
+                source="remotive",
                 board=None,
                 search_id=None,
                 started_at=started,
@@ -360,7 +361,7 @@ async def test_a_board_run_has_no_search_to_name(
         )
         await session.commit()
 
-    last_run = (await _row(client, "themuse"))["last_run"]
+    last_run = (await _row(client, "remotive"))["last_run"]
     assert last_run is not None
     assert last_run["found"] == 7
     assert last_run["search_id"] is None
@@ -368,8 +369,8 @@ async def test_a_board_run_has_no_search_to_name(
 
 
 async def test_a_source_that_has_never_run_has_no_last_run(client: httpx.AsyncClient) -> None:
-    assert (await _row(client, "themuse"))["last_run"] is None
-    assert (await _row(client, "themuse"))["paused"] is False
+    assert (await _row(client, "remotive"))["last_run"] is None
+    assert (await _row(client, "remotive"))["paused"] is False
 
 
 async def test_another_users_runs_do_not_appear_on_this_users_source_rows(
@@ -383,7 +384,7 @@ async def test_another_users_runs_do_not_appear_on_this_users_source_rows(
         session.add(
             PollRun(
                 user_id=other.id,
-                source="themuse",
+                source="remotive",
                 board=None,
                 search_id=None,
                 started_at=started,
@@ -395,7 +396,7 @@ async def test_another_users_runs_do_not_appear_on_this_users_source_rows(
         )
         await session.commit()
 
-    assert (await _row(client, "themuse"))["last_run"] is None
+    assert (await _row(client, "remotive"))["last_run"] is None
 
 
 # --- Row 5: a paused source, verified against the poller itself --------------------------------

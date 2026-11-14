@@ -254,3 +254,40 @@ def test_needs_key_and_fields_per_source() -> None:
     assert by_name["adzuna"].needs_key is True and by_name["adzuna"].fields == ("app_id", "app_key")
     assert by_name["jooble"].fields == ("api_key",)
     assert by_name["jsearch"].fields == ("rapidapi_key",)
+
+
+async def test_remotive_truncates_120_matching_items_to_the_first_100_in_order() -> None:
+    jobs = [
+        {
+            "id": i,
+            "title": f"Program Manager {i}",
+            "company_name": "Remote Co",
+            "candidate_required_location": "USA",
+            "url": f"https://remotive.com/remote-jobs/{i}",
+            "description": "<p>Lead programs.</p>",
+        }
+        for i in range(120)
+    ]
+    http = FakeDiscoveryHttp({"remotive.com/api/remote-jobs": {"jobs": jobs}})
+    postings = await get_aggregator("remotive").fetch_search(http, SPEC, {})  # type: ignore[arg-type]
+    # Stated independently of the module's parser: ids 0..99, in feed order.
+    assert [p.external_id for p in postings] == [str(i) for i in range(100)]
+
+
+async def test_adzuna_truncates_120_matching_items_to_the_first_100_in_order() -> None:
+    results = [
+        {
+            "id": str(i),
+            "title": f"Program Manager {i}",
+            "company": {"display_name": "ExampleCo"},
+            "location": {"display_name": "Denver, CO"},
+            "redirect_url": f"https://www.adzuna.com/details/{i}",
+            "description": "Run programs.",
+        }
+        for i in range(120)
+    ]
+    http = FakeDiscoveryHttp({"api.adzuna.com": {"results": results}})
+    creds = {"app_id": "id-1", "app_key": "key-1"}
+    postings = await get_aggregator("adzuna").fetch_search(http, SPEC, creds)  # type: ignore[arg-type]
+    assert [p.external_id for p in postings] == [str(i) for i in range(100)]
+    assert len(http.calls) == 1

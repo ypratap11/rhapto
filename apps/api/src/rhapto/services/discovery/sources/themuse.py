@@ -19,7 +19,13 @@ MAX_PAGES = 10
 
 @register
 class TheMuseSource:
-    info: ClassVar[SourceInfo] = SourceInfo("themuse", "aggregator", "The Muse", False)
+    info: ClassVar[SourceInfo] = SourceInfo(
+        "themuse",
+        "aggregator",
+        "The Muse",
+        False,
+        unavailable="blocked by the vendor (bot protection), not available right now",
+    )
 
     def _url(self, spec: SearchSpec, page: int) -> str:
         url = f"https://www.themuse.com/api/public/jobs?page={page}"

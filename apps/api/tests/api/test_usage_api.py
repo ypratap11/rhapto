@@ -20,7 +20,7 @@ async def _job(session: AsyncSession, user_id: uuid.UUID, external_id: str):
     return await jobs_repo.create_discovered_job(
         session,
         user_id,
-        source="themuse",
+        source="remotive",
         external_id=external_id,
         company="ExampleCo",
         title="Program Manager",

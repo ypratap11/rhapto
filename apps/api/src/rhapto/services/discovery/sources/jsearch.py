@@ -30,6 +30,7 @@ class JSearchSource:
         False,
         needs_key=True,
         fields=("rapidapi_key",),
+        live_only=True,
     )
 
     async def fetch_search(

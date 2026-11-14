@@ -101,7 +101,7 @@ async def test_deleting_a_search_nulls_the_job_link(session: AsyncSession, user:
     job = await jobs_repo.create_discovered_job(
         session,
         user.id,
-        source="themuse",
+        source="remotive",
         external_id="1",
         company="ExampleCo",
         title="TPM",

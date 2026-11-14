@@ -29,7 +29,7 @@ def probe_source():  # type: ignore[no-untyped-def]
 async def test_sources_list_reports_key_requirements(client: httpx.AsyncClient) -> None:
     rows = (await client.get("/api/v1/settings/sources")).json()
     by_id = {r["id"]: r for r in rows}
-    assert by_id["themuse"]["needs_key"] is False and by_id["themuse"]["enabled"] is True
+    assert by_id["remotive"]["needs_key"] is False and by_id["remotive"]["enabled"] is True
     assert by_id["adzuna"]["needs_key"] is True and by_id["adzuna"]["fields"] == [
         "app_id",
         "app_key",

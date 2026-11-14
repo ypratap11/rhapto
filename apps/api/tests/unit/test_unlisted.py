@@ -70,14 +70,14 @@ async def test_the_scope_is_the_search_or_the_company_not_the_whole_source(
     other = await searches_repo.create_search(
         session, user.id, name="B", keywords=["b"], location=None, remote="include"
     )
-    mine = await _job(session, user, "mine", source="themuse", search_id=search.id)
-    theirs = await _job(session, user, "theirs", source="themuse", search_id=other.id)
+    mine = await _job(session, user, "mine", source="remotive", search_id=search.id)
+    theirs = await _job(session, user, "theirs", source="remotive", search_id=other.id)
     other_company = await _job(session, user, "elsewhere", company="OtherCo")
     for _ in range(2):
         await jobs_repo.reconcile_listing(
             session,
             user.id,
-            source="themuse",
+            source="remotive",
             company=None,
             search_id=search.id,
             seen_external_ids=set(),
@@ -94,13 +94,13 @@ async def test_no_search_id_and_no_company_skips_reconciliation_entirely(
     `search_id` nor `company` to narrow the scope. Falling back to the whole source there would
     eventually mark every other search's and board's job on that source unlisted; reconciliation
     must skip instead."""
-    job = await _job(session, user, "widelisted", source="themuse")
+    job = await _job(session, user, "widelisted", source="remotive")
     for _ in range(3):
         assert (
             await jobs_repo.reconcile_listing(
                 session,
                 user.id,
-                source="themuse",
+                source="remotive",
                 company=None,
                 search_id=None,
                 seen_external_ids=set(),

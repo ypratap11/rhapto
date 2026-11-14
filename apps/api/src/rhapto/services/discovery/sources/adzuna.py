@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any, ClassVar
 from urllib.parse import urlencode
 
+from rhapto.services.discovery.errors import RateLimited
 from rhapto.services.discovery.offload import parse_off_loop
 from rhapto.services.discovery.posting import Posting
 from rhapto.services.discovery.search import SEARCH_CAP, SearchSpec, remote_matches
@@ -68,6 +69,10 @@ class AdzunaSource:
                 # would otherwise carry both credentials into a run row and the UI.
                 try:
                     data = await http.get_json(url)
+                except RateLimited:
+                    raise RateLimited(
+                        "Adzuna rate-limited (quota used up, try again later)"
+                    ) from None
                 except SourceError as exc:
                     redacted = str(exc).replace(creds["app_id"], "…").replace(creds["app_key"], "…")
                     raise SourceError(f"Adzuna: check the API key ({redacted})") from None
