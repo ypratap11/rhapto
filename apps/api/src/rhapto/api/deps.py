@@ -20,6 +20,7 @@ from rhapto.engine.providers.llm import LLMProvider
 from rhapto.engine.providers.registry import build_llm
 from rhapto.services.accounts import ensure_account
 from rhapto.services.discovery.http import DiscoveryHttp
+from rhapto.services.discovery.quota import QuotaStore
 from rhapto.services.enqueue import Enqueuer
 from rhapto.services.eventbus import EventBus
 from rhapto.services.jobtext import FetchText
@@ -44,6 +45,7 @@ class AppState:
     storage: PackageStorage
     fetch_text: FetchText
     discovery_http: DiscoveryHttp
+    quota_store: QuotaStore
     llm_factory: LlmFactory = build_llm
     user_id: uuid.UUID | None = None
     engine: AsyncEngine | None = None

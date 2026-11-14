@@ -51,6 +51,7 @@ from rhapto.db.repositories.discovery import LatestRun, latest_runs_with_search
 from rhapto.db.repositories.llm_settings import delete_llm_settings, upsert_llm_settings
 from rhapto.engine.providers.llm import Message, SystemBlock
 from rhapto.engine.providers.registry import PROVIDERS, ProviderInfo, model_for
+from rhapto.services.discovery.quota import describe, guarded_search
 from rhapto.services.discovery.search import SearchSpec
 from rhapto.services.discovery.sources import aggregator_sources, get_aggregator
 from rhapto.services.discovery.sources.status import paused_as_of_last_run, usable_source_ids
@@ -414,10 +415,18 @@ async def test_source(
         raise HTTPException(status_code=404, detail=f"unknown source {source!r}")
     credentials = await creds_repo.get_credentials(session, fernet_for(settings), user_id, source)
     http = get_state(request).discovery_http
+    spec = SearchSpec(keywords=("program manager",))
     try:
-        postings = await get_aggregator(source).fetch_search(
-            http, SearchSpec(keywords=("program manager",)), credentials
-        )
+        if info.live_only:
+            # Same guard as live search: the test must not spend quota the guard cannot see.
+            guarded = await guarded_search(
+                get_state(request).quota_store, source, http, spec, credentials
+            )
+            if guarded.skipped or guarded.rate_limited:
+                return SourceTestOut(ok=False, error=f"{info.label} {describe(guarded.state)}")
+            postings = guarded.postings
+        else:
+            postings = await get_aggregator(source).fetch_search(http, spec, credentials)
     except Exception as exc:
         return SourceTestOut(ok=False, error=redact(str(exc), *credentials.values())[:300])
     return SourceTestOut(ok=True, found=len(postings))

@@ -1,0 +1,64 @@
+{
+  "status": "OK",
+  "request_id": "req-0001",
+  "parameters": {
+    "query": "program manager",
+    "country": "us"
+  },
+  "data": {
+    "jobs": [
+      {
+        "job_id": "jid-1",
+        "job_title": "Technical Program Manager",
+        "employer_name": "ExampleCo 1",
+        "job_city": "Denver",
+        "job_state": "CO",
+        "job_country": "US",
+        "job_location": "Denver, CO, US",
+        "job_is_remote": false,
+        "job_description": "<p>Run <b>programs</b> across teams.</p>",
+        "job_apply_link": "https://example.com/apply/1",
+        "job_google_link": "https://google.example/jobs/1",
+        "job_posted_at_datetime_utc": "2026-11-10T08:30:00.000Z",
+        "job_min_salary": 150000,
+        "job_max_salary": 170000,
+        "job_salary_string": "$150000-$170000"
+      },
+      {
+        "job_id": "jid-2",
+        "job_title": "Program Manager, Platform",
+        "employer_name": "ExampleCo 2",
+        "job_city": "",
+        "job_state": null,
+        "job_country": "US",
+        "job_location": "US",
+        "job_is_remote": true,
+        "job_description": "<p>Lead platform programs remotely.</p>",
+        "job_apply_link": "https://example.com/apply/2",
+        "job_google_link": "https://google.example/jobs/2",
+        "job_posted_at_datetime_utc": "2026-11-10T08:30:00.000Z",
+        "job_min_salary": null,
+        "job_max_salary": null,
+        "job_salary_string": null
+      },
+      {
+        "job_id": "jid-3",
+        "job_title": "Barista",
+        "employer_name": "ExampleCo 3",
+        "job_city": "Denver",
+        "job_state": "CO",
+        "job_country": "US",
+        "job_location": "Denver, CO, US",
+        "job_is_remote": false,
+        "job_description": "<p>Make coffee.</p>",
+        "job_apply_link": "https://example.com/apply/3",
+        "job_google_link": "https://google.example/jobs/3",
+        "job_posted_at_datetime_utc": "2026-11-10T08:30:00.000Z",
+        "job_min_salary": null,
+        "job_max_salary": null,
+        "job_salary_string": null
+      }
+    ],
+    "cursor": "opaque-cursor-1"
+  }
+}

@@ -217,22 +217,24 @@ async def test_jooble_never_puts_the_key_in_an_error() -> None:
 
 async def test_jsearch_sends_the_key_as_a_header_only() -> None:
     body = {
-        "data": [
-            {
-                "job_id": "abc",
-                "job_title": "Technical Program Manager",
-                "employer_name": "ExampleCo",
-                "job_city": "Denver",
-                "job_state": "CO",
-                "job_country": "US",
-                "job_apply_link": "https://example.com/apply",
-                "job_description": "Run programs.",
-                "job_posted_at_datetime_utc": "2026-09-04T00:00:00Z",
-                "job_is_remote": False,
-                "job_min_salary": 150000,
-                "job_max_salary": 170000,
-            }
-        ]
+        "data": {
+            "jobs": [
+                {
+                    "job_id": "abc",
+                    "job_title": "Technical Program Manager",
+                    "employer_name": "ExampleCo",
+                    "job_city": "Denver",
+                    "job_state": "CO",
+                    "job_country": "US",
+                    "job_apply_link": "https://example.com/apply",
+                    "job_description": "Run programs.",
+                    "job_posted_at_datetime_utc": "2026-09-04T00:00:00Z",
+                    "job_is_remote": False,
+                    "job_min_salary": 150000,
+                    "job_max_salary": 170000,
+                }
+            ]
+        }
     }
     http = FakeDiscoveryHttp({"jsearch.p.rapidapi.com": body})
     postings = await get_aggregator("jsearch").fetch_search(http, SPEC, {"rapidapi_key": "rk"})  # type: ignore[arg-type]
