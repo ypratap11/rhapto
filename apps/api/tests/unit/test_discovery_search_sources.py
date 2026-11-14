@@ -220,6 +220,33 @@ async def test_jooble_never_puts_the_key_in_an_error() -> None:
     assert "check the API key" in str(exc.value)
 
 
+@pytest.mark.parametrize(
+    ("source", "host", "creds", "secrets"),
+    [
+        ("jooble", "jooble.org/api", {"api_key": "s3cret"}, ["s3cret"]),
+        (
+            "adzuna",
+            "api.adzuna.com",
+            {"app_id": "id-1", "app_key": "key-1"},
+            ["id-1", "key-1"],
+        ),
+    ],
+)
+async def test_status_less_error_redacts_the_key_and_uses_neutral_wording(
+    source: str, host: str, creds: dict[str, str], secrets: list[str]
+) -> None:
+    # A network failure carries no HTTP status; its message can still contain the request URL.
+    leaky = "connect failed for https://x.test/" + "?".join(secrets)
+    http = FakeDiscoveryHttp({host: SourceError(leaky)})
+    with pytest.raises(SourceError) as exc:
+        await get_aggregator(source).fetch_search(http, SPEC, creds)  # type: ignore[arg-type]
+    for secret in secrets:
+        assert secret not in str(exc.value)
+    assert exc.value.status is None
+    assert "the vendor returned an error" in str(exc.value)
+    assert "check the API key" not in str(exc.value)
+
+
 async def test_jsearch_sends_the_key_as_a_header_only() -> None:
     body = {
         "data": {

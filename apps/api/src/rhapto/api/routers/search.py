@@ -1,9 +1,9 @@
 """One search box, every source at once.
 
 Everything slow is bounded here: `live_search` caps each source and gives it a budget
-(aggregators 8s, watchlist boards 30s), so this endpoint answers in roughly the longer of those no
-matter how many vendors are having a bad day. Scoring is not part of the response -- the new rows are enqueued and the
-client refetches `GET /jobs?ids=` until they have a fit ring.
+(aggregators 8s, watchlist boards 30s), so this endpoint answers in about the longer of those
+no matter how many vendors are having a bad day. Scoring is not part of the response -- the new
+rows are enqueued and the client refetches `GET /jobs?ids=` until they have a fit ring.
 """
 
 from __future__ import annotations

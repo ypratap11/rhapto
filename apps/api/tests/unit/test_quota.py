@@ -275,3 +275,19 @@ def test_redis_value_holds_no_key_material() -> None:
 
     value = encode_state(QuotaState(200, 3, NOW))
     assert set(json.loads(value)) == {"limit", "remaining", "reset_at"}
+
+
+async def test_200_with_zero_remaining_and_no_reset_header_still_blocks_further_calls() -> None:
+    from rhapto.services.discovery.quota import InMemoryQuotaStore, guarded_search
+
+    store = InMemoryQuotaStore(now=_clock)
+    headers = {"x-ratelimit-requests-remaining": "0", "x-ratelimit-requests-limit": "200"}
+    http = _http(FakeResponse(200, JOBS, headers))
+    first = await guarded_search(store, "jsearch", http, SPEC, CREDS, now=_clock)  # type: ignore[arg-type]
+    assert first.skipped is False and len(first.postings) == 1
+    stored = await store.get("jsearch", KEY)
+    assert stored is not None and stored.remaining == 0
+    assert stored.reset_at == NOW + timedelta(hours=1)  # same estimate as a 429 without reset
+    again = await guarded_search(store, "jsearch", http, SPEC, CREDS, now=_clock)  # type: ignore[arg-type]
+    assert again.skipped is True
+    assert len(http.calls) == 1

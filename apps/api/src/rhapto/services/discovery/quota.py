@@ -217,7 +217,12 @@ async def guarded_search(
 
     state = quota_state_from(getattr(adapter, "quota", None), now())
     if state is not None:
-        await _put(store, source, api_key, state)
+        # A 200 that reports nothing left but no reset time must still stop further calls:
+        # store the same one-hour estimate a 429 without a reset gets.
+        stored = state
+        if state.remaining == 0 and state.reset_at is None:
+            stored = QuotaState(state.limit, 0, now() + DEFAULT_COOLDOWN)
+        await _put(store, source, api_key, stored)
     return Guarded(postings, state, skipped=False, rate_limited=False)
 
 
