@@ -47,7 +47,7 @@ async def _job_for(
         job = await jobs_repo.create_discovered_job(
             session,
             user_id,
-            source="themuse",
+            source="remotive",
             external_id=external_id,
             company="ExampleCo",
             title="Program Manager",
@@ -122,7 +122,7 @@ async def test_new_counts_never_counts_another_users_jobs_or_searches(
     await jobs_repo.create_discovered_job(
         session,
         user.id,
-        source="themuse",
+        source="remotive",
         external_id="mine-1",
         company="ExampleCo",
         title="Program Manager",
@@ -137,7 +137,7 @@ async def test_new_counts_never_counts_another_users_jobs_or_searches(
     await jobs_repo.create_discovered_job(
         session,
         other.id,
-        source="themuse",
+        source="remotive",
         external_id="theirs-1",
         company="ExampleCo",
         title="Program Manager",

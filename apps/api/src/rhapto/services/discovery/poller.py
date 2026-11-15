@@ -77,6 +77,12 @@ class PollSummary:
     unlisted_jobs: int = 0
 
 
+def _is_unpolled(source: str) -> bool:
+    """True for a registered source the poller must never call: unavailable or live-only."""
+    cls = SOURCES.get(source)
+    return cls is not None and (cls.info.unavailable is not None or cls.info.live_only)
+
+
 async def build_specs(
     session: AsyncSession, user_id: uuid.UUID, *, fernet: Fernet | None = None
 ) -> list[SourceSpec]:
@@ -93,7 +99,11 @@ async def build_specs(
     track_keywords: list[str] = []
     for track in await profile_repo.list_tracks(session, user_id):
         track_keywords.extend(k for k in track.keywords if k not in track_keywords)
-    enabled = [a for a in await profile_repo.list_aggregators(session, user_id) if a.enabled]
+    enabled = [
+        a
+        for a in await profile_repo.list_aggregators(session, user_id)
+        if a.enabled and not _is_unpolled(a.source)
+    ]
     if not enabled:
         return specs
     # A user who has never opened the Searches tab still gets the market: derive on first poll.
@@ -307,6 +317,8 @@ async def poll_sources(
     new_ids: list[uuid.UUID] = []
     await step("fetch")
     for spec in specs:
+        if _is_unpolled(spec.source):
+            continue
         if await _is_paused(session, user_id, spec):
             run = await disc_repo.start_run(session, user_id, spec.source, spec.board)
             run.search_id = spec.search_id

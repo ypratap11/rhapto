@@ -22,6 +22,11 @@ confirms Rhapto can reach the source with it. A source's status line reads one o
 **Zero setup** (no key needed), **Needs a key** (on, but nothing saved yet), or **Key saved**. A
 saved key is never shown back to you — there's nothing to reveal, by design.
 
+Two sources read differently. **The Muse** shows "The Muse: blocked by the vendor (bot protection),
+not available right now"; Rhapto does not query it. **JSearch** shows "Searched when you search —
+not checked in the background", because it runs only when you search from the Jobs page. **Test** on
+JSearch spends one of its requests.
+
 ## Saved searches
 
 Every saved search — whether you saved it yourself from the Jobs page, or Rhapto derived it from

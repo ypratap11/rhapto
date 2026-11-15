@@ -5,6 +5,7 @@ from typing import Any
 
 import httpx
 import pytest
+from fastapi import FastAPI
 from sqlalchemy import delete
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -98,7 +99,14 @@ async def test_a_search_returns_jobs_and_per_source_counts(
     assert response.status_code == 200, response.text
     body = response.json()
     assert len(body["jobs"]) == 2
-    assert body["per_source"]["api-alpha"] == {"found": 2, "new": 2, "error": None}
+    assert body["per_source"]["api-alpha"] == {
+        "found": 2,
+        "new": 2,
+        "error": None,
+        "state": "ok",
+        "failed_boards": [],
+        "quota": None,
+    }
     assert {j["salary_text"] for j in body["jobs"]} == {"$150k", None}
     # New jobs come back unscored; the client refetches GET /jobs?ids= until they have a ring.
     assert all(j["best_fit"] is None for j in body["jobs"])
@@ -182,3 +190,142 @@ async def test_validation(client: httpx.AsyncClient) -> None:
     assert (
         await client.post("/api/v1/search", json={"query": "pm", "field": "not-a-field"})
     ).status_code == 422
+
+
+# --- T6: per_source states, quota guard, unavailable source ------------------------------------
+JS_KEY = "rk-api-test-key-456"
+
+
+def _jsearch_body() -> dict[str, Any]:
+    import json
+    from pathlib import Path
+
+    path = Path(__file__).parent.parent / "fixtures" / "jsearch_v2_response.json"
+    data: dict[str, Any] = json.loads(path.read_text(encoding="utf-8"))
+    return data
+
+
+async def _enable_jsearch(client: httpx.AsyncClient) -> None:
+    put = await client.put(
+        "/api/v1/settings/sources/jsearch",
+        json={"enabled": True, "credentials": {"rapidapi_key": JS_KEY}},
+    )
+    assert put.status_code == 200, put.text
+
+
+async def test_per_source_carries_state_failed_boards_quota(
+    client: httpx.AsyncClient, app: FastAPI
+) -> None:
+    from datetime import datetime
+
+    from rhapto.services.discovery.http import FakeDiscoveryHttp, FakeResponse
+
+    await _enable_jsearch(client)
+    headers = {
+        "x-ratelimit-requests-remaining": "187",
+        "x-ratelimit-requests-limit": "200",
+        "x-ratelimit-requests-reset": "3600",
+    }
+    fake = FakeDiscoveryHttp(
+        {"jsearch.p.rapidapi.com": FakeResponse(status=200, body=_jsearch_body(), headers=headers)}
+    )
+    app.state.rhapto.discovery_http = fake
+    body = (
+        await client.post(
+            "/api/v1/search", json={"query": "program manager", "sources": ["jsearch"]}
+        )
+    ).json()
+    row = body["per_source"]["jsearch"]
+    assert row["state"] == "ok" and row["failed_boards"] == [] and row["error"] is None
+    assert row["quota"]["limit"] == 200 and row["quota"]["remaining"] == 187
+    reset = datetime.fromisoformat(row["quota"]["reset_at"])
+    assert reset.utcoffset() is not None and reset.utcoffset().total_seconds() == 0
+    assert JS_KEY not in str(body)
+
+
+async def test_failed_source_still_has_error_for_old_clients(
+    client: httpx.AsyncClient, session_factory: async_sessionmaker[AsyncSession], user_id: Any
+) -> None:
+    await _enable(session_factory, user_id, "api-keyed")
+    ApiKeyed.result = SourceError("Api Keyed: check the API key")
+    row = (await client.post("/api/v1/search", json={"query": "pm"})).json()["per_source"][
+        "api-keyed"
+    ]
+    assert row["state"] == "failed"
+    assert row["error"] == "Api Keyed: check the API key"
+    assert row["failed_boards"] == [
+        {"name": "api-keyed", "kind": "failed", "message": "Api Keyed: check the API key"}
+    ]
+
+
+async def test_themuse_enabled_row_reports_unavailable_and_makes_no_call(
+    client: httpx.AsyncClient,
+    app: FastAPI,
+    session_factory: async_sessionmaker[AsyncSession],
+    user_id: Any,
+) -> None:
+    from rhapto.services.discovery.http import FakeDiscoveryHttp
+
+    await _enable(session_factory, user_id, "themuse")
+    fake = FakeDiscoveryHttp({})
+    app.state.rhapto.discovery_http = fake
+    row = (await client.post("/api/v1/search", json={"query": "pm"})).json()["per_source"][
+        "themuse"
+    ]
+    assert row["state"] == "unavailable"
+    assert row["error"] == "blocked by the vendor (bot protection), not available right now"
+    assert fake.calls == []
+
+
+async def test_jsearch_exhausted_search_makes_no_http_call(
+    client: httpx.AsyncClient, app: FastAPI
+) -> None:
+    """[BR] Condition-7 witness: the quota store is assigned after app creation, so this also
+    runs against code that has no guard -- where the JSearch request is made."""
+    from datetime import UTC, datetime, timedelta
+
+    from rhapto.services.discovery.http import FakeDiscoveryHttp, FakeResponse
+    from rhapto.services.discovery.quota import InMemoryQuotaStore, QuotaState
+
+    await _enable_jsearch(client)
+    store = InMemoryQuotaStore()
+    reset = datetime.now(UTC) + timedelta(hours=2)
+    await store.put("jsearch", JS_KEY, QuotaState(200, 0, reset))
+    app.state.rhapto.quota_store = store
+    fake = FakeDiscoveryHttp(
+        {"jsearch.p.rapidapi.com": FakeResponse(status=200, body=_jsearch_body())}
+    )
+    app.state.rhapto.discovery_http = fake
+    body = (
+        await client.post(
+            "/api/v1/search", json={"query": "program manager", "sources": ["jsearch"]}
+        )
+    ).json()
+    assert fake.calls == []
+    row = body["per_source"]["jsearch"]
+    assert row["state"] == "quota_exhausted"
+    assert row["error"].startswith("quota used up until ")
+    assert row["quota"]["remaining"] == 0
+
+
+async def test_jsearch_second_search_after_429_makes_no_call(
+    client: httpx.AsyncClient, app: FastAPI
+) -> None:
+    from rhapto.services.discovery.http import FakeDiscoveryHttp, FakeResponse
+    from rhapto.services.discovery.quota import InMemoryQuotaStore
+
+    await _enable_jsearch(client)
+    app.state.rhapto.quota_store = InMemoryQuotaStore()
+    fake = FakeDiscoveryHttp(
+        {
+            "jsearch.p.rapidapi.com": FakeResponse(
+                status=429, headers={"x-ratelimit-requests-reset": "3600"}
+            )
+        }
+    )
+    app.state.rhapto.discovery_http = fake
+    payload = {"query": "program manager", "sources": ["jsearch"]}
+    first = (await client.post("/api/v1/search", json=payload)).json()["per_source"]["jsearch"]
+    assert first["state"] == "quota_exhausted" and len(fake.calls) == 1
+    second = (await client.post("/api/v1/search", json=payload)).json()["per_source"]["jsearch"]
+    assert second["state"] == "quota_exhausted" and len(fake.calls) == 1

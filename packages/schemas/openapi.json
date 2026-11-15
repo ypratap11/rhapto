@@ -329,6 +329,29 @@
         "title": "Block",
         "type": "object"
       },
+      "BoardFailureOut": {
+        "properties": {
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "kind",
+          "message"
+        ],
+        "title": "BoardFailureOut",
+        "type": "object"
+      },
       "BoardOut": {
         "properties": {
           "columns": {
@@ -2480,6 +2503,14 @@
             ],
             "title": "Error"
           },
+          "failed_boards": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/BoardFailureOut"
+            },
+            "title": "Failed Boards",
+            "type": "array"
+          },
           "found": {
             "title": "Found",
             "type": "integer"
@@ -2487,6 +2518,29 @@
           "new": {
             "title": "New",
             "type": "integer"
+          },
+          "quota": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/QuotaOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "state": {
+            "default": "ok",
+            "enum": [
+              "ok",
+              "partial",
+              "failed",
+              "rate_limited",
+              "unavailable",
+              "quota_exhausted"
+            ],
+            "title": "State",
+            "type": "string"
           }
         },
         "required": [
@@ -2687,6 +2741,46 @@
           "kind"
         ],
         "title": "QuickAnswers",
+        "type": "object"
+      },
+      "QuotaOut": {
+        "properties": {
+          "limit": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Limit"
+          },
+          "remaining": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Remaining"
+          },
+          "reset_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reset At"
+          }
+        },
+        "title": "QuotaOut",
         "type": "object"
       },
       "ReadinessOut": {
@@ -3600,6 +3694,11 @@
               }
             ]
           },
+          "live_only": {
+            "default": false,
+            "title": "Live Only",
+            "type": "boolean"
+          },
           "needs_key": {
             "title": "Needs Key",
             "type": "boolean"
@@ -3613,6 +3712,17 @@
             "default": false,
             "title": "Runnable",
             "type": "boolean"
+          },
+          "unavailable": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unavailable"
           }
         },
         "required": [

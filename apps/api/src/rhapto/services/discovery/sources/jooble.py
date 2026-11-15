@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, ClassVar
 
+from rhapto.services.discovery.errors import RateLimited
 from rhapto.services.discovery.posting import Posting
 from rhapto.services.discovery.search import SEARCH_CAP, SearchSpec, remote_matches
 from rhapto.services.discovery.sources import register
@@ -42,9 +43,19 @@ class JoobleSource:
                     body["location"] = spec.location
                 try:
                     data = await http.post_json(f"https://jooble.org/api/{key}", body)
+                except RateLimited:
+                    raise RateLimited(
+                        "Jooble rate-limited (quota used up, try again later)"
+                    ) from None
                 except SourceError as exc:
+                    redacted = str(exc).replace(key, "…")
+                    if exc.status in (401, 403):
+                        raise SourceError(
+                            f"Jooble: check the API key ({redacted})", status=exc.status
+                        ) from None
+                    # Any other failure (5xx, network) says nothing about the key.
                     raise SourceError(
-                        f"Jooble: check the API key ({str(exc).replace(key, '…')})"
+                        f"Jooble: the vendor returned an error ({redacted})", status=exc.status
                     ) from None
                 if not isinstance(data, dict):
                     raise SourceError("Jooble: unexpected response shape")

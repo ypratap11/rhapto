@@ -24,6 +24,7 @@ from rhapto.engine.providers.fake import FakeEmbeddingProvider, FakeLLMProvider
 from rhapto.engine.providers.llm import LLMProvider
 from rhapto.engine.providers.registry import build_llm
 from rhapto.services.discovery.http import FakeDiscoveryHttp
+from rhapto.services.discovery.quota import InMemoryQuotaStore
 from rhapto.services.enqueue import InlineEnqueuer
 from rhapto.services.eventbus import InMemoryEventBus
 from rhapto.services.jobtext import JobTextError
@@ -168,6 +169,7 @@ async def app(
         fetch_text=fake_fetch,
         llm_factory=llm_factory,
         discovery_http=FakeDiscoveryHttp({}),
+        quota_store=InMemoryQuotaStore(),
     )
     async with LifespanManager(application):
         yield application

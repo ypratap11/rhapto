@@ -51,6 +51,7 @@ from rhapto.db.repositories.discovery import LatestRun, latest_runs_with_search
 from rhapto.db.repositories.llm_settings import delete_llm_settings, upsert_llm_settings
 from rhapto.engine.providers.llm import Message, SystemBlock
 from rhapto.engine.providers.registry import PROVIDERS, ProviderInfo, model_for
+from rhapto.services.discovery.quota import describe, guarded_search
 from rhapto.services.discovery.search import SearchSpec
 from rhapto.services.discovery.sources import aggregator_sources, get_aggregator
 from rhapto.services.discovery.sources.status import paused_as_of_last_run, usable_source_ids
@@ -310,7 +311,13 @@ async def _source_settings(session: AsyncSession, user_id: uuid.UUID) -> list[So
         # missed.
         enabled = row.enabled if row is not None else False
         scopes = by_source.get(info.name, [])
-        configured = info.name in usable
+        configured = info.name in usable and info.unavailable is None
+        # Neither kind is ever polled, so old poll runs describe a time before the flag existed.
+        # Showing them would put Paused / Resume or the vendor's raw error next to a line that says
+        # the source is not checked in the background (spec 4.2, 5.3).
+        never_polled = info.unavailable is not None or info.live_only
+        if never_polled:
+            scopes = []
         paused = paused_as_of_last_run(
             [(e.run.error, e.run.started_at) for e in scopes],
             row.updated_at if row is not None else None,
@@ -328,7 +335,9 @@ async def _source_settings(session: AsyncSession, user_id: uuid.UUID) -> list[So
                 # One `and`, no extra query: both inputs are already here. "Runnable" is a
                 # present-tense claim about the next poll, so it has to account for pause --
                 # architecture §12.1.
-                runnable=configured and not paused,
+                runnable=configured and not paused and not info.live_only,
+                unavailable=info.unavailable,
+                live_only=info.live_only,
                 # `latest_runs_with_search` is sorted newest first, so the head of this source's
                 # scopes is its newest run across all of them.
                 last_run=_run_out(scopes[0]) if scopes else None,
@@ -412,12 +421,23 @@ async def test_source(
     info = next((i for i in aggregator_sources() if i.name == source), None)
     if info is None:
         raise HTTPException(status_code=404, detail=f"unknown source {source!r}")
+    if info.unavailable is not None:
+        # No credential lookup, no call: the vendor blocks us and we do not work around it.
+        return SourceTestOut(ok=False, error=f"{info.label}: {info.unavailable}")
     credentials = await creds_repo.get_credentials(session, fernet_for(settings), user_id, source)
     http = get_state(request).discovery_http
+    spec = SearchSpec(keywords=("program manager",))
     try:
-        postings = await get_aggregator(source).fetch_search(
-            http, SearchSpec(keywords=("program manager",)), credentials
-        )
+        if info.live_only:
+            # Same guard as live search: the test must not spend quota the guard cannot see.
+            guarded = await guarded_search(
+                get_state(request).quota_store, source, http, spec, credentials
+            )
+            if guarded.skipped or guarded.rate_limited:
+                return SourceTestOut(ok=False, error=f"{info.label} {describe(guarded.state)}")
+            postings = guarded.postings
+        else:
+            postings = await get_aggregator(source).fetch_search(http, spec, credentials)
     except Exception as exc:
         return SourceTestOut(ok=False, error=redact(str(exc), *credentials.values())[:300])
     return SourceTestOut(ok=True, found=len(postings))

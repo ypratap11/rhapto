@@ -35,6 +35,7 @@ from rhapto.db.session import make_engine, make_session_factory
 from rhapto.engine.providers.registry import build_llm
 from rhapto.services.accounts import ensure_account
 from rhapto.services.discovery.http import DiscoveryHttp
+from rhapto.services.discovery.quota import QuotaStore, RedisQuotaStore
 from rhapto.services.enqueue import ArqEnqueuer, Enqueuer
 from rhapto.services.eventbus import EventBus, RedisEventBus
 from rhapto.services.jobtext import FetchText, fetch_job_text
@@ -62,6 +63,7 @@ def create_app(
     fetch_text: FetchText | None = None,
     llm_factory: LlmFactory | None = None,
     discovery_http: DiscoveryHttp | None = None,
+    quota_store: QuotaStore | None = None,
 ) -> FastAPI:
     engine = None
     if session_factory is None:
@@ -80,6 +82,7 @@ def create_app(
             user_agent=settings.rhapto_discovery_user_agent,
             base_override=settings.rhapto_discovery_base_override,
         ),
+        quota_store=quota_store or RedisQuotaStore(settings.redis_url),
         engine=engine,
     )
 
@@ -129,7 +132,7 @@ def create_app(
         finally:
             # The arq pool and the redis pub/sub client own connections; the in-memory test
             # doubles have nothing to close.
-            for collaborator in (state.enqueuer, state.event_bus):
+            for collaborator in (state.enqueuer, state.event_bus, state.quota_store):
                 close = getattr(collaborator, "close", None)
                 if close is not None:
                     await close()

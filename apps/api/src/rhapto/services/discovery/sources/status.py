@@ -36,7 +36,11 @@ def keyless_source_names() -> tuple[str, ...]:
     without anyone remembering to update a list -- and a source that starts needing a key drops out of
     it on the same edit that sets `needs_key`.
     """
-    return tuple(info.name for info in aggregator_sources() if not info.needs_key)
+    return tuple(
+        info.name
+        for info in aggregator_sources()
+        if not info.needs_key and info.unavailable is None
+    )
 
 
 class SourceRow(Protocol):
@@ -83,7 +87,7 @@ def usable_source_ids(
     usable = set()
     for info in registry:
         row = rows.get(info.name)
-        if row is None or not row.enabled:
+        if info.unavailable is not None or row is None or not row.enabled:
             continue
         if info.needs_key and info.name not in credentialled:
             continue

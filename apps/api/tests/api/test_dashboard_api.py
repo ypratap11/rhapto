@@ -134,7 +134,7 @@ async def test_new_fit_count_respects_the_track_threshold_and_the_window(
             job = await jobs_repo.create_discovered_job(
                 session,
                 user_id,
-                source="themuse",
+                source="remotive",
                 external_id=key,
                 company="ExampleCo",
                 title=key,
@@ -169,7 +169,7 @@ async def test_saved_searches_carry_their_new_counts(
         await jobs_repo.create_discovered_job(
             session,
             user_id,
-            source="themuse",
+            source="remotive",
             external_id="s1",
             company="ExampleCo",
             title="PM",

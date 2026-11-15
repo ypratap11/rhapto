@@ -534,7 +534,12 @@ class SourceSettingOut(BaseModel):
     #: source paused for some but not all of its saved searches -- it says "stopped" when it is partly
     #: working. Conservative in the direction of surfacing a real failure, which is the right bias
     #: here, and `last_run.error` names the failing scope.
+    #: Also false for a `live_only` source (the poller never runs it) and an `unavailable` one.
     runnable: bool = False
+    #: Why the vendor cannot be used right now (None when it can); never configured when set.
+    unavailable: str | None = None
+    #: Called only from a user's search, never by the poller.
+    live_only: bool = False
     last_run: SourceRunOut | None = None
 
 
@@ -627,10 +632,28 @@ class JobsEmptyReasonOut(BaseModel):
     search_ever_found: bool | None = None
 
 
+class BoardFailureOut(BaseModel):
+    name: str
+    kind: str
+    message: str
+
+
+class QuotaOut(BaseModel):
+    limit: int | None = None
+    remaining: int | None = None
+    reset_at: datetime | None = None
+
+
 class PerSourceOut(BaseModel):
     found: int
     new: int
+    #: Set only when the whole source failed; a partial result has jobs and `failed_boards` instead.
     error: str | None = None
+    state: Literal["ok", "partial", "failed", "rate_limited", "unavailable", "quota_exhausted"] = (
+        "ok"
+    )
+    failed_boards: list[BoardFailureOut] = []
+    quota: QuotaOut | None = None
 
 
 class LiveSearchOut(BaseModel):

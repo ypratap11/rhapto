@@ -2,19 +2,73 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from collections.abc import Mapping
+from dataclasses import dataclass, field
 from typing import Any
 from urllib.parse import urljoin, urlparse, urlunparse
 
 import httpx
 
-from rhapto.services.discovery.errors import SourceError
+from rhapto.services.discovery.errors import Quota, RateLimited, SourceError
 from rhapto.services.jobtext import JobTextError, assert_public_host, public_http_client
 
 DEFAULT_MAX_BYTES = 25 * 1024 * 1024
 MAX_REDIRECTS = 5
 _REDIRECT_STATUS_CODES = (301, 302, 303, 307, 308)
 
+ALLOWED_HEADERS = (
+    "x-ratelimit-requests-limit",
+    "x-ratelimit-requests-remaining",
+    "x-ratelimit-requests-reset",
+    "retry-after",
+)
+
 logger = logging.getLogger(__name__)
+
+# httpx logs "POST <url>" at INFO; some vendors (Jooble, Adzuna) carry the key in the URL.
+for _noisy in ("httpx", "httpcore"):
+    logging.getLogger(_noisy).setLevel(logging.WARNING)
+
+
+def allowlisted(headers: Mapping[str, str]) -> dict[str, str]:
+    """Lower-cased copy of only the rate-limit headers; everything else (cookies, keys) is dropped."""
+    return {k.lower(): v for k, v in headers.items() if k.lower() in ALLOWED_HEADERS}
+
+
+def _to_int(value: str | None) -> int | None:
+    try:
+        return int(value) if value is not None else None
+    except ValueError:
+        return None
+
+
+def parse_quota(headers: Mapping[str, str]) -> Quota | None:
+    """Quota from the allowlisted headers; `retry-after` fills the reset only when the vendor
+    sent no explicit reset header. None when no usable value is present."""
+    h = allowlisted(headers)
+    limit = _to_int(h.get("x-ratelimit-requests-limit"))
+    remaining = _to_int(h.get("x-ratelimit-requests-remaining"))
+    reset = _to_int(h.get("x-ratelimit-requests-reset"))
+    if reset is None:
+        reset = _to_int(h.get("retry-after"))
+    if limit is None and remaining is None and reset is None:
+        return None
+    return Quota(limit=limit, remaining=remaining, reset_seconds=reset)
+
+
+@dataclass(frozen=True)
+class JsonResponse:
+    body: Any
+    headers: dict[str, str]
+
+
+@dataclass(frozen=True)
+class FakeResponse:
+    """Test-double route value: behaves like the real client for its status."""
+
+    status: int = 200
+    body: Any = None
+    headers: dict[str, str] = field(default_factory=dict)
 
 
 class DiscoveryHttp:
@@ -99,8 +153,17 @@ class DiscoveryHttp:
                     if response.status_code >= 500 and attempt == 1:
                         await asyncio.sleep(0.5)
                         continue
+                    if response.status_code == 429:
+                        raise RateLimited(
+                            f"{url} returned HTTP 429",
+                            status=429,
+                            quota=parse_quota(response.headers),
+                        )
                     if response.status_code >= 400:
-                        raise SourceError(f"{url} returned HTTP {response.status_code}")
+                        raise SourceError(
+                            f"{url} returned HTTP {response.status_code}",
+                            status=response.status_code,
+                        )
                     chunks: list[bytes] = []
                     size = 0
                     async for chunk in response.aiter_bytes():
@@ -147,12 +210,18 @@ class DiscoveryHttp:
             await self._assert_public(current_url)
         raise SourceError(f"{url}: too many redirects")
 
-    async def get_json(self, url: str, *, headers: dict[str, str] | None = None) -> Any:
+    async def get_json_response(
+        self, url: str, *, headers: dict[str, str] | None = None
+    ) -> JsonResponse:
         response = await self._get(url, headers)
         try:
-            return response.json()
+            body = response.json()
         except ValueError as exc:
             raise SourceError(f"{url}: invalid JSON") from exc
+        return JsonResponse(body=body, headers=allowlisted(response.headers))
+
+    async def get_json(self, url: str, *, headers: dict[str, str] | None = None) -> Any:
+        return (await self.get_json_response(url, headers=headers)).body
 
     async def get_text(self, url: str) -> str:
         return (await self._get(url)).text
@@ -187,26 +256,44 @@ class FakeDiscoveryHttp:
         self.posts: list[tuple[str, str, dict[str, Any]]] = []
         self.headers: list[dict[str, str]] = []
 
-    def _match(self, url: str) -> Any:
+    def _match(self, url: str) -> JsonResponse:
         for key, value in self.routes.items():
             if key in url:
                 if isinstance(value, SourceError):
                     raise value
-                return value
+                if isinstance(value, FakeResponse):
+                    if value.status == 429:
+                        raise RateLimited(
+                            f"{url} returned HTTP 429",
+                            status=429,
+                            quota=parse_quota(value.headers),
+                        )
+                    if value.status >= 400:
+                        raise SourceError(
+                            f"{url} returned HTTP {value.status}", status=value.status
+                        )
+                    return JsonResponse(body=value.body, headers=allowlisted(value.headers))
+                return JsonResponse(body=value, headers={})
         raise SourceError(f"no fake route for {url}")
 
     def _route(self, url: str) -> Any:
         self.calls.append(url)
+        return self._match(url).body
+
+    async def get_json_response(
+        self, url: str, *, headers: dict[str, str] | None = None
+    ) -> JsonResponse:
+        self.headers.append(dict(headers or {}))
+        self.calls.append(url)
         return self._match(url)
 
     async def get_json(self, url: str, *, headers: dict[str, str] | None = None) -> Any:
-        self.headers.append(dict(headers or {}))
-        return self._route(url)
+        return (await self.get_json_response(url, headers=headers)).body
 
     async def post_json(self, url: str, body: dict[str, Any]) -> Any:
         """POSTs are recorded in `posts` (method, url, body); `calls` stays a GET-only log."""
         self.posts.append(("POST", url, body))
-        return self._match(url)
+        return self._match(url).body
 
     async def get_text(self, url: str) -> str:
         value = self._route(url)

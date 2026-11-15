@@ -16,7 +16,9 @@ import { ApiError } from "@/lib/api/client";
 import { formatDate } from "@/lib/format";
 import { useResumeSource, useSaveSourceSettings, useSourceSettings, useTestSource, type SourceSetting } from "@/lib/api/queries";
 
-function statusLine(s: SourceSetting): string {
+function statusLine(s: SourceSetting): string | null {
+  // A vendor-blocked source has no setup state worth reporting; the reason replaces it.
+  if (s.unavailable) return `${s.label}: ${s.unavailable}`;
   if (!s.needs_key) return "No setup needed";
   return s.key_set ? "Key saved" : "Needs a key";
 }
@@ -38,6 +40,9 @@ function statusLine(s: SourceSetting): string {
  * the drift this branch exists to remove, reintroduced in the client.
  */
 function statusDetail(s: SourceSetting): string | null {
+  if (s.unavailable) return null;
+  // Live-only sources are never polled, so the poller-readiness lines below would mislead.
+  if (s.live_only) return "Searched when you search — not checked in the background";
   if (!s.configured) {
     if (s.needs_key && !s.key_set) return "Add a key and Rhapto will check this source next time.";
     if (!s.enabled) return "Switched off, so Rhapto skips it.";
@@ -50,8 +55,15 @@ function statusDetail(s: SourceSetting): string | null {
   return "Will check next time";
 }
 
+/** Vendor-blocked and live-only sources are never polled, so pause state and run history are moot. */
+function neverPolled(s: SourceSetting): boolean {
+  return Boolean(s.unavailable) || s.live_only;
+}
+
 /** What the last attempt actually did, in the source's own terms. */
 function lastRunLine(s: SourceSetting): string | null {
+  // Never polled, so any run on record predates the flag and says nothing true about it now.
+  if (neverPolled(s)) return null;
   const run = s.last_run;
   if (!run) return null;
   // The search's own location string, never one composed here: the whole point of the join.
@@ -170,14 +182,14 @@ export function SourcesSection() {
                     <p className="text-sm font-medium">{source.label}</p>
                     {/* A paused source was buried in a run row on another page. It is a state, so it
                         reads as one, and it comes with the control that lifts it. */}
-                    {source.paused ? <StatusBadge tone="danger">Paused</StatusBadge> : null}
+                    {source.paused && !neverPolled(source) ? <StatusBadge tone="danger">Paused</StatusBadge> : null}
                   </div>
-                  <p className="text-xs text-muted-foreground">{statusLine(source)}</p>
+                  {statusLine(source) ? <p className="text-xs text-muted-foreground">{statusLine(source)}</p> : null}
                   {statusDetail(source) ? <p className="text-xs text-muted-foreground">{statusDetail(source)}</p> : null}
                   {lastRunLine(source) ? <p className="text-xs text-muted-foreground">{lastRunLine(source)}</p> : null}
                 </div>
                 <div className="flex shrink-0 items-center gap-2">
-                  {source.paused ? (
+                  {source.paused && !neverPolled(source) ? (
                     <Button className="max-md:min-h-11" size="sm" variant="outline" onClick={() => void resumeSource(source)} disabled={resume.isPending}>
                       Resume
                     </Button>

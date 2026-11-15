@@ -601,38 +601,36 @@ async def test_track_less_user_with_a_new_aggregator_gets_results_not_a_crash(
     session: AsyncSession, user: User
 ) -> None:
     """Finding 1 regression. A user with zero tracks and one enabled aggregator (any of the five
-    SearchSpec-only sources -- themuse here) takes build_specs' legacy branch (`derive_searches`
+    SearchSpec-only sources -- remotive here) takes build_specs' legacy branch (`derive_searches`
     creates nothing, so `searches` is empty). That branch must route the aggregator through
-    `get_aggregator(...).fetch_search(...)`, not `get_source(...).fetch(...)`: themuse implements
+    `get_aggregator(...).fetch_search(...)`, not `get_source(...).fetch(...)`: remotive implements
     only `fetch_search`, so the old code raised `AttributeError` on every poll and the run row
     recorded that internal string instead of any jobs -- silently and permanently, for exactly the
     scenario ("aggregator on, no tracks yet") the headline feature exists for."""
     session.add(
-        Aggregator(user_id=user.id, source="themuse", enabled=True, keywords=["program manager"])
+        Aggregator(user_id=user.id, source="remotive", enabled=True, keywords=["program manager"])
     )
     await session.flush()
     assert await profile_repo.list_tracks(session, user.id) == []
     body = {
-        "page": 1,
-        "page_count": 1,
-        "results": [
+        "jobs": [
             {
                 "id": 4242,
-                "name": "Technical Program Manager",
-                "company": {"name": "ExampleCo"},
-                "locations": [{"name": "Denver, CO"}],
-                "refs": {"landing_page": "https://www.themuse.com/jobs/exampleco/tpm-0"},
-                "contents": "<p>Run programs for the platform team.</p>",
-                "publication_date": "2026-09-01T10:00:00Z",
+                "title": "Technical Program Manager",
+                "company_name": "ExampleCo",
+                "candidate_required_location": "USA",
+                "url": "https://remotive.com/remote-jobs/4242",
+                "description": "<p>Run programs for the platform team.</p>",
+                "publication_date": "2026-09-01T10:00:00",
             }
-        ],
+        ]
     }
-    http = FakeDiscoveryHttp({"themuse.com/api/public/jobs": body})
+    http = FakeDiscoveryHttp({"remotive.com/api/remote-jobs": body})
     summary = await poll_sources(
         session, user.id, http=http, embedder=FakeEmbeddingProvider(dimensions=384)
     )
-    result = next(r for r in summary.results if r.source == "themuse")
-    assert result.error is None, f"themuse poll failed: {result.error}"
+    result = next(r for r in summary.results if r.source == "remotive")
+    assert result.error is None, f"remotive poll failed: {result.error}"
     assert result.found == 1 and result.new == 1
     assert summary.new_jobs == 1
 
@@ -644,7 +642,7 @@ async def test_a_keyless_aggregator_with_no_keywords_and_no_tracks_is_skipped_no
     from. There is nothing to search on, so build_specs skips the row instead of fetching
     unfiltered or crashing -- and, because no run row is written for it, the skip never joins the
     failure streak that would eventually pause the source."""
-    session.add(Aggregator(user_id=user.id, source="themuse", enabled=True, keywords=[]))
+    session.add(Aggregator(user_id=user.id, source="remotive", enabled=True, keywords=[]))
     await session.flush()
     summary = await poll_sources(
         session,

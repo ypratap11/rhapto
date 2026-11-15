@@ -29,7 +29,7 @@ the answer.
 - **Not an auto-apply bot.** Nothing in Rhapto fills out or submits an employer's application
   form.
 - **Not a scraper of LinkedIn, Indeed, or Glassdoor.** Those sites' own terms forbid it. Rhapto
-  reads from open aggregator APIs (The Muse, Remotive, RemoteOK, HN Who's Hiring, Adzuna, Jooble,
+  reads from open aggregator APIs (The Muse (currently blocked by the vendor), Remotive, RemoteOK, HN Who's Hiring, Adzuna, Jooble,
   JSearch) and from the ATS boards companies publish themselves (Greenhouse, Lever, Ashby,
   Workday) — see [`sources.md`](sources.md).
 - **Not a resume-writing service that invents experience.** Every fact and every metric in a

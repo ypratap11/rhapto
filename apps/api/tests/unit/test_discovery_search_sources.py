@@ -192,7 +192,8 @@ async def test_adzuna_never_puts_the_key_in_an_error() -> None:
         {
             "api.adzuna.com": SourceError(
                 "https://api.adzuna.com/v1/api/jobs/us/search/1"
-                "?app_id=id-1&app_key=key-1 returned HTTP 401"
+                "?app_id=id-1&app_key=key-1 returned HTTP 401",
+                status=401,
             )
         }
     )
@@ -207,7 +208,11 @@ async def test_adzuna_never_puts_the_key_in_an_error() -> None:
 
 async def test_jooble_never_puts_the_key_in_an_error() -> None:
     http = FakeDiscoveryHttp(
-        {"jooble.org/api": SourceError("https://jooble.org/api/s3cret returned HTTP 401")}
+        {
+            "jooble.org/api": SourceError(
+                "https://jooble.org/api/s3cret returned HTTP 401", status=401
+            )
+        }
     )
     with pytest.raises(SourceError) as exc:
         await get_aggregator("jooble").fetch_search(http, SPEC, {"api_key": "s3cret"})  # type: ignore[arg-type]
@@ -215,24 +220,53 @@ async def test_jooble_never_puts_the_key_in_an_error() -> None:
     assert "check the API key" in str(exc.value)
 
 
+@pytest.mark.parametrize(
+    ("source", "host", "creds", "secrets"),
+    [
+        ("jooble", "jooble.org/api", {"api_key": "s3cret"}, ["s3cret"]),
+        (
+            "adzuna",
+            "api.adzuna.com",
+            {"app_id": "id-1", "app_key": "key-1"},
+            ["id-1", "key-1"],
+        ),
+    ],
+)
+async def test_status_less_error_redacts_the_key_and_uses_neutral_wording(
+    source: str, host: str, creds: dict[str, str], secrets: list[str]
+) -> None:
+    # A network failure carries no HTTP status; its message can still contain the request URL.
+    leaky = "connect failed for https://x.test/" + "?".join(secrets)
+    http = FakeDiscoveryHttp({host: SourceError(leaky)})
+    with pytest.raises(SourceError) as exc:
+        await get_aggregator(source).fetch_search(http, SPEC, creds)  # type: ignore[arg-type]
+    for secret in secrets:
+        assert secret not in str(exc.value)
+    assert exc.value.status is None
+    assert "the vendor returned an error" in str(exc.value)
+    assert "check the API key" not in str(exc.value)
+
+
 async def test_jsearch_sends_the_key_as_a_header_only() -> None:
     body = {
-        "data": [
-            {
-                "job_id": "abc",
-                "job_title": "Technical Program Manager",
-                "employer_name": "ExampleCo",
-                "job_city": "Denver",
-                "job_state": "CO",
-                "job_country": "US",
-                "job_apply_link": "https://example.com/apply",
-                "job_description": "Run programs.",
-                "job_posted_at_datetime_utc": "2026-09-04T00:00:00Z",
-                "job_is_remote": False,
-                "job_min_salary": 150000,
-                "job_max_salary": 170000,
-            }
-        ]
+        "data": {
+            "jobs": [
+                {
+                    "job_id": "abc",
+                    "job_title": "Technical Program Manager",
+                    "employer_name": "ExampleCo",
+                    "job_city": "Denver",
+                    "job_state": "CO",
+                    "job_country": "US",
+                    "job_apply_link": "https://example.com/apply",
+                    "job_description": "Run programs.",
+                    "job_posted_at_datetime_utc": "2026-09-04T00:00:00Z",
+                    "job_is_remote": False,
+                    "job_min_salary": 150000,
+                    "job_max_salary": 170000,
+                }
+            ]
+        }
     }
     http = FakeDiscoveryHttp({"jsearch.p.rapidapi.com": body})
     postings = await get_aggregator("jsearch").fetch_search(http, SPEC, {"rapidapi_key": "rk"})  # type: ignore[arg-type]
@@ -254,3 +288,40 @@ def test_needs_key_and_fields_per_source() -> None:
     assert by_name["adzuna"].needs_key is True and by_name["adzuna"].fields == ("app_id", "app_key")
     assert by_name["jooble"].fields == ("api_key",)
     assert by_name["jsearch"].fields == ("rapidapi_key",)
+
+
+async def test_remotive_truncates_120_matching_items_to_the_first_100_in_order() -> None:
+    jobs = [
+        {
+            "id": i,
+            "title": f"Program Manager {i}",
+            "company_name": "Remote Co",
+            "candidate_required_location": "USA",
+            "url": f"https://remotive.com/remote-jobs/{i}",
+            "description": "<p>Lead programs.</p>",
+        }
+        for i in range(120)
+    ]
+    http = FakeDiscoveryHttp({"remotive.com/api/remote-jobs": {"jobs": jobs}})
+    postings = await get_aggregator("remotive").fetch_search(http, SPEC, {})  # type: ignore[arg-type]
+    # Stated independently of the module's parser: ids 0..99, in feed order.
+    assert [p.external_id for p in postings] == [str(i) for i in range(100)]
+
+
+async def test_adzuna_truncates_120_matching_items_to_the_first_100_in_order() -> None:
+    results = [
+        {
+            "id": str(i),
+            "title": f"Program Manager {i}",
+            "company": {"display_name": "ExampleCo"},
+            "location": {"display_name": "Denver, CO"},
+            "redirect_url": f"https://www.adzuna.com/details/{i}",
+            "description": "Run programs.",
+        }
+        for i in range(120)
+    ]
+    http = FakeDiscoveryHttp({"api.adzuna.com": {"results": results}})
+    creds = {"app_id": "id-1", "app_key": "key-1"}
+    postings = await get_aggregator("adzuna").fetch_search(http, SPEC, creds)  # type: ignore[arg-type]
+    assert [p.external_id for p in postings] == [str(i) for i in range(100)]
+    assert len(http.calls) == 1

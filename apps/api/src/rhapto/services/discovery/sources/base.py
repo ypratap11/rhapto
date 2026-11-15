@@ -30,6 +30,12 @@ class SourceInfo:
     needs_key: bool = False
     #: The credential field names this source needs, in the order the Settings UI shows them.
     fields: tuple[str, ...] = ()
+    #: Why the source cannot be used right now (None when it can). An unavailable source is never
+    #: seeded, never counted as set up, and never polled.
+    unavailable: str | None = None
+    #: True for a source that is only called live from a user's search, never by the poller (its
+    #: vendor quota is too small to spend on background polling). It can still be set up.
+    live_only: bool = False
 
 
 class Source(Protocol):

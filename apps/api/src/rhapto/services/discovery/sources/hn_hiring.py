@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 import re
-from typing import TYPE_CHECKING, ClassVar
+from typing import TYPE_CHECKING, Any, ClassVar
 
 from rhapto.engine.scoring import NON_US_CITIES, NON_US_COUNTRIES, US_STATES
 from rhapto.engine.select import keyword_matches
+from rhapto.services.discovery.offload import parse_off_loop
 from rhapto.services.discovery.posting import Posting
 from rhapto.services.discovery.sources import register
 from rhapto.services.discovery.sources.base import SourceError, SourceInfo, matches_keywords
@@ -184,6 +185,38 @@ def parse_header(first_line: str) -> tuple[str, str, str | None] | None:
     return company, rest[role_index], location
 
 
+def _parse_comments(chunk: list[Any], keywords: list[str]) -> list[Posting]:
+    out: list[Posting] = []
+    for comment in chunk:
+        try:
+            raw = comment.get("text")
+            if not raw:
+                continue
+            text = html_to_text(str(raw))
+            first_line, _, rest = text.partition("\n")
+            parsed = parse_header(first_line)
+            if parsed is None:  # the header names no role (only a place or a work mode)
+                continue
+            company, title, location = parsed
+            body = rest.strip() or text
+            if not matches_keywords(keywords, title, body, first_line):
+                continue
+            out.append(
+                Posting(
+                    external_id=str(comment["id"]),
+                    company=company,
+                    title=title,
+                    location=location,
+                    url=f"https://news.ycombinator.com/item?id={comment['id']}",
+                    jd_text=body,
+                    posted_at=parse_iso(comment.get("created_at")),
+                )
+            )
+        except (KeyError, TypeError, ValueError):
+            continue
+    return out
+
+
 @register
 class HnHiringSource:
     info: ClassVar[SourceInfo] = SourceInfo(
@@ -199,35 +232,8 @@ class HnHiringSource:
             raise SourceError("no Who is hiring thread found")
         story_id = str(hits[0]["objectID"])
         item = await http.get_json(ITEM_URL.format(id=story_id))
-        out: list[Posting] = []
-        for comment in item.get("children", []) if isinstance(item, dict) else []:
-            try:
-                raw = comment.get("text")
-                if not raw:
-                    continue
-                text = html_to_text(str(raw))
-                first_line, _, rest = text.partition("\n")
-                parsed = parse_header(first_line)
-                if parsed is None:  # the header names no role (only a place or a work mode)
-                    continue
-                company, title, location = parsed
-                body = rest.strip() or text
-                if not matches_keywords(keywords, title, body, first_line):
-                    continue
-                out.append(
-                    Posting(
-                        external_id=str(comment["id"]),
-                        company=company,
-                        title=title,
-                        location=location,
-                        url=f"https://news.ycombinator.com/item?id={comment['id']}",
-                        jd_text=body,
-                        posted_at=parse_iso(comment.get("created_at")),
-                    )
-                )
-            except (KeyError, TypeError, ValueError):
-                continue
-        return out
+        children = item.get("children", []) if isinstance(item, dict) else []
+        return await parse_off_loop(_parse_comments, list(children), keywords)
 
     async def fetch_search(
         self, http: DiscoveryHttp, spec: SearchSpec, credentials: dict[str, str]

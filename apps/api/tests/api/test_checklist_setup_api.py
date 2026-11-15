@@ -31,7 +31,7 @@ async def _job(
     job = await jobs_repo.create_discovered_job(
         session,
         user_id,
-        source="themuse",
+        source="remotive",
         external_id=key,
         company="ExampleCo",
         title=key,
@@ -111,7 +111,7 @@ async def test_the_checklist_and_the_settings_page_agree_about_what_is_ready(
     client: httpx.AsyncClient,
 ) -> None:
     """Both call the same `usable_source_ids`, and this is what would catch them drifting apart."""
-    await client.put("/api/v1/settings/sources/themuse", json={"enabled": True})
+    await client.put("/api/v1/settings/sources/remotive", json={"enabled": True})
     await client.put("/api/v1/settings/sources/remotive", json={"enabled": True})
     rows = (await client.get("/api/v1/settings/sources")).json()
     configured = [r["id"] for r in rows if r["configured"]]
@@ -272,7 +272,7 @@ async def test_the_checklist_invariants_hold_over_a_populated_account(
 ) -> None:
     """Each boolean must be exactly the predicate over its own count. Computing the two
     independently is how they would start disagreeing, which is this branch's whole subject."""
-    await client.put("/api/v1/settings/sources/themuse", json={"enabled": True})
+    await client.put("/api/v1/settings/sources/remotive", json={"enabled": True})
     async with session_factory() as session:
         await searches_repo.create_search(
             session, user_id, name="on", keywords=["pm"], location=None, remote="include"
