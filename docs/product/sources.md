@@ -7,13 +7,13 @@ boards are managed on Profile → Watchlist.
 
 | Source | Kind | Needs a key | Cap | Notes |
 |---|---|---|---|---|
-| The Muse | Aggregator | No | 30 (live) / 100 (background) | Zero-setup, on by default |
+| The Muse | Aggregator | No | none (not queried) | Blocked by the vendor (bot protection); off for new accounts, and Rhapto makes no calls to it |
 | Remotive | Aggregator | No | 30 (live) / 100 (background) | Zero-setup, on by default |
 | RemoteOK | Aggregator | No | 30 (live) / 100 (background) | Zero-setup, on by default |
 | HN Who's Hiring | Aggregator | No | 30 (live) / 100 (background) | Zero-setup, on by default |
 | Adzuna | Aggregator | Yes — `app_id`, `app_key` from developer.adzuna.com | 30 (live) / 100 (background) | Free tier available |
 | Jooble | Aggregator | Yes — `api_key` from jooble.org/api/about | 30 (live) / 100 (background) | Free tier available |
-| JSearch (Google Jobs) | Aggregator | Yes — `rapidapi_key` from rapidapi.com | 30 (live) / 100 (background) | Via RapidAPI |
+| JSearch (Google Jobs) | Aggregator | Yes — `rapidapi_key` from rapidapi.com | 10 per live search; never polled | Via RapidAPI. Live search only: one request per search, shows requests left, and stops at 0 until the quota resets |
 | Greenhouse | Company board | No (per board, from your watchlist) | 30 (live) / 100 (background) | `boards.greenhouse.io/<board>` |
 | Lever | Company board | No (per board, from your watchlist) | 30 (live) / 100 (background) | `jobs.lever.co/<slug>` |
 | Ashby | Company board | No (per board, from your watchlist) | 30 (live) / 100 (background) | `jobs.ashbyhq.com/<slug>` |
@@ -26,10 +26,11 @@ itself.
 
 ## Caps and timeouts
 
-Every source gets an 8-second timeout per request. A live search (the one you trigger from the
+Aggregators get an 8-second timeout per request and watchlist boards get 30 seconds. A live search (the one you trigger from the
 Jobs page) caps each source at 30 results; the background poll the worker runs on its own schedule
 caps each source at 100. A source that times out or errors is reported in the search's per-source
-summary rather than silently dropped.
+summary rather than silently dropped. Each source's line says which state it was in: rate-limited,
+quota used up, partial (for example, some boards failed), blocked by the vendor, or failed.
 
 ## Auto-discovered boards
 

@@ -232,8 +232,8 @@ using the track's first six keywords, your preferred location, and your `remote_
 them through `GET/POST/PUT/DELETE /api/v1/searches`, or from the portal: save one from the Jobs
 page's search bar, and manage the list from Settings → Saved searches.
 
-Zero-setup sources are on by default: **The Muse**, **Remotive**, **RemoteOK**, **HN Who's
-Hiring**. Three more need a free key, saved with `PUT /api/v1/settings/sources/{source}`
+Zero-setup sources are on by default: **Remotive**, **RemoteOK**, **HN Who's Hiring**. (**The
+Muse** is blocked by the vendor and is not queried.) Three more need a free key, saved with `PUT /api/v1/settings/sources/{source}`
 (keys are encrypted at rest and never returned by the API):
 
 | Source | Where the key comes from | Fields |
@@ -278,7 +278,7 @@ curl -sS -H "$AUTH" "$API/jobs?sort=newest"   | python -c 'import json,sys; [pri
 curl -sS -H "$AUTH" "$API/profile/watchlist" | python -m json.tool
 ```
 
-Confirm: step 1 lists seven aggregators; step 3's runs include `themuse` and `remotive` with a
+Confirm: step 1 lists seven aggregators; step 3's runs include `remotive` with a
 non-zero `found`; step 4 prints jobs carrying those source ids and `Platform` as the search name;
 step 5 shows at least one entry with `"discovered": true`. Then tailor one of those job ids through
 `POST /jobs/{id}/tailor` and confirm a package comes back from `GET /jobs/{id}/packages`.
