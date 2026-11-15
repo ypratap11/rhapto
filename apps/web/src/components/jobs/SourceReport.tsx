@@ -53,5 +53,5 @@ export function SourceReport({ perSource }: { perSource: PerSource | null }) {
 
   const parts = entries.map(([source, stat]) => describe(SOURCE_LABEL[source] ?? source, stat));
 
-  return <p className="text-sm text-muted-foreground">{parts.join(" · ")}</p>;
+  return <p className="break-words text-sm text-muted-foreground">{parts.join(" · ")}</p>;
 }

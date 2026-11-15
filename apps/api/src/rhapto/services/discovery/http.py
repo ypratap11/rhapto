@@ -25,6 +25,10 @@ ALLOWED_HEADERS = (
 
 logger = logging.getLogger(__name__)
 
+# httpx logs "POST <url>" at INFO; some vendors (Jooble, Adzuna) carry the key in the URL.
+for _noisy in ("httpx", "httpcore"):
+    logging.getLogger(_noisy).setLevel(logging.WARNING)
+
 
 def allowlisted(headers: Mapping[str, str]) -> dict[str, str]:
     """Lower-cased copy of only the rate-limit headers; everything else (cookies, keys) is dropped."""

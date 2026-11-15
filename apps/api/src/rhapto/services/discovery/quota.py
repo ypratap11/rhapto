@@ -141,12 +141,24 @@ class RedisQuotaStore:
         await self._redis.aclose()
 
 
+#: A vendor header is untrusted: keep any reset inside 0..one year so date maths cannot overflow.
+MAX_RESET_SECONDS = 366 * 24 * 3600
+
+
+def _reset_at(now: datetime, seconds: int | None) -> datetime | None:
+    if seconds is None:
+        return None
+    try:
+        clamped = min(max(int(seconds), 0), MAX_RESET_SECONDS)
+    except (TypeError, ValueError, OverflowError):
+        return None
+    return now + timedelta(seconds=clamped)
+
+
 def quota_state_from(quota: Quota | None, now: datetime) -> QuotaState | None:
     if quota is None:
         return None
-    reset_at = (
-        now + timedelta(seconds=quota.reset_seconds) if quota.reset_seconds is not None else None
-    )
+    reset_at = _reset_at(now, quota.reset_seconds)
     return QuotaState(limit=quota.limit, remaining=quota.remaining, reset_at=reset_at)
 
 
@@ -204,10 +216,7 @@ async def guarded_search(
         postings = await adapter.fetch_search(http, spec, credentials)
     except RateLimited as exc:
         quota = exc.quota
-        if quota is not None and quota.reset_seconds is not None:
-            reset_at: datetime | None = now() + timedelta(seconds=quota.reset_seconds)
-        else:
-            reset_at = None
+        reset_at = _reset_at(now(), quota.reset_seconds) if quota is not None else None
         limit = quota.limit if quota is not None else None
         await _put(
             store, source, api_key, QuotaState(limit, 0, reset_at or now() + DEFAULT_COOLDOWN)
