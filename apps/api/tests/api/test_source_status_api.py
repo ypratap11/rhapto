@@ -615,3 +615,55 @@ async def test_themuse_never_counts_toward_usable_sources(
     rows = {r["id"]: r for r in (await client.get(SOURCES_URL)).json()}
     assert rows["themuse"]["enabled"] is True
     assert rows["themuse"]["configured"] is False and rows["themuse"]["runnable"] is False
+
+
+@pytest.mark.parametrize("source", ["themuse", "jsearch"])
+async def test_unavailable_and_live_only_sources_never_report_old_poll_history(
+    client: httpx.AsyncClient,
+    session_factory: async_sessionmaker[AsyncSession],
+    user_id: uuid.UUID,
+    source: str,
+) -> None:
+    """Runs left over from before the source became unavailable / live-only mean nothing now.
+
+    The poller never writes a newer run for either, so a stale PAUSED_MESSAGE run would show Paused
+    and Resume forever, and a stale failure would show the vendor's raw error (spec 4.2, 5.3).
+    """
+    base = datetime.now(UTC) - timedelta(days=2)
+    async with session_factory() as session:
+        for existing in await profile_repo.list_aggregators(session, user_id):
+            if existing.source == source:
+                await session.delete(existing)
+        # The switch was last touched before the runs, so a PAUSED_MESSAGE run counts as pausing it.
+        session.add(
+            Aggregator(
+                user_id=user_id,
+                source=source,
+                enabled=True,
+                keywords=[],
+                updated_at=base - timedelta(days=1),
+            )
+        )
+        for i, error in enumerate(
+            ["https://www.themuse.com/api/public/jobs?page=1 returned HTTP 404", PAUSED_MESSAGE]
+        ):
+            started = base + timedelta(hours=i)
+            session.add(
+                PollRun(
+                    user_id=user_id,
+                    source=source,
+                    board=None,
+                    search_id=None,
+                    started_at=started,
+                    finished_at=started,
+                    found=0,
+                    new=0,
+                    error=error,
+                )
+            )
+        await session.commit()
+
+    row = await _row(client, source)
+    assert row["paused"] is False
+    assert row["last_run"] is None
+    assert row["runnable"] is False

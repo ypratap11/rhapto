@@ -324,6 +324,19 @@ describe("SourcesSection, vendor-blocked and live-only sources", () => {
     expect(within(jsearch).queryByText(/will check next time/i)).not.toBeInTheDocument();
   });
 
+  it.each([
+    ["unavailable", { unavailable: blocked, live_only: false }],
+    ["live-only", { unavailable: undefined, live_only: true }],
+  ])("ignores old poll history on a %s source", (_name, flags) => {
+    // The API sends neither once a source is never polled; this is the client refusing to trust it.
+    data = [{ ...rows[2]!, ...flags, paused: true, configured: true, runnable: false }];
+    render(<SourcesSection />);
+    const jsearch = screen.getByRole("group", { name: "JSearch" });
+    expect(within(jsearch).queryByText("Paused")).not.toBeInTheDocument();
+    expect(within(jsearch).queryByRole("button", { name: "Resume" })).not.toBeInTheDocument();
+    expect(within(jsearch).queryByText(/last checked/i)).not.toBeInTheDocument();
+  });
+
   it("leaves an ordinary source unchanged", () => {
     data = [{ ...rows[1]!, live_only: false }];
     render(<SourcesSection />);

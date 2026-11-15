@@ -55,8 +55,15 @@ function statusDetail(s: SourceSetting): string | null {
   return "Will check next time";
 }
 
+/** Vendor-blocked and live-only sources are never polled, so pause state and run history are moot. */
+function neverPolled(s: SourceSetting): boolean {
+  return Boolean(s.unavailable) || s.live_only;
+}
+
 /** What the last attempt actually did, in the source's own terms. */
 function lastRunLine(s: SourceSetting): string | null {
+  // Never polled, so any run on record predates the flag and says nothing true about it now.
+  if (neverPolled(s)) return null;
   const run = s.last_run;
   if (!run) return null;
   // The search's own location string, never one composed here: the whole point of the join.
@@ -175,14 +182,14 @@ export function SourcesSection() {
                     <p className="text-sm font-medium">{source.label}</p>
                     {/* A paused source was buried in a run row on another page. It is a state, so it
                         reads as one, and it comes with the control that lifts it. */}
-                    {source.paused ? <StatusBadge tone="danger">Paused</StatusBadge> : null}
+                    {source.paused && !neverPolled(source) ? <StatusBadge tone="danger">Paused</StatusBadge> : null}
                   </div>
                   {statusLine(source) ? <p className="text-xs text-muted-foreground">{statusLine(source)}</p> : null}
                   {statusDetail(source) ? <p className="text-xs text-muted-foreground">{statusDetail(source)}</p> : null}
                   {lastRunLine(source) ? <p className="text-xs text-muted-foreground">{lastRunLine(source)}</p> : null}
                 </div>
                 <div className="flex shrink-0 items-center gap-2">
-                  {source.paused ? (
+                  {source.paused && !neverPolled(source) ? (
                     <Button className="max-md:min-h-11" size="sm" variant="outline" onClick={() => void resumeSource(source)} disabled={resume.isPending}>
                       Resume
                     </Button>

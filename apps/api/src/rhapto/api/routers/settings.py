@@ -312,6 +312,12 @@ async def _source_settings(session: AsyncSession, user_id: uuid.UUID) -> list[So
         enabled = row.enabled if row is not None else False
         scopes = by_source.get(info.name, [])
         configured = info.name in usable and info.unavailable is None
+        # Neither kind is ever polled, so old poll runs describe a time before the flag existed.
+        # Showing them would put Paused / Resume or the vendor's raw error next to a line that says
+        # the source is not checked in the background (spec 4.2, 5.3).
+        never_polled = info.unavailable is not None or info.live_only
+        if never_polled:
+            scopes = []
         paused = paused_as_of_last_run(
             [(e.run.error, e.run.started_at) for e in scopes],
             row.updated_at if row is not None else None,
