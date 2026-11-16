@@ -44,7 +44,8 @@ class Settings(BaseSettings):
     # the only gate; the allowlists above are not consulted per request.
     rhapto_open_signup: bool = False
     # Comma-separated, casefolded, exact addresses that may open /admin. Access mode only; empty
-    # means there is no admin area. Matched with `is_allowed_email(email, this, "")`.
+    # means there is no admin area. Matched with `is_allowed_email(email, this, "")`. Listed accounts
+    # are also exempt from the trial cap and the free budget (`services.trial.admin_exempt`).
     rhapto_admin_emails: str = ""
     rhapto_packages_dir: Path = Path("data/packages")
     rhapto_web_origin: str = "http://localhost:3000"
