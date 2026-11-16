@@ -16,6 +16,7 @@ from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from rhapto.config import Settings
 from rhapto.db.models import User
 from rhapto.db.repositories.users import (
     claim_free_import,
@@ -23,6 +24,7 @@ from rhapto.db.repositories.users import (
     get_or_create_user,
     trial_runs_used,
 )
+from rhapto.services.trial import TrialLimitExceededError, consume_trial_run
 
 LIMIT = 3
 
@@ -197,3 +199,33 @@ async def test_a_second_free_import_claim_after_the_first_committed_is_refused(
     await session.commit()
     assert await claim_free_import(session, user.id) is False
     assert await claim_free_import(session, uuid.uuid4()) is False  # a missing row claims nothing
+
+
+def _hosted_settings(admin_emails: str) -> Settings:
+    return Settings(
+        _env_file=None,
+        rhapto_auth_mode="access",
+        rhapto_llm_provider="anthropic",
+        anthropic_api_key="sk-env-deployment-key",
+        rhapto_trial_runs=LIMIT,
+        rhapto_monthly_free_budget_usd=-1,
+        rhapto_admin_emails=admin_emails,
+    )
+
+
+async def test_d1_an_admin_at_the_limit_consumes_nothing_and_is_not_refused(
+    session: AsyncSession, user: User
+) -> None:
+    """`user` is test@example.com, no stored key, so it is on the deployment's key."""
+    await _set_used(session, user.id, LIMIT)
+    await consume_trial_run(session, _hosted_settings("test@example.com"), user.id)
+    await session.commit()
+    assert await trial_runs_used(session, user.id) == LIMIT
+
+
+async def test_d1_a_non_admin_at_the_limit_is_still_refused(
+    session: AsyncSession, user: User
+) -> None:
+    await _set_used(session, user.id, LIMIT)
+    with pytest.raises(TrialLimitExceededError):
+        await consume_trial_run(session, _hosted_settings("someone-else@example.com"), user.id)

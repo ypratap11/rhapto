@@ -5,11 +5,13 @@ from __future__ import annotations
 import logging
 import uuid
 from decimal import Decimal
-from typing import Any
+from typing import Any, cast
 
 import pytest
 from pydantic import BaseModel
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from rhapto.config import Settings
 from rhapto.db.models import FreeSpend
 from rhapto.engine.providers.fake import FakeLLMProvider
 from rhapto.engine.providers.llm import (
@@ -19,7 +21,8 @@ from rhapto.engine.providers.llm import (
     SystemBlock,
     TokenUsage,
 )
-from rhapto.services.free_spend import MeteredLLM
+from rhapto.services import trial as trial_service
+from rhapto.services.free_spend import MeteredLLM, meter_if_free
 from rhapto.services.pricing import MODEL_RATES, conservative_cost, estimate_cost
 
 USER = uuid.uuid4()
@@ -163,3 +166,43 @@ async def test_a_failing_ledger_write_is_logged_and_the_result_still_returned(
 def test_metered_llm_exposes_the_model() -> None:
     llm = _metered(FakeLLMProvider(responses=[]), _Ledger(), model="claude-opus-5")
     assert llm.model == "claude-opus-5"
+
+
+async def _meter_for(monkeypatch: pytest.MonkeyPatch, email: str) -> Any:
+    """`meter_if_free` for a keyless account on a hosted instance whose operator is the owner.
+
+    The session is a fake: monkeypatching `trial_service.email_of` (and the stored-key lookup) is
+    what keeps both the admin check and `on_deployment_key` from touching a database.
+    """
+
+    async def stored(session: object, settings: object, user_id: object) -> None:
+        return None
+
+    async def email_of(session: object, user_id: object) -> str:
+        return email
+
+    monkeypatch.setattr(trial_service, "stored_llm_config", stored)
+    monkeypatch.setattr(trial_service, "email_of", email_of)
+    settings = Settings(
+        _env_file=None,
+        rhapto_auth_mode="access",
+        rhapto_llm_provider="anthropic",
+        anthropic_api_key="sk-env-deployment-key",
+        rhapto_monthly_free_budget_usd=1.0,
+        rhapto_admin_emails="owner@example.com",
+    )
+    inner = FakeLLMProvider(responses=[{"text": "a"}])
+    wrapped = await meter_if_free(
+        inner, cast("AsyncSession", object()), settings, USER, cast("Any", _Ledger())
+    )
+    return inner, wrapped
+
+
+async def test_u11_an_admins_calls_are_not_metered(monkeypatch: pytest.MonkeyPatch) -> None:
+    inner, wrapped = await _meter_for(monkeypatch, "owner@example.com")
+    assert wrapped is inner
+
+
+async def test_u11_a_non_admins_calls_are_metered(monkeypatch: pytest.MonkeyPatch) -> None:
+    inner, wrapped = await _meter_for(monkeypatch, "tester@example.com")
+    assert isinstance(wrapped, MeteredLLM)

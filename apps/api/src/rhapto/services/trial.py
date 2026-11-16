@@ -26,12 +26,14 @@ from typing import Literal
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from rhapto.allowlist import is_allowed_email
 from rhapto.config import Settings
 from rhapto.db.repositories.free_spend import month_free_spend
 from rhapto.db.repositories.users import (
     blocked_at_of,
     claim_free_import,
     claim_trial_run,
+    email_of,
     trial_runs_used,
 )
 from rhapto.engine.providers.registry import FAKE_PROVIDER_ID
@@ -176,6 +178,24 @@ def free_budget_applies(settings: Settings) -> bool:
     )
 
 
+async def admin_exempt(session: AsyncSession, settings: Settings, user_id: uuid.UUID) -> bool:
+    """True when this account is one of the operator's (RHAPTO_ADMIN_EMAILS) on a hosted instance.
+
+    The one place that answers "is this the owner, not a trial user". Every gate below consults it,
+    so they cannot disagree. It is NOT folded into `on_deployment_key` (a billing fact, also used to
+    word a rejected-key message) nor into `_operator_exempt` (sync, settings-only, no user).
+
+    No database read at all outside access mode or with a blank admin list, so deployments that do
+    not use it pay nothing. The email is read from the users row (written only from the verified
+    Cloudflare Access assertion) and matched exactly with the admin guard's own `is_allowed_email`;
+    the domains argument is always empty -- an admin is an address, never a domain. Logs nothing.
+    """
+    if settings.rhapto_auth_mode != "access" or not settings.rhapto_admin_emails.strip():
+        return False
+    email = await email_of(session, user_id)
+    return email is not None and is_allowed_email(email, settings.rhapto_admin_emails, "")
+
+
 async def trial_limit_for(
     session: AsyncSession, settings: Settings, user_id: uuid.UUID
 ) -> int | None:
@@ -185,6 +205,9 @@ async def trial_limit_for(
         return None
     # 4. The user pays for their own calls. Checked last, because it is the only branch that reads.
     if not await on_deployment_key(session, settings, user_id):
+        return None
+    # 5. The operator is not a trial user, even when their stored key is a copy of the env key.
+    if await admin_exempt(session, settings, user_id):
         return None
     return limit
 
@@ -199,6 +222,8 @@ async def check_free_budget(session: AsyncSession, settings: Settings, user_id: 
     if not free_budget_applies(settings):
         return
     if not await on_deployment_key(session, settings, user_id):
+        return
+    if await admin_exempt(session, settings, user_id):
         return
     if await month_free_spend(session) >= Decimal(str(settings.rhapto_monthly_free_budget_usd)):
         raise FreeRunsPausedError()
@@ -324,6 +349,9 @@ async def llm_setup_status(
         return LlmSetupStatus(llm_key=True, llm_key_source="settings")
     limit = deployment_key_trial_limit(settings)
     if limit is None:
+        return LlmSetupStatus(llm_key=True, llm_key_source="env")
+    # Same answer as "cap disabled": the gate admits the operator, so the checklist must too.
+    if await admin_exempt(session, settings, user_id):
         return LlmSetupStatus(llm_key=True, llm_key_source="env")
     used = runs_used if runs_used is not None else await trial_runs_used(session, user_id)
     left = max(0, limit - used)
