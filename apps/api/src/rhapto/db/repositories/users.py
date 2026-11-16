@@ -141,3 +141,9 @@ async def touch_last_seen(session: AsyncSession, user_id: uuid.UUID) -> bool:
         {"id": user_id},
     )
     return bool(result.rowcount)  # type: ignore[attr-defined]
+
+
+async def email_of(session: AsyncSession, user_id: uuid.UUID) -> str | None:
+    """The user's email, or None when there is no such user."""
+    email: str | None = await session.scalar(select(User.email).where(User.id == user_id))
+    return email

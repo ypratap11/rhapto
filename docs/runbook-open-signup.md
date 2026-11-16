@@ -15,6 +15,8 @@ the watch queries.
 - The **$50 budget** (`RHAPTO_MONTHLY_FREE_BUDGET_USD`) is shared by all accounts and **resets on the
   1st (UTC)**. When it is spent, free runs answer 409 `free_runs_paused` ("Free runs are paused until
   the 1st of next month") and the person is pointed to Settings to add their own key.
+- Accounts listed in `RHAPTO_ADMIN_EMAILS` are exempt from both, and their runs are not counted in the
+  $50 budget (`docs/runbook-access-mode.md`, "Admin addresses").
 
 ## 1. Back up. Not optional.
 

@@ -25,7 +25,7 @@ from rhapto.engine.providers.llm import (
 )
 from rhapto.services.llm import env_llm_config
 from rhapto.services.pricing import conservative_cost
-from rhapto.services.trial import free_budget_applies, on_deployment_key
+from rhapto.services.trial import admin_exempt, free_budget_applies, on_deployment_key
 
 logger = logging.getLogger(__name__)
 
@@ -106,6 +106,10 @@ async def meter_if_free(
 ) -> LLMProvider:
     """Wrap `llm` when this user's calls are billed to the deployment's key, else return it as is."""
     if not free_budget_applies(settings) or not await on_deployment_key(session, settings, user_id):
+        return llm
+    # Admin calls are intentionally unmetered: the ledger means "money given away", and the
+    # operator's own runs would drain the budget meant for invited users.
+    if await admin_exempt(session, settings, user_id):
         return llm
     env = env_llm_config(settings)
     model = getattr(llm, "model", None) or (env.model if env is not None else "")

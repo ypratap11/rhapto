@@ -25,8 +25,10 @@ from rhapto.services.llm import LlmConfig
 from rhapto.services.secrets import KeyUnreadableError
 from rhapto.services.trial import (
     TrialLimitExceededError,
+    admin_exempt,
     check_trial_allowance,
     configured_trial_limit,
+    llm_setup_status,
     on_deployment_key,
     trial_limit_for,
     trial_limit_message,
@@ -255,3 +257,126 @@ def test_the_module_logs_nothing() -> None:
     text = source.read_text(encoding="utf-8")
     for forbidden in ("getLogger", "logger.", "logging."):
         assert forbidden not in text, f"services/trial.py must not log ({forbidden})"
+
+
+# --- admin accounts are never trial users (owner-trial-exempt) ---
+
+ADMIN_EMAIL = "owner@example.com"
+
+
+class _EmailOf:
+    """A stand-in for `trial_service.email_of` that counts its awaits."""
+
+    def __init__(self, email: str | None) -> None:
+        self.email = email
+        self.calls = 0
+
+    async def __call__(self, session: object, user_id: object) -> str | None:
+        self.calls += 1
+        return self.email
+
+
+def _email(monkeypatch: pytest.MonkeyPatch, email: str | None) -> _EmailOf:
+    stub = _EmailOf(email)
+    monkeypatch.setattr(trial_service, "email_of", stub)
+    return stub
+
+
+def _used(monkeypatch: pytest.MonkeyPatch, n: int) -> None:
+    async def used(session: object, user_id: object) -> int:
+        return n
+
+    monkeypatch.setattr(trial_service, "trial_runs_used", used)
+
+
+async def test_u1_an_admin_at_the_limit_is_not_capped_and_is_admitted(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _stored(monkeypatch, None)
+    _email(monkeypatch, ADMIN_EMAIL)
+    _used(monkeypatch, 3)
+    settings = _settings(rhapto_admin_emails=ADMIN_EMAIL)
+    assert await trial_limit_for(_session(), settings, USER_ID) is None
+    await check_trial_allowance(_session(), settings, USER_ID)
+
+
+async def test_u2_the_match_ignores_case_and_spaces(monkeypatch: pytest.MonkeyPatch) -> None:
+    _stored(monkeypatch, None)
+    _email(monkeypatch, "Owner@Example.com")
+    settings = _settings(rhapto_admin_emails=" other@example.com ,  OWNER@example.COM ")
+    assert await trial_limit_for(_session(), settings, USER_ID) is None
+
+
+async def test_u3_a_non_admin_is_still_capped(monkeypatch: pytest.MonkeyPatch) -> None:
+    _stored(monkeypatch, None)
+    _email(monkeypatch, "tester@example.com")
+    _used(monkeypatch, 3)
+    settings = _settings(rhapto_admin_emails=ADMIN_EMAIL)
+    assert await trial_limit_for(_session(), settings, USER_ID) == 3
+    with pytest.raises(TrialLimitExceededError):
+        await check_trial_allowance(_session(), settings, USER_ID)
+
+
+async def test_u4_an_empty_admin_list_exempts_nobody_and_reads_nothing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    stub = _email(monkeypatch, ADMIN_EMAIL)
+    for blank in ("", "   "):
+        assert (
+            await admin_exempt(_session(), _settings(rhapto_admin_emails=blank), USER_ID) is False
+        )
+    assert stub.calls == 0
+
+
+async def test_u5_token_mode_never_consults_the_email(monkeypatch: pytest.MonkeyPatch) -> None:
+    stub = _email(monkeypatch, ADMIN_EMAIL)
+    settings = _settings(rhapto_auth_mode="token", rhapto_admin_emails=ADMIN_EMAIL)
+    assert await admin_exempt(_session(), settings, USER_ID) is False
+    assert stub.calls == 0
+
+
+async def test_u6_a_missing_email_is_not_exempt(monkeypatch: pytest.MonkeyPatch) -> None:
+    _email(monkeypatch, None)
+    settings = _settings(rhapto_admin_emails=ADMIN_EMAIL)
+    assert await admin_exempt(_session(), settings, USER_ID) is False
+
+
+async def test_u7_a_domain_shaped_entry_is_not_an_admin(monkeypatch: pytest.MonkeyPatch) -> None:
+    _email(monkeypatch, "x@example.com")
+    for entry in ("@example.com", "example.com"):
+        settings = _settings(rhapto_admin_emails=entry)
+        assert await admin_exempt(_session(), settings, USER_ID) is False
+
+
+async def test_u8_the_checklist_agrees_with_the_gate_for_an_exhausted_admin(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _stored(monkeypatch, None)
+    _email(monkeypatch, ADMIN_EMAIL)
+    settings = _settings(rhapto_admin_emails=ADMIN_EMAIL)
+    status = await llm_setup_status(_session(), settings, USER_ID, runs_used=3)
+    assert status.llm_key is True
+    assert status.llm_key_source == "env"
+    assert status.trial_runs_left is None
+
+
+async def test_u8_the_checklist_is_unchanged_for_a_non_admin(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _stored(monkeypatch, None)
+    _email(monkeypatch, "tester@example.com")
+    settings = _settings(rhapto_admin_emails=ADMIN_EMAIL)
+    status = await llm_setup_status(_session(), settings, USER_ID, runs_used=3)
+    assert (status.llm_key, status.llm_key_source, status.trial_runs_left) == (False, "trial", 0)
+
+
+async def test_u9_an_admin_with_a_stored_copy_of_the_env_key_is_exempt(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The observed live bug: the owner saved the deployment's own key in Settings."""
+    _stored(monkeypatch, _copy_of_env_key_config())
+    _email(monkeypatch, ADMIN_EMAIL)
+    _used(monkeypatch, 3)
+    settings = _settings(rhapto_admin_emails=ADMIN_EMAIL)
+    assert await trial_limit_for(_session(), settings, USER_ID) is None
+    await check_trial_allowance(_session(), settings, USER_ID)

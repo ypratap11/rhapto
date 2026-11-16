@@ -109,3 +109,37 @@ def test_the_409_body_is_the_sentence_and_leaks_nothing() -> None:
     assert set(body) <= {"type", "title", "status", "detail", "code"}
     assert "$" not in res.text and "RHAPTO_" not in res.text
     assert re.findall(r"\d", body["detail"]) == ["1"]
+
+
+async def test_u10_an_admin_is_never_paused_and_the_ledger_is_not_read(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    reads = 0
+
+    async def spent(session: object) -> Decimal:
+        nonlocal reads
+        reads += 1
+        return Decimal("999")
+
+    async def email_of(session: object, user_id: object) -> str | None:
+        return "owner@example.com"
+
+    _world(monkeypatch, spend="999")
+    monkeypatch.setattr(trial_service, "month_free_spend", spent)
+    monkeypatch.setattr(trial_service, "email_of", email_of)
+    settings = _settings(rhapto_admin_emails="owner@example.com")
+    await check_free_budget(_session(), settings, USER_ID)
+    assert reads == 0
+
+
+async def test_u10_a_non_admin_is_still_paused_on_the_same_settings(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def email_of(session: object, user_id: object) -> str | None:
+        return "tester@example.com"
+
+    _world(monkeypatch, spend="999")
+    monkeypatch.setattr(trial_service, "email_of", email_of)
+    settings = _settings(rhapto_admin_emails="owner@example.com")
+    with pytest.raises(FreeRunsPausedError):
+        await check_free_budget(_session(), settings, USER_ID)

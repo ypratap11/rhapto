@@ -499,3 +499,26 @@ async def test_a_guardrail_blocked_package_still_consumes_a_run(
     assert await _used(session_factory, trial_user) == 1, (
         "the money was spent before the guardrail ran"
     )
+
+
+@pytest.mark.usefixtures("worker_profile")
+async def test_a3_the_worker_runs_an_admin_at_the_limit_and_the_counter_does_not_move(
+    worker_ctx: dict[str, Any],
+    session_factory: async_sessionmaker[AsyncSession],
+    trial_user: uuid.UUID,
+    api_settings: Any,
+    fake_llm: Any,
+) -> None:
+    """The worker is authoritative: it evaluates the exemption with its own settings, from the
+    users row's email, not from anything the API decided."""
+    api_settings.rhapto_admin_emails = EMAIL
+    await _set_used(session_factory, trial_user, LIMIT)
+    task_id = await _queued_task(session_factory, trial_user)
+    fake_llm.script(*default_tailor_script())
+
+    await tailor_job(worker_ctx, task_id)
+
+    row = await _task(session_factory, task_id)
+    assert row.status == "succeeded", row.error
+    assert fake_llm.calls, "the run reached the model"
+    assert await _used(session_factory, trial_user) == LIMIT

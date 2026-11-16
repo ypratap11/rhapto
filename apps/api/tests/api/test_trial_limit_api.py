@@ -40,6 +40,7 @@ from rhapto.engine.import_resume import ImportedBlock, ImportedLocation, Importe
 from rhapto.engine.providers.fake import FakeLLMProvider
 from rhapto.engine.providers.llm import LLMProvider
 from rhapto.services.secrets import encrypt
+from rhapto.services.trial import trial_limit_message
 
 LIMIT = 3
 EMAIL = "test@example.com"
@@ -518,3 +519,94 @@ async def test_the_key_probe_is_not_gated_by_the_trial(
     assert response.status_code == 200 and response.json()["ok"] is True
     assert probed == [("anthropic", "claude-sonnet-5", "sk-brand-new-key")]
     assert await _used(session_factory, user_id) == LIMIT
+
+
+# --- admin accounts are never trial users (owner-trial-exempt) ---
+#
+# The principal override above is `EMAIL`, so "admin" is `rhapto_admin_emails = EMAIL` and the
+# non-admin controls leave it empty or name somebody else. The counter is pre-set to the limit.
+
+
+async def _set_used(
+    session_factory: async_sessionmaker[AsyncSession], user_id: uuid.UUID, used: int
+) -> None:
+    async with session_factory() as session:
+        await session.execute(
+            text("UPDATE users SET trial_runs_used = :n WHERE id = :uid"),
+            {"n": used, "uid": str(user_id)},
+        )
+        await session.commit()
+
+
+@pytest.mark.usefixtures("imported_profile")
+async def test_a1_an_admin_at_the_limit_is_admitted_and_the_counter_does_not_move(
+    client: httpx.AsyncClient,
+    fake_llm: Any,
+    api_settings: Settings,
+    session_factory: async_sessionmaker[AsyncSession],
+    user_id: uuid.UUID,
+) -> None:
+    api_settings.rhapto_admin_emails = EMAIL
+    await _set_used(session_factory, user_id, LIMIT)
+    response = await _tailor(client, fake_llm, await _job(client))
+    assert response.status_code in (200, 201, 202), response.text
+    assert response.json()["status"] == "succeeded", response.text
+    assert len(fake_llm.calls) >= 1
+    assert await _used(session_factory, user_id) == LIMIT
+
+
+@pytest.mark.usefixtures("imported_profile")
+@pytest.mark.parametrize("admin_emails", ["", "someone-else@example.com"])
+async def test_a2_a_non_admin_at_the_limit_is_still_refused(
+    client: httpx.AsyncClient,
+    fake_llm: Any,
+    api_settings: Settings,
+    session_factory: async_sessionmaker[AsyncSession],
+    user_id: uuid.UUID,
+    admin_emails: str,
+) -> None:
+    api_settings.rhapto_admin_emails = admin_emails
+    await _set_used(session_factory, user_id, LIMIT)
+    refused = await _tailor(client, fake_llm, await _job(client))
+    assert refused.status_code == 409, refused.text
+    body = refused.json()
+    assert body["code"] == "trial_limit_reached"
+    assert body["detail"] == trial_limit_message(LIMIT)
+    assert fake_llm.calls == []
+
+
+@pytest.mark.parametrize(
+    ("admin_emails", "runs_left", "llm_key", "source"),
+    [(EMAIL, None, True, "env"), ("", 0, False, "trial")],
+)
+async def test_a6_the_dashboard_checklist_agrees_with_the_gate(
+    client: httpx.AsyncClient,
+    api_settings: Settings,
+    session_factory: async_sessionmaker[AsyncSession],
+    user_id: uuid.UUID,
+    admin_emails: str,
+    runs_left: int | None,
+    llm_key: bool,
+    source: str,
+) -> None:
+    api_settings.rhapto_admin_emails = admin_emails
+    await _set_used(session_factory, user_id, LIMIT)
+    checklist = (await client.get("/api/v1/dashboard")).json()["checklist"]
+    assert checklist["trial_runs_left"] == runs_left
+    assert checklist["llm_key"] is llm_key
+    assert checklist["llm_key_source"] == source
+
+
+async def test_a7_an_admin_at_the_limit_can_import_without_spending_anything(
+    client: httpx.AsyncClient,
+    import_llm: FakeLLMProvider,
+    api_settings: Settings,
+    session_factory: async_sessionmaker[AsyncSession],
+    user_id: uuid.UUID,
+) -> None:
+    api_settings.rhapto_admin_emails = EMAIL
+    await _set_used(session_factory, user_id, LIMIT)
+    assert (await _import_resume(client)).status_code == 200
+    assert len(import_llm.calls) == 1
+    assert await _used(session_factory, user_id) == LIMIT
+    assert not await _free_import_used(session_factory, user_id)

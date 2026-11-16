@@ -126,7 +126,12 @@ After this, Cloudflare is never edited to invite someone again.
 `/admin`. Empty means nobody is an admin, and `/admin` answers 404 for everyone. Admin addresses cannot be
 blocked from the UI. If a listed address was blocked earlier (directly in SQL, or before it was listed), it
 sees "Account blocked" on `/admin` and cannot unblock itself in the UI; clear `users.blocked_at` in SQL.
-Like the allowlist, changing it needs a restart: `docker compose up -d --force-recreate api worker`.
+Admin accounts are also never trial users: on this instance's key (no stored key, or a stored copy of it)
+they get no free-run cap and no monthly free-budget pause, and their runs are not written to the free-spend
+ledger (so the admin dashboard's free-spend totals exclude them; see the provider console). The "N free
+runs used" counter on an admin's row stays frozen at its old value. List only people whose spend you accept.
+Like the allowlist, changing it needs a restart of BOTH api and worker (the worker enforces the cap):
+`docker compose up -d --force-recreate api worker`.
 
 ## Step 6 — invite the second person
 
