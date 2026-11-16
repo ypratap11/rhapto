@@ -29,6 +29,7 @@ from rhapto.api.deps import get_session, get_settings_dep
 from rhapto.api.errors import not_found
 from rhapto.config import Settings
 from rhapto.db.repositories import admin as admin_repo
+from rhapto.db.repositories import users as users_repo
 from rhapto.services import admin_alerts
 from rhapto.services.failure_categories import FAILURE_LABELS, FailureCategory, classify
 from rhapto.services.trial import configured_trial_limit
@@ -180,7 +181,7 @@ PROTECTED_DETAIL = "This account is listed as an admin and cannot be blocked."
 
 
 async def _target_email(session: AsyncSession, user_id: uuid.UUID) -> str:
-    email = await admin_repo.email_of(session, user_id)
+    email = await users_repo.email_of(session, user_id)
     if email is None:
         raise not_found("user", user_id)
     return email
