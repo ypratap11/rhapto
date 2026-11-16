@@ -334,3 +334,54 @@ async def test_budget_disabled_never_pauses(
     response = await client.post(f"/api/v1/jobs/{await _job(client)}/tailor", json={})
     assert response.status_code in (200, 201, 202), response.text
     assert response.json()["status"] == "succeeded", response.text
+
+
+@pytest.mark.usefixtures("imported_profile")
+async def test_a4_an_admin_is_admitted_when_the_month_budget_is_spent(
+    client: httpx.AsyncClient,
+    fake_llm: Any,
+    api_settings: Settings,
+    session_factory: async_sessionmaker[AsyncSession],
+    user_id: uuid.UUID,
+) -> None:
+    api_settings.rhapto_admin_emails = EMAIL
+    await _seed_spend(session_factory, user_id, "1.00")
+    fake_llm.script(*default_tailor_script())
+    response = await client.post(f"/api/v1/jobs/{await _job(client)}/tailor", json={})
+    assert response.status_code in (200, 201, 202), response.text
+    assert response.json()["status"] == "succeeded", response.text
+    assert await _month_spend(session_factory) == Decimal("1.00"), "admin calls are not metered"
+
+
+@pytest.mark.usefixtures("imported_profile")
+async def test_a4_the_worker_runs_an_admin_when_the_month_budget_is_spent(
+    worker_ctx: dict[str, Any],
+    fake_llm: Any,
+    api_settings: Settings,
+    session_factory: async_sessionmaker[AsyncSession],
+    user_id: uuid.UUID,
+) -> None:
+    api_settings.rhapto_admin_emails = EMAIL
+    task_id = await _queued_task(session_factory, user_id)
+    await _seed_spend(session_factory, user_id, "1.00")
+    fake_llm.script(*default_tailor_script())
+
+    await tailor_job(worker_ctx, task_id)
+
+    row = await _task(session_factory, task_id)
+    assert row.status == "succeeded", row.error
+
+
+@pytest.mark.usefixtures("imported_profile")
+async def test_a4_a_different_admin_does_not_exempt_this_user(
+    client: httpx.AsyncClient,
+    fake_llm: Any,
+    api_settings: Settings,
+    session_factory: async_sessionmaker[AsyncSession],
+    user_id: uuid.UUID,
+) -> None:
+    api_settings.rhapto_admin_emails = "someone-else@example.com"
+    await _seed_spend(session_factory, user_id, "1.00")
+    fake_llm.script(*default_tailor_script())
+    _assert_paused(await client.post(f"/api/v1/jobs/{await _job(client)}/tailor", json={}))
+    assert fake_llm.calls == []

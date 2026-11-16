@@ -307,3 +307,26 @@ async def test_runs_used_can_be_supplied_without_changing_the_answer(
         supplied = await llm_setup_status(session, settings, user_id, runs_used=1)
     assert read_itself == supplied
     assert supplied.trial_runs_left == 2
+
+
+async def test_a6_an_exhausted_admin_reads_as_done_with_no_countdown(
+    session_factory: async_sessionmaker[AsyncSession], tmp_path: Path
+) -> None:
+    """Admin accounts are not trial users: the row agrees with the gate, which admits them."""
+    settings = _settings(tmp_path, trial_runs=2)
+    settings.rhapto_admin_emails = "owner@example.com"
+    owner = await _user(session_factory, "owner@example.com")
+    tester = await _user(session_factory, "tester@example.com")
+    async with session_factory() as session:
+        for uid in (owner, tester):
+            for _ in range(2):
+                assert await claim_trial_run(session, uid, 2) is not None
+        await session.commit()
+
+    async with session_factory() as session:
+        admin_status = await llm_setup_status(session, settings, owner)
+        tester_status = await llm_setup_status(session, settings, tester)
+    assert (admin_status.llm_key, admin_status.llm_key_source) == (True, "env")
+    assert admin_status.trial_runs_left is None
+    assert (tester_status.llm_key, tester_status.llm_key_source) == (False, "trial")
+    assert tester_status.trial_runs_left == 0

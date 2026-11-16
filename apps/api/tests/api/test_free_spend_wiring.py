@@ -196,3 +196,20 @@ async def test_budget_disabled_writes_nothing(
     task = await _tailor(client, fake_llm)
     assert task["status"] == "succeeded", task
     assert await _count(session_factory) == 0
+
+
+@pytest.mark.usefixtures("imported_profile")
+async def test_a5_an_admins_run_writes_no_ledger_rows(
+    client: httpx.AsyncClient,
+    fake_llm: Any,
+    api_settings: Settings,
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    """The ledger means "money given away"; the owner's own runs are not that, and metering them
+    would drain the budget meant for invited users. The control is
+    `test_a_free_tailor_run_writes_ledger_rows`, same settings with no admin list."""
+    api_settings.rhapto_admin_emails = EMAIL
+    task = await _tailor(client, fake_llm)
+    assert task["status"] == "succeeded", task
+    assert len(fake_llm.calls) >= 1
+    assert await _count(session_factory) == 0
