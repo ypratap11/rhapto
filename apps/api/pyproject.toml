@@ -61,6 +61,7 @@ asyncio_mode = "auto"
 testpaths = ["tests"]
 pythonpath = ["tests", "tests/unit"]
 timeout = 60
+markers = ["real_ingest_age: run with poller.INGEST_MAX_AGE_DAYS at its real value"]
 
 [tool.ruff]
 line-length = 100

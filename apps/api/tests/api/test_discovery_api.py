@@ -73,14 +73,14 @@ async def test_poll_creates_jobs_runs_and_scored_queue(
     assert task.json()["status"] == "succeeded" and task.json()["result_ref"].startswith("new:")
     runs = await client.get("/api/v1/discovery/runs")
     assert {r["source"] for r in runs.json()} == {"greenhouse", "remoteok"}
-    jobs = await client.get("/api/v1/jobs", params={"sort": "fit"})
+    jobs = await client.get("/api/v1/jobs", params={"sort": "fit", "posted_within": "any"})
     body = jobs.json()
     assert body and all(j["best_fit"] is not None and j["bucket"] in ("fit", "low") for j in body)
     assert [j["best_fit"] for j in body] == sorted((j["best_fit"] for j in body), reverse=True)
     assert body[0]["scores"] and {"track_id", "fit_score", "rationale"} <= set(body[0]["scores"][0])
-    only_low = await client.get("/api/v1/jobs", params={"bucket": "low"})
+    only_low = await client.get("/api/v1/jobs", params={"bucket": "low", "posted_within": "any"})
     assert all(j["bucket"] == "low" for j in only_low.json())
-    by_track = await client.get("/api/v1/jobs", params={"track": "data-pm"})
+    by_track = await client.get("/api/v1/jobs", params={"track": "data-pm", "posted_within": "any"})
     assert all(j["best_track_id"] == "data-pm" for j in by_track.json())
 
 
