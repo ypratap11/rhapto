@@ -1,8 +1,8 @@
 """The synchronous half of discovery: one search, every source at once, one response.
 
 The poller is patient and thorough; this is neither. It fans out with a hard per-target timeout
-(aggregators 8s, live-only 20s, watchlist boards 30s), caps each source, and never lets one vendor's outage fail
-the request -- the user typed a query and is watching a spinner.
+(aggregators 8s, live-only 20s, watchlist boards 30s), caps each source, and never lets one
+vendor's outage fail the request -- the user typed a query and is watching a spinner.
 
 Two rules differ from the poller on purpose:
 

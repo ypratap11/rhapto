@@ -73,7 +73,9 @@ COMMON_WORDS = frozenset(
 TECH_TERMS = frozenset("ai io dev sdk api db sql os".split())
 CORPORATE_FORMS = frozenset(
     """
-    inc corp corporation co llc llp ltd plc gmbh ag sa nv bv ab oy oyj kk pte pty labs lab technologies technology systems solutions software group holdings partners ventures capital university institute college academy
+    inc corp corporation co llc llp ltd plc gmbh ag sa nv bv ab oy oyj kk pte pty
+    labs lab technologies technology systems solutions software
+    group holdings partners ventures capital university institute college academy
     """.split()
 )
 NAME_SUFFIXES = TECH_TERMS | CORPORATE_FORMS
@@ -276,8 +278,8 @@ def _has_unknown_word(source: str, run: str) -> bool:
     Skills and competency lines are Title Case by convention, so a tune edit that recombines the
     document's own vocabulary -- "Automated Validation", "Python Hands-on" -- is a rephrasing,
     not an invented employer or product. A run is only an invention when it brings in a word the
-    document has nowhere ("Globex"), a word with a digit ("GPT5"), or a corporate form ("Corp",
-    "Acme.io" is caught as an unknown "Acme"). Tech terms ("AI", "SQL") are vouched for by the
+    document has nowhere ("Globex", or "acme.io" as one token), a word with a digit ("GPT5"), or
+    a corporate form ("Corp"). Tech terms ("AI", "SQL") are vouched for by the
     document using them.
     """
     for word in normalize_entity(run).split():
