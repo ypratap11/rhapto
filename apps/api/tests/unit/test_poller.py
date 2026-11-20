@@ -149,6 +149,7 @@ async def test_repost_is_flagged_not_requeued(session: AsyncSession, user: User)
     assert new is not None and original is not None and new.repost_of == original.id
 
 
+@pytest.mark.real_ingest_age
 async def test_ingest_skips_postings_older_than_90_days_but_keeps_dateless_ones(
     session: AsyncSession, user: User
 ) -> None:

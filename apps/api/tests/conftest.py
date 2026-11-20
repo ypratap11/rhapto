@@ -87,6 +87,19 @@ def _no_provider_env(monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.delenv(name, raising=False)
 
 
+@pytest.fixture(autouse=True)
+def _ingest_age_guard_off(request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch) -> None:
+    """`poller._ingest` drops postings older than `INGEST_MAX_AGE_DAYS` (90) against the wall clock,
+    but the discovery fixtures carry static `posted_at` dates, so every test that ingests them
+    would start failing as the calendar moves on. Widen the window to 100 years for every test so
+    the suite's result does not depend on the day it runs. The one test that exercises the real
+    guard opts out with `@pytest.mark.real_ingest_age`. The string target with the default
+    `raising=True` makes a rename of the constant fail loudly.
+    """
+    if request.node.get_closest_marker("real_ingest_age") is None:
+        monkeypatch.setattr("rhapto.services.discovery.poller.INGEST_MAX_AGE_DAYS", 36500)
+
+
 @pytest.fixture
 def repo_root() -> Path:
     return REPO_ROOT
