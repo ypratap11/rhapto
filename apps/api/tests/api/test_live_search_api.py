@@ -329,3 +329,26 @@ async def test_jsearch_second_search_after_429_makes_no_call(
     assert first["state"] == "quota_exhausted" and len(fake.calls) == 1
     second = (await client.post("/api/v1/search", json=payload)).json()["per_source"]["jsearch"]
     assert second["state"] == "quota_exhausted" and len(fake.calls) == 1
+
+
+async def test_router_passes_the_live_only_budget(
+    client: httpx.AsyncClient,
+    session_factory: async_sessionmaker[AsyncSession],
+    user_id: Any,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from rhapto.api.routers import search as search_router
+
+    await _enable(session_factory, user_id, "api-alpha")
+    ApiAlpha.result = [_posting(1)]
+    real = search_router.live_search
+    seen: dict[str, Any] = {}
+
+    async def spy(*a: Any, **kw: Any) -> Any:
+        seen.update(kw)
+        return await real(*a, **kw)
+
+    monkeypatch.setattr(search_router, "live_search", spy)
+    response = await client.post("/api/v1/search", json={"query": "program manager"})
+    assert response.status_code == 200
+    assert seen["live_only_timeout"] == 20.0

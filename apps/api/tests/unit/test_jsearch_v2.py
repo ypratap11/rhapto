@@ -89,3 +89,67 @@ async def test_jsearch_without_a_key_raises_before_any_call() -> None:
     with pytest.raises(SourceError):
         await get_aggregator("jsearch").fetch_search(http, SearchSpec(keywords=("pm",)), {})  # type: ignore[arg-type]
     assert http.calls == []
+
+
+def _body_with(*jobs: dict[str, Any]) -> dict[str, Any]:
+    return {"data": {"jobs": list(jobs)}}
+
+
+def _job(jid: str, title: str, description: str, **extra: Any) -> dict[str, Any]:
+    return {
+        "job_id": jid,
+        "job_title": title,
+        "job_description": description,
+        "job_apply_link": f"https://example.com/apply/{jid}",
+        "employer_name": "ExampleCo",
+        **extra,
+    }
+
+
+async def _kept(query: str, *jobs: dict[str, Any]) -> set[str]:
+    http = FakeDiscoveryHttp({"jsearch.p.rapidapi.com/search-v2": _body_with(*jobs)})
+    postings = await get_aggregator("jsearch").fetch_search(
+        http,  # type: ignore[arg-type]
+        SearchSpec(keywords=(query,)),
+        CREDS,
+    )
+    return {p.external_id for p in postings}
+
+
+async def test_multiword_query_matches_words_in_any_order() -> None:
+    job = _job("a", "Director, Enterprise Applications", "Lead AI adoption.")
+    assert await _kept("director AI enterprise applications", job) == {"a"}
+
+
+async def test_ai_director_matches_director_of_ai() -> None:
+    assert await _kept("AI director", _job("a", "Director of AI", "Run the team.")) == {"a"}
+
+
+async def test_city_typed_in_the_query_matches_the_posting_city() -> None:
+    job = _job("a", "Director of AI", "Run the team.", job_city="Austin")
+    assert await _kept("AI director Austin", job) == {"a"}
+
+
+async def test_posting_missing_a_significant_word_is_dropped() -> None:
+    job = _job("a", "Director, Enterprise Applications", "Lead cloud work.")
+    assert await _kept("director AI enterprise applications", job) == set()
+
+
+async def test_it_is_not_a_stop_word() -> None:
+    ops = _job("a", "Operations Manager", "Run the floor.")
+    it = _job("b", "IT Manager", "Run the floor.")
+    assert await _kept("IT manager", ops, it) == {"b"}
+
+
+async def test_stop_word_only_query_falls_back_to_exact_phrase() -> None:
+    barista = _job("a", "Barista", "Make coffee.")
+    phrase = _job("b", "Clerk", "Sort the and tags.")
+    assert await _kept("the and", barista, phrase) == {"b"}
+
+
+async def test_symbol_queries_keep_working() -> None:
+    cpp = _job("a", "C++ Engineer", "Build things.")
+    barista = _job("b", "Barista", "Make coffee.")
+    net = _job("c", ".NET Developer", "Build things.")
+    assert await _kept("C++", cpp, barista) == {"a"}
+    assert await _kept(".NET", net, barista) == {"c"}

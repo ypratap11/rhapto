@@ -30,6 +30,7 @@ from rhapto.db.repositories import profile as profile_repo
 from rhapto.db.repositories import source_credentials as creds_repo
 from rhapto.services.discovery.live import (
     BOARD_TIMEOUT_SECONDS,
+    LIVE_ONLY_TIMEOUT_SECONDS,
     LIVE_TIMEOUT_SECONDS,
     LiveTarget,
     live_search,
@@ -104,6 +105,7 @@ async def live(
         targets=targets,
         timeout=LIVE_TIMEOUT_SECONDS,
         board_timeout=BOARD_TIMEOUT_SECONDS,
+        live_only_timeout=LIVE_ONLY_TIMEOUT_SECONDS,
         quota_store=get_state(request).quota_store,
     )
     await session.commit()

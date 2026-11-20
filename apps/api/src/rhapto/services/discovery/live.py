@@ -1,7 +1,7 @@
 """The synchronous half of discovery: one search, every source at once, one response.
 
 The poller is patient and thorough; this is neither. It fans out with a hard per-target timeout
-(aggregators 8s, watchlist boards 30s), caps each source, and never lets one vendor's outage fail
+(aggregators 8s, live-only 20s, watchlist boards 30s), caps each source, and never lets one vendor's outage fail
 the request -- the user typed a query and is watching a spinner.
 
 Two rules differ from the poller on purpose:
@@ -51,6 +51,8 @@ LIVE_TIMEOUT_SECONDS = 8.0
 #: How long a watchlist board gets. Boards are downloaded live and some are big (hundreds of
 #: postings parsed off the loop in chunks), so they get a longer budget than the aggregators.
 BOARD_TIMEOUT_SECONDS = 30.0
+#: JSearch is live-only and one billed request per search; give it more patience than aggregators.
+LIVE_ONLY_TIMEOUT_SECONDS = 20.0
 #: How many postings per source reach the database. The grid shows a page at a time; a search
 #: box that quietly ingests hundreds of rows per keystroke is a different product.
 LIVE_CAP = 30
@@ -120,6 +122,7 @@ async def _fetch_one(
     spec: SearchSpec,
     timeout: float,
     board_timeout: float,
+    live_only_timeout: float,
     quota_store: QuotaStore | None,
 ) -> FetchResult:
     """Fetch one target. Never raises, never touches the session.
@@ -127,9 +130,15 @@ async def _fetch_one(
     The session is deliberately out of reach here: these coroutines run concurrently under
     `asyncio.gather`, and an AsyncSession is not safe to share between them.
     """
-    budget = board_timeout if target.board is not None else timeout
     cls = SOURCES.get(target.source)
     info = cls.info if cls is not None else None
+    budget = (
+        board_timeout
+        if target.board is not None
+        else live_only_timeout
+        if (info is not None and info.live_only)
+        else timeout
+    )
     if info is not None and info.unavailable is not None:
         # Even an existing user's enabled row never reaches the vendor: no call, no bypass.
         return FetchResult(target, [], "unavailable", info.unavailable)
@@ -220,6 +229,7 @@ async def live_search(
     targets: list[LiveTarget],
     timeout: float = LIVE_TIMEOUT_SECONDS,
     board_timeout: float = BOARD_TIMEOUT_SECONDS,
+    live_only_timeout: float = LIVE_ONLY_TIMEOUT_SECONDS,
     quota_store: QuotaStore | None = None,
     cap: int = LIVE_CAP,
 ) -> LiveResult:
@@ -231,7 +241,10 @@ async def live_search(
     if not targets:
         return LiveResult(jobs=[], per_source=per_source, new_job_ids=[])
     fetched = await asyncio.gather(
-        *(_fetch_one(http, target, spec, timeout, board_timeout, quota_store) for target in targets)
+        *(
+            _fetch_one(http, target, spec, timeout, board_timeout, live_only_timeout, quota_store)
+            for target in targets
+        )
     )
 
     jobs: list[Job] = []

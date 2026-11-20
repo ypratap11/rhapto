@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import re
 from typing import TYPE_CHECKING, Any, ClassVar
 from urllib.parse import quote
 
+from rhapto.engine.select import keyword_matches
 from rhapto.services.discovery.errors import Quota
 from rhapto.services.discovery.http import parse_quota
 from rhapto.services.discovery.offload import parse_off_loop
@@ -12,7 +14,6 @@ from rhapto.services.discovery.sources import register
 from rhapto.services.discovery.sources.base import (
     SourceError,
     SourceInfo,
-    matches_keywords,
     require_credentials,
 )
 from rhapto.services.discovery.sources.greenhouse import parse_iso
@@ -65,16 +66,41 @@ class JSearchSource:
         return postings[:SEARCH_CAP]
 
 
+_STOP_WORDS = frozenset(
+    "a an and or the of for in at to with on job jobs role roles position positions".split()
+)
+
+
+def _significant_words(keyword: str) -> list[str]:
+    words = (w for w in re.split(r"[\s\-/,&]+", keyword) if w)
+    return [w for w in words if w.casefold() not in _STOP_WORDS]
+
+
+def _matches_all_words(keywords: tuple[str, ...], *texts: str | None) -> bool:
+    """A posting matches when every significant word of some keyword appears in it, in any order."""
+    if not keywords:
+        return True
+    haystack = " ".join(t for t in texts if t)
+    for keyword in keywords:
+        words = _significant_words(keyword)
+        if words:
+            if all(keyword_matches(w, haystack) for w in words):
+                return True
+        elif keyword_matches(keyword, haystack):
+            return True
+    return False
+
+
 def _to_posting(spec: SearchSpec, item: Any) -> Posting | None:
     if not isinstance(item, dict):
         return None
     try:
         title = str(item["job_title"])
         text = html_to_text(str(item.get("job_description") or "")) or title
-        if not matches_keywords(spec.keywords, title, text):
-            return None
         parts = [item.get("job_city"), item.get("job_state"), item.get("job_country")]
         location = ", ".join(str(p) for p in parts if p) or None
+        if not _matches_all_words(spec.keywords, title, text, location):
+            return None
         is_remote = bool(item.get("job_is_remote"))
         if not remote_matches(spec, location, is_remote):
             return None
