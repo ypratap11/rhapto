@@ -8,8 +8,9 @@ from helpers import demo_extract
 from helpers_docx import build_fixture_docx
 
 from rhapto.engine.document import parse_docx
+from rhapto.engine.guardrails.base import normalize_entity
 from rhapto.engine.guardrails.registry import UnknownGuardrailError
-from rhapto.engine.guardrails.tune import run_tune_guardrails
+from rhapto.engine.guardrails.tune import _is_known, run_tune_guardrails
 from rhapto.models.profile.guardrails import GuardrailRule
 from rhapto.models.source_document import Edit, SourceDocument
 from rhapto.profile.loader import load_profile
@@ -463,3 +464,70 @@ def test_homepage_tailored_line_passes_the_engine(demo_profile_dir: Path) -> Non
     assert report.violations == []
     assert "no-invented-entities" in report.rules_run
     assert "date-consistency" in report.rules_run
+
+
+_TEXT = (
+    "Led AI and SQL reporting. Built analytics platforms and dashboards. "
+    "Ran delivery and analytics. Met Globex."
+)
+_SRC = normalize_entity(_TEXT)
+_SRC_NO_GLOBEX = normalize_entity("Led AI and SQL reporting. Built analytics.")
+_SRC_WORDS = normalize_entity(_TEXT + " Ran labs. Led group work.")
+_SRC_PHRASE = normalize_entity(_TEXT + " Joined Analytics Group in 2020.")
+
+
+@pytest.mark.parametrize("run", ["AI Analytics Platforms", "SQL Reporting"])
+def test_tech_acronym_runs_built_from_document_words_are_known(run: str) -> None:
+    assert _is_known(_SRC, run)
+
+
+@pytest.mark.parametrize("term", ["ai", "io", "dev", "sdk", "api", "db", "sql", "os"])
+def test_every_tech_term_is_vouched_by_the_document(term: str) -> None:
+    source = normalize_entity(f"Used {term.upper()} daily. Built analytics.")
+    assert _is_known(source, f"{term.upper()} Analytics")
+
+
+@pytest.mark.parametrize("run", ["Globex AI", "Globex Corp", "Acme.io", "Acme Labs"])
+def test_invented_name_with_tech_or_corporate_suffix_is_reported(run: str) -> None:
+    assert not _is_known(_SRC_NO_GLOBEX, run)
+    assert not _is_known(normalize_entity(_TEXT + " Ran labs. Met Acme."), "Acme Labs")
+
+
+def test_digit_word_absent_from_document_is_reported() -> None:
+    assert not _is_known(_SRC, "GPT5 Analytics")
+
+
+def test_corporate_form_needs_the_whole_phrase() -> None:
+    assert not _is_known(_SRC_WORDS, "Delivery Labs")
+    assert not _is_known(_SRC_WORDS, "Analytics Group")
+    assert _is_known(_SRC_PHRASE, "Analytics Group")
+
+
+def test_unvouched_corporate_form_after_a_tech_term_is_reported() -> None:
+    assert not _is_known(_SRC_WORDS, "AI Labs")
+
+
+def test_ai_skill_heading_built_from_document_words_passes(demo_profile_dir: Path) -> None:
+    doc = _doc()
+    b = _bullet(doc)
+    new = "Led AI work and SQL work. Built reporting, analytics, platforms and dashboards."
+    doc = doc.model_copy(
+        update={
+            "paragraphs": [
+                p.model_copy(update={"text": new}) if p.id == b.id else p for p in doc.paragraphs
+            ]
+        }
+    )
+    skill = next(p for p in doc.paragraphs if p.role == "skill")
+    edits = [
+        Edit(
+            paragraph_id=skill.id,
+            before=skill.text,
+            after="Platforms:  SQL Reporting & Dashboards  •  AI Analytics Platforms",
+            reason="r",
+        )
+    ]
+    report = run_tune_guardrails(
+        doc, edits, demo_extract(), load_profile(demo_profile_dir).guardrails, cover_note=None
+    )
+    assert [v for v in report.violations if v.rule == "no-invented-entities"] == []

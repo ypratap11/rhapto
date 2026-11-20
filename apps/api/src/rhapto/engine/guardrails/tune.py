@@ -66,15 +66,19 @@ COMMON_WORDS = frozenset(
     monday tuesday wednesday thursday friday saturday sunday
     """.split()
 )
-# Tokens that make a lone capitalised word read as an organisation or product rather than as
-# ordinary resume prose ("Agile", "Legal", "Delivery").
-NAME_SUFFIXES = frozenset(
+# Words that make a lone capitalised word read as an organisation or product rather than as
+# ordinary resume prose ("Agile", "Legal", "Delivery"). TECH_TERMS are ordinary technical
+# vocabulary: a run that uses one is vouched for when the document uses the word. CORPORATE_FORMS
+# stay strict: a run containing one passes only when the whole phrase is in the document.
+TECH_TERMS = frozenset("ai io dev sdk api db sql os".split())
+CORPORATE_FORMS = frozenset(
     """
     inc corp corporation co llc llp ltd plc gmbh ag sa nv bv ab oy oyj kk pte pty
-    labs lab ai io dev sdk api db sql os technologies technology systems solutions software
+    labs lab technologies technology systems solutions software
     group holdings partners ventures capital university institute college academy
     """.split()
 )
+NAME_SUFFIXES = TECH_TERMS | CORPORATE_FORMS
 
 
 def _is_sentence_start(text: str, index: int) -> bool:
@@ -261,16 +265,25 @@ def _mentions(source: str, run: str) -> bool:
     return re.search(rf"(?<!\w){re.escape(run)}(?!\w)", source) is not None
 
 
+def _is_strict_word(word: str) -> bool:
+    """Whether the document cannot vouch for `word` alone: it has a digit or a corporate-form tail."""
+    return (
+        any(c.isdigit() for c in word) or re.split(r"[-.]", word.casefold())[-1] in CORPORATE_FORMS
+    )
+
+
 def _has_unknown_word(source: str, run: str) -> bool:
     """Whether `run` contains a word the document never uses, or a word that looks like a name.
 
     Skills and competency lines are Title Case by convention, so a tune edit that recombines the
     document's own vocabulary -- "Automated Validation", "Python Hands-on" -- is a rephrasing,
     not an invented employer or product. A run is only an invention when it brings in a word the
-    document has nowhere ("Globex") or a word with an organisation signal ("Corp", "Acme.io").
+    document has nowhere ("Globex", or "acme.io" as one token), a word with a digit ("GPT5"), or
+    a corporate form ("Corp"). Tech terms ("AI", "SQL") are vouched for by the
+    document using them.
     """
     for word in normalize_entity(run).split():
-        if _looks_like_a_name(word) or not _mentions(source, word):
+        if _is_strict_word(word) or not _mentions(source, word):
             return True
     return False
 

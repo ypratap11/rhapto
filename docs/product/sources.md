@@ -26,7 +26,7 @@ itself.
 
 ## Caps and timeouts
 
-Aggregators get an 8-second timeout per request and watchlist boards get 30 seconds. A live search (the one you trigger from the
+Aggregators get an 8-second timeout per request, JSearch (live-only, one billed request) gets 20 seconds, and watchlist boards get 30 seconds. A live search (the one you trigger from the
 Jobs page) caps each source at 30 results; the background poll the worker runs on its own schedule
 caps each source at 100. A source that times out or errors is reported in the search's per-source
 summary rather than silently dropped. Each source's line says which state it was in: rate-limited,

@@ -510,3 +510,63 @@ async def test_jsearch_429_without_reset_is_rate_limited_generic(
     outcome = result.per_source["jsearch"]
     assert outcome.state == "rate_limited"
     assert outcome.error == "rate-limited (quota used up, try again later)"
+
+
+def _slow(http, delay: float) -> None:  # type: ignore[no-untyped-def]
+    orig = http.get_json_response
+
+    async def slow(url, *, headers=None):  # type: ignore[no-untyped-def]
+        await asyncio.sleep(delay)
+        return await orig(url, headers=headers)
+
+    http.get_json_response = slow
+
+
+def test_live_only_timeout_constant() -> None:
+    from rhapto.services.discovery.live import BOARD_TIMEOUT_SECONDS, LIVE_ONLY_TIMEOUT_SECONDS
+
+    assert LIVE_ONLY_TIMEOUT_SECONDS == 20.0
+    assert LIVE_ONLY_TIMEOUT_SECONDS < BOARD_TIMEOUT_SECONDS
+
+
+async def test_slow_jsearch_succeeds_within_live_only_budget(
+    session: AsyncSession, user: User
+) -> None:
+    from rhapto.services.discovery.quota import InMemoryQuotaStore
+
+    http = _jsearch_http()
+    _slow(http, 0.15)
+    result = await live_search(
+        session,
+        user.id,
+        http=http,
+        spec=SPEC,
+        targets=[LiveTarget(source="jsearch", credentials=JSEARCH_CREDS)],
+        timeout=0.05,
+        live_only_timeout=0.3,
+        quota_store=InMemoryQuotaStore(),
+    )
+    outcome = result.per_source["jsearch"]
+    assert outcome.error is None
+    assert outcome.found >= 1
+    assert len(http.calls) == 1
+
+
+async def test_jsearch_times_out_on_the_live_only_budget(session: AsyncSession, user: User) -> None:
+    from rhapto.services.discovery.quota import InMemoryQuotaStore
+
+    http = _jsearch_http()
+    _slow(http, 0.15)
+    result = await live_search(
+        session,
+        user.id,
+        http=http,
+        spec=SPEC,
+        targets=[LiveTarget(source="jsearch", credentials=JSEARCH_CREDS)],
+        timeout=0.5,
+        live_only_timeout=0.05,
+        quota_store=InMemoryQuotaStore(),
+    )
+    outcome = result.per_source["jsearch"]
+    assert outcome.error == "timed out after 0.05s"
+    assert outcome.state == "failed"
